@@ -3,10 +3,10 @@ package com.software_project_team_15b.Ticketmaster.Domain.Order;
 import java.util.List;
 
 public class OrderHistory {
-    private String orderId;
-    private String userId;
-    private String eventId;
-    private List<Ticket> tickets;
+    private final String orderId;
+    private final String userId;
+    private final String eventId;
+    private final List<Ticket> tickets;
 
     public OrderHistory(String orderId, String userId, String eventId, List<Ticket> tickets) {
         this.orderId = orderId;
