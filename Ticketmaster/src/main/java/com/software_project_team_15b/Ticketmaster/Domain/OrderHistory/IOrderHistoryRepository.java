@@ -10,5 +10,5 @@ public interface IOrderHistoryRepository extends JpaRepository<OrderHistory, Str
 
     List<OrderHistory> findByEventId(String eventId);
 
-    //TODO: Add query to find order history by companyId
+    List<OrderHistory> findByEventIds(List<String> eventIds);
 }
