@@ -1,8 +1,8 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Order;
 
 public class Ticket {
-    private String eventAreaId;
-    private String seatId;
+    private final String eventAreaId;
+    private final String seatId;
 
     public Ticket(String eventAreaId, String seatId) {
         this.eventAreaId = eventAreaId;
