@@ -36,6 +36,17 @@ public class OrderHistory {
         this.tickets = tickets;
     }
 
+    public static OrderHistory fromActiveOrder(ActiveOrder activeOrder) {
+        return new OrderHistory(
+                activeOrder.getOrderId(),
+                activeOrder.getUserId(),
+                activeOrder.getEventId(),
+                activeOrder.getTicketSeats().stream()
+                        .map(seat -> new Ticket(seat))
+                        .toList()
+        );
+    }
+
     public String getOrderId() {
         return orderId;
     }
