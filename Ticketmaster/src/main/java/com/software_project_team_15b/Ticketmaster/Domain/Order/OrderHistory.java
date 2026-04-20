@@ -1,6 +1,8 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Order;
 
 import jakarta.persistence.*;
+
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -17,8 +19,11 @@ public class OrderHistory {
     @Column(name = "event_id", nullable = false, updatable = false)
     private String eventId;
 
-    @OneToMany
-    @JoinColumn(name = "order_id")
+    @ElementCollection
+    @CollectionTable(
+        name = "order_history_tickets",
+        joinColumns = @JoinColumn(name = "order_id")
+    )
     private List<Ticket> tickets;
 
     protected OrderHistory() {
