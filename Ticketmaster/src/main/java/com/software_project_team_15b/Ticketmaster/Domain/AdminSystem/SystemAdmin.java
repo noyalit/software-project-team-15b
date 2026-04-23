@@ -1,4 +1,4 @@
-package com.software_project_team_15b.Ticketmaster.Application.AdminSystem;
+package com.software_project_team_15b.Ticketmaster.Domain.AdminSystem;
 
 public class SystemAdmin {
 
