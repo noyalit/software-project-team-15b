@@ -1,16 +1,34 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Member;
 
+import jakarta.persistence.*;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+
 import java.util.Objects;
 import java.util.UUID;
 
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-
+@Entity
+@Table(name = "members")
 public class Member {
+
     private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
-    private final String userId;
+
+    @Id
+    @Column(name = "user_id", nullable = false, updatable = false)
+    private String userId;
+
+    @Column(name = "username", nullable = false, unique = true)
     private String username;
+
+    @Column(name = "password_hash", nullable = false)
     private String passwordHash;
+
+    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER, optional = false, orphanRemoval = true)
+    @JoinColumn(name = "role_id", nullable = false)
     private Role role;
+
+    protected Member() {
+        // JPA only
+    }
 
     public Member(String username, String rawPassword, Role role) {
         validateUsername(username);
@@ -21,6 +39,13 @@ public class Member {
         this.username = username.trim();
         this.passwordHash = PASSWORD_ENCODER.encode(rawPassword);
         this.role = role;
+    }
+
+    @PrePersist
+    protected void prePersist() {
+        if (this.userId == null) {
+            this.userId = UUID.randomUUID().toString();
+        }
     }
 
     public String getUserId() {

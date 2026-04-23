@@ -1,6 +1,15 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Member;
 
+import jakarta.persistence.DiscriminatorValue;
+import jakarta.persistence.Entity;
+
+@Entity
+@DiscriminatorValue("MANAGER")
 public class Manager extends Role {
+
+    protected Manager() {
+        // JPA only
+    }
 
     public Manager(Member appointedBy) {
         super(appointedBy);
