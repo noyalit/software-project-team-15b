@@ -24,7 +24,7 @@ public class OrderHistory {
         name = "order_history_tickets",
         joinColumns = @JoinColumn(name = "order_id")
     )
-    private List<Ticket> tickets;
+    private List<Ticket> tickets = new ArrayList<>();
 
     protected OrderHistory() {
     }
@@ -36,7 +36,12 @@ public class OrderHistory {
         this.orderId = orderId;
         this.userId = userId;
         this.eventId = eventId;
-        this.tickets = new ArrayList<>(tickets);
+        for (Ticket ticket : tickets) {
+            if (ticket == null) {
+                throw new IllegalArgumentException("Tickets list cannot contain null values");
+            }
+            this.tickets.add(new Ticket(ticket));
+        }
     }
 
     public static OrderHistory fromActiveOrder(ActiveOrder activeOrder) {
