@@ -7,6 +7,11 @@ public class Founder extends Owner {
     }
 
     @Override
+    protected void validateAppointer(Member appointedBy) {
+        // Founder is allowed to have no appointer
+    }
+
+    @Override
     public String getRoleName() {
         return "Founder";
     }
