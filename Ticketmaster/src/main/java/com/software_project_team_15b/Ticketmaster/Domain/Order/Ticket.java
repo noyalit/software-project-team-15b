@@ -13,10 +13,29 @@ public class Ticket {
     }
 
     public Ticket(String seatId) {
+        if (seatId == null) {
+            throw new IllegalArgumentException("Seat ID cannot be null");
+        }    
         this.seatId = seatId;
     }
 
     public String getSeatId() {
         return seatId;
     }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        Ticket ticket = (Ticket) o;
+
+        return seatId.equals(ticket.seatId);
+    }
+
+    @Override
+    public int hashCode() {
+        return seatId.hashCode();
+    }
+
 }
