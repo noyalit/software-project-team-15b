@@ -1,7 +1,7 @@
-package com.software_project_team_15b.Ticketmaster.Domain;
+package com.software_project_team_15b.Ticketmaster.Application;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.UserType;
+import com.software_project_team_15b.Ticketmaster.Domain.UserType;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -21,7 +21,10 @@ public class Auth {
     private static final long EXPIRATION_TIME = 1000 * 60 * 60; // 1 hour
 
     public boolean validatePassword(Member member, String password) {
-        return member.getPassword().equals(password);
+        if (member == null) {
+            throw new IllegalArgumentException("member cannot be null");
+        }
+        return member.verifyPassword(password);
     }
 
     public String generateMemberToken(Member member) {
