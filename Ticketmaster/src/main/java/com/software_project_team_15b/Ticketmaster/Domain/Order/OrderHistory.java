@@ -30,13 +30,19 @@ public class OrderHistory {
     }
 
     public OrderHistory(String orderId, String userId, String eventId, List<Ticket> tickets) {
+        if (orderId == null || userId == null || eventId == null || tickets == null) {
+            throw new IllegalArgumentException("Order ID, User ID, Event ID, and Tickets cannot be null");
+        }
         this.orderId = orderId;
         this.userId = userId;
         this.eventId = eventId;
-        this.tickets = tickets;
+        this.tickets = new ArrayList<>(tickets);
     }
 
     public static OrderHistory fromActiveOrder(ActiveOrder activeOrder) {
+        if (activeOrder == null) {
+            throw new IllegalArgumentException("ActiveOrder cannot be null");
+        }
         return new OrderHistory(
                 activeOrder.getOrderId(),
                 activeOrder.getUserId(),
@@ -60,6 +66,6 @@ public class OrderHistory {
     }
 
     public List<Ticket> getTickets() {
-        return tickets;
+        return new ArrayList<>(tickets);
     }
 }
