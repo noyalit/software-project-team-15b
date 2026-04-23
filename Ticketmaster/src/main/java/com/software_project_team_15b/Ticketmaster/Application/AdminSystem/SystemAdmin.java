@@ -1,54 +1,36 @@
 package com.software_project_team_15b.Ticketmaster.Application.AdminSystem;
 
-import java.util.List;
-
 public class SystemAdmin {
 
-    public void closeProductionCompany(String companyId, String reason) {
-        throw new UnsupportedOperationException("Not implemented");
+    private final String adminId;
+    private final String username;
+    private String password;
+
+    public SystemAdmin(String adminId, String username, String password) {
+        requireNonBlank(adminId, "adminId");
+        requireNonBlank(username, "username");
+        requireNonBlank(password, "password");
+        this.adminId = adminId;
+        this.username = username;
+        this.password = password;
     }
 
-    public void removeSubscriberFromPlatform(String subscriberId, String reason) {
-        throw new UnsupportedOperationException("Not implemented");
+    public String getAdminId() {
+        return adminId;
     }
 
-    public List<?> listComplaints(Object query) {
-        throw new UnsupportedOperationException("Not implemented");
+    public String getUsername() {
+        return username;
     }
 
-    public void respondToComplaint(String complaintId, String responseMessage) {
-        throw new UnsupportedOperationException("Not implemented");
+    public void changePassword(String newPassword) {
+        requireNonBlank(newPassword, "newPassword");
+        this.password = newPassword;
     }
 
-    public void sendSystemMessageToProducers(List<String> producerIds, String message) {
-        throw new UnsupportedOperationException("Not implemented");
-    }
-
-    public void sendSystemMessageToPurchasers(List<String> purchaserIds, String message) {
-        throw new UnsupportedOperationException("Not implemented");
-    }
-
-    public List<?> getGlobalPurchaseHistoryByBuyer(Object query) {
-        throw new UnsupportedOperationException("Not implemented");
-    }
-
-    public List<?> getGlobalPurchaseHistoryByCompanyOrEvent(Object query) {
-        throw new UnsupportedOperationException("Not implemented");
-    }
-
-    public Object getAnalytics(Object query) {
-        throw new UnsupportedOperationException("Not implemented");
-    }
-
-    public List<?> listActiveQueues() {
-        throw new UnsupportedOperationException("Not implemented");
-    }
-
-    public void setQueueFlowRate(String queueId, int permitsPerSecond) {
-        throw new UnsupportedOperationException("Not implemented");
-    }
-
-    public void clearQueue(String queueId) {
-        throw new UnsupportedOperationException("Not implemented");
+    private static void requireNonBlank(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(name + " cannot be null/blank");
+        }
     }
 }
