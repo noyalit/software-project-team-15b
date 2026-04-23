@@ -5,7 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
 
-public interface JpaSystemAdminSpringDataRepository extends JpaRepository<SystemAdmin, String> {
+public interface JpaSystemAdminSpringDataRepository extends JpaRepository<SystemAdmin, Long> {
 
     Optional<SystemAdmin> findByUsername(String username);
 }

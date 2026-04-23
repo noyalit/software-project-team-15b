@@ -7,11 +7,11 @@ public interface ISystemAdminRepository {
 
     SystemAdmin save(SystemAdmin systemAdmin);
 
-    Optional<SystemAdmin> findById(String adminId);
+    Optional<SystemAdmin> findById(Long adminId);
 
     Optional<SystemAdmin> findByUsername(String username);
 
     List<SystemAdmin> findAll();
 
-    void deleteById(String adminId);
+    void deleteById(Long adminId);
 }

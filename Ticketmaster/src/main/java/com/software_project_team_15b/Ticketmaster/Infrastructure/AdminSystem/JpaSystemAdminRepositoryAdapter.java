@@ -24,7 +24,7 @@ public class JpaSystemAdminRepositoryAdapter implements ISystemAdminRepository {
     }
 
     @Override
-    public Optional<SystemAdmin> findById(String adminId) {
+    public Optional<SystemAdmin> findById(Long adminId) {
         return springDataRepository.findById(adminId);
     }
 
@@ -39,7 +39,7 @@ public class JpaSystemAdminRepositoryAdapter implements ISystemAdminRepository {
     }
 
     @Override
-    public void deleteById(String adminId) {
+    public void deleteById(Long adminId) {
         springDataRepository.deleteById(adminId);
     }
 }
