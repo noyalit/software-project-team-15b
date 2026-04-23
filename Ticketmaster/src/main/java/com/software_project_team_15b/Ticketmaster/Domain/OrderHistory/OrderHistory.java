@@ -1,11 +1,11 @@
-package com.software_project_team_15b.Ticketmaster.Domain.Order;
+package com.software_project_team_15b.Ticketmaster.Domain.OrderHistory;
 
 import jakarta.persistence.*;
 
 import java.util.ArrayList;
 import java.util.List;
 
-import com.software_project_team_15b.Ticketmaster.Domain.Order.Ticket;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 
 @Entity
 @Table(name = "order_history")

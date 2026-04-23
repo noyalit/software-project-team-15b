@@ -1,4 +1,4 @@
-package com.software_project_team_15b.Ticketmaster.Domain.Order;
+package com.software_project_team_15b.Ticketmaster.Domain.OrderHistory;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;

@@ -4,8 +4,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 
-import com.software_project_team_15b.Ticketmaster.Domain.Order.OrderHistory;
-
 public interface IOrderHistoryRepository extends JpaRepository<OrderHistory, String> {
 
     List<OrderHistory> findByUserId(String userId);

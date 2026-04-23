@@ -1,4 +1,4 @@
-package com.software_project_team_15b.Ticketmaster.Domain.Order;
+package com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder;
 
 import java.util.List;
 
