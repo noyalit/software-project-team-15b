@@ -21,7 +21,8 @@ public class Money {
     }
 
     public static Money of(String amount, String currency) {
-        return new Money(new BigDecimal(amount), currency);
+        if (amount == null || amount.isBlank()) throw new IllegalArgumentException("amount must not be null or blank");
+        return new Money(new BigDecimal(amount.trim()), currency);
     }
 
     public static Money zero(String currency) {
