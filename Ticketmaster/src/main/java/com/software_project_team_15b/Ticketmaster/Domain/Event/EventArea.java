@@ -25,8 +25,8 @@ public abstract class EventArea {
 
     @Embedded
     @AttributeOverrides({
-            @AttributeOverride(name = "amount", column = @Column(name = "base_price_amount")),
-            @AttributeOverride(name = "currency", column = @Column(name = "base_price_currency"))
+            @AttributeOverride(name = "amount", column = @Column(name = "base_price_amount", nullable = false, precision = 19, scale = 2)),
+            @AttributeOverride(name = "currency", column = @Column(name = "base_price_currency", nullable = false))
     })
     protected Money basePrice;
 
