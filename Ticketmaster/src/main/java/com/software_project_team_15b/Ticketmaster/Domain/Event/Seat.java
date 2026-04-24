@@ -7,24 +7,24 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
+import java.util.Objects;
 import java.util.UUID;
 
-/**
- * Seat in a SeatingEventArea.
- */
 @Entity
 public class Seat {
 
     @Id
+    @Column(nullable = false)
     private UUID seatId;
 
-    @Column(name = "seat_row")
+    @Column(name = "seat_row", nullable = false)
     private String row;
 
-    @Column(name = "seat_number")
+    @Column(name = "seat_number", nullable = false)
     private String number;
 
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
     private SeatStatus status;
 
     private UUID heldBy;
@@ -32,6 +32,9 @@ public class Seat {
     protected Seat() {}
 
     public Seat(UUID seatId, String row, String number) {
+        if (seatId == null) throw new IllegalArgumentException("seatId must not be null");
+        if (row == null || row.isBlank()) throw new IllegalArgumentException("row must not be null or blank");
+        if (number == null || number.isBlank()) throw new IllegalArgumentException("number must not be null or blank");
         this.seatId = seatId;
         this.row = row;
         this.number = number;
@@ -55,6 +58,7 @@ public class Seat {
     }
 
     public void markHeld(UUID token) {
+        if (token == null) throw new IllegalArgumentException("token must not be null");
         if (status != SeatStatus.AVAILABLE) {
             throw new SeatUnavailableException("seat " + seatId + " is not available");
         }
@@ -63,6 +67,7 @@ public class Seat {
     }
 
     public void markSold(UUID token) {
+        if (token == null) throw new IllegalArgumentException("token must not be null");
         if (status != SeatStatus.HELD) {
             throw new SeatUnavailableException("seat " + seatId + " is not held");
         }
@@ -73,9 +78,26 @@ public class Seat {
     }
 
     public void markAvailable(UUID token) {
-        if (status != SeatStatus.HELD) return;
-        if (!token.equals(heldBy)) return;
+        if (token == null) throw new IllegalArgumentException("token must not be null");
+        if (status != SeatStatus.HELD) {
+            throw new SeatUnavailableException("seat " + seatId + " is not held");
+        }
+        if (!token.equals(heldBy)) {
+            throw new HoldNotFoundException("token mismatch for seat " + seatId);
+        }
         this.status = SeatStatus.AVAILABLE;
         this.heldBy = null;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Seat other)) return false;
+        return Objects.equals(seatId, other.seatId);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(seatId);
     }
 }
