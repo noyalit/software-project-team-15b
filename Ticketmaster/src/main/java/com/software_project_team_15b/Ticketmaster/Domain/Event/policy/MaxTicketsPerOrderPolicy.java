@@ -1,4 +1,4 @@
-package main.java.com.software_project_team_15b.Ticketmaster.Domain.Event.policy;
+package com.software_project_team_15b.Ticketmaster.Domain.Event.policy;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
