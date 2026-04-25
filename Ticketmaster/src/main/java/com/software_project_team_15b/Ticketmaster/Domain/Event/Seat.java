@@ -83,7 +83,7 @@ public class Seat {
             throw new SeatUnavailableException("seat " + seatId + " is not held");
         }
         if (!token.equals(heldBy)) {
-            throw new HoldNotFoundException("token mismatch for seat " + seatId);
+            return; // wrong token — only the holder can release; silently ignore
         }
         this.status = SeatStatus.AVAILABLE;
         this.heldBy = null;
