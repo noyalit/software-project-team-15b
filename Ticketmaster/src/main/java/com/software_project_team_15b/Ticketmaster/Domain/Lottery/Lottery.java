@@ -1,20 +1,34 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Lottery;
 
+import jakarta.persistence.*;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
+@Entity
+@Table(name = "lottery")
 public class Lottery<T> {
+    @Transient
     private final Set<T> lotterySet;
-    private final int eventId;
+
+    @Id
+    @Column(name = "event_id", nullable = false, updatable = false)
+    private final UUID eventId;
+
+    // JPA only
+    protected Lottery() {
+        this.lotterySet = null;
+        this.eventId = null;
+    }
 
     /**
      * Constructs a new Lottery instance for a specific event.
      * 
      * @param eventId the unique identifier for the event this lottery is associated with
      */
-    public Lottery(int eventId) {
+    public Lottery(UUID eventId) {
         this.lotterySet = ConcurrentHashMap.newKeySet();
         this.eventId = eventId;
     }
