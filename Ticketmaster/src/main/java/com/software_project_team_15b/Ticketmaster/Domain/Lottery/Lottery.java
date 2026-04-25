@@ -9,18 +9,24 @@ import java.util.concurrent.ThreadLocalRandom;
 
 @Entity
 @Table(name = "lottery")
-public class Lottery<T> {
-    @Transient
-    private final Set<T> lotterySet;
+public class Lottery {
 
     @Id
     @Column(name = "event_id", nullable = false, updatable = false)
-    private final UUID eventId;
+    private UUID eventId;
+
+    @ElementCollection
+    @CollectionTable(
+            name = "lottery_entries",
+            joinColumns = @JoinColumn(name = "event_id")
+    )
+    @Column(name = "entry", nullable = false)
+    private Set<String> lotterySet;
 
     // JPA only
     protected Lottery() {
-        this.lotterySet = null;
-        this.eventId = null;
+        this.lotterySet = new HashSet<>();
+        this.eventId = UUID.randomUUID();
     }
 
     /**
@@ -29,6 +35,10 @@ public class Lottery<T> {
      * @param eventId the unique identifier for the event this lottery is associated with
      */
     public Lottery(UUID eventId) {
+        // TODO: Check that eventId is valid
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
         this.lotterySet = ConcurrentHashMap.newKeySet();
         this.eventId = eventId;
     }
@@ -39,7 +49,10 @@ public class Lottery<T> {
      * @param option the option to add to the lottery
      * @return true if the option was added successfully, false if it already existed
      */
-    public boolean add(T option) {
+    public boolean add(String option) {
+        if (option == null) {
+            throw new IllegalArgumentException("option cannot be null");
+        }
         return lotterySet.add(option);
     }
 
@@ -50,7 +63,7 @@ public class Lottery<T> {
      * @param option the specific option to remove from the lottery
      * @return the option if it was removed successfully, null otherwise
      */
-    public T pop(T option) {
+    public String pop(String option) {
         return lotterySet.remove(option) ? option : null;
     }
 
@@ -60,8 +73,7 @@ public class Lottery<T> {
      * 
      * @return a randomly selected option, or null if the lottery is empty
      */
-    @SuppressWarnings("unchecked")
-    public T getRandom() {
+    public String getRandom() {
         Object[] values = lotterySet.toArray();
 
         if (values.length == 0) {
@@ -69,7 +81,7 @@ public class Lottery<T> {
         }
 
         int i = ThreadLocalRandom.current().nextInt(values.length);
-        return (T) values[i];
+        return (String) values[i];
     }
 
     /**
@@ -78,9 +90,9 @@ public class Lottery<T> {
      * 
      * @return a randomly selected option that was removed from the lottery, or null if the lottery is empty
      */
-    public T popRandom() {
+    public String popRandom() {
         while (true) {
-            T value = getRandom();
+            String value = getRandom();
 
             if (value == null) {
                 return null;
@@ -100,11 +112,14 @@ public class Lottery<T> {
      * @param count the number of options to pop from the lottery
      * @return a HashSet containing up to 'count' randomly selected options that were removed from the lottery
      */
-    public HashSet<T> popRandom(int count) {
-        HashSet<T> result = new HashSet<>();
+    public HashSet<String> popRandom(int count) {
+        if (count < 0) {
+            throw new IllegalArgumentException("count cannot be negative");
+        }
+        HashSet<String> result = new HashSet<>();
 
         for (int i = 0; i < count; i++) {
-            T value = popRandom();
+            String value = popRandom();
 
             if (value == null) {
                 break;
@@ -114,5 +129,9 @@ public class Lottery<T> {
         }
 
         return result;
+    }
+
+    public UUID getEventId() {
+        return eventId;
     }
 }

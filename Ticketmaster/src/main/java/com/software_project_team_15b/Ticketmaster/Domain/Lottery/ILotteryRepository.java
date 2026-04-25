@@ -1,8 +1,10 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Lottery;
 
-public interface ILotteryRepository<T> {
-    public void addLottery(Lottery<T> lottery);
-    public void removeLottery(Lottery<T> lottery);
-    public Lottery<T> getLottery(Lottery<T> lottery);
-    public void updateLottery(Lottery<T> lottery);
+import java.util.UUID;
+
+public interface ILotteryRepository {
+    public void addLottery(Lottery lottery);
+    public void removeLottery(Lottery lottery);
+    public Lottery getLottery(UUID eventId);
+    public void updateLottery(Lottery lottery);
 }
