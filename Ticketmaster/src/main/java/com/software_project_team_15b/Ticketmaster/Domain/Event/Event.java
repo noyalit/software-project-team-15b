@@ -98,6 +98,7 @@ public class Event {
 
     public void addArea(EventArea area) {
         requireState(EventStatus.DRAFT, "addArea");
+        Objects.requireNonNull(area, "area");
         if (areas.stream().anyMatch(a -> a.areaId().equals(area.areaId()))) {
             throw new InvalidEventStateException("area already exists: " + area.areaId());
         }
