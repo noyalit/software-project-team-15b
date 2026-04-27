@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 
@@ -13,13 +14,13 @@ public class OrderHistory {
 
     @Id
     @Column(name = "order_id", nullable = false, updatable = false)
-    private String orderId;
+    private UUID orderId;
 
     @Column(name = "user_id", nullable = false, updatable = false)
-    private String userId;
+    private UUID userId;
 
     @Column(name = "event_id", nullable = false, updatable = false)
-    private String eventId;
+    private UUID eventId;
 
     @ElementCollection
     @CollectionTable(
@@ -31,7 +32,7 @@ public class OrderHistory {
     protected OrderHistory() {
     }
 
-    public OrderHistory(String orderId, String userId, String eventId, List<Ticket> tickets) {
+    public OrderHistory(UUID orderId, UUID userId, UUID eventId, List<Ticket> tickets) {
         if (orderId == null || userId == null || eventId == null || tickets == null) {
             throw new IllegalArgumentException("Order ID, User ID, Event ID, and Tickets cannot be null");
         }
@@ -54,21 +55,21 @@ public class OrderHistory {
                 activeOrder.getOrderId(),
                 activeOrder.getUserId(),
                 activeOrder.getEventId(),
-                activeOrder.getTicketSeats().stream()
+                activeOrder.getOrderSeats().stream()
                         .map(seat -> new Ticket(seat))
                         .toList()
         );
     }
 
-    public String getOrderId() {
+    public UUID getOrderId() {
         return orderId;
     }
 
-    public String getUserId() {
+    public UUID getUserId() {
         return userId;
     }
 
-    public String getEventId() {
+    public UUID getEventId() {
         return eventId;
     }
 
