@@ -8,4 +8,6 @@ public interface IMemberRepository {
     Optional<Member> findById(String userId);
     List<Member> findAll();
     boolean deleteById(String userId);
+    Optional<Member> findByUsername(String username);
+    boolean existsByUsername(String username);
 }

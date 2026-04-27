@@ -43,4 +43,17 @@ public class InMemoryMemberRepository implements IMemberRepository {
         return membersById.remove(userId) != null;
     }
 
+    @Override
+    public Optional<Member> findByUsername(String username) {
+        return membersById.values().stream()
+                .filter(member -> member.getUsername().equals(username))
+                .findFirst();
+    }
+
+    @Override
+    public boolean existsByUsername(String username) {
+        return membersById.values().stream()
+                .anyMatch(member -> member.getUsername().equals(username));
+    }
+
 }
