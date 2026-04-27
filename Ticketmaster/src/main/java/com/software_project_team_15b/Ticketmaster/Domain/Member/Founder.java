@@ -12,12 +12,20 @@ public class Founder extends Owner {
     }
 
     public Founder(Member appointedBy) {
-        super(appointedBy);
+        super(null);
+        approveAppointment();
     }
 
     @Override
     protected void validateAppointer(Member appointedBy) {
-        // Founder is allowed to have no appointer
+        if (appointedBy != null) {
+            throw new IllegalArgumentException("Founder cannot have an appointer");
+        }
+    }
+
+    @Override
+    public void setAppointedBy(Member appointedBy) {
+        throw new IllegalStateException("Founder cannot have an appointer");
     }
 
     @Override

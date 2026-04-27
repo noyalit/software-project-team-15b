@@ -19,12 +19,18 @@ public class InMemoryMemberRepository implements IMemberRepository {
             throw new IllegalArgumentException("Member cannot be null");
         }
 
-        Optional<Member> existing = findById(member.getUserId());
-        if (existing.isPresent() && !existing.get().getUserId().equals(member.getUserId())) {
+        // Check username uniqueness
+        Optional<Member> existing = findByUsername(member.getUsername());
+
+        //existing member with the same username exists and it's not the same member
+        if (existing.isPresent() &&
+            !existing.get().getUserId().equals(member.getUserId())) {
             throw new IllegalArgumentException("Username already exists");
         }
 
+        // Save or update
         membersById.put(member.getUserId(), member);
+
         return member;
     }
 

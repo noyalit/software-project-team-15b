@@ -33,7 +33,6 @@ public class Member {
     public Member(String username, String rawPassword, Role role) {
         validateUsername(username);
         validatePassword(rawPassword);
-        validateRole(role);
 
         this.userId = UUID.randomUUID().toString();
         this.username = username.trim();
@@ -79,7 +78,6 @@ public class Member {
     }
 
     public void setRole(Role role) {
-        validateRole(role);
         this.role = role;
     }
 
@@ -100,12 +98,6 @@ public class Member {
         String regex = "^(?=.*[A-Z])(?=.*\\d).+$";
         if (!password.matches(regex)) {
             throw new IllegalArgumentException("Password must contain at least one uppercase letter and one number");
-        }
-    }
-
-    private static void validateRole(Role role) {
-        if (role == null) {
-            throw new IllegalArgumentException("Role cannot be null");
         }
     }
 

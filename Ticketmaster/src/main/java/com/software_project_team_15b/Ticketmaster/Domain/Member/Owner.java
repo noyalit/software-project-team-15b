@@ -16,16 +16,15 @@ public class Owner extends Role {
         validateAppointer(appointedBy);
     }
 
+    @Override
     protected void validateAppointer(Member appointedBy) {
         if (appointedBy == null) {
-            throw new IllegalArgumentException("Owner must be appointed by a member");
+            throw new IllegalArgumentException("Owner must be appointed by another owner");
         }
-    }
 
-    @Override
-    public void setAppointedBy(Member appointedBy) {
-        validateAppointer(appointedBy);
-        this.appointedBy = appointedBy;
+        if (!(appointedBy.getRole() instanceof Owner)) {
+            throw new IllegalArgumentException("Only an owner can appoint another owner");
+        }
     }
 
     @Override

@@ -117,12 +117,6 @@ public class Auth {
 
         activeSessions.remove(memberToken);
 
-        /*
-         * Logout means:
-         * - member identification is cancelled
-         * - user becomes a guest
-         */
-
         return generateGuestToken();
     }
 
