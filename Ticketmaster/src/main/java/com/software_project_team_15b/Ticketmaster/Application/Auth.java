@@ -1,7 +1,7 @@
-package com.software_project_team_15b.Ticketmaster.Domain;
+package com.software_project_team_15b.Ticketmaster.Application;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.UserType;
+import com.software_project_team_15b.Ticketmaster.Domain.UserType;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -10,6 +10,8 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.UUID;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 
 public class Auth {
@@ -17,15 +19,19 @@ public class Auth {
     private static final String SECRET = "mySuperSecretKeyForJwtToken123!";
     private static final SecretKey KEY =
             Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
-
+    
+    private final Set<String> activeTokens = ConcurrentHashMap.newKeySet();
     private static final long EXPIRATION_TIME = 1000 * 60 * 60; // 1 hour
 
     public boolean validatePassword(Member member, String password) {
-        return member.getPassword().equals(password);
+        if (member == null) {
+            throw new IllegalArgumentException("member cannot be null");
+        }
+        return member.verifyPassword(password);
     }
 
     public String generateMemberToken(Member member) {
-        return Jwts.builder()
+        String token = Jwts.builder()
                 .subject(member.getUserId())
                 .claim("userType", UserType.MEMBER.name())
                 .claim("username", member.getUsername())
@@ -34,19 +40,33 @@ public class Auth {
                 .expiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
                 .signWith(KEY)
                 .compact();
+
+        activeTokens.add(token);
+        return token;
     }
 
     public String generateGuestToken() {
         String guestId = UUID.randomUUID().toString();
 
-        return Jwts.builder()
+        String token = Jwts.builder()
                 .subject(guestId)
                 .claim("userType", UserType.GUEST.name())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
                 .signWith(KEY)
                 .compact();
+        
+        activeTokens.add(token);
+        return token;
     }
+
+    public void logout(String token) {
+    if (token == null || token.isBlank()) {
+        throw new IllegalArgumentException("Invalid token");
+    }
+
+    activeTokens.remove(token);
+}
 
     public Claims extractAllClaims(String token) {
         return Jwts.parser()
@@ -86,6 +106,6 @@ public class Auth {
     }
 
     public boolean isTokenValid(String token) {
-        return !isTokenExpired(token);
+        return activeTokens.contains(token) && !isTokenExpired(token);
     }
 }
