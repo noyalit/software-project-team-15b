@@ -16,9 +16,11 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 public class UserService {
 
     private final IMemberRepository memberRepository;
+    private final Auth auth;
 
-    public UserService(IMemberRepository memberRepository) {
+    public UserService(IMemberRepository memberRepository, Auth auth) {
         this.memberRepository = memberRepository;
+        this.auth = auth;
     }
 
     public Member registerFounder(String username, String password) {
@@ -61,6 +63,14 @@ public class UserService {
         }
 
         return member;
+    }
+
+    public void exitSystem(String token) {
+        auth.exitSystem(token);
+    }
+
+    public void logout(String token) {
+        auth.logout(token);
     }
 
     public Optional<Member> findById(String userId) {
