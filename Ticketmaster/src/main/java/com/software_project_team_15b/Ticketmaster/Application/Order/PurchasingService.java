@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -45,7 +46,6 @@ public class PurchasingService {
 
     @Transactional
     public UUID createActiveOrder(String token, CreateActiveOrderCommand cmd) {
-        UUID holdToken = null;
 
         try {
             requireValidToken(token);
@@ -87,7 +87,6 @@ public class PurchasingService {
 
     @Transactional
     public void addSeatsToExistingOrder(String token, AddSeatsToActiveOrderCommand cmd) {
-        UUID holdToken = null;
         ActiveOrder activeOrder = null;
 
         try {
@@ -202,6 +201,30 @@ public class PurchasingService {
         }
     }
 
+    @Transactional
+    public void cancelAllActiveOrdersOfCurrentUser(String token) {
+        try {
+            requireValidToken(token);
+
+            UUID userId = extractUserId(token);
+
+            List<ActiveOrder> activeOrders =
+                    activeOrderRepository.findByUserIdAndActiveOrderStatus(userId, ActiveOrderStatus.ACTIVE);
+
+            for (ActiveOrder activeOrder : activeOrders) {
+                cancelSingleActiveOrder(activeOrder);
+            }
+
+            AUDIT.info("op=cancelAllActiveOrdersOfCurrentUser user={} count={} result=ok",
+                    userId, activeOrders.size());
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=cancelAllActiveOrdersOfCurrentUser result=rejected reason={}",
+                    e.getMessage());
+            throw e;
+        }
+    }
+
     private void requireValidToken(String token) {
         if (!auth.isTokenValid(token)) {
             throw new IllegalStateException("Token is invalid or expired");
@@ -227,19 +250,36 @@ public class PurchasingService {
         );
     }
 
+    @Transactional
     private void finalizeSuccessfulCheckout(ActiveOrder activeOrder) {
         if (activeOrder == null) {
             throw new IllegalArgumentException("Active order cannot be null");
         }
 
         activeOrder.complete();
+        activeOrderRepository.save(activeOrder);
 
         OrderHistory orderHistory = toOrderHistory(activeOrder);
         orderHistoryRepository.save(orderHistory);
-
-        activeOrderRepository.delete(activeOrder);
     }
 
+    @Transactional
+    private void cancelSingleActiveOrder(ActiveOrder activeOrder) {
+        if (activeOrder == null) {
+            throw new IllegalArgumentException("Active order cannot be null");
+        }
+
+        activeOrder.cancel();
+
+        activeOrderRepository.save(activeOrder);
+
+        eventManagementService.release(
+                activeOrder.getEventId(),
+                activeOrder.getOrderId()
+        );
+    }
+
+    @Transactional(readOnly = true)
     private ActiveOrder requireActiveOrder(UUID orderId) {
         return activeOrderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Active order not found: " + orderId));
