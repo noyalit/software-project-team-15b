@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class Auth implements IAuth {
 
-    private static final String SECRET = "mySuperSecretKeyForJwtToken123!";
+    private static final String SECRET = "mySuperSecretKeyForJwtToken123!!!!";
     private static final SecretKey KEY =
             Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
 
