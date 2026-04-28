@@ -4,6 +4,9 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import org.springframework.test.util.ReflectionTestUtils;
+import java.util.UUID;
+
 class MemberTest {
 
     @Test
@@ -122,5 +125,35 @@ class MemberTest {
         int hash2 = member.hashCode();
 
         assertEquals(hash1, hash2);
+    }
+
+    @Test
+    void equals_shouldReturnTrue_whenMembersHaveSameUserId() {
+        UUID sameUserId = UUID.randomUUID();
+
+        Member member1 = new Member("john", "hashedPassword123", null);
+        Member member2 = new Member("david", "hashedPassword456", null);
+
+        ReflectionTestUtils.setField(member1, "userId", sameUserId);
+        ReflectionTestUtils.setField(member2, "userId", sameUserId);
+
+        assertEquals(member1, member2);
+        assertEquals(member1.hashCode(), member2.hashCode());
+    }
+
+    @Test
+    void setUsername_shouldThrowException_whenUsernameIsNull() {
+        Member member = new Member("john", "hashedPassword123", null);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> member.setUsername(null));
+    }
+
+    @Test
+    void setPassword_shouldThrowException_whenPasswordHashIsNull() {
+        Member member = new Member("john", "oldHash", null);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> member.setPassword(null));
     }
 }
