@@ -36,8 +36,10 @@ public class OrderHistory {
         if (orderId == null || userId == null || eventId == null || tickets == null || tickets.isEmpty()) {
             throw new IllegalArgumentException("Order ID, User ID, Event ID, and Tickets cannot be null or empty");
         }
-        if (tickets.contains(null)) {
-            throw new IllegalArgumentException("Tickets set cannot contain null values");
+        for (Ticket ticket : tickets) {
+            if (ticket == null) {
+                throw new IllegalArgumentException("Tickets set cannot contain null values");
+            }
         }
         this.orderId = orderId;
         this.userId = userId;
