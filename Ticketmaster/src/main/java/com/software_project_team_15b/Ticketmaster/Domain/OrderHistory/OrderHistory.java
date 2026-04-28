@@ -54,7 +54,7 @@ public class OrderHistory {
                 activeOrder.getOrderId(),
                 activeOrder.getUserId(),
                 activeOrder.getEventId(),
-                activeOrder.getTicketSeats().stream()
+                activeOrder.getOrderSeats().stream()
                         .map(seat -> new Ticket(seat))
                         .toList()
         );
