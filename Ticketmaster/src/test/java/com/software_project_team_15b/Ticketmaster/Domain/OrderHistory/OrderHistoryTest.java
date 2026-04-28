@@ -4,8 +4,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -54,81 +53,96 @@ public class OrderHistoryTest {
                 orderId,
                 userId,
                 eventId,
-                List.of(new Ticket(seatId1), new Ticket(seatId2))
+                Set.of(new Ticket(seatId1), new Ticket(seatId2))
         );
 
         assertEquals(orderId, orderHistory.getOrderId());
         assertEquals(userId, orderHistory.getUserId());
         assertEquals(eventId, orderHistory.getEventId());
-        assertEquals(2, orderHistory.getTickets().size());
+
+        Set<UUID> ticketSeatIds = orderHistory.getTickets().stream()
+                .map(Ticket::getSeatId)
+                .collect(Collectors.toSet());
+
+        assertEquals(Set.of(seatId1, seatId2), ticketSeatIds);
     }
 
     @Test
-    void getTicketsShouldReturnDefensiveCopy() {
-        Ticket ticket1 = new Ticket(seatId1);
-        Ticket ticket2 = new Ticket(seatId2);
-
+    void getTicketsShouldProtectInternalState() {
         OrderHistory orderHistory = new OrderHistory(
                 orderId,
                 userId,
                 eventId,
-                List.of(ticket1, ticket2)
+                Set.of(new Ticket(seatId1), new Ticket(seatId2))
         );
 
-        List<Ticket> returnedTickets = orderHistory.getTickets();
-        returnedTickets.clear();
+        Set<Ticket> returnedTickets = orderHistory.getTickets();
 
-        List<Ticket> ticketsAfterMutationAttempt = orderHistory.getTickets();
+        assertThrows(UnsupportedOperationException.class, () ->
+                returnedTickets.add(new Ticket(UUID.randomUUID()))
+        );
 
-        assertEquals(2, ticketsAfterMutationAttempt.size());
-        assertTrue(ticketsAfterMutationAttempt.contains(ticket1));
-        assertTrue(ticketsAfterMutationAttempt.contains(ticket2));
+        Set<UUID> ticketSeatIds = orderHistory.getTickets().stream()
+                .map(Ticket::getSeatId)
+                .collect(Collectors.toSet());
+
+        assertEquals(Set.of(seatId1, seatId2), ticketSeatIds);
     }
 
     @Test
-    void constructorShouldCopyTicketsList() {
-        List<Ticket> originalTickets = new ArrayList<>();
+    void constructorShouldCopyTicketsSet() {
+        Set<Ticket> originalTickets = new HashSet<>();
         originalTickets.add(new Ticket(seatId1));
 
         OrderHistory orderHistory = new OrderHistory(orderId, userId, eventId, originalTickets);
 
         originalTickets.clear();
 
-        assertEquals(1, orderHistory.getTickets().size());
-        assertEquals(seatId1, orderHistory.getTickets().get(0).getSeatId());
+        Set<UUID> seatIds = orderHistory.getTickets().stream()
+                .map(Ticket::getSeatId)
+                .collect(Collectors.toSet());
+
+        assertEquals(Set.of(seatId1), seatIds);
     }
 
     @Test
     void constructorShouldThrowWhenOrderIdIsNull() {
         assertThrows(IllegalArgumentException.class, () ->
-                new OrderHistory(null, userId, eventId, List.of(new Ticket(seatId1)))
+                new OrderHistory(null, userId, eventId, Set.of(new Ticket(seatId1)))
         );
     }
 
     @Test
     void constructorShouldThrowWhenUserIdIsNull() {
         assertThrows(IllegalArgumentException.class, () ->
-                new OrderHistory(orderId, null, eventId, List.of(new Ticket(seatId1)))
+                new OrderHistory(orderId, null, eventId, Set.of(new Ticket(seatId1)))
         );
     }
 
     @Test
     void constructorShouldThrowWhenEventIdIsNull() {
         assertThrows(IllegalArgumentException.class, () ->
-                new OrderHistory(orderId, userId, null, List.of(new Ticket(seatId1)))
+                new OrderHistory(orderId, userId, null, Set.of(new Ticket(seatId1)))
         );
     }
 
     @Test
-    void constructorShouldThrowWhenTicketsListIsNull() {
+    void constructorShouldThrowWhenTicketsSetIsNull() {
         assertThrows(IllegalArgumentException.class, () ->
                 new OrderHistory(orderId, userId, eventId, null)
         );
     }
 
     @Test
+    void constructorShouldThrowWhenTicketsSetIsEmpty() {
+        assertThrows(IllegalArgumentException.class, () ->
+                new OrderHistory(orderId, userId, eventId, Set.of())
+        );
+    }
+
+    @Test
     void constructorShouldThrowWhenTicketsContainNull() {
-        List<Ticket> tickets = new ArrayList<>();
+        Set<Ticket> tickets = new HashSet<>();
         tickets.add(new Ticket(seatId1));
         tickets.add(null);
 
@@ -142,5 +156,21 @@ public class OrderHistoryTest {
         assertThrows(IllegalArgumentException.class, () ->
                 OrderHistory.fromActiveOrder(null)
         );
+    }
+
+    @Test
+    void constructorShouldRemoveDuplicateTicketsBySeatId() {
+        Set<Ticket> tickets = new HashSet<>();
+        tickets.add(new Ticket(seatId1));
+        tickets.add(new Ticket(seatId1));
+
+        OrderHistory orderHistory = new OrderHistory(orderId, userId, eventId, tickets);
+
+        Set<UUID> seatIds = orderHistory.getTickets().stream()
+                .map(Ticket::getSeatId)
+                .collect(Collectors.toSet());
+
+        assertEquals(1, seatIds.size());
+        assertEquals(Set.of(seatId1), seatIds);
     }
 }
