@@ -9,7 +9,9 @@ import java.util.UUID;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
+import org.springframework.stereotype.Repository;
 
+@Repository
 public class InMemoryMemberRepository implements IMemberRepository {
 
     private final Map<UUID, Member> membersById = new ConcurrentHashMap<>();
