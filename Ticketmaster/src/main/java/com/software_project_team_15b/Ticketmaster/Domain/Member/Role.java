@@ -3,15 +3,14 @@ package com.software_project_team_15b.Ticketmaster.Domain.Member;
 import jakarta.persistence.Column;
 import jakarta.persistence.DiscriminatorColumn;
 import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Inheritance;
 import jakarta.persistence.InheritanceType;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.util.UUID;
 
 @Entity
 @Table(name = "roles")
@@ -23,9 +22,8 @@ public abstract class Role {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "appointed_by_user_id")
-    protected Member appointedBy;
+    protected UUID appointedBy;
 
     @Column(name = "appointment_approved", nullable = false)
     private boolean appointmentApproved = false;
@@ -34,7 +32,7 @@ public abstract class Role {
         // JPA only
     }
 
-    public Role(Member appointedBy) {
+    public Role(UUID appointedBy) {
         this.appointedBy = appointedBy;
     }
 
@@ -42,16 +40,13 @@ public abstract class Role {
         return id;
     }
 
-    public Member getAppointedBy() {
+    public UUID getAppointedBy() {
         return appointedBy;
     }
 
-    public void setAppointedBy(Member appointedBy) {
-        validateAppointer(appointedBy);
+    public void setAppointedBy(UUID appointedBy) {
         this.appointedBy = appointedBy;
     }
-
-    protected abstract void validateAppointer(Member appointedBy);
 
     public boolean isAppointmentApproved() {
         return appointmentApproved;

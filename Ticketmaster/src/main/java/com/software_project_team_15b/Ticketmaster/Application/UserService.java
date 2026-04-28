@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 
@@ -15,17 +16,18 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermissio
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
-
-
+import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 
 @Service
 public class UserService {
 
     private final IMemberRepository memberRepository;
+    private final ISystemAdminRepository systemAdminRepository;
     private final Auth auth;
 
-    public UserService(IMemberRepository memberRepository, Auth auth) {
+    public UserService(IMemberRepository memberRepository, ISystemAdminRepository systemAdminRepository, Auth auth) {
         this.memberRepository = memberRepository;
+        this.systemAdminRepository = systemAdminRepository;
         this.auth = auth;
     }
 
@@ -38,25 +40,21 @@ public class UserService {
         return memberRepository.save(founder);
     }
 
-    public Member registerManager(String username, String password, String appointedByUserId, Set<ManagerPermission> premissions) {
-        Member appointedBy = getMemberOrThrow(appointedByUserId);
-
+    public Member registerManager(String username, String password, UUID appointedByUserId, Set<ManagerPermission> premissions) {
         if (memberRepository.existsByUsername(username)) {
             throw new IllegalArgumentException("Username already exists");
         }
-
-        Member manager = new Member(username, password, new Manager(appointedBy, premissions));
+        validateOwnerAppointer(appointedByUserId);
+        Member manager = new Member(username, password, new Manager(appointedByUserId, premissions));
         return memberRepository.save(manager);
     }
 
-    public Member registerOwner(String username, String password, String appointedByUserId) {
-        Member appointedBy = getMemberOrThrow(appointedByUserId);
-
+    public Member registerOwner(String username, String password, UUID appointedByUserId) {
         if (memberRepository.existsByUsername(username)) {
             throw new IllegalArgumentException("Username already exists");
         }
-
-        Member owner = new Member(username, password, new Owner(appointedBy));
+        validateOwnerAppointer(appointedByUserId);
+        Member owner = new Member(username, password, new Owner(appointedByUserId));
         return memberRepository.save(owner);
     }
 
@@ -79,7 +77,7 @@ public class UserService {
         auth.logout(token);
     }
 
-    public Optional<Member> findById(String userId) {
+    public Optional<Member> findById(UUID userId) {
         return memberRepository.findById(userId);
     }
 
@@ -91,11 +89,11 @@ public class UserService {
         return memberRepository.findAll();
     }
 
-    public boolean deleteMember(String userId) {
+    public boolean deleteMember(UUID userId) {
         return memberRepository.deleteById(userId);
     }
 
-    public Member changeUsername(String userId, String newUsername) {
+    public Member changeUsername(UUID userId, String newUsername) {
         Member member = getMemberOrThrow(userId);
 
         Optional<Member> existing = memberRepository.findByUsername(newUsername);
@@ -107,37 +105,33 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    public Member changePassword(String userId, String newPassword) {
+    public Member changePassword(UUID userId, String newPassword) {
         Member member = getMemberOrThrow(userId);
         member.setPassword(newPassword);
         return memberRepository.save(member);
     }
 
-    public Member changeRoleToManager(String userId, String appointedByUserId, Set<ManagerPermission> permissions) {
+    public Member changeRoleToManager(UUID userId, UUID appointedByUserId, Set<ManagerPermission> permissions) {
         Member member = getMemberOrThrow(userId);
-        Member appointedBy = getMemberOrThrow(appointedByUserId);
-
-        validateNoAppointmentCycle(member, appointedBy);
-
-        Role newRole = new Manager(appointedBy, permissions);
+        validateNoAppointmentCycle(member, appointedByUserId);
+        validateOwnerAppointer(appointedByUserId);
+        Role newRole = new Manager(appointedByUserId, permissions);
         member.setRole(newRole);
 
         return memberRepository.save(member);
     }
 
-    public Member changeRoleToOwner(String userId, String appointedByUserId) {
+    public Member changeRoleToOwner(UUID userId, UUID appointedByUserId) {
         Member member = getMemberOrThrow(userId);
-        Member appointedBy = getMemberOrThrow(appointedByUserId);
-
-        validateNoAppointmentCycle(member, appointedBy);
-
-        Role newRole = new Owner(appointedBy);
+        validateNoAppointmentCycle(member, appointedByUserId);
+        validateOwnerAppointer(appointedByUserId);
+        Role newRole = new Owner(appointedByUserId);
         member.setRole(newRole);
 
         return memberRepository.save(member);
     }
 
-    public Member changeRoleToFounder(String userId) {
+    public Member changeRoleToFounder(UUID userId) {
         Member member = getMemberOrThrow(userId);
 
         Role newRole = new Founder(null);
@@ -146,11 +140,9 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    public Member removeAppointment(String removerOwnerId, String memberToRemoveId) {
-        Member removerOwner = getMemberOrThrow(removerOwnerId);
+    public Member removeAppointment(UUID removerOwnerId, UUID memberToRemoveId) {
         Member memberToRemove = getMemberOrThrow(memberToRemoveId);
 
-        validateActiveOwner(removerOwner);
         if (memberToRemove.getRole() == null) {
             throw new IllegalArgumentException("Target member has no appointment");
         }
@@ -161,12 +153,13 @@ public class UserService {
             throw new IllegalArgumentException("Target member is not an owner or manager");
         }
 
-        validateWasAppointedBy(memberToRemove, removerOwner);
+        validateOwnerAppointer(removerOwnerId);
+        validateWasAppointedBy(memberToRemove, removerOwnerId);
         memberToRemove.setRole(null); 
         return memberRepository.save(memberToRemove);
     }
 
-    public Member ownerResign(String ownerId) {
+    public Member ownerResign(UUID ownerId) {
         Member owner = getMemberOrThrow(ownerId);
 
         if (!(owner.getRole() instanceof Owner)) {
@@ -180,10 +173,10 @@ public class UserService {
         return memberRepository.save(owner);
     }
 
-    public Member changeManagerPermissions(String ownerId, String managerId, Set<ManagerPermission> newPermissions) {
-        Member owner = getMemberOrThrow(ownerId);
+    public Member changeManagerPermissions(UUID ownerId, UUID managerId, Set<ManagerPermission> newPermissions) {
         Member manager = getMemberOrThrow(managerId);
-        validateActiveOwner(owner);
+        validateWasAppointedBy(manager, ownerId);
+        validateOwnerAppointer(ownerId);
 
         if (!(manager.getRole() instanceof Manager managerRole)) {
             throw new IllegalArgumentException("Target member is not a manager");
@@ -193,7 +186,17 @@ public class UserService {
         return memberRepository.save(manager);
     }
 
-    public Member approveAppointment(String userId) {
+    public Set<ManagerPermission> getManagerPermissions(UUID ownerId, UUID managerId) {
+        Member manager = getMemberOrThrow(managerId);
+        validateOwnerAppointer(ownerId);
+
+        if (!(manager.getRole() instanceof Manager managerRole)) {
+            throw new IllegalArgumentException("Target member is not a manager");
+        }
+        return managerRole.getPermissions();
+    }
+
+    public Member approveAppointment(UUID userId) {
         Member member = getMemberOrThrow(userId);
 
         if (member.getRole() == null) {
@@ -203,7 +206,14 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    public boolean isAppointmentApproved(String userId) {
+    public boolean cancelMemberAccountBySystemAdmin(UUID adminId, UUID memberIdToCancel) {
+        if (systemAdminRepository.findById(adminId).isEmpty()) {
+            throw new IllegalArgumentException("Only a system admin can cancel member accounts");
+        }
+        return memberRepository.deleteById(memberIdToCancel);
+    }
+
+    public boolean isAppointmentApproved(UUID userId) {
         Member member = getMemberOrThrow(userId);
         if (member.getRole() == null) {
             return false;
@@ -211,50 +221,61 @@ public class UserService {
         return member.getRole().isAppointmentApproved();
     }
 
-    private void validateActiveOwner(Member member) {
-        if (!(member.getRole() instanceof Owner)) {
-            throw new IllegalArgumentException("Only an owner can perform this action");
-        }
+    private void validateWasAppointedBy(Member appointedMember, UUID expectedAppointerId) {
+        UUID actualAppointerId = appointedMember.getRole().getAppointedBy();
 
-        if (!member.getRole().isAppointmentApproved()) {
-            throw new IllegalStateException("Owner appointment must be approved first");
-        }
-    }
-
-    private void validateWasAppointedBy(Member appointedMember, Member expectedAppointer) {
-        Member actualAppointer = appointedMember.getRole().getAppointedBy();
-
-        if (actualAppointer == null ||
-                !actualAppointer.getUserId().equals(expectedAppointer.getUserId())) {
+        if (actualAppointerId == null || !actualAppointerId.equals(expectedAppointerId)) {
             throw new IllegalArgumentException("Only the owner who appointed this member can remove the appointment");
         }
     }
 
-    private Member getMemberOrThrow(String userId) {
+    private Member getMemberOrThrow(UUID userId) {
         return memberRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Member not found with id: " + userId));
     }
 
-    private void validateNoAppointmentCycle(Member member, Member appointedBy) {
-        if (member == null || appointedBy == null) {
-            return;
+    private void validateOwnerAppointer(UUID appointedByUserId) {
+        if (appointedByUserId == null) {
+            throw new IllegalArgumentException("Appointer user ID cannot be null");
         }
-        if (member.getUserId().equals(appointedBy.getUserId())) {
-            throw new IllegalArgumentException("Member cannot be appointed by themselves");
-        }
-        Member current = appointedBy;
 
-        while (current != null && current.getRole() != null) {
-            Member currentAppointer = current.getRole().getAppointedBy();
-            if (currentAppointer == null) {
-                return;
-            }
-            if (currentAppointer.getUserId().equals(member.getUserId())) {
-                throw new IllegalArgumentException("Appointment cycle detected");
-            }
-            current = currentAppointer;
+        Member appointedBy = getMemberOrThrow(appointedByUserId);
+
+        if (appointedBy == null) {
+            throw new IllegalArgumentException("Appointer cannot be null");
+        }
+
+        if (!(appointedBy.getRole() instanceof Owner)) {
+            throw new IllegalArgumentException("Only an owner can appoint another owner or manager");
+        }
+
+        if (!appointedBy.getRole().isAppointmentApproved()) {
+            throw new IllegalStateException("Appointer owner appointment must be approved first");
         }
     }
 
+    private void validateNoAppointmentCycle(Member member, UUID appointedById) {
+        if (member == null || appointedById == null) {
+            return;
+        }
+        if (member.getUserId().equals(appointedById)) {
+            throw new IllegalArgumentException("Member cannot be appointed by themselves");
+        }
+        UUID currentId = appointedById;
+        while (currentId != null) {
+            Member current = getMemberOrThrow(currentId);
+            if (current.getRole() == null) {
+                return;
+            }
+            UUID currentAppointerId = current.getRole().getAppointedBy();
+            if (currentAppointerId == null) {
+                return;
+            }
+            if (currentAppointerId.equals(member.getUserId())) {
+                throw new IllegalArgumentException("Appointment cycle detected");
+            }
+            currentId = currentAppointerId;
+        }
+    }
 
 }

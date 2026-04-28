@@ -13,6 +13,8 @@ import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
+import java.util.UUID;
+
 
 @Entity
 @DiscriminatorValue("MANAGER")
@@ -31,21 +33,9 @@ public class Manager extends Role {
         // JPA only
     }
 
-    public Manager(Member appointedBy, Set<ManagerPermission> permissions) {
+    public Manager(UUID appointedBy, Set<ManagerPermission> permissions) {
         super(appointedBy);
-        validateAppointer(appointedBy);
         setPermissions(permissions);
-    }
-
-    @Override
-    protected void validateAppointer(Member appointedBy) {
-        if (appointedBy == null) {
-            throw new IllegalArgumentException("Manager must be appointed by an owner");
-        }
-
-        if (!(appointedBy.getRole() instanceof Owner)) {
-            throw new IllegalArgumentException("Only an owner can appoint a manager");
-        }
     }
 
     public Set<ManagerPermission> getPermissions() {

@@ -14,7 +14,7 @@ public class Member {
 
     @Id
     @Column(name = "user_id", nullable = false, updatable = false)
-    private String userId;
+    private UUID userId;
 
     @Column(name = "username", nullable = false, unique = true)
     private String username;
@@ -34,7 +34,7 @@ public class Member {
         validateUsername(username);
         validatePassword(rawPassword);
 
-        this.userId = UUID.randomUUID().toString();
+        this.userId = UUID.randomUUID();
         this.username = username.trim();
         this.passwordHash = PASSWORD_ENCODER.encode(rawPassword);
         this.role = role;
@@ -43,11 +43,11 @@ public class Member {
     @PrePersist
     protected void prePersist() {
         if (this.userId == null) {
-            this.userId = UUID.randomUUID().toString();
+            this.userId = UUID.randomUUID();
         }
     }
 
-    public String getUserId() {
+    public UUID getUserId() {
         return userId;
     }
 

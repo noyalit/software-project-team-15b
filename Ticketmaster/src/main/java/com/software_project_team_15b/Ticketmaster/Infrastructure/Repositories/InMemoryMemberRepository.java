@@ -5,13 +5,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.UUID;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 
 public class InMemoryMemberRepository implements IMemberRepository {
 
-    private final Map<String, Member> membersById = new ConcurrentHashMap<>();
+    private final Map<UUID, Member> membersById = new ConcurrentHashMap<>();
 
     @Override
     public Member save(Member member) {
@@ -35,7 +36,7 @@ public class InMemoryMemberRepository implements IMemberRepository {
     }
 
     @Override
-    public Optional<Member> findById(String userId) {
+    public Optional<Member> findById(UUID userId) {
         return Optional.ofNullable(membersById.get(userId));
     }
 
@@ -45,7 +46,7 @@ public class InMemoryMemberRepository implements IMemberRepository {
     }
 
     @Override
-    public boolean deleteById(String userId) {
+    public boolean deleteById(UUID userId) {
         return membersById.remove(userId) != null;
     }
 
