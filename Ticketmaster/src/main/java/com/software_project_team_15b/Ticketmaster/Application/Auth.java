@@ -9,49 +9,122 @@ import io.jsonwebtoken.security.Keys;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.stereotype.Service;
 
+@Service
+public class Auth implements IAuth {
 
-public class Auth {
-
-    private static final String SECRET = "mySuperSecretKeyForJwtToken123!";
+    private static final String SECRET = "mySuperSecretKeyForJwtToken123!!!!";
     private static final SecretKey KEY =
             Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
 
     private static final long EXPIRATION_TIME = 1000 * 60 * 60; // 1 hour
 
-    public boolean validatePassword(Member member, String password) {
+    private final Map<String, Session> activeSessions = new ConcurrentHashMap<>();
+
+    private static class Session {
+        private final String token;
+        private final UUID userId;
+        private final UserType userType;
+
+        private Session(String token, UUID userId, UserType userType) {
+            this.token = token;
+            this.userId = userId;
+            this.userType = userType;
+        }
+
+        public String getToken() {
+            return token;
+        }
+
+        public UUID getUserId() {
+            return userId;
+        }
+
+        public UserType getUserType() {
+            return userType;
+        }
+
+        public boolean isGuest() {
+            return userType == UserType.GUEST;
+        }
+
+        public boolean isMember() {
+            return userType == UserType.MEMBER;
+        }
+    }
+
+    @Override
+    public String generateMemberToken(Member member) {
         if (member == null) {
             throw new IllegalArgumentException("member cannot be null");
         }
-        return member.verifyPassword(password);
-    }
 
-    public String generateMemberToken(Member member) {
-        return Jwts.builder()
-                .subject(member.getUserId())
+        String roleName = member.getRole() == null
+                ? "RegularMember"
+                : member.getRole().getRoleName();
+
+        String token = Jwts.builder()
+                .subject(member.getUserId().toString())
                 .claim("userType", UserType.MEMBER.name())
                 .claim("username", member.getUsername())
-                .claim("role", member.getRole().getRoleName())
+                .claim("role", roleName)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
                 .signWith(KEY)
                 .compact();
+
+        activeSessions.put(token, new Session(token, member.getUserId(), UserType.MEMBER));
+        return token;
     }
 
+    @Override
     public String generateGuestToken() {
-        String guestId = UUID.randomUUID().toString();
+        UUID guestId = UUID.randomUUID();
 
-        return Jwts.builder()
-                .subject(guestId)
+        String token = Jwts.builder()
+                .subject(guestId.toString())
                 .claim("userType", UserType.GUEST.name())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
                 .signWith(KEY)
                 .compact();
+
+        activeSessions.put(token, new Session(token, guestId, UserType.GUEST));
+        return token;
+    }
+
+    @Override
+    public void exitSystem(String token) {
+        validateTokenInput(token);
+        activeSessions.remove(token);
+    }
+
+    @Override
+    public String logout(String memberToken) {
+        validateTokenInput(memberToken);
+
+        Session session = activeSessions.get(memberToken);
+
+        if (session == null || isTokenExpired(memberToken)) {
+            activeSessions.remove(memberToken);
+            throw new IllegalArgumentException("Invalid or expired session");
+        }
+
+        if (!session.isMember()) {
+            throw new IllegalArgumentException("Only members can logout");
+        }
+
+        activeSessions.remove(memberToken);
+        return generateGuestToken();
     }
 
     public Claims extractAllClaims(String token) {
+        validateTokenInput(token);
+
         return Jwts.parser()
                 .verifyWith(KEY)
                 .build()
@@ -59,8 +132,8 @@ public class Auth {
                 .getPayload();
     }
 
-    public String extractUserId(String token) {
-        return extractAllClaims(token).getSubject();
+    public UUID extractUserId(String token) {
+        return UUID.fromString(extractAllClaims(token).getSubject());
     }
 
     public String extractUserType(String token) {
@@ -75,12 +148,16 @@ public class Auth {
         return extractAllClaims(token).get("role", String.class);
     }
 
+    @Override
     public boolean isGuest(String token) {
-        return UserType.GUEST.name().equals(extractUserType(token));
+        Session session = activeSessions.get(token);
+        return session != null && session.isGuest();
     }
 
+    @Override
     public boolean isMember(String token) {
-        return UserType.MEMBER.name().equals(extractUserType(token));
+        Session session = activeSessions.get(token);
+        return session != null && session.isMember();
     }
 
     public boolean isTokenExpired(String token) {
@@ -88,7 +165,49 @@ public class Auth {
         return expiration.before(new Date());
     }
 
+    @Override
     public boolean isTokenValid(String token) {
-        return !isTokenExpired(token);
+        if (token == null || token.isBlank()) {
+            return false;
+        }
+
+        if (!activeSessions.containsKey(token)) {
+            return false;
+        }
+
+        if (isTokenExpired(token)) {
+            activeSessions.remove(token);
+            return false;
+        }
+
+        return true;
+    }
+
+    @Override
+    public String getSessionUserId(String token) {
+        Session session = activeSessions.get(token);
+
+        if (session == null) {
+            throw new IllegalArgumentException("Session not found");
+        }
+
+        return session.getUserId().toString();
+    }
+
+    @Override
+    public UserType getSessionUserType(String token) {
+        Session session = activeSessions.get(token);
+
+        if (session == null) {
+            throw new IllegalArgumentException("Session not found");
+        }
+
+        return session.getUserType();
+    }
+
+    private void validateTokenInput(String token) {
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("Invalid token");
+        }
     }
 }
