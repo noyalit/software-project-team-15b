@@ -6,15 +6,16 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.util.UUID;
 
 @Entity
 @Table(name = "system_admins")
 public class SystemAdmin {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "admin_id", nullable = false, updatable = false)
-    private Long adminId;
+    private UUID adminId;
 
     @Column(name = "username", nullable = false, unique = true)
     private final String username;
@@ -31,7 +32,7 @@ public class SystemAdmin {
         this.password = password;
     }
 
-    public Long getAdminId() {
+    public UUID getAdminId() {
         return adminId;
     }
 
@@ -44,12 +45,12 @@ public class SystemAdmin {
         this.password = newPassword;
     }
 
-    public void assignAdminId(long adminId) {
+    public void assignAdminId(UUID adminId) {
         if (this.adminId != null) {
             return;
         }
-        if (adminId <= 0) {
-            throw new IllegalArgumentException("adminId must be positive");
+        if (adminId == null) {
+            throw new IllegalArgumentException("adminId cannot be null");
         }
         this.adminId = adminId;
     }

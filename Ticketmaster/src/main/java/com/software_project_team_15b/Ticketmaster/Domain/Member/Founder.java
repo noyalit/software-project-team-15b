@@ -2,6 +2,7 @@ package com.software_project_team_15b.Ticketmaster.Domain.Member;
 
 import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
+import java.util.UUID;
 
 @Entity
 @DiscriminatorValue("FOUNDER")
@@ -12,12 +13,13 @@ public class Founder extends Owner {
     }
 
     public Founder(Member appointedBy) {
-        super(appointedBy);
+        super(null);
+        approveAppointment();
     }
 
     @Override
-    protected void validateAppointer(Member appointedBy) {
-        // Founder is allowed to have no appointer
+    public void setAppointedBy(UUID appointedBy) {
+        throw new IllegalStateException("Founder cannot have an appointer");
     }
 
     @Override
