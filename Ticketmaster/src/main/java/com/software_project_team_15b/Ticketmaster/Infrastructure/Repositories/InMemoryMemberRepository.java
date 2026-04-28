@@ -9,9 +9,11 @@ import java.util.UUID;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 @Repository
+@ConditionalOnProperty(name = "app.storage.mode", havingValue = "memory", matchIfMissing = true)
 public class InMemoryMemberRepository implements IMemberRepository {
 
     private final Map<UUID, Member> membersById = new ConcurrentHashMap<>();
@@ -22,17 +24,16 @@ public class InMemoryMemberRepository implements IMemberRepository {
             throw new IllegalArgumentException("Member cannot be null");
         }
 
-        // Check username uniqueness
-        Optional<Member> existing = findByUsername(member.getUsername());
+        synchronized (this) {
+            Optional<Member> existing = findByUsername(member.getUsername());
 
-        //existing member with the same username exists and it's not the same member
-        if (existing.isPresent() &&
-            !existing.get().getUserId().equals(member.getUserId())) {
-            throw new IllegalArgumentException("Username already exists");
+            if (existing.isPresent() &&
+                !existing.get().getUserId().equals(member.getUserId())) {
+                throw new IllegalArgumentException("Username already exists");
+            }
+
+            membersById.put(member.getUserId(), member);
         }
-
-        // Save or update
-        membersById.put(member.getUserId(), member);
 
         return member;
     }

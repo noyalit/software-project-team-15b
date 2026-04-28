@@ -13,7 +13,7 @@ import java.util.UUID;
 public class SystemAdmin {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.UUID)
     @Column(name = "admin_id", nullable = false, updatable = false)
     private UUID adminId;
 
