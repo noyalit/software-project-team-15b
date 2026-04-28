@@ -17,18 +17,27 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.IPasswordEncoder;
 
 @Service
 public class UserService {
 
     private final IMemberRepository memberRepository;
     private final ISystemAdminRepository systemAdminRepository;
-    private final Auth auth;
+    private final IAuth auth;
+    private final IPasswordEncoder passwordEncoder;
 
-    public UserService(IMemberRepository memberRepository, ISystemAdminRepository systemAdminRepository, Auth auth) {
+    public UserService(
+            IMemberRepository memberRepository,
+            ISystemAdminRepository systemAdminRepository,
+            IAuth auth,
+            IPasswordEncoder passwordEncoder
+    ) {
         this.memberRepository = memberRepository;
         this.systemAdminRepository = systemAdminRepository;
         this.auth = auth;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public Member registerFounder(String username, String password) {
@@ -36,7 +45,8 @@ public class UserService {
             throw new IllegalArgumentException("Username already exists");
         }
 
-        Member founder = new Member(username, password, new Founder(null));
+        validateRawPassword(password);
+        Member founder = new Member(username, passwordEncoder.encode(password), new Founder(null));
         return memberRepository.save(founder);
     }
 
@@ -44,8 +54,10 @@ public class UserService {
         if (memberRepository.existsByUsername(username)) {
             throw new IllegalArgumentException("Username already exists");
         }
+
         validateOwnerAppointer(appointedByUserId);
-        Member manager = new Member(username, password, new Manager(appointedByUserId, premissions));
+        validateRawPassword(password);
+        Member manager = new Member(username, passwordEncoder.encode(password), new Manager(appointedByUserId, premissions));
         return memberRepository.save(manager);
     }
 
@@ -54,7 +66,8 @@ public class UserService {
             throw new IllegalArgumentException("Username already exists");
         }
         validateOwnerAppointer(appointedByUserId);
-        Member owner = new Member(username, password, new Owner(appointedByUserId));
+        validateRawPassword(password);
+        Member owner = new Member(username, passwordEncoder.encode(password), new Owner(appointedByUserId));
         return memberRepository.save(owner);
     }
 
@@ -62,7 +75,7 @@ public class UserService {
         Member member = memberRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid username or password"));
 
-        if (!member.verifyPassword(password)) {
+        if (!passwordEncoder.matches(password, member.getPasswordHash())) {
             throw new IllegalArgumentException("Invalid username or password");
         }
 
@@ -107,7 +120,8 @@ public class UserService {
 
     public Member changePassword(UUID userId, String newPassword) {
         Member member = getMemberOrThrow(userId);
-        member.setPassword(newPassword);
+        validateRawPassword(newPassword);
+        member.setPassword(passwordEncoder.encode(newPassword));
         return memberRepository.save(member);
     }
 
@@ -275,6 +289,23 @@ public class UserService {
                 throw new IllegalArgumentException("Appointment cycle detected");
             }
             currentId = currentAppointerId;
+        }
+    }
+
+    private void validateRawPassword(String password) {
+        if (password == null || password.isBlank()) {
+            throw new IllegalArgumentException("Password cannot be null or empty");
+        }
+
+        if (password.length() < 8) {
+            throw new IllegalArgumentException("Password must be at least 8 characters long");
+        }
+
+        String regex = "^(?=.*[A-Z])(?=.*\\d).+$";
+        if (!password.matches(regex)) {
+            throw new IllegalArgumentException(
+                    "Password must contain at least one uppercase letter and one number"
+            );
         }
     }
 

@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class Auth {
+public class Auth implements IAuth {
 
     private static final String SECRET = "mySuperSecretKeyForJwtToken123!";
     private static final SecretKey KEY =
@@ -25,10 +25,10 @@ public class Auth {
 
     private static class Session {
         private final String token;
-        private final String userId;
+        private final UUID userId;
         private final UserType userType;
 
-        private Session(String token, String userId, UserType userType) {
+        private Session(String token, UUID userId, UserType userType) {
             this.token = token;
             this.userId = userId;
             this.userType = userType;
@@ -38,7 +38,7 @@ public class Auth {
             return token;
         }
 
-        public String getUserId() {
+        public UUID getUserId() {
             return userId;
         }
 
@@ -55,23 +55,21 @@ public class Auth {
         }
     }
 
-    public boolean validatePassword(Member member, String password) {
-        if (member == null) {
-            throw new IllegalArgumentException("member cannot be null");
-        }
-        return member.verifyPassword(password);
-    }
-
+    @Override
     public String generateMemberToken(Member member) {
         if (member == null) {
             throw new IllegalArgumentException("member cannot be null");
         }
 
+        String roleName = member.getRole() == null
+                ? "RegularMember"
+                : member.getRole().getRoleName();
+
         String token = Jwts.builder()
-                .subject(member.getUserId())
+                .subject(member.getUserId().toString())
                 .claim("userType", UserType.MEMBER.name())
                 .claim("username", member.getUsername())
-                .claim("role", member.getRole().getRoleName())
+                .claim("role", roleName)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
                 .signWith(KEY)
@@ -81,11 +79,12 @@ public class Auth {
         return token;
     }
 
+    @Override
     public String generateGuestToken() {
-        String guestId = UUID.randomUUID().toString();
+        UUID guestId = UUID.randomUUID();
 
         String token = Jwts.builder()
-                .subject(guestId)
+                .subject(guestId.toString())
                 .claim("userType", UserType.GUEST.name())
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
@@ -96,11 +95,13 @@ public class Auth {
         return token;
     }
 
+    @Override
     public void exitSystem(String token) {
         validateTokenInput(token);
         activeSessions.remove(token);
     }
 
+    @Override
     public String logout(String memberToken) {
         validateTokenInput(memberToken);
 
@@ -116,7 +117,6 @@ public class Auth {
         }
 
         activeSessions.remove(memberToken);
-
         return generateGuestToken();
     }
 
@@ -130,8 +130,8 @@ public class Auth {
                 .getPayload();
     }
 
-    public String extractUserId(String token) {
-        return extractAllClaims(token).getSubject();
+    public UUID extractUserId(String token) {
+        return UUID.fromString(extractAllClaims(token).getSubject());
     }
 
     public String extractUserType(String token) {
@@ -146,11 +146,13 @@ public class Auth {
         return extractAllClaims(token).get("role", String.class);
     }
 
+    @Override
     public boolean isGuest(String token) {
         Session session = activeSessions.get(token);
         return session != null && session.isGuest();
     }
 
+    @Override
     public boolean isMember(String token) {
         Session session = activeSessions.get(token);
         return session != null && session.isMember();
@@ -161,6 +163,7 @@ public class Auth {
         return expiration.before(new Date());
     }
 
+    @Override
     public boolean isTokenValid(String token) {
         if (token == null || token.isBlank()) {
             return false;
@@ -178,6 +181,7 @@ public class Auth {
         return true;
     }
 
+    @Override
     public String getSessionUserId(String token) {
         Session session = activeSessions.get(token);
 
@@ -185,9 +189,10 @@ public class Auth {
             throw new IllegalArgumentException("Session not found");
         }
 
-        return session.getUserId();
+        return session.getUserId().toString();
     }
 
+    @Override
     public UserType getSessionUserType(String token) {
         Session session = activeSessions.get(token);
 

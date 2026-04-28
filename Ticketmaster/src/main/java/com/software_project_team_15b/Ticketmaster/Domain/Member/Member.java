@@ -1,17 +1,12 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Member;
 
 import jakarta.persistence.*;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-
 import java.util.Objects;
 import java.util.UUID;
 
 @Entity
 @Table(name = "members")
 public class Member {
-
-    private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
-
     @Id
     @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
@@ -30,13 +25,13 @@ public class Member {
         // JPA only
     }
 
-    public Member(String username, String rawPassword, Role role) {
+    public Member(String username, String passwordHash, Role role) {
         validateUsername(username);
-        validatePassword(rawPassword);
+        validatePasswordHash(passwordHash);
 
         this.userId = UUID.randomUUID();
         this.username = username.trim();
-        this.passwordHash = PASSWORD_ENCODER.encode(rawPassword);
+        this.passwordHash = passwordHash;
         this.role = role;
     }
 
@@ -64,13 +59,9 @@ public class Member {
         return passwordHash;
     }
 
-    public void setPassword(String rawPassword) {
-        validatePassword(rawPassword);
-        this.passwordHash = PASSWORD_ENCODER.encode(rawPassword);
-    }
-
-    public boolean verifyPassword(String rawPassword) {
-        return rawPassword != null && PASSWORD_ENCODER.matches(rawPassword, this.passwordHash);
+    public void setPassword(String passwordHash) {
+        validatePasswordHash(passwordHash);
+        this.passwordHash = passwordHash;
     }
 
     public Role getRole() {
@@ -87,17 +78,9 @@ public class Member {
         }
     }
 
-    private static void validatePassword(String password) {
-        if (password == null || password.isBlank()) {
-            throw new IllegalArgumentException("Password cannot be null or empty");
-        }
-        if (password.length() < 8) {
-            throw new IllegalArgumentException("Password must be at least 8 characters long");
-        }
-
-        String regex = "^(?=.*[A-Z])(?=.*\\d).+$";
-        if (!password.matches(regex)) {
-            throw new IllegalArgumentException("Password must contain at least one uppercase letter and one number");
+    private static void validatePasswordHash(String passwordHash) {
+        if (passwordHash == null || passwordHash.isBlank()) {
+            throw new IllegalArgumentException("Password hash cannot be null or empty");
         }
     }
 
