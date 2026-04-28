@@ -50,14 +50,14 @@ public class UserService {
         return memberRepository.save(founder);
     }
 
-    public Member registerManager(String username, String password, UUID appointedByUserId, Set<ManagerPermission> premissions) {
+    public Member registerManager(String username, String password, UUID appointedByUserId, Set<ManagerPermission> permissions) {
         if (memberRepository.existsByUsername(username)) {
             throw new IllegalArgumentException("Username already exists");
         }
 
         validateOwnerAppointer(appointedByUserId);
         validateRawPassword(password);
-        Member manager = new Member(username, passwordEncoder.encode(password), new Manager(appointedByUserId, premissions));
+        Member manager = new Member(username, passwordEncoder.encode(password), new Manager(appointedByUserId, permissions));
         return memberRepository.save(manager);
     }
 
@@ -254,10 +254,6 @@ public class UserService {
         }
 
         Member appointedBy = getMemberOrThrow(appointedByUserId);
-
-        if (appointedBy == null) {
-            throw new IllegalArgumentException("Appointer cannot be null");
-        }
 
         if (!(appointedBy.getRole() instanceof Owner)) {
             throw new IllegalArgumentException("Only an owner can appoint another owner or manager");
