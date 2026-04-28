@@ -3,23 +3,25 @@ package com.software_project_team_15b.Ticketmaster.Domain.OrderHistory;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 
+import java.util.UUID;
+
 @Embeddable
 public class Ticket {
 
     @Column(name = "seat_id", nullable = false, updatable = false)
-    private String seatId;
+    private UUID seatId;
 
     protected Ticket() {
     }
 
-    public Ticket(String seatId) {
+    public Ticket(UUID seatId) {
         if (seatId == null) {
             throw new IllegalArgumentException("Seat ID cannot be null");
         }    
         this.seatId = seatId;
     }
 
-    public String getSeatId() {
+    public UUID getSeatId() {
         return seatId;
     }
 
