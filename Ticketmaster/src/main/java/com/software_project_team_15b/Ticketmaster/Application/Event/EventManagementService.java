@@ -3,11 +3,16 @@ package com.software_project_team_15b.Ticketmaster.Application.Event;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventArea;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Seat;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatingEventArea;
@@ -20,6 +25,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompanyAut
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PessimisticLockException;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
@@ -259,6 +265,57 @@ public class EventManagementService {
         } finally {
             lock.unlock();
         }
+    }
+
+    @Retryable(retryFor = {
+            OptimisticLockException.class,
+            PessimisticLockException.class,
+            PessimisticLockingFailureException.class,
+            CannotAcquireLockException.class,
+            ObjectOptimisticLockingFailureException.class
+    }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
+    public void releaseSeats(UUID eventId, UUID holdToken, List<UUID> seatIds) {
+        Objects.requireNonNull(seatIds, "seatIds");
+        if (seatIds.isEmpty()) return;
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            txTemplate.executeWithoutResult(status -> {
+                Event event = events.findByIdForUpdate(eventId)
+                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
+                event.releaseSeats(holdToken, seatIds);
+                events.save(event);
+            });
+            AUDIT.info("op=releaseSeats event={} token={} seats={} result=ok", eventId, holdToken, seatIds.size());
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=releaseSeats event={} token={} result=rejected reason={}", eventId, holdToken, e.getMessage());
+            throw e;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public PriceBreakdown getPrice(UUID eventId, PriceQuery query) {
+        Event event = requireEvent(eventId);
+        EventArea area = event.areas().stream()
+                .filter(a -> a.areaId().equals(query.areaId()))
+                .findFirst()
+                .orElseThrow(() -> new InvalidEventStateException("area not found: " + query.areaId()));
+        Money subtotal = area.basePrice().multiply(query.quantity());
+        PurchaseRequest request = new PurchaseRequest(
+                eventId, query.areaId(), query.buyerId(), query.buyerBirthDate(),
+                query.quantity(), List.of(), query.couponCode()
+        );
+        Money total = event.discountPolicy().apply(subtotal, request, null);
+        Money discount = subtotal.subtract(total);
+        return new PriceBreakdown(area.basePrice(), subtotal, discount, total);
+    }
+
+    @Transactional(readOnly = true)
+    public EventAvailability getEventAvailability(UUID eventId) {
+        Event event = requireEvent(eventId);
+        return event.bookingStatus();
     }
 
     private Event requireEvent(UUID eventId) {

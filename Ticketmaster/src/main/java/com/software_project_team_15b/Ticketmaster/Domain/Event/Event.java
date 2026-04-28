@@ -161,6 +161,25 @@ public class Event {
     }
 
     /**
+     * Releases only the specified seats held under the given token, leaving other
+     * seats in the same reservation on hold.
+     *
+     * @return true if at least one seat was released
+     */
+    public boolean releaseSeats(UUID holdToken, List<UUID> seatIds) {
+        Objects.requireNonNull(holdToken, "holdToken");
+        Objects.requireNonNull(seatIds, "seatIds");
+        if (seatIds.isEmpty()) return false;
+        boolean released = false;
+        for (EventArea a : areas) {
+            if (a instanceof SeatingEventArea seating) {
+                released |= seating.releaseSpecificSeats(seatIds, holdToken);
+            }
+        }
+        return released;
+    }
+
+    /**
      * Transitions seats/capacity held under the given token to SOLD.
      * Called by the checkout flow on successful payment.
      */
@@ -197,6 +216,26 @@ public class Event {
                 .findFirst()
                 .orElseThrow(() -> new InvalidEventStateException("area not found: " + areaId));
         return area.basePrice().multiply(quantity);
+    }
+
+    /**
+     * Returns the current booking status of the event.
+     * INACTIVE if the event is not published or has already started.
+     * SOLD_OUT if there is no remaining available capacity.
+     * AVAILABLE otherwise.
+     */
+    public EventAvailability bookingStatus() {
+        if (status == EventStatus.CANCELLED || status == EventStatus.DRAFT) {
+            return EventAvailability.INACTIVE;
+        }
+        if (startsAt.isBefore(Instant.now())) {
+            return EventAvailability.INACTIVE;
+        }
+        if (status == EventStatus.SOLD_OUT) {
+            return EventAvailability.SOLD_OUT;
+        }
+        boolean anyAvailable = areas.stream().anyMatch(a -> a.availableCapacity() > 0);
+        return anyAvailable ? EventAvailability.AVAILABLE : EventAvailability.SOLD_OUT;
     }
 
     public int heldCountIn(UUID areaId) {
