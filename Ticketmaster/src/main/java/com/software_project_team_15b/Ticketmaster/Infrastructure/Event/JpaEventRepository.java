@@ -27,6 +27,8 @@ public class JpaEventRepository implements IEventRepository {
 
     @Override
     public Optional<Event> findByIdForUpdate(UUID id) {
+        // Optimistic profile: no DB lock — conflict detection relies on @Version.
+        // The pessimistic profile acquires PESSIMISTIC_WRITE via SpringDataEventJpa.
         return jpa.findById(id);
     }
 

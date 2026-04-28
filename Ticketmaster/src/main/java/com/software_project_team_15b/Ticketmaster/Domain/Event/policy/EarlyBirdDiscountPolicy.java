@@ -7,6 +7,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompDiscountPolicy;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Objects;
 
 public class EarlyBirdDiscountPolicy implements IEventDiscountPolicy {
 
@@ -24,7 +25,7 @@ public class EarlyBirdDiscountPolicy implements IEventDiscountPolicy {
             throw new IllegalArgumentException("percentage must be in [0, 100]");
         }
         this.percentage = percentage;
-        this.until = until;
+        this.until = Objects.requireNonNull(until, "until");
     }
 
     public BigDecimal percentage() { return percentage; }

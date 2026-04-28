@@ -29,6 +29,7 @@ public class CouponDiscountPolicy implements IEventDiscountPolicy {
     @Override
     public Money apply(Money subtotal, PurchaseRequest request, ICompDiscountPolicy companyPolicy) {
         Money afterCompany = companyPolicy != null ? companyPolicy.apply(subtotal, request) : subtotal;
+        if (request.couponCode() == null) return afterCompany;
         if (code.equalsIgnoreCase(request.couponCode())) {
             return afterCompany.subtract(afterCompany.percent(percentage));
         }

@@ -79,8 +79,8 @@ public class Event {
         this.startsAt = Objects.requireNonNull(startsAt, "startsAt");
         this.location = Objects.requireNonNull(location, "location");
         this.status = EventStatus.DRAFT;
-        this.purchasePolicy = purchasePolicy;
-        this.discountPolicy = discountPolicy;
+        this.purchasePolicy = Objects.requireNonNull(purchasePolicy, "purchasePolicy");
+        this.discountPolicy = Objects.requireNonNull(discountPolicy, "discountPolicy");
     }
 
     public UUID eventId() { return eventId; }
@@ -126,6 +126,7 @@ public class Event {
      */
     public HoldReceipt holdSeats(UUID areaId, List<UUID> seatIds, UUID holdToken) {
         requireState(EventStatus.PUBLISHED, "holdSeats");
+        Objects.requireNonNull(seatIds, "seatIds");
         if (new HashSet<>(seatIds).size() != seatIds.size()) {
             throw new InvalidEventStateException("seatIds contains duplicates");
         }

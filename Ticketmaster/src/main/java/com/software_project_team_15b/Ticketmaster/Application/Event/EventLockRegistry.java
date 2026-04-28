@@ -5,6 +5,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import org.springframework.stereotype.Component;
 
+// NOTE: single-JVM only — if this service is ever scaled to multiple instances,
+// replace with a distributed lock (e.g. Redis Redlock) or remove and rely solely on DB locking.
 @Component
 public class EventLockRegistry {
 

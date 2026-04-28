@@ -42,6 +42,12 @@ import org.springframework.transaction.annotation.Transactional;
  * The service deliberately does NOT own any TTL/timer logic: the external
  * reservation-timer component is expected to invoke {@link #release} when a
  * hold's TTL expires.
+ *
+ * Transaction style note: read/write methods that do NOT retry use @Transactional
+ * directly. Methods that use @Retryable (hold/release/confirm/cancel) must manage
+ * their own transaction boundary via TransactionTemplate so that a fresh transaction
+ * is opened on each retry attempt — @Transactional on a retried method would keep
+ * the same transaction open across retries and never see a different version.
  */
 @Service
 public class EventManagementService {
@@ -139,6 +145,7 @@ public class EventManagementService {
                 events.save(event);
             });
             AUDIT.info("op=cancel event={} caller={} result=ok", eventId, callerId);
+            locks.forget(eventId);
         } catch (RuntimeException e) {
             AUDIT.warn("op=cancel event={} caller={} result=rejected reason={}", eventId, callerId, e.getMessage());
             throw e;
@@ -241,6 +248,7 @@ public class EventManagementService {
             });
             AUDIT.info("op=confirm event={} token={} qty={} result=ok",
                     eventId, holdToken, receipt.quantity());
+            locks.forget(eventId);
             return receipt;
         } catch (PolicyViolationException | InvalidEventStateException e) {
             AUDIT.warn("op=confirm event={} token={} result=rejected reason={}", eventId, holdToken, e.getMessage());
