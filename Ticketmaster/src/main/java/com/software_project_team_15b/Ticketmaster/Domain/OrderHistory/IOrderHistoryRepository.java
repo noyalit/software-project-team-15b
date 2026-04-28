@@ -3,12 +3,13 @@ package com.software_project_team_15b.Ticketmaster.Domain.OrderHistory;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.UUID;
 
-public interface IOrderHistoryRepository extends JpaRepository<OrderHistory, String> {
+public interface IOrderHistoryRepository extends JpaRepository<OrderHistory, UUID> {
 
-    List<OrderHistory> findByUserId(String userId);
+    List<OrderHistory> findByUserId(UUID userId);
 
-    List<OrderHistory> findByEventId(String eventId);
+    List<OrderHistory> findByEventId(UUID eventId);
 
-    List<OrderHistory> findByEventIdIn(List<String> eventIds);
+    List<OrderHistory> findByEventIdIn(List<UUID> eventIds);
 }

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
 @ConditionalOnProperty(name = "app.storage.mode", havingValue = "db")
@@ -24,7 +25,7 @@ public class JpaSystemAdminRepositoryAdapter implements ISystemAdminRepository {
     }
 
     @Override
-    public Optional<SystemAdmin> findById(Long adminId) {
+    public Optional<SystemAdmin> findById(UUID adminId) {
         return springDataRepository.findById(adminId);
     }
 
@@ -39,7 +40,7 @@ public class JpaSystemAdminRepositoryAdapter implements ISystemAdminRepository {
     }
 
     @Override
-    public void deleteById(Long adminId) {
+    public void deleteById(UUID adminId) {
         springDataRepository.deleteById(adminId);
     }
 }
