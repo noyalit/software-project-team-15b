@@ -47,17 +47,18 @@ public class OrderHistory {
         this.tickets = new java.util.HashSet<>(tickets);
     }
 
-    public static OrderHistory fromActiveOrder(ActiveOrder activeOrder) {
+    public static OrderHistory fromActiveOrder(ActiveOrder activeOrder, Set<Ticket> tickets) {
         if (activeOrder == null) {
             throw new IllegalArgumentException("ActiveOrder cannot be null");
+        }
+        if (tickets == null) {
+            throw new IllegalArgumentException("Tickets cannot be null");
         }
         return new OrderHistory(
                 activeOrder.getOrderId(),
                 activeOrder.getUserId(),
                 activeOrder.getEventId(),
-                activeOrder.getOrderSeats().stream()
-                        .map(seat -> new Ticket(seat))
-                        .collect(Collectors.toSet())
+                Set.copyOf(tickets)
         );
     }
 

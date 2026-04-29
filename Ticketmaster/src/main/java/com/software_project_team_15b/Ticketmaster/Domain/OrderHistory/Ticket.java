@@ -5,24 +5,36 @@ import jakarta.persistence.Embeddable;
 
 import java.util.UUID;
 
+import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
+
 @Embeddable
 public class Ticket {
 
     @Column(name = "seat_id", nullable = false, updatable = false)
     private UUID seatId;
+    @Column(name = "price_amount", nullable = false, updatable = false)
+    private Money price;
 
     protected Ticket() {
     }
 
-    public Ticket(UUID seatId) {
+    public Ticket(UUID seatId, Money price) {
         if (seatId == null) {
             throw new IllegalArgumentException("Seat ID cannot be null");
-        }    
+        }
+        if (price == null) {
+            throw new IllegalArgumentException("Price cannot be null");
+        }
         this.seatId = seatId;
+        this.price = price;
     }
 
     public UUID getSeatId() {
         return seatId;
+    }
+
+    public Money getPrice() {
+        return new Money(price.amount(), price.currency());
     }
 
     @Override
@@ -32,12 +44,12 @@ public class Ticket {
 
         Ticket ticket = (Ticket) o;
 
-        return seatId.equals(ticket.seatId);
+        return seatId.equals(ticket.seatId) && price.equals(ticket.price);
     }
 
     @Override
     public int hashCode() {
-        return seatId.hashCode();
+        return java.util.Objects.hash(seatId, price);
     }
 
 }
