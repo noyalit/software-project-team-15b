@@ -196,7 +196,7 @@ public class PurchasingService {
             UUID userId = extractUserId(token);
             ActiveOrder activeOrder = requireActiveOrder(orderId);
             requireOrderOwnership(activeOrder, userId);
-            ensureOrderIsModifiable(activeOrder);
+            activeOrder.ensureOrderIsModifiable();
             requireEventIsValid(activeOrder.getEventId());
 
             EventView eventView = eventManagementService.getEvent(activeOrder.getEventId());

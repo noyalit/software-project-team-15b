@@ -10,8 +10,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.stereotype.Repository;
 
-import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
-
 import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
 
