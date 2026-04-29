@@ -69,7 +69,7 @@ public class Company {
     // =============================================================================================================
     // Usecase methods
 
-    // II.3.2 | UC-MEM-02
+    // II.3.2
     public Company(String name, String founderMemberId) {
         this.name = name;
         this.status = CompanyStatus.ACTIVE;
@@ -77,7 +77,7 @@ public class Company {
         this.roles.add(new RoleAssignment(founderMemberId, CompanyRole.FOUNDER, null, new HashSet<>()));
     }
 
-    // II.4.8 | UC-OWN-08
+    // II.4.8
     public void appointOwner(String appointerId, String targetMemberId) {
         verifyActive();
         verifyIsOwnerOrFounder(appointerId);
@@ -88,7 +88,7 @@ public class Company {
         touch();
     }
 
-    // II.4.7 | UC-OWN-07
+    // II.4.7
     public void appointManager(String appointerId, String targetMemberId, Set<Permission> permissions) {
         verifyActive();
         verifyIsOwnerOrFounder(appointerId);
@@ -98,7 +98,7 @@ public class Company {
         touch();
     }
 
-    // II.4.9 | UC-OWN-09 & UC-OWN-12
+    // II.4.9 | II.4.12
     public void removeAppointment(String appointerId, String targetMemberId) {
         verifyActive();
         RoleAssignment targetRole = getRoleAssignment(targetMemberId);
@@ -114,7 +114,7 @@ public class Company {
         touch();
     }
 
-    // II.4.10 | UC-OWN-10
+    // II.4.10
     public void resign(String memberId) {
         verifyActive();
         RoleAssignment role = getRoleAssignment(memberId);
@@ -130,7 +130,7 @@ public class Company {
         touch();
     }
 
-    // II.4.11 | UC-OWN-11
+    // II.4.11
     public void updateManagerPermissions(String appointerId, String managerId, Set<Permission> newPermissions) {
         verifyActive();
         RoleAssignment managerRole = getRoleAssignment(managerId);
@@ -147,7 +147,7 @@ public class Company {
         touch();
     }
 
-    // II.4.3 | UC-OWN-03
+    // II.4.3
     public void updatePurchasePolicy(String actorId, String policy) {
         verifyActive();
         verifyPermission(actorId, Permission.UPDATE_POLICIES);
@@ -155,7 +155,7 @@ public class Company {
         touch();
     }
 
-    // II.4.3 | UC-OWN-04
+    // II.4.3
     public void updateDiscountPolicy(String actorId, String policy) {
         verifyActive();
         verifyPermission(actorId, Permission.UPDATE_POLICIES);
@@ -163,7 +163,7 @@ public class Company {
         touch();
     }
 
-    // II.4.6 | UC-OWN-06
+    // II.4.6
     public List<String> getSubTreeMembers(String memberId) {
         List<String> subtree = new ArrayList<>();
         subtree.add(memberId);
@@ -182,12 +182,12 @@ public class Company {
         return subtree;
     }
 
-    // II.4.15 | UC-OWN-15
+    // II.4.15
     public List<RoleAssignment> getRoles() {
         return Collections.unmodifiableList(this.roles);
     }
 
-    // II.6.1 & II.4.13 & II.4.14 | UC-OWN-13
+    // II.6.1 & II.4.13 & II.4.14
     public void changeStatus(String actorId, CompanyStatus newStatus, boolean isSystemAdmin) {
         if (!isSystemAdmin) {
             RoleAssignment role = getRoleAssignment(actorId);

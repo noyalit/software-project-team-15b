@@ -26,7 +26,7 @@ public class RoleAssignment {
     @Column(nullable = true)
     private String appointerId; // Null for Founder
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
     @CollectionTable(name = "role_permissions", joinColumns = @JoinColumn(name = "role_id"))
     @Enumerated(EnumType.STRING)
     @Column(name = "permission")
@@ -51,21 +51,41 @@ public class RoleAssignment {
     }
 
     public Set<Permission> getPermissions() {
-        return permissions;
+        return java.util.Collections.unmodifiableSet(permissions);
     }
 
     // ==============================================================================================================
     // Usecase methods
 
     public RoleAssignment(String memberId, CompanyRole role, String appointerId, Set<Permission> permissions) {
+        if (memberId == null || memberId.trim().isEmpty()) {
+            throw new IllegalArgumentException("memberId cannot be null or empty");
+        }
+        if (role == null) {
+            throw new IllegalArgumentException("role cannot be null");
+        }
+        if (role == CompanyRole.FOUNDER && appointerId != null) {
+            throw new IllegalArgumentException("A Founder cannot have an appointer");
+        }
+        if (role == CompanyRole.MANAGER && (permissions == null || permissions.isEmpty())) {
+            throw new IllegalArgumentException("A Manager must have at least one permission assigned");
+        }
+
         this.memberId = memberId;
         this.role = role;
         this.appointerId = appointerId;
-        this.permissions = permissions != null ? new HashSet<>(permissions) : new HashSet<>();
+        this.permissions = role == CompanyRole.MANAGER ? new HashSet<>(permissions) : new HashSet<>();
     }
 
     public void updatePermissions(Set<Permission> newPermissions) {
-        this.permissions = newPermissions != null ? new HashSet<>(newPermissions) : new HashSet<>();
+        if (this.role != CompanyRole.MANAGER) {
+            throw new IllegalStateException("Only managers can have specific permissions updated.");
+        }
+        if (newPermissions == null || newPermissions.isEmpty()) {
+            throw new IllegalArgumentException("A Manager must have at least one permission assigned");
+        }
+        this.permissions.clear();
+        this.permissions.addAll(newPermissions);
     }
 
     public void setAppointerId(String appointerId) {
