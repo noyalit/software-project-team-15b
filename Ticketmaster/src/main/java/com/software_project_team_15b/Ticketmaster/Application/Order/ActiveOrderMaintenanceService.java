@@ -40,7 +40,7 @@ public class ActiveOrderMaintenanceService {
     @Scheduled(cron = "${active-orders.cleanup-non-active-cron:0 0 3 * * *}")
     public void deleteNonActiveOrders() {
         List<ActiveOrder> ordersToDelete =
-                activeOrderRepository.findByStatusNot(ActiveOrderStatus.ACTIVE);
+                activeOrderRepository.findByStatusNotForUpdate(ActiveOrderStatus.ACTIVE);
 
         if (ordersToDelete.isEmpty()) {
             return;
@@ -58,7 +58,7 @@ public class ActiveOrderMaintenanceService {
         LocalDateTime expiredBefore = LocalDateTime.now().minusMinutes(1);
 
         List<ActiveOrder> expiredActiveOrders =
-                activeOrderRepository.findByStatusAndExpiresAtBefore(
+                activeOrderRepository.findExpiredActiveOrdersForUpdate(
                         ActiveOrderStatus.ACTIVE,
                         expiredBefore
                 );
