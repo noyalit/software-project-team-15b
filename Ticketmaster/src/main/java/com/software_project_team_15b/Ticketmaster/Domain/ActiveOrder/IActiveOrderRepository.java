@@ -16,7 +16,7 @@ import jakarta.persistence.LockModeType;
 import jakarta.persistence.QueryHint;
 
 @Repository
-public interface IActiveOrderRepository extends JpaRepository<ActiveOrder, String> {
+public interface IActiveOrderRepository extends JpaRepository<ActiveOrder, UUID> {
 
     List<ActiveOrder> findByUserIdAndStatus(UUID userId, ActiveOrderStatus status);
 
@@ -26,6 +26,21 @@ public interface IActiveOrderRepository extends JpaRepository<ActiveOrder, Strin
             @QueryHint(name = "jakarta.persistence.lock.timeout", value = "10000")
     })
     Optional<ActiveOrder> findByIdForUpdate(UUID orderId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        select ao
+        from ActiveOrder ao
+        where ao.userId = :userId
+            and ao.status = :status
+        """)
+    @QueryHints({
+            @QueryHint(name = "jakarta.persistence.lock.timeout", value = "10000")
+    })
+    List<ActiveOrder> findByUserIdAndStatusForUpdate(
+            UUID userId,
+            ActiveOrderStatus status
+    );
 
     boolean existsByUserIdAndEventIdAndStatus(
         UUID userId,

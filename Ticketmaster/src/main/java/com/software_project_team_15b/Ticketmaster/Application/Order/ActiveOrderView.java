@@ -1,5 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.Application.Order;
 
+import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
@@ -33,4 +35,45 @@ public record ActiveOrderView(
             Money basePrice
     ) {
     }
+
+    public static ActiveOrderView from(ActiveOrder activeOrder, EventView eventView) {
+        List<SeatInOrderView> seats = activeOrder.getOrderSeats().stream()
+                .map(seatId -> {
+                    EventView.AreaView area = eventView.areas().stream()
+                            .filter(a -> a.seats().stream().anyMatch(s -> s.seatId().equals(seatId)))
+                            .findFirst()
+                            .orElseThrow(() -> new IllegalArgumentException("Seat not found in event: " + seatId));
+
+                    EventView.SeatView seatView = area.seats().stream()
+                            .filter(s -> s.seatId().equals(seatId))
+                            .findFirst()
+                            .orElseThrow();
+
+                    return new SeatInOrderView(
+                            seatId,
+                            seatView.row(),
+                            seatView.number(),
+                            seatView.status(),
+                            area.areaId(),
+                            area.name(),
+                            area.basePrice()
+                    );
+                })
+                .toList();
+
+        return new ActiveOrderView(
+                activeOrder.getOrderId(),
+                activeOrder.getUserId(),
+                activeOrder.getEventId(),
+                eventView.name(),
+                eventView.artist(),
+                eventView.startsAt(),
+                eventView.location(),
+                eventView.status(),
+                activeOrder.getStatus(),
+                activeOrder.getCreatedAt(),
+                activeOrder.getExpiresAt(),
+                seats
+        );
+    }    
 }
