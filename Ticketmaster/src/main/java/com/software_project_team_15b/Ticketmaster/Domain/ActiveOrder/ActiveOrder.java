@@ -28,19 +28,19 @@ public class ActiveOrder {
 
     @Id 
     @Column(name = "order_id", nullable = false, updatable = false)
-    private String orderId;
+    private UUID orderId;
 
     @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
 
     @Column(name = "event_id", nullable = false, updatable = false)
-    private String eventId;
+    private UUID eventId;
 
     //using seat_id as a string for now, will change to a Seat entity if needed
     @ElementCollection
     @CollectionTable(name = "active_order_seats", joinColumns = @JoinColumn(name = "order_id"))
     @Column(name = "seat_id", nullable = false)
-    private Set<String> orderSeats = new HashSet<>();
+    private Set<UUID> orderSeats = new HashSet<>();
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
@@ -58,13 +58,13 @@ public class ActiveOrder {
     protected ActiveOrder() {
     }
 
-    public ActiveOrder(String orderId, UUID userId, String eventId) {
-        if (orderId == null || orderId.isBlank()) 
-            throw new IllegalArgumentException("orderId cannot be null or empty");  
-        if (userId == null || userId.toString().isBlank())
-            throw new IllegalArgumentException("userId cannot be null or empty");
-        if (eventId == null || eventId.isBlank()) 
-            throw new IllegalArgumentException("eventId cannot be null or empty");
+    public ActiveOrder(UUID orderId, UUID userId, UUID eventId) {
+        if (orderId == null) 
+            throw new IllegalArgumentException("orderId cannot be null");  
+        if (userId == null) 
+            throw new IllegalArgumentException("userId cannot be null");
+        if (eventId == null) 
+            throw new IllegalArgumentException("eventId cannot be null");
         this.orderId = orderId;
         this.userId = userId;
         this.eventId = eventId;
@@ -73,7 +73,7 @@ public class ActiveOrder {
         this.expiresAt = this.createdAt.plusMinutes(10);
     }
 
-    public String getOrderId() {
+    public UUID getOrderId() {
         return orderId;
     }
 
@@ -81,11 +81,11 @@ public class ActiveOrder {
         return userId;
     }
 
-    public String getEventId() {
+    public UUID getEventId() {
         return eventId;
     }
 
-    public Set<String> getOrderSeats() {
+    public Set<UUID> getOrderSeats() {
         return Set.copyOf(orderSeats);
     }
 
@@ -106,13 +106,13 @@ public class ActiveOrder {
     }
 
     //seat management methods
-    private void validateSeatId(String seatId) {
-        if (seatId == null || seatId.isBlank()) {
-            throw new IllegalArgumentException("seatId cannot be null or empty");
+    private void validateSeatId(UUID seatId) {
+        if (seatId == null) {
+            throw new IllegalArgumentException("seatId cannot be null");
         }
     }
 
-    public void addSeat(String seatId) {
+    public void addSeat(UUID seatId) {
         ensureOrderIsModifiable();
         validateSeatId(seatId);
         if (!orderSeats.add(seatId)) {
@@ -120,7 +120,7 @@ public class ActiveOrder {
         }
     }
 
-    public void removeSeat(String seatId) {
+    public void removeSeat(UUID seatId) {
         ensureOrderIsModifiable();
         validateSeatId(seatId);
         if (!orderSeats.remove(seatId)) {
@@ -131,7 +131,6 @@ public class ActiveOrder {
         }
     }
     
-
     //order management methods
     public void complete() {
         ensureOrderIsModifiable();

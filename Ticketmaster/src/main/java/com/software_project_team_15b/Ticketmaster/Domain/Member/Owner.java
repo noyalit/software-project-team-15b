@@ -2,6 +2,7 @@ package com.software_project_team_15b.Ticketmaster.Domain.Member;
 
 import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
+import java.util.UUID;
 
 @Entity
 @DiscriminatorValue("OWNER")
@@ -11,21 +12,11 @@ public class Owner extends Role {
         // JPA only
     }
 
-    public Owner(Member appointedBy) {
+    public Owner(UUID appointedBy) {
         super(appointedBy);
-        validateAppointer(appointedBy);
-    }
-
-    protected void validateAppointer(Member appointedBy) {
-        if (appointedBy == null) {
-            throw new IllegalArgumentException("Owner must be appointed by a member");
+        if (appointedBy == null && getClass().equals(Owner.class)) {
+            throw new IllegalArgumentException("appointedBy cannot be null");
         }
-    }
-
-    @Override
-    public void setAppointedBy(Member appointedBy) {
-        validateAppointer(appointedBy);
-        this.appointedBy = appointedBy;
     }
 
     @Override
