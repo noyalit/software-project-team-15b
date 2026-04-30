@@ -3,6 +3,9 @@ package com.software_project_team_15b.Ticketmaster.Domain.Member;
 import jakarta.persistence.*;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.Collections;
 
 @Entity
 @Table(name = "members")
@@ -17,22 +20,29 @@ public class Member {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
-    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER, optional = false, orphanRemoval = true)
-    @JoinColumn(name = "role_id", nullable = true)
-    private Role role;
+    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER, orphanRemoval = true)
+    @JoinColumn(name = "member_id")
+    private Set<Role> assignedRoles = new HashSet<>();
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "active_role_id", nullable = true)
+    private Role activeRole;
 
     protected Member() {
         // JPA only
     }
 
-    public Member(String username, String passwordHash, Role role) {
+    public Member(String username, String passwordHash, Role initialRole) {
         validateUsername(username);
         validatePasswordHash(passwordHash);
 
         this.userId = UUID.randomUUID();
         this.username = username.trim();
         this.passwordHash = passwordHash;
-        this.role = role;
+        if (initialRole != null) {
+            this.assignedRoles.add(initialRole);
+        }
+        this.activeRole = initialRole; 
     }
 
     @PrePersist
@@ -64,12 +74,51 @@ public class Member {
         this.passwordHash = passwordHash;
     }
 
-    public Role getRole() {
-        return role;
+    public Role getActiveRole() {
+        return activeRole;
     }
 
-    public void setRole(Role role) {
-        this.role = role;
+    public Set<Role> getAssignedRoles() {
+        return Collections.unmodifiableSet(assignedRoles);
+    }
+
+    public void addRole(Role role) {
+        if (role == null) {
+            throw new IllegalArgumentException("Role cannot be null");
+        }
+
+        assignedRoles.add(role);
+
+        if (activeRole == null) {
+            activeRole = role;
+        }
+    }
+
+    public void removeRole(Role role) {
+        if (role == null) {
+            return;
+        }
+        assignedRoles.remove(role);
+        if (role.equals(activeRole)) {
+            activeRole = null;
+        }
+    }
+
+    public void switchActiveRole(Role role) {
+        if (role == null) {
+            activeRole = null;
+            return;
+        }
+
+        if (!assignedRoles.contains(role)) {
+            throw new IllegalArgumentException("Cannot switch to a role that was not assigned to this member");
+        }
+        activeRole = role;
+    }
+
+    public void clearRoles() {
+        assignedRoles.clear();
+        activeRole = null;
     }
 
     private static void validateUsername(String username) {

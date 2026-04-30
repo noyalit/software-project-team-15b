@@ -63,9 +63,9 @@ public class Auth implements IAuth {
             throw new IllegalArgumentException("member cannot be null");
         }
 
-        String roleName = member.getRole() == null
+        String roleName = member.getActiveRole() == null
                 ? "RegularMember"
-                : member.getRole().getRoleName();
+                : member.getActiveRole().getRoleName();
 
         String token = Jwts.builder()
                 .subject(member.getUserId().toString())
