@@ -76,7 +76,8 @@ public class UserService {
         return memberRepository.findAll();
     }
 
-    public Member changeUsername(UUID userId, String newUsername) {
+    public Member changeUsername(String token, String newUsername) {
+        UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
         Optional<Member> existing = memberRepository.findByUsername(newUsername);
         if (existing.isPresent() && !existing.get().getUserId().equals(userId)) {
@@ -86,14 +87,16 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    public Member changePassword(UUID userId, String newPassword) {
+    public Member changePassword(String token, String newPassword) {
+        UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
         validateRawPassword(newPassword);
         member.setPassword(passwordEncoder.encode(newPassword));
         return memberRepository.save(member);
     }
 
-    public Member changeRoleToManager(UUID userId) {
+    public Member changeRoleToManager(String token) {
+        UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
         Role managerRole = member.getAssignedRoles()
                 .stream()
@@ -104,7 +107,8 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    public Member changeRoleToOwner(UUID userId) {
+    public Member changeRoleToOwner(String token) {
+        UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
         Role ownerRole = member.getAssignedRoles()
                 .stream()
@@ -115,7 +119,8 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    public Member changeRoleToFounder(UUID userId) {
+    public Member changeRoleToFounder(String token) {
+        UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
         Role founderRole = member.getAssignedRoles()
                 .stream()
@@ -126,32 +131,36 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    public Member changeRoleToRegularMember(UUID userId) {
+    public Member changeRoleToRegularMember(String token) {
+        UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
         member.switchActiveRole(null);
         return memberRepository.save(member);
     }
 
-    public Member appointManager(UUID memberId, UUID appointedByUserId, Set<ManagerPermission> permissions) {
+    public Member appointManager(UUID memberId, String token, Set<ManagerPermission> permissions) {
+        UUID ownerId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(memberId);
-        validateNoAppointmentCycle(member, appointedByUserId);
-        validateOwnerAppointer(appointedByUserId);
+        validateNoAppointmentCycle(member, ownerId);
+        validateOwnerAppointer(ownerId);
 
-        Role managerRole = new Manager(appointedByUserId, permissions);
+        Role managerRole = new Manager(ownerId, permissions);
         member.addRole(managerRole);
         return memberRepository.save(member);
     }
 
-    public Member appointOwner(UUID memberId, UUID appointedByUserId) {
+    public Member appointOwner(UUID memberId, String token) {
+        UUID ownerId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(memberId);
-        validateNoAppointmentCycle(member, appointedByUserId);
-        validateOwnerAppointer(appointedByUserId);
+        validateNoAppointmentCycle(member, ownerId);
+        validateOwnerAppointer(ownerId);
 
-        Role ownerRole = new Owner(appointedByUserId);
+        Role ownerRole = new Owner(ownerId);
         member.addRole(ownerRole);
         return memberRepository.save(member);
     }
 
+    ////CHECK!!
     public Member appointFounder(UUID adminId, UUID memberId) {
         if (systemAdminRepository.findById(adminId).isEmpty()) {
             throw new IllegalArgumentException("Only a system admin can appoint a founder");
@@ -162,7 +171,8 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    public Member removeOwnerAppointment(UUID removerOwnerId, UUID memberToRemoveId) {
+    public Member removeOwnerAppointment(String token, UUID memberToRemoveId) {
+        UUID removerOwnerId = getAuthenticatedMemberId(token);
         Member memberToRemove = getMemberOrThrow(memberToRemoveId);
         validateOwnerAppointer(removerOwnerId);
         Role ownerRoleToRemove = memberToRemove.getAssignedRoles()
@@ -178,7 +188,8 @@ public class UserService {
         return memberRepository.save(memberToRemove);
     }
 
-    public Member ownerResign(UUID ownerId) {
+    public Member ownerResign(String token) {
+        UUID ownerId = getAuthenticatedMemberId(token);
         Member owner = getMemberOrThrow(ownerId);
         Role activeRole = owner.getActiveRole();
 
@@ -193,7 +204,8 @@ public class UserService {
         return memberRepository.save(owner);
     }
 
-    public Member changeManagerPermissions(UUID ownerId, UUID managerId, Set<ManagerPermission> newPermissions) {
+    public Member changeManagerPermissions(String token, UUID managerId, Set<ManagerPermission> newPermissions) {
+        UUID ownerId = getAuthenticatedMemberId(token);
         Member manager = getMemberOrThrow(managerId);
         validateOwnerAppointer(ownerId);
         Manager managerRole = manager.getAssignedRoles()
@@ -209,7 +221,8 @@ public class UserService {
         return memberRepository.save(manager);
     }
 
-    public Set<ManagerPermission> getManagerPermissions(UUID ownerId, UUID managerId) {
+    public Set<ManagerPermission> getManagerPermissions(String token, UUID managerId) {
+        UUID ownerId = getAuthenticatedMemberId(token);
         Member manager = getMemberOrThrow(managerId);
         validateOwnerAppointer(ownerId);
         Manager managerRole = manager.getAssignedRoles()
@@ -224,7 +237,8 @@ public class UserService {
         return managerRole.getPermissions();
     }
 
-    public Member approveAppointment(UUID userId) {
+    public Member approveAppointment(String token) {
+        UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
         if (member.getActiveRole() == null) {
             throw new IllegalStateException("Regular member has no appointment to approve");
@@ -233,6 +247,7 @@ public class UserService {
         return memberRepository.save(member);
     }
 
+    ///CHECK!!
     public boolean cancelMemberAccountBySystemAdmin(UUID adminId, UUID memberIdToCancel) {
         if (systemAdminRepository.findById(adminId).isEmpty()) {
             throw new IllegalArgumentException("Only a system admin can cancel member accounts");
@@ -315,6 +330,18 @@ public class UserService {
                     "Password must contain at least one uppercase letter and one number"
             );
         }
+    }
+
+    private UUID getAuthenticatedMemberId(String token) {
+        if (!auth.isTokenValid(token)) {
+            throw new IllegalArgumentException("Invalid or expired token");
+        }
+
+        if (!auth.isMember(token)) {
+            throw new IllegalArgumentException("Only members can perform this action");
+        }
+
+        return UUID.fromString(auth.getSessionUserId(token));
     }
 
 }
