@@ -162,12 +162,12 @@ public class PurchasingService {
 
             ensureOrderIsModifiable(activeOrder);
 
+            eventManagementService.releaseSeats(activeOrder.getEventId(), activeOrder.getOrderId(), cmd.seatIds());
+
             for (UUID seatId : cmd.seatIds()) {
                 activeOrder.removeSeat(seatId);
             }
             activeOrderRepository.save(activeOrder);
-
-            eventManagementService.releaseSeats(activeOrder.getEventId(), activeOrder.getOrderId(), cmd.seatIds());
 
             AUDIT.info("op=removeSeatsFromExistingOrder order={} user={} event={} seatsRemoved={} result=ok",
                     cmd.orderId(), userId, activeOrder.getEventId(), cmd.seatIds().size());

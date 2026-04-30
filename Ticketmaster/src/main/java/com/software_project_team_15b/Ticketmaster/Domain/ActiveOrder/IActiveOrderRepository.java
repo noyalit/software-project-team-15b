@@ -19,7 +19,11 @@ public interface IActiveOrderRepository extends JpaRepository<ActiveOrder, UUID>
     List<ActiveOrder> findByUserIdAndStatus(UUID userId, ActiveOrderStatus status);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    @Query("select ao from ActiveOrder ao where ao.orderId = :orderId")
+    @Query("""
+        select ao 
+        from ActiveOrder ao 
+        where ao.orderId = :orderId
+        """)
     @QueryHints({
             @QueryHint(name = "jakarta.persistence.lock.timeout", value = "10000")
     })
@@ -31,6 +35,7 @@ public interface IActiveOrderRepository extends JpaRepository<ActiveOrder, UUID>
         from ActiveOrder ao
         where ao.userId = :userId
             and ao.status = :status
+        order by ao.orderId
         """)
     @QueryHints({
             @QueryHint(name = "jakarta.persistence.lock.timeout", value = "10000")
