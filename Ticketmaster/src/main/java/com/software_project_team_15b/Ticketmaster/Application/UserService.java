@@ -15,6 +15,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 
 @Service
 public class UserService {
@@ -45,7 +46,7 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    public Member login(String username, String password) {
+    public String login(String username, String password) {
         Member member = memberRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid username or password"));
 
@@ -53,7 +54,18 @@ public class UserService {
             throw new IllegalArgumentException("Invalid username or password");
         }
     
-        return member;
+        return auth.generateMemberToken(member);
+    }
+
+    public String loginSystemAdmin(String username, String password) {
+        SystemAdmin admin = systemAdminRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid username or password"));
+
+        if (!passwordEncoder.matches(password, admin.getPasswordHash())) {
+            throw new IllegalArgumentException("Invalid username or password");
+        }
+
+        return auth.generateSystemAdminToken(admin);
     }
 
     public void exitSystem(String token) {
@@ -160,9 +172,8 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    ////CHECK!!
-    public Member appointFounder(UUID adminId, UUID memberId) {
-        if (systemAdminRepository.findById(adminId).isEmpty()) {
+    public Member appointFounder(String token, UUID memberId) {
+        if (!auth.isTokenValid(token) || !auth.isSystemAdmin(token)) {
             throw new IllegalArgumentException("Only a system admin can appoint a founder");
         }
         Member member = getMemberOrThrow(memberId);
@@ -247,9 +258,8 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    ///CHECK!!
-    public boolean cancelMemberAccountBySystemAdmin(UUID adminId, UUID memberIdToCancel) {
-        if (systemAdminRepository.findById(adminId).isEmpty()) {
+    public boolean cancelMemberAccountBySystemAdmin(String token, UUID memberIdToCancel) {
+        if (!auth.isTokenValid(token) || !auth.isSystemAdmin(token)) {
             throw new IllegalArgumentException("Only a system admin can cancel member accounts");
         }
         return memberRepository.deleteById(memberIdToCancel);

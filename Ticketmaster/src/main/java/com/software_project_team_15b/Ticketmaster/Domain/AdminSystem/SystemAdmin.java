@@ -19,17 +19,19 @@ public class SystemAdmin {
 
     @Column(name = "username", nullable = false, unique = true)
     private final String username;
-    private String password;
+    
+    @Column(name = "password_hash", nullable = false)
+    private String passwordHash;
 
     protected SystemAdmin() {
         this.username = null;
     }
 
-    public SystemAdmin(String username, String password) {
+    public SystemAdmin(String username, String passwordHash) {
         requireNonBlank(username, "username");
-        validatePassword(password);
+        validatePasswordHash(passwordHash);
         this.username = username;
-        this.password = password;
+        this.passwordHash = passwordHash;
     }
 
     public UUID getAdminId() {
@@ -40,9 +42,13 @@ public class SystemAdmin {
         return username;
     }
 
-    public void changePassword(String newPassword) {
-        validatePassword(newPassword);
-        this.password = newPassword;
+    public void setPassword(String passwordHash) {
+        validatePasswordHash(passwordHash);
+        this.passwordHash = passwordHash;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
     }
 
     public void assignAdminId(UUID adminId) {
@@ -61,17 +67,9 @@ public class SystemAdmin {
         }
     }
 
-    private static void validatePassword(String password) {
-        if (password == null || password.isBlank()) {
-            throw new IllegalArgumentException("password cannot be null or empty");
-        }
-        if (password.length() < 8) {
-            throw new IllegalArgumentException("password must be at least 8 characters long");
-        }
-
-        String regex = "^(?=.*[A-Z])(?=.*\\d).+$";
-        if (!password.matches(regex)) {
-            throw new IllegalArgumentException("password must contain at least one uppercase letter and one number");
+    private static void validatePasswordHash(String passwordHash) {
+        if (passwordHash == null || passwordHash.isBlank()) {
+            throw new IllegalArgumentException("Password hash cannot be null or empty");
         }
     }
 }

@@ -2,6 +2,7 @@ package com.software_project_team_15b.Ticketmaster.Application;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Domain.UserType;
+import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -55,6 +56,10 @@ public class Auth implements IAuth {
         public boolean isMember() {
             return userType == UserType.MEMBER;
         }
+
+        public boolean isSystemAdmin() {
+            return userType == UserType.SYSTEM_ADMIN;
+        }
     }
 
     @Override
@@ -98,6 +103,26 @@ public class Auth implements IAuth {
     }
 
     @Override
+    public String generateSystemAdminToken(SystemAdmin admin) {
+        if (admin == null) {
+            throw new IllegalArgumentException("admin cannot be null");
+        }
+
+        String token = Jwts.builder()
+                .subject(admin.getAdminId().toString())
+                .claim("userType", UserType.SYSTEM_ADMIN.name())
+                .claim("username", admin.getUsername())
+                .claim("role", "SystemAdmin")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
+                .signWith(KEY)
+                .compact();
+
+        activeSessions.put(token, new Session(token, admin.getAdminId(), UserType.SYSTEM_ADMIN));
+        return token;
+    }
+
+    @Override
     public void exitSystem(String token) {
         validateTokenInput(token);
         activeSessions.remove(token);
@@ -114,8 +139,8 @@ public class Auth implements IAuth {
             throw new IllegalArgumentException("Invalid or expired session");
         }
 
-        if (!session.isMember()) {
-            throw new IllegalArgumentException("Only members can logout");
+        if (!(session.isMember() || session.isSystemAdmin())) {
+            throw new IllegalArgumentException("Only members or system admins can logout");
         }
 
         activeSessions.remove(memberToken);
@@ -158,6 +183,12 @@ public class Auth implements IAuth {
     public boolean isMember(String token) {
         Session session = activeSessions.get(token);
         return session != null && session.isMember();
+    }
+
+    @Override
+    public boolean isSystemAdmin(String token) {
+        Session session = activeSessions.get(token);
+        return session != null && session.isSystemAdmin();
     }
 
     public boolean isTokenExpired(String token) {
