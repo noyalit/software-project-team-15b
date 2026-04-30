@@ -77,20 +77,22 @@ public class ActiveOrderMaintenanceService {
     }
 
     private void releaseAndDeleteExpiredActiveOrder(ActiveOrder activeOrder) {
-        activeOrderRepository.delete(activeOrder);
 
         if (activeOrder.getOrderSeats().isEmpty()) {
+            activeOrderRepository.delete(activeOrder);
             // No seats to release, skip event management call
             AUDIT.info("op=releaseAndDeleteExpiredActiveOrder order={} event={} result=no-seats-to-release",
                     activeOrder.getOrderId(),
                     activeOrder.getEventId());
             return;
         }
-        
+
         eventManagementService.release(
                 activeOrder.getEventId(),
                 activeOrder.getOrderId()
         );
+
+        activeOrderRepository.delete(activeOrder);
 
         AUDIT.info("op=releaseAndDeleteExpiredActiveOrder order={} event={} result=ok",
                 activeOrder.getOrderId(),
