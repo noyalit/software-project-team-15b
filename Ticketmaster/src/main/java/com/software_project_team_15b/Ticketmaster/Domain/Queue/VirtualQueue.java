@@ -39,7 +39,7 @@ public class VirtualQueue {
      */
     public VirtualQueue(UUID queueId) {
         if (queueId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
+            throw new IllegalArgumentException("queueId cannot be null");
         }
 
         this.id = queueId;
