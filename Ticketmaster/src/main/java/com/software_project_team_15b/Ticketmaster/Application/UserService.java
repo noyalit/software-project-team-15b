@@ -2,8 +2,6 @@ package com.software_project_team_15b.Ticketmaster.Application;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
@@ -17,8 +15,6 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
-import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Application.IPasswordEncoder;
 
 @Service
 public class UserService {
@@ -102,10 +98,6 @@ public class UserService {
         return memberRepository.findAll();
     }
 
-    public boolean deleteMember(UUID userId) {
-        return memberRepository.deleteById(userId);
-    }
-
     public Member changeUsername(UUID userId, String newUsername) {
         Member member = getMemberOrThrow(userId);
 
@@ -145,14 +137,14 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    public Member changeRoleToFounder(UUID userId) {
-        Member member = getMemberOrThrow(userId);
+    // public Member changeRoleToFounder(UUID userId) {
+    //     Member member = getMemberOrThrow(userId);
 
-        Role newRole = new Founder(null);
-        member.setRole(newRole);
+    //     Role newRole = new Founder(null);
+    //     member.setRole(newRole);
 
-        return memberRepository.save(member);
-    }
+    //     return memberRepository.save(member);
+    // }
 
     public Member removeAppointment(UUID removerOwnerId, UUID memberToRemoveId) {
         Member memberToRemove = getMemberOrThrow(memberToRemoveId);
@@ -227,6 +219,16 @@ public class UserService {
         return memberRepository.deleteById(memberIdToCancel);
     }
 
+    public boolean isActiveOwner(UUID userId) {
+        Member member = getMemberOrThrow(userId);
+        return member.getRole() instanceof Owner && member.getRole().isAppointmentApproved();
+    }
+
+    public boolean isActiveManager(UUID userId) {
+        Member member = getMemberOrThrow(userId);
+        return member.getRole() instanceof Manager && member.getRole().isAppointmentApproved();
+    }
+
     public boolean isAppointmentApproved(UUID userId) {
         Member member = getMemberOrThrow(userId);
         if (member.getRole() == null) {
@@ -243,22 +245,19 @@ public class UserService {
         }
     }
 
-    private Member getMemberOrThrow(UUID userId) {
+   private Member getMemberOrThrow(UUID userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
+        }
         return memberRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("Member not found with id: " + userId));
     }
 
     private void validateOwnerAppointer(UUID appointedByUserId) {
-        if (appointedByUserId == null) {
-            throw new IllegalArgumentException("Appointer user ID cannot be null");
-        }
-
         Member appointedBy = getMemberOrThrow(appointedByUserId);
-
         if (!(appointedBy.getRole() instanceof Owner)) {
             throw new IllegalArgumentException("Only an owner can appoint another owner or manager");
         }
-
         if (!appointedBy.getRole().isAppointmentApproved()) {
             throw new IllegalStateException("Appointer owner appointment must be approved first");
         }
