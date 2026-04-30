@@ -4,6 +4,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Auth;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrderRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.Ticket;
@@ -64,11 +65,9 @@ public class PurchasingService {
     @Transactional
     public UUID createActiveOrder(String token, UUID eventId) {
         try {
-            requireValidToken(token);
+            UUID userId = requireValidUser(token);
+            
             requireEventIsValid(eventId);
-
-            UUID userId = extractUserId(token);
-            requireUserCanPurchaseInEvent(userId, eventId);
             requireOrderIsUniqueForUser(userId, eventId);
 
             UUID orderId = UUID.randomUUID();
@@ -100,25 +99,12 @@ public class PurchasingService {
         ActiveOrder activeOrder = null;
 
         try {
-            requireValidToken(token);
             requireAddSeatsToActiveOrderCommand(cmd);
 
-            UUID userId = extractUserId(token);
+            UUID userId = requireValidUser(token);
+            activeOrder = requireOwnedModifiableOrderForUpdate(cmd.orderId(), userId);
 
-            activeOrder = requireActiveOrderForUpdate(cmd.orderId());
-            requireOrderOwnership(activeOrder, userId);
-
-            ensureOrderIsModifiable(activeOrder);
-
-            HoldCommand holdCommand = new HoldCommand(cmd.areaId(), new ArrayList<>(cmd.seatIds()), cmd.standingQuantity(), activeOrder.getOrderId());
-
-            HoldReceipt receipt = eventManagementService.hold(activeOrder.getEventId(), holdCommand);
-
-            for (UUID seatId : cmd.seatIds()) {
-                activeOrder.addSeat(seatId);
-            }
-
-            activeOrderRepository.save(activeOrder);
+            addSeatsToActiveOrder(activeOrder, cmd.seatIds());
 
             AUDIT.info(
                     "op=addSeatsToExistingOrder order={} user={} event={} area={} holdToken={} qty={} result=ok",
@@ -126,8 +112,7 @@ public class PurchasingService {
                     userId,
                     activeOrder.getEventId(),
                     cmd.areaId(),
-                    activeOrder.getOrderId(),
-                    receipt.quantity());
+                    activeOrder.getOrderId());
 
         } catch (TimeExpiredException e) {
             expireAndSave(activeOrder);
@@ -153,21 +138,13 @@ public class PurchasingService {
         ActiveOrder activeOrder = null;
 
         try {
-            requireValidToken(token);
             requireRemoveSeatsFromActiveOrderCommand(cmd);
 
-            UUID userId = extractUserId(token);
-            activeOrder = requireActiveOrderForUpdate(cmd.orderId());
-            requireOrderOwnership(activeOrder, userId);
-
-            ensureOrderIsModifiable(activeOrder);
-
+            UUID userId = requireValidUser(token);
+            activeOrder = requireOwnedModifiableOrderForUpdate(cmd.orderId(), userId);
+            
             eventManagementService.releaseSeats(activeOrder.getEventId(), activeOrder.getOrderId(), cmd.seatIds());
-
-            for (UUID seatId : cmd.seatIds()) {
-                activeOrder.removeSeat(seatId);
-            }
-            activeOrderRepository.save(activeOrder);
+            removeSeatsFromActiveOrder(activeOrder, cmd.seatIds());
 
             AUDIT.info("op=removeSeatsFromExistingOrder order={} user={} event={} seatsRemoved={} result=ok",
                     cmd.orderId(), userId, activeOrder.getEventId(), cmd.seatIds().size());
@@ -191,14 +168,14 @@ public class PurchasingService {
     @Transactional(readOnly = true)
     public ActiveOrderView getActiveOrder(String token, UUID orderId) {
         try {
-            requireValidToken(token);
+            UUID userId = requireValidUser(token);
 
-            UUID userId = extractUserId(token);
             ActiveOrder activeOrder = requireActiveOrder(orderId);
             requireOrderOwnership(activeOrder, userId);
             activeOrder.ensureOrderIsModifiable();
             requireEventIsValid(activeOrder.getEventId());
 
+            //TODO: ask for Set<tickets> that wiil simulatently check event's valisidity
             EventView eventView = eventManagementService.getEvent(activeOrder.getEventId());
             ActiveOrderView view = ActiveOrderView.from(activeOrder, eventView);
 
@@ -218,9 +195,8 @@ public class PurchasingService {
         boolean allTicketsIssued = false;
 
         try {
-            requireValidToken(token);
+            UUID userId = requireValidUser(token);
 
-            UUID userId = extractUserId(token);
             activeOrder = requireActiveOrderForUpdate(orderId);
             requireOrderOwnership(activeOrder, userId);
             ensureOrderIsModifiable(activeOrder);
@@ -259,9 +235,7 @@ public class PurchasingService {
     @Transactional
     public void cancelAllActiveOrdersOfCurrentUser(String token) {
         try {
-            requireValidToken(token);
-
-            UUID userId = extractUserId(token);
+            UUID userId = requireValidUser(token);
 
             List<ActiveOrder> activeOrders =
                     activeOrderRepository.findByUserIdAndStatusForUpdate(
@@ -283,18 +257,11 @@ public class PurchasingService {
         }
     }
 
-    private void requireValidToken(String token) {
+    private UUID requireValidUser(String token) {
         if (!auth.isTokenValid(token)) {
             throw new IllegalStateException("Token is invalid or expired");
         }
-    }
-
-    private UUID extractUserId(String token) {
-        try {
-            return auth.extractUserId(token);
-        } catch (RuntimeException e) {
-            throw new IllegalStateException("Token does not contain a valid user ID", e);
-        }
+        return auth.extractUserId(token);
     }
 
     private void requireOrderIsUniqueForUser(UUID userId, UUID eventId) {
@@ -333,6 +300,26 @@ public class PurchasingService {
                     activeOrder.getEventId());
         }
         return paymentSuccessful;
+    }
+
+    private void addSeatsToActiveOrder(ActiveOrder activeOrder, Set<UUID> seatIds) {
+        if (activeOrder == null || seatIds == null) {
+            throw new IllegalArgumentException("Active order and seat IDs cannot be null");
+        }
+        for (UUID seatId : seatIds) {
+            activeOrder.addSeat(seatId);
+        }
+        activeOrderRepository.save(activeOrder);
+    }
+
+    private void removeSeatsFromActiveOrder(ActiveOrder activeOrder, Set<UUID> seatIds) {
+        if (activeOrder == null || seatIds == null) {
+            throw new IllegalArgumentException("Active order and seat IDs cannot be null");
+        }
+        for (UUID seatId : seatIds) {
+            activeOrder.removeSeat(seatId);
+        }
+        activeOrderRepository.save(activeOrder);
     }
 
     private void finalizeSuccessfulCheckout(ActiveOrder activeOrder) {
@@ -396,15 +383,6 @@ public class PurchasingService {
 
     }
 
-    private void requireUserCanPurchaseInEvent(UUID userId, UUID eventId) {
-        if (userId == null || eventId == null) {
-            throw new IllegalArgumentException("User ID and event ID cannot be null");
-        }
-        if (!eventManagementService.isAllowedToPurchaseInEvent(userId, eventId)) {
-            throw new IllegalStateException("User is not allowed to purchase tickets for this event");
-        }
-    }
-
     private void requireEventIsValid(UUID eventId) {
         if (eventId == null) {
             throw new IllegalArgumentException("Event ID cannot be null");
@@ -419,6 +397,13 @@ public class PurchasingService {
                 .orElseThrow(() -> new IllegalArgumentException("Active order not found: " + orderId));
     }
 
+    private ActiveOrder requireOwnedModifiableOrderForUpdate(UUID orderId, UUID userId) {
+        ActiveOrder activeOrder = requireActiveOrderForUpdate(orderId);
+        requireOrderOwnership(activeOrder, userId);
+        ensureOrderIsModifiable(activeOrder);
+        return activeOrder;
+    }
+
     private ActiveOrder requireActiveOrderForUpdate(UUID orderId) {
         return activeOrderRepository.findByIdForUpdate(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Active order not found: " + orderId));
@@ -428,19 +413,6 @@ public class PurchasingService {
         if (!activeOrder.getUserId().equals(userId)) {
             throw new IllegalStateException("User is not allowed to access this order");
         }
-    }
-
-    private void requireCreateActiveOrderCommand(CreateActiveOrderCommand cmd) {
-        if (cmd == null) {
-            throw new IllegalArgumentException("Command cannot be null");
-        }
-        if (cmd.eventId() == null) {
-            throw new IllegalArgumentException("Event ID cannot be null");
-        }
-        if (cmd.areaId() == null) {
-            throw new IllegalArgumentException("Area ID cannot be null");
-        }
-        requireSeatIds(cmd.seatIds());
     }
 
     private void requireAddSeatsToActiveOrderCommand(AddSeatsToActiveOrderCommand cmd) {
