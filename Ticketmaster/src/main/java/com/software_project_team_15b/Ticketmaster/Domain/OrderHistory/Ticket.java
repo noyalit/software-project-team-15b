@@ -1,7 +1,10 @@
 package com.software_project_team_15b.Ticketmaster.Domain.OrderHistory;
 
+import jakarta.persistence.AttributeOverride;
+import jakarta.persistence.AttributeOverrides;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
+import jakarta.persistence.Embedded;
 
 import java.util.UUID;
 
@@ -12,7 +15,18 @@ public class Ticket {
 
     @Column(name = "seat_id", nullable = false, updatable = false)
     private UUID seatId;
-    @Column(name = "price_amount", nullable = false, updatable = false)
+
+    @Embedded
+    @AttributeOverrides({
+            @AttributeOverride(
+                    name = "amount",
+                    column = @Column(name = "price_amount", nullable = false, updatable = false)
+            ),
+            @AttributeOverride(
+                    name = "currency",
+                    column = @Column(name = "price_currency", nullable = false, updatable = false)
+            )
+    })
     private Money price;
 
     protected Ticket() {
@@ -25,6 +39,7 @@ public class Ticket {
         if (price == null) {
             throw new IllegalArgumentException("Price cannot be null");
         }
+
         this.seatId = seatId;
         this.price = price;
     }
@@ -51,5 +66,4 @@ public class Ticket {
     public int hashCode() {
         return java.util.Objects.hash(seatId, price);
     }
-
 }

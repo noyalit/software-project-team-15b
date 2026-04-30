@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 
@@ -40,6 +39,9 @@ public class OrderHistory {
             if (ticket == null) {
                 throw new IllegalArgumentException("Tickets set cannot contain null values");
             }
+        }
+        if (tickets.size() != tickets.stream().map(Ticket::getSeatId).distinct().count()) {
+            throw new IllegalArgumentException("Tickets set cannot contain duplicate seat IDs");
         }
         this.orderId = orderId;
         this.userId = userId;

@@ -178,7 +178,7 @@ public class OrderHistoryTest {
     }
 
     @Test
-    void constructorShouldRemoveDuplicateTicketsWhenSeatIdAndPriceAreSame() {
+    void constructorShouldRemoveDuplicateTicketsWithSameSeatIdAndSamePrice() {
         Set<Ticket> tickets = new HashSet<>();
         tickets.add(new Ticket(seatId1, price1));
         tickets.add(new Ticket(seatId1, Money.of("100.00", "ILS")));
@@ -190,15 +190,13 @@ public class OrderHistoryTest {
     }
 
     @Test
-    void constructorShouldKeepTicketsWithSameSeatIdButDifferentPrice() {
+    void constructorShouldThrowWhenTicketsHaveSameSeatIdButDifferentPrice() {
         Set<Ticket> tickets = new HashSet<>();
         tickets.add(new Ticket(seatId1, price1));
         tickets.add(new Ticket(seatId1, price2));
 
-        OrderHistory orderHistory = new OrderHistory(orderId, userId, eventId, tickets);
-
-        assertEquals(2, orderHistory.getTickets().size());
-        assertTrue(orderHistory.getTickets().contains(new Ticket(seatId1, price1)));
-        assertTrue(orderHistory.getTickets().contains(new Ticket(seatId1, price2)));
+        assertThrows(IllegalArgumentException.class, () ->
+                new OrderHistory(orderId, userId, eventId, tickets)
+        );
     }
 }
