@@ -3,6 +3,10 @@ package com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
+
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.UnactiveOrderException;
 
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
@@ -20,12 +24,14 @@ import jakarta.persistence.Version;
 @Table(name = "active_orders")
 public class ActiveOrder {
 
-    @Id
+    ///NOTE: using String for orderId and eventId for now, will change to UUID if needed
+
+    @Id 
     @Column(name = "order_id", nullable = false, updatable = false)
     private String orderId;
 
     @Column(name = "user_id", nullable = false, updatable = false)
-    private String userId;
+    private UUID userId;
 
     @Column(name = "event_id", nullable = false, updatable = false)
     private String eventId;
@@ -52,10 +58,10 @@ public class ActiveOrder {
     protected ActiveOrder() {
     }
 
-    public ActiveOrder(String orderId, String userId, String eventId) {
+    public ActiveOrder(String orderId, UUID userId, String eventId) {
         if (orderId == null || orderId.isBlank()) 
             throw new IllegalArgumentException("orderId cannot be null or empty");  
-        if (userId == null || userId.isBlank()) 
+        if (userId == null || userId.toString().isBlank())
             throw new IllegalArgumentException("userId cannot be null or empty");
         if (eventId == null || eventId.isBlank()) 
             throw new IllegalArgumentException("eventId cannot be null or empty");
@@ -71,7 +77,7 @@ public class ActiveOrder {
         return orderId;
     }
 
-    public String getUserId() {
+    public UUID getUserId() {
         return userId;
     }
 
@@ -120,6 +126,9 @@ public class ActiveOrder {
         if (!orderSeats.remove(seatId)) {
             throw new IllegalArgumentException("Seat not found in order");
         }
+        if (orderSeats.isEmpty()) {
+            cancel();
+        }
     }
     
 
@@ -147,19 +156,27 @@ public class ActiveOrder {
         return LocalDateTime.now().isAfter(expiresAt);
     }
 
+
+    // Only ACTIVE orders can transition to EXPIRED.
+    // Time check is only relevant for ACTIVE orders.
     public void expire() {
+        if (status != ActiveOrderStatus.ACTIVE) {
+            throw new UnactiveOrderException("Order " + orderId + " is not active and cannot expire");
+        }
+        if (!hasTimeExpired()) {
+            throw new RuntimeException("Order " + orderId + " has not yet expired");
+        }
         status = ActiveOrderStatus.EXPIRED;
     }
 
-    private void ensureOrderIsModifiable() {
-        if (hasTimeExpired()) { 
-            throw new IllegalStateException("Order has expired");
-        }
+    public void ensureOrderIsModifiable() {
         if (status != ActiveOrderStatus.ACTIVE) {
-            throw new IllegalStateException("Order is not active");
+            throw new UnactiveOrderException("Order " + orderId + " is not active and cannot be modified");
+        }
+        if (hasTimeExpired()) { 
+            throw new TimeExpiredException("Order " + orderId + " has expired");
         }
     }
-
 }
 
 
