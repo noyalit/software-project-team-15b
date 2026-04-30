@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,10 +21,10 @@ public interface IActiveOrderRepository extends JpaRepository<ActiveOrder, UUID>
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
-        select ao 
-        from ActiveOrder ao 
-        where ao.orderId = :orderId
-        """)
+           select ao
+           from ActiveOrder ao
+           where ao.orderId = :orderId
+           """)
     @QueryHints({
             @QueryHint(name = "jakarta.persistence.lock.timeout", value = "10000")
     })
@@ -31,12 +32,28 @@ public interface IActiveOrderRepository extends JpaRepository<ActiveOrder, UUID>
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
-        select ao
-        from ActiveOrder ao
-        where ao.userId = :userId
-            and ao.status = :status
-        order by ao.orderId
-        """)
+           select ao
+           from ActiveOrder ao
+           where ao.status = :status
+             and ao.expiresAt < :expiresBefore
+           order by ao.orderId
+           """)
+    @QueryHints({
+            @QueryHint(name = "jakarta.persistence.lock.timeout", value = "10000")
+    })
+    List<ActiveOrder> findExpiredActiveOrdersForUpdate(
+            ActiveOrderStatus status,
+            LocalDateTime expiresBefore
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+           select ao
+           from ActiveOrder ao
+           where ao.userId = :userId
+             and ao.status = :status
+           order by ao.orderId
+           """)
     @QueryHints({
             @QueryHint(name = "jakarta.persistence.lock.timeout", value = "10000")
     })
@@ -45,10 +62,21 @@ public interface IActiveOrderRepository extends JpaRepository<ActiveOrder, UUID>
             ActiveOrderStatus status
     );
 
-    boolean existsByUserIdAndEventIdAndStatus(
-        UUID userId,
-        UUID eventId,
-        ActiveOrderStatus status
-    );
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+           select ao
+           from ActiveOrder ao
+           where ao.status <> :status
+           order by ao.orderId
+           """)
+    @QueryHints({
+            @QueryHint(name = "jakarta.persistence.lock.timeout", value = "10000")
+    })
+    List<ActiveOrder> findByStatusNotForUpdate(ActiveOrderStatus status);
 
+    boolean existsByUserIdAndEventIdAndStatus(
+            UUID userId,
+            UUID eventId,
+            ActiveOrderStatus status
+    );
 }
