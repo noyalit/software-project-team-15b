@@ -73,8 +73,8 @@ class EventAvailabilityTest {
         Event event = new Event(
                 UUID.randomUUID(), UUID.randomUUID(), "Past Show", "Artist",
                 Category.CONCERT, Instant.now().minusSeconds(3600), "Venue",
-                new DelegatingEventPurchasePolicy(),
-                new DelegatingEventDiscountPolicy()
+                List.of(new DelegatingEventPurchasePolicy()),
+                List.of(new DelegatingEventDiscountPolicy())
         );
         event.addArea(EventTestFixtures.seatingArea(1, "10.00"));
         event.publish();

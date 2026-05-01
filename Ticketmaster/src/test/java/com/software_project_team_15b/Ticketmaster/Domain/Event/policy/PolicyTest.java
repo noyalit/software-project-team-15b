@@ -161,11 +161,39 @@ class PolicyTest {
 
     @Test
     void policy_json_round_trip() {
-        MaxTicketsPerOrderPolicy original = new MaxTicketsPerOrderPolicy(6);
-        var converter = new PolicyJsonConverter.PurchasePolicyConverter();
-        String json = converter.convertToDatabaseColumn(original);
-        IEventPurchasePolicy restored = converter.convertToEntityAttribute(json);
-        assertThat(restored).isInstanceOf(MaxTicketsPerOrderPolicy.class);
-        assertThat(((MaxTicketsPerOrderPolicy) restored).max()).isEqualTo(6);
+        List<IEventPurchasePolicy> originals = List.of(
+                new MaxTicketsPerOrderPolicy(6),
+                new AgeRestrictionPolicy(18)
+        );
+        var converter = new PolicyJsonConverter.PurchasePolicyListConverter();
+        String json = converter.convertToDatabaseColumn(originals);
+        List<IEventPurchasePolicy> restored = converter.convertToEntityAttribute(json);
+        assertThat(restored).hasSize(2);
+        assertThat(restored.get(0)).isInstanceOf(MaxTicketsPerOrderPolicy.class);
+        assertThat(((MaxTicketsPerOrderPolicy) restored.get(0)).max()).isEqualTo(6);
+        assertThat(restored.get(1)).isInstanceOf(AgeRestrictionPolicy.class);
+    }
+
+    @Test
+    void discount_policy_list_json_round_trip() {
+        List<IEventDiscountPolicy> originals = List.of(
+                new EarlyBirdDiscountPolicy(BigDecimal.valueOf(15),
+                        Instant.now().plus(Duration.ofDays(1))),
+                new CouponDiscountPolicy("PROMO", BigDecimal.valueOf(20))
+        );
+        var converter = new PolicyJsonConverter.DiscountPolicyListConverter();
+        String json = converter.convertToDatabaseColumn(originals);
+        List<IEventDiscountPolicy> restored = converter.convertToEntityAttribute(json);
+        assertThat(restored).hasSize(2);
+        assertThat(restored.get(0)).isInstanceOf(EarlyBirdDiscountPolicy.class);
+        assertThat(restored.get(1)).isInstanceOf(CouponDiscountPolicy.class);
+    }
+
+    @Test
+    void purchase_policy_converter_handles_null_and_blank_as_empty_list() {
+        var converter = new PolicyJsonConverter.PurchasePolicyListConverter();
+        assertThat(converter.convertToEntityAttribute(null)).isEmpty();
+        assertThat(converter.convertToEntityAttribute("")).isEmpty();
+        assertThat(converter.convertToDatabaseColumn(List.of())).isNull();
     }
 }

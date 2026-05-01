@@ -21,6 +21,8 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.Invali
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventPurchasePolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompanyAuthorizationPort;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PessimisticLockException;
@@ -78,6 +80,12 @@ public class EventManagementService {
     @Transactional
     public UUID createEvent(CreateEventCommand cmd, UUID callerId) {
         requireAuthorized(cmd.companyId(), callerId);
+        List<IEventPurchasePolicy> purchasePolicies = (cmd.purchasePolicies() == null || cmd.purchasePolicies().isEmpty())
+                ? List.of(new DelegatingEventPurchasePolicy())
+                : cmd.purchasePolicies();
+        List<IEventDiscountPolicy> discountPolicies = (cmd.discountPolicies() == null || cmd.discountPolicies().isEmpty())
+                ? List.of(new DelegatingEventDiscountPolicy())
+                : cmd.discountPolicies();
         Event event = new Event(
                 UUID.randomUUID(),
                 cmd.companyId(),
@@ -86,8 +94,8 @@ public class EventManagementService {
                 cmd.category(),
                 cmd.startsAt(),
                 cmd.location(),
-                cmd.purchasePolicy() != null ? cmd.purchasePolicy() : new DelegatingEventPurchasePolicy(),
-                cmd.discountPolicy() != null ? cmd.discountPolicy() : new DelegatingEventDiscountPolicy()
+                purchasePolicies,
+                discountPolicies
         );
         Event saved = events.save(event);
         AUDIT.info("op=createEvent event={} caller={} result=ok", saved.eventId(), callerId);
@@ -183,7 +191,7 @@ public class EventManagementService {
             CannotAcquireLockException.class,
             ObjectOptimisticLockingFailureException.class
     }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
-    public HoldReceipt hold(UUID eventId, HoldCommand cmd) {
+    public HoldReceipt hold(UUID eventId, HoldCommand cmd) { //TODO: update it to support map of {areaId: List<SeatID>} iso list of ids
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
@@ -215,7 +223,7 @@ public class EventManagementService {
             CannotAcquireLockException.class,
             ObjectOptimisticLockingFailureException.class
     }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
-    public void release(UUID eventId, UUID holdToken) {
+    public void release(UUID eventId, UUID holdToken) { //releseAll
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
@@ -274,7 +282,7 @@ public class EventManagementService {
             CannotAcquireLockException.class,
             ObjectOptimisticLockingFailureException.class
     }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
-    public void releaseSeats(UUID eventId, UUID holdToken, List<UUID> seatIds) {
+    public void releaseSeats(UUID eventId, UUID holdToken, List<UUID> seatIds) { //TODO: update it to support map of {areaId: List<SeatID>} iso list of ids,
         Objects.requireNonNull(seatIds, "seatIds");
         if (seatIds.isEmpty()) return;
         ReentrantLock lock = locks.forEvent(eventId);
@@ -307,9 +315,30 @@ public class EventManagementService {
                 eventId, query.areaId(), query.buyerId(), query.buyerBirthDate(),
                 query.quantity(), List.of(), query.couponCode()
         );
-        Money total = event.discountPolicy().apply(subtotal, request, null);
+        Money total = event.cheapestPriceFor(query.areaId(), query.quantity(), request, null); //TODO: Talk with Kfir how to integrate company discount.
         Money discount = subtotal.subtract(total);
         return new PriceBreakdown(area.basePrice(), subtotal, discount, total);
+    }
+
+    /**
+     * Validates that the buyer is eligible to purchase under every purchase policy attached to
+     * the event. Throws {@link PolicyViolationException} on the first failure to abort purchase.
+     */
+    @Transactional(readOnly = true)
+    public void validatePurchaseEligibility(UUID eventId, PurchaseRequest request) {
+        Objects.requireNonNull(request, "request");
+        Event event = requireEvent(eventId);
+        try {
+            for (IEventPurchasePolicy policy : event.purchasePolicies()) {
+                policy.validate(request, event, null); //TODO: integrate ICompPurchasePolicy from company port.
+            }
+            AUDIT.info("op=validatePurchaseEligibility event={} buyer={} result=ok",
+                    eventId, request.buyerId());
+        } catch (PolicyViolationException e) {
+            AUDIT.warn("op=validatePurchaseEligibility event={} buyer={} result=rejected reason={}",
+                    eventId, request.buyerId(), e.getMessage());
+            throw e;
+        }
     }
 
     @Transactional(readOnly = true)
