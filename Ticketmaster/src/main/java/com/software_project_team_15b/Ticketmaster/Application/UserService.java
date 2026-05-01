@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.time.LocalDate;
 
 import org.springframework.stereotype.Service;
 
@@ -37,12 +38,12 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
     }
 
-    public Member registerMember(String username, String password) {
+    public Member registerMember(String username, String password, LocalDate birthDate) {
         if (memberRepository.existsByUsername(username)) {
             throw new IllegalArgumentException("Username already exists");
         }
         validateRawPassword(password);
-        Member member = new Member(username, passwordEncoder.encode(password), null);
+        Member member = new Member(username, passwordEncoder.encode(password), null, birthDate);
         return memberRepository.save(member);
     }
 

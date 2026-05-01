@@ -6,6 +6,7 @@ import java.util.UUID;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.Collections;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "members")
@@ -28,17 +29,22 @@ public class Member {
     @JoinColumn(name = "active_role_id", nullable = true)
     private Role activeRole;
 
+    @Column(name = "birth_date", nullable = false)
+    private LocalDate birthDate;
+
     protected Member() {
         // JPA only
     }
 
-    public Member(String username, String passwordHash, Role initialRole) {
+    public Member(String username, String passwordHash, Role initialRole, LocalDate birthDate) {
         validateUsername(username);
         validatePasswordHash(passwordHash);
+        validateBirthDate(birthDate);
 
         this.userId = UUID.randomUUID();
         this.username = username.trim();
         this.passwordHash = passwordHash;
+        this.birthDate = birthDate;
         if (initialRole != null) {
             this.assignedRoles.add(initialRole);
         }
@@ -72,6 +78,15 @@ public class Member {
     public void setPassword(String passwordHash) {
         validatePasswordHash(passwordHash);
         this.passwordHash = passwordHash;
+    }
+
+    public LocalDate getBirthDate() {
+        return birthDate;
+    }
+
+    public void setBirthDate(LocalDate birthDate) {
+        validateBirthDate(birthDate);
+        this.birthDate = birthDate;
     }
 
     public Role getActiveRole() {
@@ -130,6 +145,16 @@ public class Member {
     private static void validatePasswordHash(String passwordHash) {
         if (passwordHash == null || passwordHash.isBlank()) {
             throw new IllegalArgumentException("Password hash cannot be null or empty");
+        }
+    }
+
+    private static void validateBirthDate(LocalDate birthDate) {
+        if (birthDate == null) {
+            throw new IllegalArgumentException("Birth date cannot be null");
+        }
+
+        if (birthDate.isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("Birth date cannot be in the future");
         }
     }
 
