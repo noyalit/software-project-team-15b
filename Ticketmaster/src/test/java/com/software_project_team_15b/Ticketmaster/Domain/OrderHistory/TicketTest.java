@@ -33,7 +33,7 @@ public class TicketTest {
 
         assertEquals(seatId1, ticket.getSeatId());
 
-        Money returnedPrice = ticket.getPrice();
+        Money returnedPrice = ticket.getBasePrice();
         assertEquals("100.00", returnedPrice.amount().toPlainString());
         assertEquals("ILS", returnedPrice.currency());
     }
@@ -105,10 +105,10 @@ public class TicketTest {
     }
 
     @Test
-    void getPriceShouldReturnDefensiveCopy() {
+    void getBasePriceShouldReturnDefensiveCopy() {
         Ticket ticket = new Ticket(seatId1, price1);
 
-        Money returnedPrice = ticket.getPrice();
+        Money returnedPrice = ticket.getBasePrice();
 
         assertNotSame(price1, returnedPrice);
         assertEquals(price1.amount(), returnedPrice.amount());
