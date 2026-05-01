@@ -209,11 +209,6 @@ public class ActiveOrder {
         status = ActiveOrderStatus.EXPIRED;
     }
 
-    public void abortCheckout() {
-        ensureOrderIsInCheckout();
-        this.expiresAt = null;
-    }
-
     public void ensureOrderIsActive() {
         if (status != ActiveOrderStatus.ACTIVE) {
             throw new UnactiveOrderException("Order " + orderId + " is not active");
