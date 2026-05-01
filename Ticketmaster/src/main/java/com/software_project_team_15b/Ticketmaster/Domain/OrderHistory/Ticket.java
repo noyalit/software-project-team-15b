@@ -20,36 +20,36 @@ public class Ticket {
     @AttributeOverrides({
             @AttributeOverride(
                     name = "amount",
-                    column = @Column(name = "price_amount", nullable = false, updatable = false)
+                    column = @Column(name = "base_price_amount", nullable = false, updatable = false)
             ),
             @AttributeOverride(
                     name = "currency",
-                    column = @Column(name = "price_currency", nullable = false, updatable = false)
+                    column = @Column(name = "base_price_currency", nullable = false, updatable = false)
             )
     })
-    private Money price;
+    private Money basePrice;
 
     protected Ticket() {
     }
 
-    public Ticket(UUID seatId, Money price) {
+    public Ticket(UUID seatId, Money basePrice) {
         if (seatId == null) {
             throw new IllegalArgumentException("Seat ID cannot be null");
         }
-        if (price == null) {
-            throw new IllegalArgumentException("Price cannot be null");
+        if (basePrice == null) {
+            throw new IllegalArgumentException("Base price cannot be null");
         }
 
         this.seatId = seatId;
-        this.price = price;
+        this.basePrice = basePrice;
     }
 
     public UUID getSeatId() {
         return seatId;
     }
 
-    public Money getPrice() {
-        return new Money(price.amount(), price.currency());
+    public Money getBasePrice() {
+        return new Money(basePrice.amount(), basePrice.currency());
     }
 
     @Override
@@ -59,11 +59,11 @@ public class Ticket {
 
         Ticket ticket = (Ticket) o;
 
-        return seatId.equals(ticket.seatId) && price.equals(ticket.price);
+        return seatId.equals(ticket.seatId) && basePrice.equals(ticket.basePrice);
     }
 
     @Override
     public int hashCode() {
-        return java.util.Objects.hash(seatId, price);
+        return java.util.Objects.hash(seatId, basePrice);
     }
 }
