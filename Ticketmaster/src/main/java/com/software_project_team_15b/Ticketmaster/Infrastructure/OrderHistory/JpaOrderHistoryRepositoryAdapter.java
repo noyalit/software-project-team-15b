@@ -7,6 +7,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Repository;
+
+@Profile("jpa")
+@Repository
 public class JpaOrderHistoryRepositoryAdapter implements IOrderHistoryRepository {
 
     private final JpaOrderHistorySpringDataRepository jpaRepo;
@@ -17,11 +22,15 @@ public class JpaOrderHistoryRepositoryAdapter implements IOrderHistoryRepository
 
     @Override
     public OrderHistory save(OrderHistory orderHistory) {
+        if (orderHistory == null)
+            throw new IllegalArgumentException("orderHistory cannot be null");
         return jpaRepo.save(orderHistory);
     }
 
     @Override
     public Optional<OrderHistory> findById(UUID orderId) {
+        if (orderId == null)
+            throw new IllegalArgumentException("orderId cannot be null");
         return jpaRepo.findById(orderId);
     }
 
@@ -32,16 +41,22 @@ public class JpaOrderHistoryRepositoryAdapter implements IOrderHistoryRepository
 
     @Override
     public List<OrderHistory> findByUserId(UUID userId) {
+        if (userId == null)
+            throw new IllegalArgumentException("userId cannot be null");
         return jpaRepo.findByUserId(userId);
     }
 
     @Override
     public List<OrderHistory> findByEventId(UUID eventId) {
+        if (eventId == null)
+            throw new IllegalArgumentException("eventId cannot be null");
         return jpaRepo.findByEventId(eventId);
     }
 
     @Override
     public List<OrderHistory> findByEventIdIn(List<UUID> eventIds) {
+        if (eventIds == null || eventIds.isEmpty())
+            return List.of();
         return jpaRepo.findByEventIdIn(eventIds);
     }
 }
