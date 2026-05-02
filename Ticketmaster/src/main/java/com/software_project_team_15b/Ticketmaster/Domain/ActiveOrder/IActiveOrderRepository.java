@@ -16,5 +16,15 @@ public interface IActiveOrderRepository {
 
     void deleteById(UUID id);
 
-    List<ActiveOrder> findByStatusAndExpiresAtBefore(ActiveOrderStatus status, LocalDateTime time);
+    List<ActiveOrder> findExpiredActiveOrdersForUpdate(ActiveOrderStatus status, LocalDateTime time);
+
+    List<ActiveOrder> findByUserIdAndStatus(UUID userId, ActiveOrderStatus status);
+
+    boolean existsByUserIdAndEventIdAndStatus(UUID userId, UUID eventId, ActiveOrderStatus status);
+
+    List<ActiveOrder> findByUserIdAndStatusForUpdate(UUID userId, ActiveOrderStatus status);
+
+    List<ActiveOrder> findByStatusNotForUpdate(ActiveOrderStatus status);
+
+    Optional<ActiveOrder> findByIdForUpdate(UUID orderId);
 }
