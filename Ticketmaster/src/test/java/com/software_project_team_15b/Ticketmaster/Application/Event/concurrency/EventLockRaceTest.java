@@ -13,6 +13,8 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.SeatUnavailableException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,7 +33,7 @@ import org.springframework.boot.test.context.SpringBootTest;
  * under concurrent load.
  *
  * Each scenario is @RepeatedTest so flaky failures caused by timing are reliably caught.
- * All four scenarios should pass 100 % of the time — a single failure means a real bug.
+ * All five scenarios should pass 100 % of the time — a single failure means a real bug.
  */
 @SpringBootTest
 class EventLockRaceTest {
@@ -66,7 +68,10 @@ class EventLockRaceTest {
                     service.hold(setup.eventId(),
                             new HoldCommand(setup.areaId(), List.of(seat), null, UUID.randomUUID()));
                     successes.incrementAndGet();
-                } catch (Exception e) {
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    failures.incrementAndGet();
+                } catch (SeatUnavailableException | InvalidEventStateException e) {
                     failures.incrementAndGet();
                 }
                 return null;
@@ -108,8 +113,10 @@ class EventLockRaceTest {
                     service.hold(setup.eventId(),
                             new HoldCommand(setup.areaId(), setup.seatIds(), null, UUID.randomUUID()));
                     successes.incrementAndGet();
-                } catch (Exception e) {
-                    // expected for all losers
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                } catch (SeatUnavailableException expected) {
+                    // 24 of 25 losers see this once the winner takes the seats
                 }
                 return null;
             });
@@ -150,8 +157,16 @@ class EventLockRaceTest {
         ExecutorService pool = Executors.newFixedThreadPool(2);
 
         // Both confirms fire at the same instant.
-        pool.submit(() -> { try { ready.await(); service.confirm(setup.eventId(), tokenA); } catch (Exception ignored) {} return null; });
-        pool.submit(() -> { try { ready.await(); service.confirm(setup.eventId(), tokenB); } catch (Exception ignored) {} return null; });
+        pool.submit(() -> {
+            try { ready.await(); service.confirm(setup.eventId(), tokenA); }
+            catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            return null;
+        });
+        pool.submit(() -> {
+            try { ready.await(); service.confirm(setup.eventId(), tokenB); }
+            catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+            return null;
+        });
 
         ready.countDown();
         pool.shutdown();
@@ -186,7 +201,9 @@ class EventLockRaceTest {
                 try {
                     ready.await();
                     service.releaseSeats(setup.eventId(), token, List.of(seat));
-                } catch (Exception ignored) {}
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
                 return null;
             });
         }
@@ -219,6 +236,7 @@ class EventLockRaceTest {
 
         CountDownLatch ready = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(2);
+        AtomicInteger aReleases = new AtomicInteger();
         AtomicInteger bSuccesses = new AtomicInteger();
 
         // Thread A: release all seats held by tokenA one by one
@@ -227,8 +245,11 @@ class EventLockRaceTest {
                 ready.await();
                 for (UUID seat : setup.seatIds()) {
                     service.releaseSeats(setup.eventId(), tokenA, List.of(seat));
+                    aReleases.incrementAndGet();
                 }
-            } catch (Exception ignored) {}
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
             return null;
         });
 
@@ -239,7 +260,11 @@ class EventLockRaceTest {
                 service.hold(setup.eventId(),
                         new HoldCommand(setup.areaId(), setup.seatIds(), null, tokenB));
                 bSuccesses.incrementAndGet();
-            } catch (Exception ignored) {}
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            } catch (SeatUnavailableException expected) {
+                // legal: A hadn't released yet when B tried to hold
+            }
             return null;
         });
 
@@ -255,6 +280,11 @@ class EventLockRaceTest {
         assertThat(held)
                 .as("held count must be 0 (released) or %d (re-held by B), never in between", expectedIfBWon)
                 .isIn(0, expectedIfBWon);
+
+        // Sanity: at least one thread did real work — otherwise the test is vacuous.
+        assertThat(aReleases.get() + bSuccesses.get())
+                .as("either A released seats or B re-held them; both being 0 means nothing ran")
+                .isGreaterThan(0);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

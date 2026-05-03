@@ -101,6 +101,9 @@ class EventCheapestPriceTest {
         assertThat(totalNoCoupon).isEqualTo(EventTestFixtures.usd("85.00"));
 
         // With coupon -> 40% beats 15%, total = 60.
+        // Note: the policy stores "PROMO" but the request sends "promo" — coupon
+        // matching is intentionally case-insensitive (CouponDiscountPolicy uses
+        // String.equalsIgnoreCase). This assertion pins that contract.
         PurchaseRequest withCoupon = new PurchaseRequest(event.eventId(), area.areaId(),
                 UUID.randomUUID(), LocalDate.of(1990, 1, 1), 1, List.of(), "promo");
         Money totalWithCoupon = event.cheapestPriceFor(area.areaId(), 1, withCoupon, null);

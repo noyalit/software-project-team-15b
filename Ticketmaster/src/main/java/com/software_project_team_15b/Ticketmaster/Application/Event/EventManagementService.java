@@ -289,7 +289,6 @@ public class EventManagementService {
     }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
     public void releaseSeats(UUID eventId, UUID holdToken, List<UUID> seatIds) {
         Objects.requireNonNull(seatIds, "seatIds");
-        if (seatIds.isEmpty()) return;
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
