@@ -99,6 +99,7 @@ public class StandingEventArea extends EventArea {
         Objects.requireNonNull(token, "token must not be null");
         boolean released = false;
         for (UUID id : seatIds) {
+            Objects.requireNonNull(id, "seatIds element");
             Seat s = seats.get(id);
             if (s != null && s.status() == SeatStatus.HELD && token.equals(s.heldBy())) {
                 s.markAvailable(token);
