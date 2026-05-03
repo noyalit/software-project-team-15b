@@ -6,6 +6,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.SeatUn
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.PolicyJsonConverter;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompDiscountPolicy;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
@@ -58,19 +59,19 @@ public class Event {
     @OrderColumn(name = "area_order")
     private List<EventArea> areas = new ArrayList<>();
 
-    @Convert(converter = PolicyJsonConverter.PurchasePolicyConverter.class)
+    @Convert(converter = PolicyJsonConverter.PurchasePolicyListConverter.class)
     @Column(name = "purchase_policy", columnDefinition = "TEXT")
-    private IEventPurchasePolicy purchasePolicy;
+    private List<IEventPurchasePolicy> purchasePolicies = new ArrayList<>();
 
-    @Convert(converter = PolicyJsonConverter.DiscountPolicyConverter.class)
+    @Convert(converter = PolicyJsonConverter.DiscountPolicyListConverter.class)
     @Column(name = "discount_policy", columnDefinition = "TEXT")
-    private IEventDiscountPolicy discountPolicy;
+    private List<IEventDiscountPolicy> discountPolicies = new ArrayList<>();
 
     protected Event() {}
 
     public Event(UUID eventId, UUID companyId, String name, String artist,
                  Category category, Instant startsAt, String location,
-                 IEventPurchasePolicy purchasePolicy, IEventDiscountPolicy discountPolicy) {
+                 List<IEventPurchasePolicy> purchasePolicies, List<IEventDiscountPolicy> discountPolicies) {
         this.eventId = Objects.requireNonNull(eventId, "eventId");
         this.companyId = Objects.requireNonNull(companyId, "companyId");
         this.name = Objects.requireNonNull(name, "name");
@@ -79,8 +80,12 @@ public class Event {
         this.startsAt = Objects.requireNonNull(startsAt, "startsAt");
         this.location = Objects.requireNonNull(location, "location");
         this.status = EventStatus.DRAFT;
-        this.purchasePolicy = Objects.requireNonNull(purchasePolicy, "purchasePolicy");
-        this.discountPolicy = Objects.requireNonNull(discountPolicy, "discountPolicy");
+        Objects.requireNonNull(purchasePolicies, "purchasePolicies");
+        Objects.requireNonNull(discountPolicies, "discountPolicies");
+        this.purchasePolicies = new ArrayList<>(purchasePolicies);
+        this.discountPolicies = new ArrayList<>(discountPolicies);
+        this.purchasePolicies.forEach(p -> Objects.requireNonNull(p, "purchase policy element"));
+        this.discountPolicies.forEach(p -> Objects.requireNonNull(p, "discount policy element"));
     }
 
     public UUID eventId() { return eventId; }
@@ -93,8 +98,8 @@ public class Event {
     public EventStatus status() { return status; }
     public long version() { return version; }
     public List<EventArea> areas() { return Collections.unmodifiableList(areas); }
-    public IEventPurchasePolicy purchasePolicy() { return purchasePolicy; }
-    public IEventDiscountPolicy discountPolicy() { return discountPolicy; }
+    public List<IEventPurchasePolicy> purchasePolicies() { return Collections.unmodifiableList(purchasePolicies); }
+    public List<IEventDiscountPolicy> discountPolicies() { return Collections.unmodifiableList(discountPolicies); }
 
     public void addArea(EventArea area) {
         requireState(EventStatus.DRAFT, "addArea");
@@ -161,6 +166,23 @@ public class Event {
     }
 
     /**
+     * Releases only the specified seats held under the given token, leaving other
+     * seats in the same reservation on hold.
+     *
+     * @return true if at least one seat was released
+     */
+    public boolean releaseSeats(UUID holdToken, List<UUID> seatIds) {
+        Objects.requireNonNull(holdToken, "holdToken");
+        Objects.requireNonNull(seatIds, "seatIds");
+        if (seatIds.isEmpty()) return false;
+        boolean released = false;
+        for (EventArea a : areas) {
+            released |= a.releaseSpecificSeats(seatIds, holdToken);
+        }
+        return released;
+    }
+
+    /**
      * Transitions seats/capacity held under the given token to SOLD.
      * Called by the checkout flow on successful payment.
      */
@@ -197,6 +219,48 @@ public class Event {
                 .findFirst()
                 .orElseThrow(() -> new InvalidEventStateException("area not found: " + areaId));
         return area.basePrice().multiply(quantity);
+    }
+
+    /**
+     * Returns the lowest price the buyer can pay across all configured discount policies.
+     * Each policy is applied independently to the base subtotal — discounts are NOT combined.
+     * The result is clamped to the subtotal so a misbehaving policy cannot raise the price.
+     */
+    public Money cheapestPriceFor(UUID areaId, int quantity, PurchaseRequest request, ICompDiscountPolicy companyPolicy) {
+        Money subtotal = priceFor(areaId, quantity);
+        Money best = subtotal;
+        for (IEventDiscountPolicy policy : discountPolicies) {
+            Money candidate = policy.apply(subtotal, request, companyPolicy);
+            if (candidate == null) continue;
+            if (!candidate.currency().equals(subtotal.currency())) {
+                throw new InvalidEventStateException("discount policy returned mismatched currency: "
+                        + candidate.currency() + " vs " + subtotal.currency());
+            }
+            if (candidate.amount().compareTo(best.amount()) < 0) {
+                best = candidate;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * Returns the current booking status of the event.
+     * INACTIVE if the event is not published or has already started.
+     * SOLD_OUT if there is no remaining available capacity.
+     * AVAILABLE otherwise.
+     */
+    public EventAvailability bookingStatus() {
+        if (status == EventStatus.CANCELLED || status == EventStatus.DRAFT) {
+            return EventAvailability.INACTIVE;
+        }
+        if (startsAt.isBefore(Instant.now())) {
+            return EventAvailability.INACTIVE;
+        }
+        if (status == EventStatus.SOLD_OUT) {
+            return EventAvailability.SOLD_OUT;
+        }
+        boolean anyAvailable = areas.stream().anyMatch(a -> a.availableCapacity() > 0);
+        return anyAvailable ? EventAvailability.AVAILABLE : EventAvailability.SOLD_OUT;
     }
 
     public int heldCountIn(UUID areaId) {

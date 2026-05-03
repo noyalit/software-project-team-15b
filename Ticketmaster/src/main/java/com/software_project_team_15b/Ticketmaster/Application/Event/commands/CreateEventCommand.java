@@ -4,6 +4,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 public record CreateEventCommand(
@@ -13,6 +14,6 @@ public record CreateEventCommand(
         Category category,
         Instant startsAt,
         String location,
-        IEventPurchasePolicy purchasePolicy,
-        IEventDiscountPolicy discountPolicy
+        List<IEventPurchasePolicy> purchasePolicies,
+        List<IEventDiscountPolicy> discountPolicies
 ) {}
