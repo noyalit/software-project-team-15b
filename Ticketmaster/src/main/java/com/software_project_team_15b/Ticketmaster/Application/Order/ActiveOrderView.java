@@ -5,6 +5,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 
 import java.time.Instant;
 import java.time.LocalDateTime;

@@ -10,8 +10,8 @@ import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHisto
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceQuery;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchseRequest;
+import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
@@ -19,7 +19,6 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITick
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
@@ -304,7 +303,7 @@ public class PurchasingService {
 
             ensureOrderIsInCheckout(activeOrder);
 
-            priceBreakdown = getPriceBreakdown(activeOrder, couponCode);
+            priceBreakdown = getPriceBreakdown(activeOrder, couponCode, birthDate);
 
             pay(activeOrder, token, priceBreakdown.total());
             paymentSucceeded = true;
@@ -385,7 +384,7 @@ public class PurchasingService {
             boolean confirmed) {
         if (activeOrder != null) {
             if (paymentSucceeded) {
-                paymentGateway.refund(token, priceBreakdown.total());
+                paymentGateway.refundPayment(token, priceBreakdown.total());
                 AUDIT.info("op=refundPayment order={} user={} event={} result=ok",
                         activeOrder.getOrderId(), activeOrder.getUserId(), activeOrder.getEventId());
             }
@@ -474,7 +473,7 @@ public class PurchasingService {
         activeOrder.complete();
         activeOrderRepository.save(activeOrder);
 
-        OrderHistory orderHistory = OrderHistory.fromActiveOrder(activeOrder, pricing.total(), pricing.basePricePerTicket());
+        OrderHistory orderHistory = OrderHistory.fromActiveOrder(activeOrder, pricing.total(), pricing.basePrice());
         orderHistoryRepository.save(orderHistory);
     }
 
@@ -515,7 +514,7 @@ public class PurchasingService {
         if (activeOrder == null) {
             throw new IllegalArgumentException("Active order cannot be null");
         }
-        return eventManagementService.getPricing(PriceQuery.of(
+        return eventManagementService.getPrice(activeOrder.getEventId(), new PriceQuery(
                 activeOrder.getAreaId(),
                 activeOrder.getOrderSeats().size(),
                 activeOrder.getUserId(),
@@ -646,7 +645,7 @@ public class PurchasingService {
          if (activeOrder == null) {
             throw new IllegalArgumentException("Active order cannot be null");
         }
-        PurchaseRequest request = new PurchaseRequest(activeOrder.getEventId(), activeOrder.getAreaId(), activeOrder.getUserId(), birthDate, activeOrder.getOrderSeats().size(), activeOrder.getOrderSeats());
+        PurchaseRequest request = new PurchaseRequest(activeOrder.getEventId(), activeOrder.getAreaId(), activeOrder.getUserId(), birthDate, activeOrder.getOrderSeats().size(), new ArrayList<>(activeOrder.getOrderSeats()), null);
         try {
             eventManagementService.validatePurchaseEligibility(activeOrder.getEventId(), request);
         } catch (PolicyViolationException e) {
