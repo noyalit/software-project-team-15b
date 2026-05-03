@@ -352,7 +352,7 @@ public class UserService {
             throw new IllegalArgumentException("Only members can perform this action");
         }
 
-        return UUID.fromString(auth.getSessionUserId(token));
+        return auth.extractUserId(token);
     }
 
 }

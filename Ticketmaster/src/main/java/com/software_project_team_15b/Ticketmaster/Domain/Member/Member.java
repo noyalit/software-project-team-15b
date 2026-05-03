@@ -93,6 +93,10 @@ public class Member {
         return activeRole;
     }
 
+    public Role getRole() {
+        return activeRole;
+    }
+
     public Set<Role> getAssignedRoles() {
         return Collections.unmodifiableSet(assignedRoles);
     }
@@ -128,6 +132,16 @@ public class Member {
         if (!assignedRoles.contains(role)) {
             throw new IllegalArgumentException("Cannot switch to a role that was not assigned to this member");
         }
+        activeRole = role;
+    }
+
+    public void setRole(Role role) {
+        if (role == null) {
+            activeRole = null;
+            return;
+        }
+
+        assignedRoles.add(role);
         activeRole = role;
     }
 

@@ -157,6 +157,7 @@ public class Auth implements IAuth {
                 .getPayload();
     }
 
+    @Override
     public UUID extractUserId(String token) {
         return UUID.fromString(extractAllClaims(token).getSubject());
     }

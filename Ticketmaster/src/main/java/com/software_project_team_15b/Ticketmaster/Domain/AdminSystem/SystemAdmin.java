@@ -42,6 +42,7 @@ public class SystemAdmin {
         return username;
     }
 
+
     public void setPassword(String passwordHash) {
         validatePasswordHash(passwordHash);
         this.passwordHash = passwordHash;
@@ -70,6 +71,15 @@ public class SystemAdmin {
     private static void validatePasswordHash(String passwordHash) {
         if (passwordHash == null || passwordHash.isBlank()) {
             throw new IllegalArgumentException("Password hash cannot be null or empty");
+        }
+
+        if (passwordHash.length() < 8) {
+            throw new IllegalArgumentException("password must be at least 8 characters long");
+        }
+
+        String regex = "^(?=.*[A-Z])(?=.*\\d).+$";
+        if (!passwordHash.matches(regex)) {
+            throw new IllegalArgumentException("password must contain at least one uppercase letter and one number");
         }
     }
 }

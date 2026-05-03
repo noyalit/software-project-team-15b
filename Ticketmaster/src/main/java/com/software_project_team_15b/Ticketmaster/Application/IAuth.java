@@ -3,6 +3,7 @@ package com.software_project_team_15b.Ticketmaster.Application;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Domain.UserType;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
+import java.util.UUID;
 
 public interface IAuth {
 
@@ -19,6 +20,7 @@ public interface IAuth {
     boolean isSystemAdmin(String token);
 
     String getSessionUserId(String token);
+    UUID extractUserId(String token);
     UserType getSessionUserType(String token);
     
 }
