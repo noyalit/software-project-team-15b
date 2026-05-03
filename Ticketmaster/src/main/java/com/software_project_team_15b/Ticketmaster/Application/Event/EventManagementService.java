@@ -3,23 +3,36 @@ package com.software_project_team_15b.Ticketmaster.Application.Event;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventArea;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Seat;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatingEventArea;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.StandingEventArea;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventPurchasePolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompanyAuthorizationPort;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PessimisticLockException;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
@@ -72,6 +85,12 @@ public class EventManagementService {
     @Transactional
     public UUID createEvent(CreateEventCommand cmd, UUID callerId) {
         requireAuthorized(cmd.companyId(), callerId);
+        List<IEventPurchasePolicy> purchasePolicies = (cmd.purchasePolicies() == null || cmd.purchasePolicies().isEmpty())
+                ? List.of(new DelegatingEventPurchasePolicy())
+                : cmd.purchasePolicies();
+        List<IEventDiscountPolicy> discountPolicies = (cmd.discountPolicies() == null || cmd.discountPolicies().isEmpty())
+                ? List.of(new DelegatingEventDiscountPolicy())
+                : cmd.discountPolicies();
         Event event = new Event(
                 UUID.randomUUID(),
                 cmd.companyId(),
@@ -80,8 +99,8 @@ public class EventManagementService {
                 cmd.category(),
                 cmd.startsAt(),
                 cmd.location(),
-                cmd.purchasePolicy() != null ? cmd.purchasePolicy() : new DelegatingEventPurchasePolicy(),
-                cmd.discountPolicy() != null ? cmd.discountPolicy() : new DelegatingEventDiscountPolicy()
+                purchasePolicies,
+                discountPolicies
         );
         Event saved = events.save(event);
         AUDIT.info("op=createEvent event={} caller={} result=ok", saved.eventId(), callerId);
@@ -259,6 +278,125 @@ public class EventManagementService {
         } finally {
             lock.unlock();
         }
+    }
+
+    @Retryable(retryFor = {
+            OptimisticLockException.class,
+            PessimisticLockException.class,
+            PessimisticLockingFailureException.class,
+            CannotAcquireLockException.class,
+            ObjectOptimisticLockingFailureException.class
+    }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
+    public boolean releaseSeats(UUID eventId, UUID holdToken, List<UUID> seatIds) {
+        Objects.requireNonNull(seatIds, "seatIds");
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            boolean released = Boolean.TRUE.equals(txTemplate.execute(status -> {
+                Event event = events.findByIdForUpdate(eventId)
+                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
+                boolean r = event.releaseSeats(holdToken, seatIds);
+                events.save(event);
+                return r;
+            }));
+            AUDIT.info("op=releaseSeats event={} token={} seats={} result={}",
+                    eventId, holdToken, seatIds.size(), released ? "ok" : "noop");
+            return released;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=releaseSeats event={} token={} result=rejected reason={}", eventId, holdToken, e.getMessage());
+            throw e;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public PriceBreakdown getPrice(UUID eventId, PriceQuery query) {
+        Event event = requireEvent(eventId);
+        EventArea area = event.areas().stream()
+                .filter(a -> a.areaId().equals(query.areaId()))
+                .findFirst()
+                .orElseThrow(() -> new InvalidEventStateException("area not found: " + query.areaId()));
+        Money subtotal = area.basePrice().multiply(query.quantity());
+        PurchaseRequest request = new PurchaseRequest(
+                eventId, query.areaId(), query.buyerId(), query.buyerBirthDate(),
+                query.quantity(), List.of(), query.couponCode()
+        );
+        Money total = event.cheapestPriceFor(query.areaId(), query.quantity(), request, null); //TODO: Talk with Kfir how to integrate company discount.
+        Money discount = subtotal.subtract(total);
+        return new PriceBreakdown(area.basePrice(), subtotal, discount, total);
+    }
+
+    /**
+     * Validates that the buyer is eligible to purchase under every purchase policy attached to
+     * the event. Throws {@link PolicyViolationException} on the first failure to abort purchase.
+     */
+    @Transactional(readOnly = true)
+    public void validatePurchaseEligibility(UUID eventId, PurchaseRequest request) {
+        Objects.requireNonNull(request, "request");
+        Event event = requireEvent(eventId);
+        try {
+            for (IEventPurchasePolicy policy : event.purchasePolicies()) {
+                policy.validate(request, event, null); //TODO: integrate ICompPurchasePolicy from company port.
+            }
+            AUDIT.info("op=validatePurchaseEligibility event={} buyer={} result=ok",
+                    eventId, request.buyerId());
+        } catch (PolicyViolationException e) {
+            AUDIT.warn("op=validatePurchaseEligibility event={} buyer={} result=rejected reason={}",
+                    eventId, request.buyerId(), e.getMessage());
+            throw e;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public EventAvailability getEventAvailability(UUID eventId) {
+        Event event = requireEvent(eventId);
+        return event.bookingStatus();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean getAreaAvailability(UUID eventId, UUID areaId) {
+        Objects.requireNonNull(areaId, "areaId");
+        Event event = requireEvent(eventId);
+        EventArea area = event.areas().stream()
+                .filter(a -> a.areaId().equals(areaId))
+                .findFirst()
+                .orElseThrow(() -> new InvalidEventStateException("area not found: " + areaId));
+        return area.availableCapacity() > 0;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<Boolean, Set<UUID>> getSeatsAvailability(UUID eventId, UUID areaId, Set<UUID> seatIds) {
+        Objects.requireNonNull(areaId, "areaId");
+        Objects.requireNonNull(seatIds, "seatIds");
+        Event event = requireEvent(eventId);
+        EventArea area = event.areas().stream()
+                .filter(a -> a.areaId().equals(areaId))
+                .findFirst()
+                .orElseThrow(() -> new InvalidEventStateException("area not found: " + areaId));
+        Map<UUID, Seat> seats = areaSeats(area);
+
+        Set<UUID> available = new HashSet<>();
+        Set<UUID> unavailable = new HashSet<>();
+        for (UUID seatId : seatIds) {
+            Objects.requireNonNull(seatId, "seatIds element");
+            Seat seat = seats.get(seatId);
+            if (seat != null && seat.status() == SeatStatus.AVAILABLE) {
+                available.add(seatId);
+            } else {
+                unavailable.add(seatId);
+            }
+        }
+        Map<Boolean, Set<UUID>> result = new HashMap<>();
+        result.put(Boolean.TRUE, available);
+        result.put(Boolean.FALSE, unavailable);
+        return result;
+    }
+
+    private Map<UUID, Seat> areaSeats(EventArea area) {
+        if (area instanceof SeatingEventArea s) return s.seats();
+        if (area instanceof StandingEventArea s) return s.seats();
+        return Map.of();
     }
 
     private Event requireEvent(UUID eventId) {
