@@ -91,6 +91,7 @@ public class SeatingEventArea extends EventArea {
         return !held.isEmpty();
     }
 
+    @Override
     public boolean releaseSpecificSeats(List<UUID> seatIds, UUID token) {
         Objects.requireNonNull(seatIds, "seatIds must not be null");
         Objects.requireNonNull(token, "token must not be null");

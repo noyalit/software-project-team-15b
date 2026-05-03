@@ -12,8 +12,11 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Pri
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatStatus;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.StandingEventArea;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import java.time.Instant;
 import java.util.List;
@@ -30,6 +33,9 @@ class EventServiceFeaturesIT {
     @Autowired
     EventManagementService service;
 
+    @Autowired
+    IEventRepository events;
+
     // ── Task 1: releaseSeats ─────────────────────────────────────────────────
 
     @Test
@@ -40,13 +46,51 @@ class EventServiceFeaturesIT {
                 new HoldCommand(setup.areaId(), setup.seatIds(), null, token));
         assertThat(hold.quantity()).isEqualTo(3);
 
-        service.releaseSeats(setup.eventId(), token, List.of(setup.seatIds().get(0)));
+        boolean released = service.releaseSeats(setup.eventId(), token, List.of(setup.seatIds().get(0)));
 
+        assertThat(released).isTrue();
         EventView view = service.getEvent(setup.eventId());
         long available = seatCount(view, setup.areaId(), "AVAILABLE");
         long held = seatCount(view, setup.areaId(), "HELD");
         assertThat(available).isEqualTo(1);
         assertThat(held).isEqualTo(2);
+    }
+
+    @Test
+    void releaseSeats_returns_false_when_token_does_not_match_held_seat() {
+        SeatingSetup setup = createSeatingEvent(2, "10.00");
+        UUID realToken = UUID.randomUUID();
+        service.hold(setup.eventId(),
+                new HoldCommand(setup.areaId(), setup.seatIds(), null, realToken));
+
+        boolean released = service.releaseSeats(
+                setup.eventId(), UUID.randomUUID(), List.of(setup.seatIds().get(0)));
+
+        assertThat(released).isFalse();
+        EventView view = service.getEvent(setup.eventId());
+        assertThat(seatCount(view, setup.areaId(), "HELD")).isEqualTo(2);
+    }
+
+    @Test
+    void releaseSeats_works_for_standing_area_seats() {
+        StandingSetup setup = createStandingEvent(4, "10.00");
+        UUID token = UUID.randomUUID();
+        service.hold(setup.eventId(),
+                new HoldCommand(setup.areaId(), null, 4, token));
+        List<UUID> heldSeatIds = standingHeldSeatIdsFor(setup.eventId(), setup.areaId(), token);
+        assertThat(heldSeatIds).hasSize(4);
+
+        boolean released = service.releaseSeats(
+                setup.eventId(), token, List.of(heldSeatIds.get(0), heldSeatIds.get(1)));
+
+        assertThat(released).isTrue();
+        assertThat(service.getAreaAvailability(setup.eventId(), setup.areaId())).isTrue();
+        Map<Boolean, Set<UUID>> avail = service.getSeatsAvailability(
+                setup.eventId(), setup.areaId(), new java.util.HashSet<>(heldSeatIds));
+        assertThat(avail.get(Boolean.TRUE))
+                .containsExactlyInAnyOrder(heldSeatIds.get(0), heldSeatIds.get(1));
+        assertThat(avail.get(Boolean.FALSE))
+                .containsExactlyInAnyOrder(heldSeatIds.get(2), heldSeatIds.get(3));
     }
 
     @Test
@@ -278,6 +322,31 @@ class EventServiceFeaturesIT {
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private record SeatingSetup(UUID eventId, UUID areaId, List<UUID> seatIds, UUID callerId) {}
+    private record StandingSetup(UUID eventId, UUID areaId, UUID callerId) {}
+
+    private StandingSetup createStandingEvent(int capacity, String price) {
+        UUID caller = UUID.randomUUID();
+        UUID companyId = UUID.randomUUID();
+        UUID eventId = service.createEvent(new CreateEventCommand(
+                companyId, "Test Event", "Artist", Category.CONCERT,
+                Instant.now().plusSeconds(86400), "Venue", null, null), caller);
+        UUID areaId = service.addArea(eventId, new AddAreaCommand(
+                "Floor", Money.of(price, "USD"), AddAreaCommand.AreaType.STANDING, capacity, null), caller);
+        service.publish(eventId, caller);
+        return new StandingSetup(eventId, areaId, caller);
+    }
+
+    private List<UUID> standingHeldSeatIdsFor(UUID eventId, UUID areaId, UUID token) {
+        StandingEventArea area = (StandingEventArea) events.findById(eventId).orElseThrow()
+                .areas().stream()
+                .filter(a -> a.areaId().equals(areaId))
+                .findFirst()
+                .orElseThrow();
+        return area.seats().values().stream()
+                .filter(s -> s.status() == SeatStatus.HELD && token.equals(s.heldBy()))
+                .map(s -> s.seatId())
+                .toList();
+    }
 
     private SeatingSetup createSeatingEvent(int seatCount, String price) {
         UUID caller = UUID.randomUUID();

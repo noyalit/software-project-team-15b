@@ -287,18 +287,21 @@ public class EventManagementService {
             CannotAcquireLockException.class,
             ObjectOptimisticLockingFailureException.class
     }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
-    public void releaseSeats(UUID eventId, UUID holdToken, List<UUID> seatIds) {
+    public boolean releaseSeats(UUID eventId, UUID holdToken, List<UUID> seatIds) {
         Objects.requireNonNull(seatIds, "seatIds");
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
-            txTemplate.executeWithoutResult(status -> {
+            boolean released = Boolean.TRUE.equals(txTemplate.execute(status -> {
                 Event event = events.findByIdForUpdate(eventId)
                         .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
-                event.releaseSeats(holdToken, seatIds);
+                boolean r = event.releaseSeats(holdToken, seatIds);
                 events.save(event);
-            });
-            AUDIT.info("op=releaseSeats event={} token={} seats={} result=ok", eventId, holdToken, seatIds.size());
+                return r;
+            }));
+            AUDIT.info("op=releaseSeats event={} token={} seats={} result={}",
+                    eventId, holdToken, seatIds.size(), released ? "ok" : "noop");
+            return released;
         } catch (RuntimeException e) {
             AUDIT.warn("op=releaseSeats event={} token={} result=rejected reason={}", eventId, holdToken, e.getMessage());
             throw e;

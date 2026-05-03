@@ -124,4 +124,51 @@ class EventPartialReleaseTest {
         assertThat(released).isFalse();
         assertThat(area.heldCount()).isEqualTo(2);
     }
+
+    @Test
+    void partial_release_on_standing_area_frees_only_specified_seats() {
+        StandingEventArea area = EventTestFixtures.standingArea(5, "10.00");
+        Event event = EventTestFixtures.published(new StandingEventArea[]{area}, new SeatingEventArea[0]);
+        UUID token = UUID.randomUUID();
+        List<Seat> held = area.hold(5, token);
+        UUID toRelease = held.get(0).seatId();
+
+        boolean released = event.releaseSeats(token, List.of(toRelease));
+
+        assertThat(released).isTrue();
+        assertThat(area.activeHeldQuantity()).isEqualTo(4);
+        assertThat(area.availableCapacity()).isEqualTo(1);
+        assertThat(area.seats().get(toRelease).status()).isEqualTo(SeatStatus.AVAILABLE);
+    }
+
+    @Test
+    void partial_release_on_standing_area_with_wrong_token_is_noop() {
+        StandingEventArea area = EventTestFixtures.standingArea(3, "10.00");
+        Event event = EventTestFixtures.published(new StandingEventArea[]{area}, new SeatingEventArea[0]);
+        UUID tokenA = UUID.randomUUID();
+        List<Seat> held = area.hold(3, tokenA);
+        UUID seatId = held.get(0).seatId();
+
+        boolean released = event.releaseSeats(UUID.randomUUID(), List.of(seatId));
+
+        assertThat(released).isFalse();
+        assertThat(area.activeHeldQuantity()).isEqualTo(3);
+    }
+
+    @Test
+    void standing_area_release_specific_seats_directly() {
+        StandingEventArea area = EventTestFixtures.standingArea(4, "10.00");
+        UUID token = UUID.randomUUID();
+        List<Seat> held = area.hold(4, token);
+        UUID first = held.get(0).seatId();
+        UUID third = held.get(2).seatId();
+
+        boolean released = area.releaseSpecificSeats(List.of(first, third), token);
+
+        assertThat(released).isTrue();
+        assertThat(area.activeHeldQuantity()).isEqualTo(2);
+        assertThat(area.availableCapacity()).isEqualTo(2);
+        assertThat(area.seats().get(first).status()).isEqualTo(SeatStatus.AVAILABLE);
+        assertThat(area.seats().get(third).status()).isEqualTo(SeatStatus.AVAILABLE);
+    }
 }

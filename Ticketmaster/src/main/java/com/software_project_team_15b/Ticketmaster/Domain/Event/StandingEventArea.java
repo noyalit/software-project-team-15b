@@ -15,6 +15,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 @Entity
@@ -90,6 +91,21 @@ public class StandingEventArea extends EventArea {
                 .toList();
         held.forEach(s -> s.markAvailable(token));
         return !held.isEmpty();
+    }
+
+    @Override
+    public boolean releaseSpecificSeats(List<UUID> seatIds, UUID token) {
+        Objects.requireNonNull(seatIds, "seatIds must not be null");
+        Objects.requireNonNull(token, "token must not be null");
+        boolean released = false;
+        for (UUID id : seatIds) {
+            Seat s = seats.get(id);
+            if (s != null && s.status() == SeatStatus.HELD && token.equals(s.heldBy())) {
+                s.markAvailable(token);
+                released = true;
+            }
+        }
+        return released;
     }
 
     @Override

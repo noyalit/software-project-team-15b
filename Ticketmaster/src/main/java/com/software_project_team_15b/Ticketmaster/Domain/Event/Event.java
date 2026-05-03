@@ -177,9 +177,7 @@ public class Event {
         if (seatIds.isEmpty()) return false;
         boolean released = false;
         for (EventArea a : areas) {
-            if (a instanceof SeatingEventArea seating) {
-                released |= seating.releaseSpecificSeats(seatIds, holdToken);
-            }
+            released |= a.releaseSpecificSeats(seatIds, holdToken);
         }
         return released;
     }
