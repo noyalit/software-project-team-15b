@@ -9,10 +9,14 @@ import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHist
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceQuery;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchseRequest;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
+import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
@@ -76,7 +80,7 @@ public class PurchasingService {
             UUID userId = requireValidUser(token);
 
             requireEventIsValid(eventId);
-            requireAreaIsValid(areaId);
+            requireAreaIsValid(eventId, areaId);
 
             requireOrderIsUniqueForUser(userId, eventId);
 
@@ -629,11 +633,11 @@ public class PurchasingService {
         }
     }
 
-    private void requireAreaIsValid(UUID areaId) {
+    private void requireAreaIsValid(UUID eventId, UUID areaId) {
         if (areaId == null) {
             throw new IllegalArgumentException("Area ID cannot be null");
         }
-        if (!eventManagementService.getAreaAvailability(areaId)) {
+        if (!eventManagementService.getAreaAvailability(eventId, areaId)) {
             throw new IllegalStateException("Area is not available for booking");
         }
     }
