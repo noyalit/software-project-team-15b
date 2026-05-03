@@ -5,16 +5,16 @@ import java.util.UUID;
 public interface IPaymentAPI {
     /**
      * External API call to process payment.
-     * @param orderId ID of the order to process
+     * @param token the token of the order to process
      * @param amount amount of money to charge for
-     * @return Response containing the payment ID if successful, or an error message if failed
+     * @return Response object
      */
-    public Response<UUID> chargePayment(UUID orderId, double amount);
+    public Response<Boolean> chargePayment(String token, double amount);
 
     /**
      * External API call to refund processed payment.
-     * @param paymentId ID of the payment.
-     * @return Response containing the payment ID if successful, or an error message if failed
+     * @param token the token of the order to refund the payment for.
+     * @return Response object
      */
-    public Response<UUID> refundPayment(UUID paymentId);
+    public Response<Boolean> refundPayment(String token);
 }
