@@ -3,6 +3,10 @@ package com.software_project_team_15b.Ticketmaster.Domain.Member;
 import jakarta.persistence.*;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.Collections;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "members")
@@ -17,22 +21,34 @@ public class Member {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
-    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER, optional = true, orphanRemoval = true)
-    @JoinColumn(name = "role_id", nullable = true)
-    private Role role;
+    @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER, orphanRemoval = true)
+    @JoinColumn(name = "member_id")
+    private Set<Role> assignedRoles = new HashSet<>();
+
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "active_role_id", nullable = true)
+    private Role activeRole;
+
+    @Column(name = "birth_date", nullable = false)
+    private LocalDate birthDate;
 
     protected Member() {
         // JPA only
     }
 
-    public Member(String username, String passwordHash, Role role) {
+    public Member(String username, String passwordHash, Role initialRole, LocalDate birthDate) {
         validateUsername(username);
         validatePasswordHash(passwordHash);
+        validateBirthDate(birthDate);
 
         this.userId = UUID.randomUUID();
         this.username = username.trim();
         this.passwordHash = passwordHash;
-        this.role = role;
+        this.birthDate = birthDate;
+        if (initialRole != null) {
+            this.assignedRoles.add(initialRole);
+        }
+        this.activeRole = initialRole; 
     }
 
     @PrePersist
@@ -64,12 +80,74 @@ public class Member {
         this.passwordHash = passwordHash;
     }
 
+    public LocalDate getBirthDate() {
+        return birthDate;
+    }
+
+    public void setBirthDate(LocalDate birthDate) {
+        validateBirthDate(birthDate);
+        this.birthDate = birthDate;
+    }
+
+    public Role getActiveRole() {
+        return activeRole;
+    }
+
     public Role getRole() {
-        return role;
+        return activeRole;
+    }
+
+    public Set<Role> getAssignedRoles() {
+        return Collections.unmodifiableSet(assignedRoles);
+    }
+
+    public void addRole(Role role) {
+        if (role == null) {
+            throw new IllegalArgumentException("Role cannot be null");
+        }
+
+        assignedRoles.add(role);
+
+        if (activeRole == null) {
+            activeRole = role;
+        }
+    }
+
+    public void removeRole(Role role) {
+        if (role == null) {
+            return;
+        }
+        assignedRoles.remove(role);
+        if (role.equals(activeRole)) {
+            activeRole = null;
+        }
+    }
+
+    public void switchActiveRole(Role role) {
+        if (role == null) {
+            activeRole = null;
+            return;
+        }
+
+        if (!assignedRoles.contains(role)) {
+            throw new IllegalArgumentException("Cannot switch to a role that was not assigned to this member");
+        }
+        activeRole = role;
     }
 
     public void setRole(Role role) {
-        this.role = role;
+        if (role == null) {
+            activeRole = null;
+            return;
+        }
+
+        assignedRoles.add(role);
+        activeRole = role;
+    }
+
+    public void clearRoles() {
+        assignedRoles.clear();
+        activeRole = null;
     }
 
     private static void validateUsername(String username) {
@@ -81,6 +159,16 @@ public class Member {
     private static void validatePasswordHash(String passwordHash) {
         if (passwordHash == null || passwordHash.isBlank()) {
             throw new IllegalArgumentException("Password hash cannot be null or empty");
+        }
+    }
+
+    private static void validateBirthDate(LocalDate birthDate) {
+        if (birthDate == null) {
+            throw new IllegalArgumentException("Birth date cannot be null");
+        }
+
+        if (birthDate.isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("Birth date cannot be in the future");
         }
     }
 
