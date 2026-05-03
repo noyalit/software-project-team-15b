@@ -1,6 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.Application.Event.integration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
@@ -13,8 +14,11 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability
 import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -136,6 +140,139 @@ class EventServiceFeaturesIT {
         service.releaseSeats(setup.eventId(), token, List.of(setup.seatIds().get(0)));
 
         assertThat(service.getEventAvailability(setup.eventId())).isEqualTo(EventAvailability.AVAILABLE);
+    }
+
+    // ── Task 4: getAreaAvailability ──────────────────────────────────────────
+
+    @Test
+    void getAreaAvailability_returns_true_when_area_has_available_seats() {
+        SeatingSetup setup = createSeatingEvent(3, "20.00");
+
+        assertThat(service.getAreaAvailability(setup.eventId(), setup.areaId())).isTrue();
+    }
+
+    @Test
+    void getAreaAvailability_returns_false_when_all_seats_held() {
+        SeatingSetup setup = createSeatingEvent(2, "20.00");
+        UUID token = UUID.randomUUID();
+        service.hold(setup.eventId(),
+                new HoldCommand(setup.areaId(), setup.seatIds(), null, token));
+
+        assertThat(service.getAreaAvailability(setup.eventId(), setup.areaId())).isFalse();
+    }
+
+    @Test
+    void getAreaAvailability_returns_true_after_partial_release() {
+        SeatingSetup setup = createSeatingEvent(2, "20.00");
+        UUID token = UUID.randomUUID();
+        service.hold(setup.eventId(),
+                new HoldCommand(setup.areaId(), setup.seatIds(), null, token));
+        assertThat(service.getAreaAvailability(setup.eventId(), setup.areaId())).isFalse();
+
+        service.releaseSeats(setup.eventId(), token, List.of(setup.seatIds().get(0)));
+
+        assertThat(service.getAreaAvailability(setup.eventId(), setup.areaId())).isTrue();
+    }
+
+    @Test
+    void getAreaAvailability_throws_when_area_not_found() {
+        SeatingSetup setup = createSeatingEvent(1, "10.00");
+        UUID unknownArea = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.getAreaAvailability(setup.eventId(), unknownArea))
+                .isInstanceOf(InvalidEventStateException.class)
+                .hasMessageContaining("area not found");
+    }
+
+    @Test
+    void getAreaAvailability_throws_when_event_not_found() {
+        UUID unknownEvent = UUID.randomUUID();
+        UUID unknownArea = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.getAreaAvailability(unknownEvent, unknownArea))
+                .isInstanceOf(InvalidEventStateException.class)
+                .hasMessageContaining("event not found");
+    }
+
+    // ── Task 5: getSeatsAvailability ─────────────────────────────────────────
+
+    @Test
+    void getSeatsAvailability_all_available_returns_all_in_true_bucket() {
+        SeatingSetup setup = createSeatingEvent(3, "20.00");
+        Set<UUID> seatIds = new java.util.HashSet<>(setup.seatIds());
+
+        Map<Boolean, Set<UUID>> result = service.getSeatsAvailability(
+                setup.eventId(), setup.areaId(), seatIds);
+
+        assertThat(result.get(Boolean.TRUE)).containsExactlyInAnyOrderElementsOf(seatIds);
+        assertThat(result.get(Boolean.FALSE)).isEmpty();
+    }
+
+    @Test
+    void getSeatsAvailability_all_held_returns_all_in_false_bucket() {
+        SeatingSetup setup = createSeatingEvent(2, "20.00");
+        UUID token = UUID.randomUUID();
+        service.hold(setup.eventId(),
+                new HoldCommand(setup.areaId(), setup.seatIds(), null, token));
+        Set<UUID> seatIds = new java.util.HashSet<>(setup.seatIds());
+
+        Map<Boolean, Set<UUID>> result = service.getSeatsAvailability(
+                setup.eventId(), setup.areaId(), seatIds);
+
+        assertThat(result.get(Boolean.TRUE)).isEmpty();
+        assertThat(result.get(Boolean.FALSE)).containsExactlyInAnyOrderElementsOf(seatIds);
+    }
+
+    @Test
+    void getSeatsAvailability_partitions_mixed_held_and_available_seats() {
+        SeatingSetup setup = createSeatingEvent(3, "20.00");
+        UUID heldSeat = setup.seatIds().get(0);
+        UUID freeSeat1 = setup.seatIds().get(1);
+        UUID freeSeat2 = setup.seatIds().get(2);
+        service.hold(setup.eventId(),
+                new HoldCommand(setup.areaId(), List.of(heldSeat), null, UUID.randomUUID()));
+
+        Map<Boolean, Set<UUID>> result = service.getSeatsAvailability(
+                setup.eventId(), setup.areaId(), Set.of(heldSeat, freeSeat1, freeSeat2));
+
+        assertThat(result.get(Boolean.TRUE)).containsExactlyInAnyOrder(freeSeat1, freeSeat2);
+        assertThat(result.get(Boolean.FALSE)).containsExactly(heldSeat);
+    }
+
+    @Test
+    void getSeatsAvailability_unknown_seat_id_lands_in_false_bucket() {
+        SeatingSetup setup = createSeatingEvent(1, "20.00");
+        UUID realSeat = setup.seatIds().get(0);
+        UUID ghost = UUID.randomUUID();
+
+        Map<Boolean, Set<UUID>> result = service.getSeatsAvailability(
+                setup.eventId(), setup.areaId(), Set.of(realSeat, ghost));
+
+        assertThat(result.get(Boolean.TRUE)).containsExactly(realSeat);
+        assertThat(result.get(Boolean.FALSE)).containsExactly(ghost);
+    }
+
+    @Test
+    void getSeatsAvailability_empty_input_returns_two_empty_buckets() {
+        SeatingSetup setup = createSeatingEvent(2, "20.00");
+
+        Map<Boolean, Set<UUID>> result = service.getSeatsAvailability(
+                setup.eventId(), setup.areaId(), Set.of());
+
+        assertThat(result).containsOnlyKeys(Boolean.TRUE, Boolean.FALSE);
+        assertThat(result.get(Boolean.TRUE)).isEmpty();
+        assertThat(result.get(Boolean.FALSE)).isEmpty();
+    }
+
+    @Test
+    void getSeatsAvailability_throws_when_area_not_found() {
+        SeatingSetup setup = createSeatingEvent(1, "10.00");
+        UUID unknownArea = UUID.randomUUID();
+
+        assertThatThrownBy(() -> service.getSeatsAvailability(
+                setup.eventId(), unknownArea, Set.of(UUID.randomUUID())))
+                .isInstanceOf(InvalidEventStateException.class)
+                .hasMessageContaining("area not found");
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

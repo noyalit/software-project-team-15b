@@ -15,6 +15,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Seat;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatingEventArea;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.StandingEventArea;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
@@ -26,8 +27,12 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurc
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompanyAuthorizationPort;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PessimisticLockException;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
@@ -191,7 +196,7 @@ public class EventManagementService {
             CannotAcquireLockException.class,
             ObjectOptimisticLockingFailureException.class
     }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
-    public HoldReceipt hold(UUID eventId, HoldCommand cmd) { //TODO: update it to support map of {areaId: List<SeatID>} iso list of ids
+    public HoldReceipt hold(UUID eventId, HoldCommand cmd) {
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
@@ -223,7 +228,7 @@ public class EventManagementService {
             CannotAcquireLockException.class,
             ObjectOptimisticLockingFailureException.class
     }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
-    public void release(UUID eventId, UUID holdToken) { //releseAll
+    public void release(UUID eventId, UUID holdToken) {
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
@@ -282,7 +287,7 @@ public class EventManagementService {
             CannotAcquireLockException.class,
             ObjectOptimisticLockingFailureException.class
     }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
-    public void releaseSeats(UUID eventId, UUID holdToken, List<UUID> seatIds) { //TODO: update it to support map of {areaId: List<SeatID>} iso list of ids,
+    public void releaseSeats(UUID eventId, UUID holdToken, List<UUID> seatIds) {
         Objects.requireNonNull(seatIds, "seatIds");
         if (seatIds.isEmpty()) return;
         ReentrantLock lock = locks.forEvent(eventId);
@@ -345,6 +350,51 @@ public class EventManagementService {
     public EventAvailability getEventAvailability(UUID eventId) {
         Event event = requireEvent(eventId);
         return event.bookingStatus();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean getAreaAvailability(UUID eventId, UUID areaId) {
+        Objects.requireNonNull(areaId, "areaId");
+        Event event = requireEvent(eventId);
+        EventArea area = event.areas().stream()
+                .filter(a -> a.areaId().equals(areaId))
+                .findFirst()
+                .orElseThrow(() -> new InvalidEventStateException("area not found: " + areaId));
+        return area.availableCapacity() > 0;
+    }
+
+    @Transactional(readOnly = true)
+    public Map<Boolean, Set<UUID>> getSeatsAvailability(UUID eventId, UUID areaId, Set<UUID> seatIds) {
+        Objects.requireNonNull(areaId, "areaId");
+        Objects.requireNonNull(seatIds, "seatIds");
+        Event event = requireEvent(eventId);
+        EventArea area = event.areas().stream()
+                .filter(a -> a.areaId().equals(areaId))
+                .findFirst()
+                .orElseThrow(() -> new InvalidEventStateException("area not found: " + areaId));
+        Map<UUID, Seat> seats = areaSeats(area);
+
+        Set<UUID> available = new HashSet<>();
+        Set<UUID> unavailable = new HashSet<>();
+        for (UUID seatId : seatIds) {
+            Objects.requireNonNull(seatId, "seatIds element");
+            Seat seat = seats.get(seatId);
+            if (seat != null && seat.status() == SeatStatus.AVAILABLE) {
+                available.add(seatId);
+            } else {
+                unavailable.add(seatId);
+            }
+        }
+        Map<Boolean, Set<UUID>> result = new HashMap<>();
+        result.put(Boolean.TRUE, available);
+        result.put(Boolean.FALSE, unavailable);
+        return result;
+    }
+
+    private Map<UUID, Seat> areaSeats(EventArea area) {
+        if (area instanceof SeatingEventArea s) return s.seats();
+        if (area instanceof StandingEventArea s) return s.seats();
+        return Map.of();
     }
 
     private Event requireEvent(UUID eventId) {
