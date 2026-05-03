@@ -14,6 +14,9 @@ public class Owner extends Role {
 
     public Owner(UUID appointedBy) {
         super(appointedBy);
+        if (appointedBy == null && getClass().equals(Owner.class)) {
+            throw new IllegalArgumentException("appointedBy cannot be null");
+        }
     }
 
     @Override
