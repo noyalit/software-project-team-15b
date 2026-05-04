@@ -7,11 +7,15 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
-@Profile("jpa")
 @Repository
+@ConditionalOnProperty(
+        name = "app.storage.mode",
+        havingValue = "jpa"
+)
 public class JpaOrderHistoryRepositoryAdapter implements IOrderHistoryRepository {
 
     private final JpaOrderHistorySpringDataRepository jpaRepo;

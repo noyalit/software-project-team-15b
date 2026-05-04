@@ -7,11 +7,16 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
-@Profile("memory")
 @Repository
+@ConditionalOnProperty(
+        name = "app.storage.mode",
+        havingValue = "memory",
+        matchIfMissing = true
+)
 public class InMemoryOrderHistoryRepository implements IOrderHistoryRepository {
 
     private final Map<UUID, OrderHistory> storage = new ConcurrentHashMap<>();
