@@ -151,7 +151,7 @@ public class ActiveOrderTest {
     }
     
 
-    // ---------- STATUS ----------
+    // ---------- STATUS -----------
 
     @Test
     void complete_shouldSetStatusToCompleted_whenOrderIsActive() {
