@@ -1,9 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Application;
 
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyLotteryException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyQueueException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.*;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.Lottery;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
@@ -124,6 +121,9 @@ public class QueuesService {
         VirtualQueue queue = queueRepository.getQueue(eventId);
         if (queue == null) {
             throw new QueueNotFoundException("Queue not found for eventId: " + eventId);
+        }
+        if (queue.isFull()) {
+            throw new QueueIsFullException("Event queue is full (eventId: " + eventId + ")");
         }
         queue.push(userId);
         queueRepository.updateQueue(queue);

@@ -18,21 +18,36 @@ public class InMemoryQueueRepository implements IQueueRepository {
 
     @Override
     public void addQueue(VirtualQueue queue) {
+        if (queue == null) {
+            throw new IllegalArgumentException("queue cannot be null");
+        }
+        if (store.containsKey(queue.getId())) {
+            throw new IllegalArgumentException("A queue with this ID already exists");
+        }
         store.put(queue.getId(), queue);
     }
 
     @Override
     public void removeQueue(VirtualQueue queue) {
+        if (queue == null) {
+            throw new IllegalArgumentException("queue cannot be null");
+        }
         store.remove(queue.getId());
     }
 
     @Override
     public VirtualQueue getQueue(UUID queueId) {
+        if (queueId == null) {
+            throw new IllegalArgumentException("queueId cannot be null");
+        }
         return store.get(queueId);
     }
 
     @Override
     public void updateQueue(VirtualQueue queue) {
+        if (queue == null) {
+            throw new IllegalArgumentException("queue cannot be null");
+        }
         store.put(queue.getId(), queue);
     }
 }
