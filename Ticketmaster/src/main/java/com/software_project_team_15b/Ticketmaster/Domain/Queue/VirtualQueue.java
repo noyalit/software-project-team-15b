@@ -45,6 +45,10 @@ public class VirtualQueue {
         this.id = queueId;
     }
 
+    public UUID getId() {
+        return id;
+    }
+
     /**
      * Adds an ID to the back of the queue.
      *
