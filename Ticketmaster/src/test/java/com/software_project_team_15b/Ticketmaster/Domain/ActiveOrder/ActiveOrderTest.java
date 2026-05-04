@@ -25,6 +25,7 @@ public class ActiveOrderTest {
     private UUID eventId;
     private UUID seatId1;
     private UUID seatId2;
+    private UUID areaId;
 
     private ActiveOrder order;
     private LocalDateTime now;
@@ -36,10 +37,11 @@ public class ActiveOrderTest {
         orderId = UUID.randomUUID();
         seatId1 = UUID.randomUUID();
         seatId2 = UUID.randomUUID();
+        areaId = UUID.randomUUID();
 
         now = LocalDateTime.now();
 
-        order = new ActiveOrder(orderId, userId, eventId);
+        order = new ActiveOrder(orderId, userId, eventId, areaId);
     }
 
     // ---------- CONSTRUCTOR ----------
@@ -55,19 +57,25 @@ public class ActiveOrderTest {
     @Test
     void constructor_shouldThrowException_whenOrderIdIsNull() {
         assertThrows(IllegalArgumentException.class,
-                () -> new ActiveOrder(null, userId, eventId));
+                () -> new ActiveOrder(null, userId, eventId, areaId));
     }
 
     @Test
     void constructor_shouldThrowException_whenUserIdIsNull() {
         assertThrows(IllegalArgumentException.class,
-                () -> new ActiveOrder(orderId, null, eventId));
+                () -> new ActiveOrder(orderId, null, eventId, areaId));
     }
 
     @Test
     void constructor_shouldThrowException_whenEventIdIsNull() {
         assertThrows(IllegalArgumentException.class,
-                () -> new ActiveOrder(orderId, userId, null));
+                () -> new ActiveOrder(orderId, userId, null, areaId));
+    }
+
+    @Test
+    void constructor_shouldThrowException_whenAreaIdIsNull() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new ActiveOrder(orderId, userId, eventId, null));
     }
 
     // ---------- SEATS ----------
@@ -75,59 +83,59 @@ public class ActiveOrderTest {
     @Test
     void addSeat_shouldThrowException_whenSeatIsNull() {
         assertThrows(IllegalArgumentException.class,
-            () -> order.addSeat(null));
+            () -> order.addSeats(null));
     }
 
     @Test
     void removeSeat_shouldThrowException_whenSeatIsNull() {
         assertThrows(IllegalArgumentException.class,
-            () -> order.removeSeat(null));
+            () -> order.removeSeats(null));
     }
     
     
     @Test
     void addSeat_shouldAddSeat_whenSeatIsValid() {
-        order.addSeat(seatId1);
+        order.addSeats(Set.of(seatId1));
 
         assertTrue(order.getOrderSeats().contains(seatId1));
     }
 
     @Test
     void addSeat_shouldThrowException_whenSeatAlreadyExists() {
-        order.addSeat(seatId1);
+        order.addSeats(Set.of(seatId1));
 
         assertThrows(IllegalArgumentException.class,
-                () -> order.addSeat(seatId1));
+                () -> order.addSeats(Set.of(seatId1)));
     }
 
     @Test
     void removeSeat_shouldRemoveSeat_whenSeatExists() {
-        order.addSeat(seatId1);
-        order.removeSeat(seatId1);
+        order.addSeats(Set.of(seatId1));
+        order.removeSeats(Set.of(seatId1));
 
         assertFalse(order.getOrderSeats().contains(seatId1));
     }
 
     @Test
     void removeSeat_shouldThrowException_whenSeatNotFound() {
-        order.addSeat(seatId1);
+        order.addSeats(Set.of(seatId1));
         assertThrows(IllegalArgumentException.class,
-                () -> order.removeSeat(seatId2));
+                () -> order.removeSeats(Set.of(seatId2)));
     }
 
   
     @Test
     @Disabled("This test will fail until issue #5 is fixed and merged")
     void removeSeat_shouldCancelOrder_whenLastSeatRemoved() {
-        order.addSeat(seatId1);
-        order.removeSeat(seatId1);
+        order.addSeats(Set.of(seatId1));
+        order.removeSeats(Set.of(seatId1));
 
         assertEquals(ActiveOrderStatus.CANCELED, order.getStatus());
     }
 
     @Test
     void getOrderSeats_shouldReturnUnmodifiableCopy() {
-        order.addSeat(seatId1);
+        order.addSeats(Set.of(seatId1));
 
         Set<UUID> seats = order.getOrderSeats();
 
@@ -147,7 +155,7 @@ public class ActiveOrderTest {
         );
 
         assertThrows(TimeExpiredException.class,
-            () -> expiredOrder.addSeat(seatId1));
+            () -> expiredOrder.addSeats(Set.of(seatId1)));
     }
     
 
@@ -155,7 +163,7 @@ public class ActiveOrderTest {
 
     @Test
     void complete_shouldSetStatusToCompleted_whenOrderIsActive() {
-        order.addSeat(seatId1);
+        order.addSeats(Set.of(seatId1));
         order.complete();
 
         assertEquals(ActiveOrderStatus.COMPLETED, order.getStatus());
@@ -163,7 +171,7 @@ public class ActiveOrderTest {
 
     @Test
     void cancel_shouldSetStatusToCanceled_whenOrderIsActive() {
-        order.addSeat(seatId1);
+        order.addSeats(Set.of(seatId1));
         order.cancel();
 
         assertEquals(ActiveOrderStatus.CANCELED, order.getStatus());
@@ -172,17 +180,17 @@ public class ActiveOrderTest {
     @Test
     @Disabled("Enable after issue #5 is fixed and merged")
     void addSeat_shouldThrowUnactiveOrderException_whenOrderIsCompleted() {
-        order.addSeat(seatId1);
+        order.addSeats(Set.of(seatId1));
         order.complete();
 
         assertThrows(UnactiveOrderException.class,
-            () -> order.addSeat(seatId2));
+            () -> order.addSeats(Set.of(seatId2)));
     }
 
     @Test
     @Disabled("Enable after issue #5 is fixed and merged")
     void complete_shouldThrowUnactiveOrderException_whenOrderAlreadyCompleted() {
-        order.addSeat(seatId1);
+        order.addSeats(Set.of(seatId1));
         order.complete();
 
         assertThrows(UnactiveOrderException.class,
@@ -192,7 +200,7 @@ public class ActiveOrderTest {
     @Test
     @Disabled("Enable after issue #5 is fixed and merged")
     void cancel_shouldThrowUnactiveOrderException_whenOrderAlreadyCanceled() {
-        order.addSeat(seatId1);
+        order.addSeats(Set.of(seatId1));
         order.cancel();
 
         assertThrows(UnactiveOrderException.class,
@@ -201,7 +209,7 @@ public class ActiveOrderTest {
 
     @Test
     void cancel_shouldThrowUnactiveOrderException_whenOrderIsCompleted() {
-        order.addSeat(seatId1);
+        order.addSeats(Set.of(seatId1));
         order.complete();
 
         assertThrows(UnactiveOrderException.class, order::cancel);
@@ -240,7 +248,7 @@ public class ActiveOrderTest {
     @Test
     @Disabled("Enable after expiration rules are finalized")
     void expire_shouldThrowUnactiveOrderException_whenOrderIsNotActive() {
-        order.addSeat(seatId1);
+        order.addSeats(Set.of(seatId1));
         order.cancel(); 
 
         assertThrows(UnactiveOrderException.class, order::expire);
