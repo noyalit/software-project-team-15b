@@ -92,6 +92,22 @@ public class SeatingEventArea extends EventArea {
     }
 
     @Override
+    public boolean releaseSpecificSeats(List<UUID> seatIds, UUID token) {
+        Objects.requireNonNull(seatIds, "seatIds must not be null");
+        Objects.requireNonNull(token, "token must not be null");
+        boolean released = false;
+        for (UUID id : seatIds) {
+            Objects.requireNonNull(id, "seatIds element");
+            Seat s = seats.get(id);
+            if (s != null && s.status() == SeatStatus.HELD && token.equals(s.heldBy())) {
+                s.markAvailable(token);
+                released = true;
+            }
+        }
+        return released;
+    }
+
+    @Override
     public void confirmByToken(UUID token) {
         if (token == null) throw new IllegalArgumentException("token must not be null");
         List<Seat> held = seats.values().stream()

@@ -8,10 +8,10 @@ public record PurchaseRequest(
         UUID eventId,
         UUID areaId,
         UUID buyerId,
-        LocalDate buyerBirthDate,
+        LocalDate buyerBirthDate, // Can be null if not required
         int quantity,
         List<UUID> seatIds,
-        String couponCode
+        String couponCode // Can be null if there is no coupon
 ) {
     public PurchaseRequest {
         if (quantity < 1) {

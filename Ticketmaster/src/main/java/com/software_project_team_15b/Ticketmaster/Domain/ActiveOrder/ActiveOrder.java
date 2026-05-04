@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.AlreadyDoneException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.UnactiveOrderException;
 
@@ -19,14 +20,11 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 
-
 @Entity
 @Table(name = "active_orders")
 public class ActiveOrder {
 
-    ///NOTE: using String for orderId and eventId for now, will change to UUID if needed
-
-    @Id 
+    @Id
     @Column(name = "order_id", nullable = false, updatable = false)
     private UUID orderId;
 
@@ -36,9 +34,14 @@ public class ActiveOrder {
     @Column(name = "event_id", nullable = false, updatable = false)
     private UUID eventId;
 
-    //using seat_id as a string for now, will change to a Seat entity if needed
+    @Column(name = "area_id", nullable = false, updatable = false)
+    private UUID areaId;
+
     @ElementCollection
-    @CollectionTable(name = "active_order_seats", joinColumns = @JoinColumn(name = "order_id"))
+    @CollectionTable(
+            name = "active_order_seats",
+            joinColumns = @JoinColumn(name = "order_id")
+    )
     @Column(name = "seat_id", nullable = false)
     private Set<UUID> orderSeats = new HashSet<>();
 
@@ -49,7 +52,8 @@ public class ActiveOrder {
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "expires_at", nullable = false)
+    // null means: regular ACTIVE order, not in checkout yet.
+    @Column(name = "expires_at", nullable = true)
     private LocalDateTime expiresAt;
 
     @Version
@@ -58,19 +62,27 @@ public class ActiveOrder {
     protected ActiveOrder() {
     }
 
-    public ActiveOrder(UUID orderId, UUID userId, UUID eventId) {
-        if (orderId == null) 
-            throw new IllegalArgumentException("orderId cannot be null");  
-        if (userId == null) 
+    public ActiveOrder(UUID orderId, UUID userId, UUID eventId, UUID areaId) {
+        if (orderId == null) {
+            throw new IllegalArgumentException("orderId cannot be null");
+        }
+        if (userId == null) {
             throw new IllegalArgumentException("userId cannot be null");
-        if (eventId == null) 
+        }
+        if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
+        }
+        if (areaId == null) {
+            throw new IllegalArgumentException("areaId cannot be null");
+        }
+
         this.orderId = orderId;
         this.userId = userId;
         this.eventId = eventId;
+        this.areaId = areaId;
         this.status = ActiveOrderStatus.ACTIVE;
         this.createdAt = LocalDateTime.now();
-        this.expiresAt = this.createdAt.plusMinutes(10);
+        this.expiresAt = null;
     }
     // Constructor for testing purposes
     public ActiveOrder(UUID orderId,
@@ -114,6 +126,10 @@ public class ActiveOrder {
         return eventId;
     }
 
+    public UUID getAreaId() {
+        return areaId;
+    }
+
     public Set<UUID> getOrderSeats() {
         return Set.copyOf(orderSeats);
     }
@@ -134,77 +150,139 @@ public class ActiveOrder {
         return version;
     }
 
-    //seat management methods
-    private void validateSeatId(UUID seatId) {
-        if (seatId == null) {
-            throw new IllegalArgumentException("seatId cannot be null");
+    public void addSeats(Set<UUID> seatIds) {
+        ensureOrderIsModifiable();
+        validateSeatIds(seatIds);
+
+        Set<UUID> duplicates = seatIds.stream()
+                .filter(orderSeats::contains)
+                .collect(java.util.stream.Collectors.toSet());
+
+        if (!duplicates.isEmpty()) {
+            throw new AlreadyDoneException("Seats already in order: " + duplicates);
         }
+
+        orderSeats.addAll(seatIds);
     }
 
-    public void addSeat(UUID seatId) {
+    public void removeSeats(Set<UUID> seatIds) {
         ensureOrderIsModifiable();
-        validateSeatId(seatId);
-        if (!orderSeats.add(seatId)) {
-            throw new IllegalArgumentException("Seat already in order");
+        validateSeatIds(seatIds);
+
+        Set<UUID> missingSeats = seatIds.stream()
+                .filter(seatId -> !orderSeats.contains(seatId))
+                .collect(java.util.stream.Collectors.toSet());
+
+        if (!missingSeats.isEmpty()) {
+            throw new AlreadyDoneException("Seats not found in order: " + missingSeats);
         }
+
+        orderSeats.removeAll(seatIds);
     }
 
-    public void removeSeat(UUID seatId) {
+    public void startCheckout(LocalDateTime checkoutExpiresAt) {
         ensureOrderIsModifiable();
-        validateSeatId(seatId);
-        if (!orderSeats.remove(seatId)) {
-            throw new IllegalArgumentException("Seat not found in order");
-        }
+
         if (orderSeats.isEmpty()) {
-            cancel();
+            throw new IllegalStateException("Cannot start checkout for an empty order");
         }
+        if (checkoutExpiresAt == null) {
+            throw new IllegalArgumentException("checkoutExpiresAt cannot be null");
+        }
+        if (!checkoutExpiresAt.isAfter(LocalDateTime.now())) {
+            throw new IllegalArgumentException("checkoutExpiresAt must be in the future");
+        }
+
+        this.expiresAt = checkoutExpiresAt;
     }
-    
-    //order management methods
+
     public void complete() {
-        ensureOrderIsModifiable();
+        ensureOrderIsInCheckout();
+
         status = ActiveOrderStatus.COMPLETED;
     }
 
     public void cancel() {
-        ensureOrderIsModifiable();
+        if (status != ActiveOrderStatus.ACTIVE) {
+            throw new UnactiveOrderException("Order " + orderId + " is not active and cannot be canceled");
+        }
+
         status = ActiveOrderStatus.CANCELED;
     }
-    
-    //expiration management methods
-    //NOTE: time-based expiration state changes are handled in the Service layer
 
-    /*Checks expiration based on status*/
-    public boolean isExpired() {    
+    public boolean isExpired() {
         return status == ActiveOrderStatus.EXPIRED;
     }
 
-    /*Checks expiration based on time*/
-    public boolean hasTimeExpired() {
-        return LocalDateTime.now().isAfter(expiresAt);
+    public boolean isInCheckout() {
+        return status == ActiveOrderStatus.ACTIVE
+                && expiresAt != null
+                && !hasTimeExpired();
     }
 
+    public boolean hasTimeExpired() {
+        return expiresAt != null && LocalDateTime.now().isAfter(expiresAt);
+    }
 
-    // Only ACTIVE orders can transition to EXPIRED.
-    // Time check is only relevant for ACTIVE orders.
     public void expire() {
         if (status != ActiveOrderStatus.ACTIVE) {
             throw new UnactiveOrderException("Order " + orderId + " is not active and cannot expire");
         }
-        if (!hasTimeExpired()) {
-            throw new RuntimeException("Order " + orderId + " has not yet expired");
+        if (expiresAt == null) {
+            throw new IllegalStateException("Order " + orderId + " is not in checkout and cannot expire");
         }
+        if (!hasTimeExpired()) {
+            throw new IllegalStateException("Order " + orderId + " checkout has not expired yet");
+        }
+
         status = ActiveOrderStatus.EXPIRED;
+    }
+
+    public void ensureOrderIsActive() {
+        if (status != ActiveOrderStatus.ACTIVE) {
+            throw new UnactiveOrderException("Order " + orderId + " is not active");
+        }
+        if (hasTimeExpired()) {
+            throw new TimeExpiredException("Order " + orderId + " checkout has expired");
+        }
     }
 
     public void ensureOrderIsModifiable() {
         if (status != ActiveOrderStatus.ACTIVE) {
             throw new UnactiveOrderException("Order " + orderId + " is not active and cannot be modified");
         }
-        if (hasTimeExpired()) { 
-            throw new TimeExpiredException("Order " + orderId + " has expired");
+
+        if (expiresAt != null) {
+            if (hasTimeExpired()) {
+                throw new TimeExpiredException("Order " + orderId + " checkout has expired");
+            }
+
+            throw new IllegalStateException("Order " + orderId + " is already in checkout");
+        }
+    }
+
+    public void ensureOrderIsInCheckout() {
+        if (status != ActiveOrderStatus.ACTIVE) {
+            throw new UnactiveOrderException("Order " + orderId + " is not active");
+        }
+
+        if (expiresAt == null) {
+            throw new IllegalStateException("Order " + orderId + " is not in checkout");
+        }
+
+        if (hasTimeExpired()) {
+            throw new TimeExpiredException("Order " + orderId + " checkout has expired");
+        }
+    }
+
+    private void validateSeatIds(Set<UUID> seatIds) {
+        if (seatIds == null) {
+            throw new IllegalArgumentException("seatIds cannot be null");
+        }
+        for (UUID seatId : seatIds) {
+             if (seatId == null) {
+                throw new IllegalArgumentException("seatId cannot be null");
+            }
         }
     }
 }
-
-
