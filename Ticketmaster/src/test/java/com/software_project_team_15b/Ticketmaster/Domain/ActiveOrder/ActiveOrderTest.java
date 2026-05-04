@@ -2,6 +2,7 @@ package com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder;
 
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.AlreadyDoneException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.UnactiveOrderException;
 
@@ -81,35 +82,35 @@ public class ActiveOrderTest {
     // ---------- SEATS ----------
 
     @Test
-    void addSeat_shouldThrowException_whenSeatIsNull() {
+    void addSeats_shouldThrowException_whenSeatIsNull() {
         assertThrows(IllegalArgumentException.class,
             () -> order.addSeats(null));
     }
 
     @Test
-    void removeSeat_shouldThrowException_whenSeatIsNull() {
+    void removeSeats_shouldThrowException_whenSeatIsNull() {
         assertThrows(IllegalArgumentException.class,
             () -> order.removeSeats(null));
     }
     
     
     @Test
-    void addSeat_shouldAddSeat_whenSeatIsValid() {
+    void addSeats_shouldAddSeat_whenSeatIsValid() {
         order.addSeats(Set.of(seatId1));
 
         assertTrue(order.getOrderSeats().contains(seatId1));
     }
 
     @Test
-    void addSeat_shouldThrowException_whenSeatAlreadyExists() {
+    void addSeats_shouldThrowException_whenSeatAlreadyExists() {
         order.addSeats(Set.of(seatId1));
 
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(AlreadyDoneException.class,
                 () -> order.addSeats(Set.of(seatId1)));
     }
 
     @Test
-    void removeSeat_shouldRemoveSeat_whenSeatExists() {
+    void removeSeats_shouldRemoveSeat_whenSeatExists() {
         order.addSeats(Set.of(seatId1));
         order.removeSeats(Set.of(seatId1));
 
@@ -117,22 +118,13 @@ public class ActiveOrderTest {
     }
 
     @Test
-    void removeSeat_shouldThrowException_whenSeatNotFound() {
+    void removeSeats_shouldThrowException_whenSeatNotFound() {
         order.addSeats(Set.of(seatId1));
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(AlreadyDoneException.class,
                 () -> order.removeSeats(Set.of(seatId2)));
     }
 
   
-    @Test
-    @Disabled("This test will fail until issue #5 is fixed and merged")
-    void removeSeat_shouldCancelOrder_whenLastSeatRemoved() {
-        order.addSeats(Set.of(seatId1));
-        order.removeSeats(Set.of(seatId1));
-
-        assertEquals(ActiveOrderStatus.CANCELED, order.getStatus());
-    }
-
     @Test
     void getOrderSeats_shouldReturnUnmodifiableCopy() {
         order.addSeats(Set.of(seatId1));
@@ -144,7 +136,6 @@ public class ActiveOrderTest {
     }
 
     @Test
-    @Disabled("Enable after PR introduces TimeExpiredException")
     void addSeat_shouldThrowTimeExpiredException_whenOrderExpired() {
         ActiveOrder expiredOrder = new ActiveOrder(
         orderId,
@@ -164,6 +155,7 @@ public class ActiveOrderTest {
     @Test
     void complete_shouldSetStatusToCompleted_whenOrderIsActive() {
         order.addSeats(Set.of(seatId1));
+        order.startCheckout(LocalDateTime.now().plusMinutes(10));
         order.complete();
 
         assertEquals(ActiveOrderStatus.COMPLETED, order.getStatus());
@@ -178,9 +170,9 @@ public class ActiveOrderTest {
     }
 
     @Test
-    @Disabled("Enable after issue #5 is fixed and merged")
-    void addSeat_shouldThrowUnactiveOrderException_whenOrderIsCompleted() {
+    void addSeats_shouldThrowUnactiveOrderException_whenOrderIsCompleted() {
         order.addSeats(Set.of(seatId1));
+        order.startCheckout(LocalDateTime.now().plusMinutes(10));
         order.complete();
 
         assertThrows(UnactiveOrderException.class,
@@ -188,9 +180,9 @@ public class ActiveOrderTest {
     }
 
     @Test
-    @Disabled("Enable after issue #5 is fixed and merged")
     void complete_shouldThrowUnactiveOrderException_whenOrderAlreadyCompleted() {
         order.addSeats(Set.of(seatId1));
+        order.startCheckout(LocalDateTime.now().plusMinutes(10));
         order.complete();
 
         assertThrows(UnactiveOrderException.class,
@@ -198,7 +190,6 @@ public class ActiveOrderTest {
     }
 
     @Test
-    @Disabled("Enable after issue #5 is fixed and merged")
     void cancel_shouldThrowUnactiveOrderException_whenOrderAlreadyCanceled() {
         order.addSeats(Set.of(seatId1));
         order.cancel();
@@ -210,6 +201,7 @@ public class ActiveOrderTest {
     @Test
     void cancel_shouldThrowUnactiveOrderException_whenOrderIsCompleted() {
         order.addSeats(Set.of(seatId1));
+        order.startCheckout(LocalDateTime.now().plusMinutes(10));
         order.complete();
 
         assertThrows(UnactiveOrderException.class, order::cancel);
@@ -240,13 +232,11 @@ public class ActiveOrderTest {
 
 
     @Test
-    @Disabled("Enable after expiration rules are finalized")
     void expire_shouldThrowRuntimeException_whenOrderHasNotExpired() {
         assertThrows(RuntimeException.class, order::expire);
     }
 
     @Test
-    @Disabled("Enable after expiration rules are finalized")
     void expire_shouldThrowUnactiveOrderException_whenOrderIsNotActive() {
         order.addSeats(Set.of(seatId1));
         order.cancel(); 
