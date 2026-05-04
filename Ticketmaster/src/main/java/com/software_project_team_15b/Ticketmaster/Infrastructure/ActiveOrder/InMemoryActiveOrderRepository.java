@@ -5,15 +5,19 @@ import java.time.LocalDateTime;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.springframework.stereotype.Repository;
-import org.springframework.context.annotation.Profile;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrderRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 
 
-@Profile("memory")
 @Repository
+@ConditionalOnProperty(
+    name = "app.storage.mode",
+    havingValue = "memory",
+    matchIfMissing = true
+)
 public class InMemoryActiveOrderRepository implements IActiveOrderRepository {
 
     private final Map<UUID, ActiveOrder> store = new ConcurrentHashMap<>();
