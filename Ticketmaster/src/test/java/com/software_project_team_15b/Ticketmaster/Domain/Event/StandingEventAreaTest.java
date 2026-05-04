@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.HoldNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.SeatUnavailableException;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -86,9 +87,12 @@ class StandingEventAreaTest {
     void hold_returns_receipt_with_correct_token_and_quantity() {
         StandingEventArea a = area(10);
         UUID token = UUID.randomUUID();
-        StandingHold hold = a.hold(3, token);
-        assertThat(hold.token()).isEqualTo(token);
-        assertThat(hold.quantity()).isEqualTo(3);
+        List<Seat> held = a.hold(3, token);
+        assertThat(held).hasSize(3);
+        assertThat(held).allSatisfy(s -> {
+            assertThat(s.status()).isEqualTo(SeatStatus.HELD);
+            assertThat(s.heldBy()).isEqualTo(token);
+        });
     }
 
     @Test

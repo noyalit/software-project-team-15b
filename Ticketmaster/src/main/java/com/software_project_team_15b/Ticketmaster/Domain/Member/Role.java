@@ -22,7 +22,7 @@ public abstract class Role {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @JoinColumn(name = "appointed_by_user_id")
+    @Column(name = "appointed_by_user_id")
     protected UUID appointedBy;
 
     @Column(name = "appointment_approved", nullable = false)

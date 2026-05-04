@@ -16,6 +16,10 @@ public interface IActiveOrderRepository {
 
     void deleteById(UUID id);
 
+    void delete(ActiveOrder order);
+
+    void deleteAll(List<ActiveOrder> orders);
+
     List<ActiveOrder> findExpiredActiveOrdersForUpdate(ActiveOrderStatus status, LocalDateTime time);
 
     List<ActiveOrder> findByUserIdAndStatus(UUID userId, ActiveOrderStatus status);

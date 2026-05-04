@@ -3,26 +3,31 @@ package com.software_project_team_15b.Ticketmaster.Domain.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.HoldNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.SeatUnavailableException;
-import jakarta.persistence.CollectionTable;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.DiscriminatorValue;
-import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.MapKey;
+import jakarta.persistence.OneToMany;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 @Entity
 @DiscriminatorValue("STANDING")
 public class StandingEventArea extends EventArea {
 
-    private int capacity;
-    private int soldCount;
+    private static final String STANDING_ROW = "GA";
 
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "standing_hold", joinColumns = @JoinColumn(name = "area_id"))
-    private List<StandingHold> activeHolds = new ArrayList<>();
+    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JoinColumn(name = "area_id")
+    @MapKey(name = "seatId")
+    private Map<UUID, Seat> seats = new LinkedHashMap<>();
 
     protected StandingEventArea() {}
 
@@ -31,66 +36,102 @@ public class StandingEventArea extends EventArea {
         if (capacity < 1) {
             throw new InvalidEventStateException("capacity must be >= 1");
         }
-        this.capacity = capacity;
+        for (int i = 0; i < capacity; i++) {
+            UUID seatId = UUID.randomUUID();
+            seats.put(seatId, new Seat(seatId, STANDING_ROW, String.valueOf(i)));
+        }
     }
 
-    public int capacity() { return capacity; }
-    public int soldCount() { return soldCount; }
+    public Map<UUID, Seat> seats() { return Collections.unmodifiableMap(seats); }
+
+    public int capacity() { return seats.size(); }
+
+    public int soldCount() {
+        return (int) seats.values().stream().filter(s -> s.status() == SeatStatus.SOLD).count();
+    }
 
     public int activeHeldQuantity() {
-        return activeHolds.stream().mapToInt(StandingHold::quantity).sum();
+        return (int) seats.values().stream().filter(s -> s.status() == SeatStatus.HELD).count();
     }
 
     @Override
     public int availableCapacity() {
-        return capacity - soldCount - activeHeldQuantity();
+        return (int) seats.values().stream().filter(s -> s.status() == SeatStatus.AVAILABLE).count();
     }
 
-    public StandingHold hold(int quantity, UUID token) {
+    public List<Seat> hold(int quantity, UUID token) {
         if (token == null) throw new IllegalArgumentException("token must not be null");
         if (quantity < 1) {
             throw new InvalidEventStateException("quantity must be >= 1");
         }
-        if (activeHolds.stream().anyMatch(h -> token.equals(h.token()))) {
+        if (seats.values().stream().anyMatch(s -> s.status() == SeatStatus.HELD && token.equals(s.heldBy()))) {
             throw new InvalidEventStateException("hold already exists for token " + token);
         }
-        if (availableCapacity() < quantity) {
+        List<Seat> targets = new ArrayList<>(quantity);
+        for (Seat s : seats.values()) {
+            if (s.status() == SeatStatus.AVAILABLE) {
+                targets.add(s);
+                if (targets.size() == quantity) break;
+            }
+        }
+        if (targets.size() < quantity) {
             throw new SeatUnavailableException("not enough standing capacity");
         }
-        StandingHold h = new StandingHold(token, quantity);
-        activeHolds.add(h);
-        return h;
+        for (Seat s : targets) {
+            s.markHeld(token);
+        }
+        return targets;
     }
 
     @Override
     public boolean releaseByToken(UUID token) {
         if (token == null) throw new IllegalArgumentException("token must not be null");
-        return activeHolds.removeIf(h -> token.equals(h.token()));
+        List<Seat> held = seats.values().stream()
+                .filter(s -> s.status() == SeatStatus.HELD && token.equals(s.heldBy()))
+                .toList();
+        held.forEach(s -> s.markAvailable(token));
+        return !held.isEmpty();
+    }
+
+    @Override
+    public boolean releaseSpecificSeats(List<UUID> seatIds, UUID token) {
+        Objects.requireNonNull(seatIds, "seatIds must not be null");
+        Objects.requireNonNull(token, "token must not be null");
+        boolean released = false;
+        for (UUID id : seatIds) {
+            Objects.requireNonNull(id, "seatIds element");
+            Seat s = seats.get(id);
+            if (s != null && s.status() == SeatStatus.HELD && token.equals(s.heldBy())) {
+                s.markAvailable(token);
+                released = true;
+            }
+        }
+        return released;
     }
 
     @Override
     public void confirmByToken(UUID token) {
         if (token == null) throw new IllegalArgumentException("token must not be null");
-        int confirmed = activeHolds.stream()
-                .filter(h -> token.equals(h.token()))
-                .mapToInt(StandingHold::quantity)
-                .sum();
-        if (confirmed == 0) {
+        List<Seat> held = seats.values().stream()
+                .filter(s -> s.status() == SeatStatus.HELD && token.equals(s.heldBy()))
+                .toList();
+        if (held.isEmpty()) {
             throw new HoldNotFoundException("no active standing hold for token " + token);
         }
-        activeHolds.removeIf(h -> token.equals(h.token()));
-        soldCount += confirmed;
+        for (Seat s : held) {
+            s.markSold(token);
+        }
     }
 
     @Override
     public boolean hasActiveHolds() {
-        return !activeHolds.isEmpty();
+        return seats.values().stream().anyMatch(s -> s.status() == SeatStatus.HELD);
     }
 
     public int quantityFor(UUID token) {
-        return activeHolds.stream()
-                .filter(h -> token.equals(h.token()))
-                .mapToInt(StandingHold::quantity)
-                .sum();
+        if (token == null) throw new IllegalArgumentException("token must not be null");
+        return (int) seats.values().stream()
+                .filter(s -> s.status() == SeatStatus.HELD && token.equals(s.heldBy()))
+                .count();
     }
 }
