@@ -71,6 +71,10 @@ public class VirtualQueue {
         return id;
     }
 
+    public UUID getId() {
+        return id;
+    }
+
     /**
      * Adds an ID to the back of the queue.
      *
