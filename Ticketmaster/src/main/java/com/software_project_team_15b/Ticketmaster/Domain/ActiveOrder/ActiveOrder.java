@@ -5,6 +5,9 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.UnactiveOrderException;
+
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
@@ -21,7 +24,9 @@ import jakarta.persistence.Version;
 @Table(name = "active_orders")
 public class ActiveOrder {
 
-    @Id
+    ///NOTE: using String for orderId and eventId for now, will change to UUID if needed
+
+    @Id 
     @Column(name = "order_id", nullable = false, updatable = false)
     private UUID orderId;
 
@@ -150,6 +155,9 @@ public class ActiveOrder {
         if (!orderSeats.remove(seatId)) {
             throw new IllegalArgumentException("Seat not found in order");
         }
+        if (orderSeats.isEmpty()) {
+            cancel();
+        }
     }
     
     //order management methods
@@ -176,19 +184,27 @@ public class ActiveOrder {
         return LocalDateTime.now().isAfter(expiresAt);
     }
 
+
+    // Only ACTIVE orders can transition to EXPIRED.
+    // Time check is only relevant for ACTIVE orders.
     public void expire() {
+        if (status != ActiveOrderStatus.ACTIVE) {
+            throw new UnactiveOrderException("Order " + orderId + " is not active and cannot expire");
+        }
+        if (!hasTimeExpired()) {
+            throw new RuntimeException("Order " + orderId + " has not yet expired");
+        }
         status = ActiveOrderStatus.EXPIRED;
     }
 
-    private void ensureOrderIsModifiable() {
-        if (hasTimeExpired()) { 
-            throw new IllegalStateException("Order has expired");
-        }
+    public void ensureOrderIsModifiable() {
         if (status != ActiveOrderStatus.ACTIVE) {
-            throw new IllegalStateException("Order is not active");
+            throw new UnactiveOrderException("Order " + orderId + " is not active and cannot be modified");
+        }
+        if (hasTimeExpired()) { 
+            throw new TimeExpiredException("Order " + orderId + " has expired");
         }
     }
-
 }
 
 
