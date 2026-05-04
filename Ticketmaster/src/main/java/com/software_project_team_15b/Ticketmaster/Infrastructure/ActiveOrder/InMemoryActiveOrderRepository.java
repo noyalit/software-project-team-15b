@@ -113,4 +113,20 @@ public class InMemoryActiveOrderRepository implements IActiveOrderRepository {
     public Optional<ActiveOrder> findByIdForUpdate(UUID orderId) {
         return findById(orderId);
     }
+
+    @Override
+    public void delete(ActiveOrder order) {
+        if (order == null)
+            throw new IllegalArgumentException("order cannot be null");
+        store.remove(order.getOrderId());
+    }
+
+    @Override
+    public void deleteAll(List<ActiveOrder> orders) {
+        if (orders == null)
+            throw new IllegalArgumentException("orders cannot be null");
+        for (ActiveOrder order : orders) {
+            store.remove(order.getOrderId());
+        }
+    }
 }

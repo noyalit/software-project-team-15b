@@ -106,4 +106,18 @@ public class JpaSystemActiveOrderRepositoryAdapter implements IActiveOrderReposi
             .existsByUserIdAndEventIdAndStatus(userId, eventId, status);
     }
 
+    @Override
+    public void delete(ActiveOrder order) {
+        if (order == null)
+            throw new IllegalArgumentException("order cannot be null");
+        jpaActiveOrderSpringDataRepository.delete(order);
+    }
+
+    @Override
+    public void deleteAll(List<ActiveOrder> orders) {
+        if (orders == null)
+            throw new IllegalArgumentException("orders cannot be null");
+        jpaActiveOrderSpringDataRepository.deleteAll(orders);
+    }
+
 }
