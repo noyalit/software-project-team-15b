@@ -40,6 +40,10 @@ public class Lottery {
         this.eventId = eventId;
     }
 
+    public UUID getEventId() {
+        return eventId;
+    }
+
     /**
      * Adds an option to the lottery.
      * 
