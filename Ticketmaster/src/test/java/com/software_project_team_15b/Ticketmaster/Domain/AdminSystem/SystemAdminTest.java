@@ -29,13 +29,25 @@ class SystemAdminTest {
     }
 
     @Test
+    void constructor_shouldThrowException_whenPasswordHasNoUppercase() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new SystemAdmin("admin", "password1"));
+    }
+
+    @Test
+    void constructor_shouldThrowException_whenPasswordHasNoDigit() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new SystemAdmin("admin", "Password"));
+    }
+
+    @Test
     void changePassword_shouldUpdatePassword_whenValid() {
         SystemAdmin admin = new SystemAdmin("admin", "Password1");
 
-        admin.changePassword("NewPass1");
+        admin.setPassword("NewPass1");
 
         // no getter → just verify no exception
-        assertDoesNotThrow(() -> admin.changePassword("AnotherPass1"));
+        assertDoesNotThrow(() -> admin.setPassword("AnotherPass1"));
     }
 
     @Test
@@ -43,7 +55,21 @@ class SystemAdminTest {
         SystemAdmin admin = new SystemAdmin("admin", "Password1");
 
         assertThrows(IllegalArgumentException.class,
-                () -> admin.changePassword("bad"));
+                () -> admin.setPassword("bad"));
+    }
+
+    @Test
+    void setPassword_shouldThrowException_whenPasswordIsNull() {
+        SystemAdmin admin = new SystemAdmin("admin", "Password1");
+
+        assertThrows(IllegalArgumentException.class, () -> admin.setPassword(null));
+    }
+
+    @Test
+    void setPassword_shouldThrowException_whenPasswordIsBlank() {
+        SystemAdmin admin = new SystemAdmin("admin", "Password1");
+
+        assertThrows(IllegalArgumentException.class, () -> admin.setPassword(" "));
     }
 
     @Test

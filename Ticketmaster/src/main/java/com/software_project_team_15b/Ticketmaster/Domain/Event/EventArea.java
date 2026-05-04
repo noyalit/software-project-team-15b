@@ -9,6 +9,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Inheritance;
 import jakarta.persistence.InheritanceType;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -47,6 +48,7 @@ public abstract class EventArea {
 
     public abstract int availableCapacity();
     public abstract boolean releaseByToken(UUID token);
+    public abstract boolean releaseSpecificSeats(List<UUID> seatIds, UUID token);
     public abstract void confirmByToken(UUID token);
     public abstract boolean hasActiveHolds();
 }
