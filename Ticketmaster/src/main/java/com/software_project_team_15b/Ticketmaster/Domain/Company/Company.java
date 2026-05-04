@@ -23,14 +23,17 @@ public class Company {
     @Column(unique = true, nullable = false)
     private String name;
 
+    @Column(name = "founder_id", nullable = false)
+    private UUID founderId;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "company_owners", joinColumns = @JoinColumn(name = "company_id"))
+    @Column(name = "owner_id", nullable = false)
+    private Set<UUID> ownerIds = new HashSet<>();
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private CompanyStatus status;
-
-    // Appointment Tree
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
-    @JoinColumn(name = "company_id")
-    private List<RoleAssignment> roles = new ArrayList<>();
 
     // STILL NEED TO INTEGRATE WITH REAL POLICY OBJECT INSTEAD OF STRING
     @Column(columnDefinition = "TEXT")
@@ -54,6 +57,14 @@ public class Company {
         return name;
     }
 
+    public UUID getFounderId() {
+        return founderId;
+    }
+
+    public Set<UUID> getOwnerIds() {
+        return Collections.unmodifiableSet(ownerIds);
+    }
+
     public CompanyStatus getStatus() {
         return status;
     }
@@ -70,131 +81,27 @@ public class Company {
     // Usecase methods
 
     // II.3.2
-    public Company(String name, String founderMemberId) {
+    public Company(String name, UUID founderId) {
         this.name = name;
+        this.founderId = Objects.requireNonNull(founderId, "founderId");
+        this.ownerIds.add(founderId);
         this.status = CompanyStatus.ACTIVE;
         this.lastModified = LocalDateTime.now();
-        this.roles.add(new RoleAssignment(founderMemberId, CompanyRole.FOUNDER, null, new HashSet<>()));
     }
 
-    // II.4.8
-    public void appointOwner(String appointerId, String targetMemberId) {
+    public void updatePurchasePolicy(String policy) {
         verifyActive();
-        verifyIsOwnerOrFounder(appointerId);
-        verifyNotAlreadyInCompany(targetMemberId);
-        verifyAcyclicTree(appointerId, targetMemberId);
-
-        roles.add(new RoleAssignment(targetMemberId, CompanyRole.OWNER, appointerId, new HashSet<>()));
-        touch();
-    }
-
-    // II.4.7
-    public void appointManager(String appointerId, String targetMemberId, Set<Permission> permissions) {
-        verifyActive();
-        verifyIsOwnerOrFounder(appointerId);
-        verifyNotAlreadyInCompany(targetMemberId);
-
-        roles.add(new RoleAssignment(targetMemberId, CompanyRole.MANAGER, appointerId, permissions));
-        touch();
-    }
-
-    // II.4.9 | II.4.12
-    public void removeAppointment(String appointerId, String targetMemberId) {
-        verifyActive();
-        RoleAssignment targetRole = getRoleAssignment(targetMemberId);
-
-        if (!appointerId.equals(targetRole.getAppointerId())) {
-            throw new IllegalStateException("Only the direct appointer can remove this role.");
-        }
-
-        // Reassign first-degree appointees to the appointerId
-        reassignAppointees(targetMemberId, appointerId);
-
-        roles.remove(targetRole);
-        touch();
-    }
-
-    // II.4.10
-    public void resign(String memberId) {
-        verifyActive();
-        RoleAssignment role = getRoleAssignment(memberId);
-
-        if (role.getRole() == CompanyRole.FOUNDER) {
-            throw new IllegalStateException("The Founder cannot resign.");
-        }
-
-        // Reassign first-degree appointees to the resigner's appointer
-        reassignAppointees(memberId, role.getAppointerId());
-
-        roles.remove(role);
-        touch();
-    }
-
-    // II.4.11
-    public void updateManagerPermissions(String appointerId, String managerId, Set<Permission> newPermissions) {
-        verifyActive();
-        RoleAssignment managerRole = getRoleAssignment(managerId);
-
-        if (managerRole.getRole() != CompanyRole.MANAGER) {
-            throw new IllegalStateException("Target member is not a manager.");
-        }
-
-        if (!appointerId.equals(managerRole.getAppointerId())) {
-            throw new IllegalStateException("Only the direct appointer can change permissions.");
-        }
-
-        managerRole.updatePermissions(newPermissions);
-        touch();
-    }
-
-    // II.4.3
-    public void updatePurchasePolicy(String actorId, String policy) {
-        verifyActive();
-        verifyPermission(actorId, Permission.UPDATE_POLICIES);
         this.purchasePolicy = policy;
         touch();
     }
 
-    // II.4.3
-    public void updateDiscountPolicy(String actorId, String policy) {
+    public void updateDiscountPolicy(String policy) {
         verifyActive();
-        verifyPermission(actorId, Permission.UPDATE_POLICIES);
         this.discountPolicy = policy;
         touch();
     }
 
-    // II.4.6
-    public List<String> getSubTreeMembers(String memberId) {
-        List<String> subtree = new ArrayList<>();
-        subtree.add(memberId);
-        Queue<String> queue = new LinkedList<>();
-        queue.add(memberId);
-
-        while (!queue.isEmpty()) {
-            String current = queue.poll();
-            for (RoleAssignment role : roles) {
-                if (current.equals(role.getAppointerId())) {
-                    subtree.add(role.getMemberId());
-                    queue.add(role.getMemberId());
-                }
-            }
-        }
-        return subtree;
-    }
-
-    // II.4.15
-    public List<RoleAssignment> getRoles() {
-        return Collections.unmodifiableList(this.roles);
-    }
-
-    // II.6.1 & II.4.13 & II.4.14
-    public void changeStatus(String actorId, CompanyStatus newStatus, boolean isSystemAdmin) {
-        if (!isSystemAdmin) {
-            RoleAssignment role = getRoleAssignment(actorId);
-            if (role.getRole() != CompanyRole.FOUNDER) {
-                throw new IllegalStateException("Only the Founder or SysAdmin can change company status.");
-            }
-        }
+    public void changeStatus(CompanyStatus newStatus) {
         this.status = newStatus;
         touch();
     }
@@ -205,70 +112,6 @@ public class Company {
     private void verifyActive() {
         if (this.status != CompanyStatus.ACTIVE) {
             throw new IllegalStateException("Company is not ACTIVE.");
-        }
-    }
-
-    private void verifyIsOwnerOrFounder(String memberId) {
-        RoleAssignment role = getRoleAssignment(memberId);
-        if (role.getRole() == CompanyRole.MANAGER) {
-            throw new IllegalStateException("Managers cannot make appointments.");
-        }
-    }
-
-    private void verifyNotAlreadyInCompany(String memberId) {
-        if (roles.stream().anyMatch(r -> r.getMemberId().equals(memberId))) {
-            throw new IllegalStateException("Member is already assigned a role in this company.");
-        }
-    }
-
-    private RoleAssignment getRoleAssignment(String memberId) {
-        return roles.stream()
-                .filter(r -> r.getMemberId().equals(memberId))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Member has no role in this company."));
-    }
-
-    private void verifyAcyclicTree(String appointerId, String targetMemberId) {
-        String currentAppointer = appointerId;
-
-        // For avoidinf circular appointments
-        while (currentAppointer != null) {
-            if (currentAppointer.equals(targetMemberId)) {
-                throw new IllegalStateException("Circular appointment detected. Tree must remain acyclic.");
-            }
-
-            String finalCurrent = currentAppointer;
-            Optional<RoleAssignment> parentRole = roles.stream()
-                    .filter(r -> r.getMemberId().equals(finalCurrent))
-                    .findFirst();
-
-            currentAppointer = parentRole.map(RoleAssignment::getAppointerId).orElse(null);
-        }
-    }
-
-    private void reassignAppointees(String oldAppointerId, String newAppointerId) {
-        for (RoleAssignment role : roles) {
-            if (oldAppointerId.equals(role.getAppointerId())) {
-                role.setAppointerId(newAppointerId);
-            }
-        }
-    }
-
-    public boolean hasPermission(String memberId, Permission requiredPermission) {
-        try {
-            RoleAssignment role = getRoleAssignment(memberId);
-            if (role.getRole() == CompanyRole.FOUNDER || role.getRole() == CompanyRole.OWNER) {
-                return true;
-            }
-            return role.getPermissions() != null && role.getPermissions().contains(requiredPermission);
-        } catch (IllegalArgumentException e) {
-            return false;
-        }
-    }
-
-    private void verifyPermission(String memberId, Permission requiredPermission) {
-        if (!hasPermission(memberId, requiredPermission)) {
-            throw new IllegalStateException("Member does not have the required permission: " + requiredPermission);
         }
     }
 
