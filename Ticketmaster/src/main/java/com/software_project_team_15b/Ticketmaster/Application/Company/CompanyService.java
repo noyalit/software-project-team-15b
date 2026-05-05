@@ -1,9 +1,9 @@
 package com.software_project_team_15b.Ticketmaster.Application.Company;
 
-import java.util.Objects;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 
+import com.software_project_team_15b.Ticketmaster.Application.UserService;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 import org.springframework.stereotype.Service;
 
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
@@ -34,6 +34,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyReposit
 public class CompanyService {
 
     private final ICompanyRepository companyRepository;
+    private final UserService userService;
     private final IAuth auth;
 
     /**
@@ -41,8 +42,9 @@ public class CompanyService {
      * @param auth authentication/authorization gateway; must not be null
      * @throws NullPointerException if any argument is null
      */
-    public CompanyService(ICompanyRepository companyRepository, IAuth auth) {
+    public CompanyService(ICompanyRepository companyRepository, UserService userService, IAuth auth) {
         this.companyRepository = Objects.requireNonNull(companyRepository, "companyRepository cannot be null");
+        this.userService = Objects.requireNonNull(userService, "userService cannot be null");
         this.auth = Objects.requireNonNull(auth, "auth cannot be null");
     }
 
@@ -60,7 +62,217 @@ public class CompanyService {
         requireNonBlank(name, "Company name");
         UUID founderId = requireAuthenticatedMember(token);
         Company company = new Company(name, founderId);
+        userService.appointFounder(token, founderId);
         return companyRepository.save(company);
+    }
+
+    /**
+     * Appoints a member as an owner of the company. Only an existing owner of
+     * the company may perform this action.
+     *
+     * @param token      an active member token; must not be null or blank
+     * @param companyId  the target company's id; must not be null or blank
+     * @param newOwnerId the id of the member to appoint as owner; must not be null
+     * @throws IllegalArgumentException           if {@code companyId} is null/blank or {@code newOwnerId} is null
+     * @throws InvalidTokenException              if the token is null, blank, or not valid
+     * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
+     * @throws CompanyNotFoundException           if no company with {@code companyId} exists
+     */
+    public void addOwner(String token, String companyId, UUID newOwnerId) {
+        requireNonBlank(companyId, "Company ID");
+        requireNonNull(newOwnerId, "New owner ID");
+        Company company = getCompany(companyId);
+        UUID appointingUserId = requireAuthenticatedMember(token);
+        requireOwner(company, appointingUserId);
+        userService.appointOwner(newOwnerId, token);
+        company.addOwner(newOwnerId);
+        companyRepository.save(company);
+    }
+
+    /**
+     * Removes an owner from the company. An owner may resign themselves, or
+     * remove an owner they appointed. The founder cannot be removed.
+     *
+     * @param token     an active member token; must not be null or blank
+     * @param companyId the target company's id; must not be null or blank
+     * @param ownerId   the id of the owner to remove; must not be null
+     * @throws IllegalArgumentException           if {@code companyId} is null/blank, {@code ownerId} is null,
+     *                                            or {@code ownerId} refers to the company founder
+     * @throws InvalidTokenException              if the token is null, blank, or not valid
+     * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
+     * @throws CompanyNotFoundException           if no company with {@code companyId} exists
+     */
+    public void removeOwner(String token, String companyId, UUID ownerId) {
+        requireNonBlank(companyId, "Company ID");
+        requireNonNull(ownerId, "Owner ID to remove");
+        Company company = getCompany(companyId);
+        UUID calledId = requireAuthenticatedMember(token);
+        requireOwner(company, calledId);
+
+        if (calledId.equals(ownerId)) {
+            userService.ownerResign(token);
+        } else {
+            userService.removeOwnerAppointment(token, ownerId);
+        }
+
+        company.removeOwner(ownerId);
+        companyRepository.save(company);
+    }
+
+    /**
+     * Transitions the company to the given status. Only the founder or a
+     * system administrator may perform this action.
+     *
+     * <p>Prefer {@link #changeStatus(String, String, CompanyStatus)} which returns
+     * the updated company. This overload exists for callers that do not need
+     * the return value.
+     *
+     * @param token     an active member or system-admin token; must not be null or blank
+     * @param companyId the target company's id; must not be null or blank
+     * @param newStatus the status to transition to; must not be null
+     * @throws IllegalArgumentException           if {@code companyId} is null/blank or {@code newStatus} is null
+     * @throws InvalidTokenException              if the token is null, blank, or not valid
+     * @throws UnauthorizedCompanyActionException if the caller is neither the founder nor a system admin
+     * @throws CompanyNotFoundException           if no company with {@code companyId} exists
+     */
+    public void changeCompanyStatus(String token, String companyId, CompanyStatus newStatus) {
+        requireNonBlank(companyId, "Company ID");
+        requireNonNull(newStatus, "New status");
+        Company company = getCompany(companyId);
+        requireFounderOrSystemAdmin(token, company);
+        company.changeStatus(newStatus);
+        companyRepository.save(company);
+    }
+
+    /**
+     * Appoints a member as a manager of the company with the given permissions.
+     * Only an owner of the company may perform this action.
+     *
+     * @param token              an active member token; must not be null or blank
+     * @param companyId          the target company's id; must not be null or blank
+     * @param newOwnerId         the id of the member to appoint as manager; must not be null
+     * @param managerPermissions the set of permissions to grant; must not be null
+     * @throws IllegalArgumentException           if {@code companyId} is null/blank or {@code newOwnerId} is null
+     * @throws InvalidTokenException              if the token is null, blank, or not valid
+     * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
+     * @throws CompanyNotFoundException           if no company with {@code companyId} exists
+     */
+    public void addManager(String token, String companyId, UUID newOwnerId, Set<ManagerPermission> managerPermissions) {
+        requireNonBlank(companyId, "Company ID");
+        requireNonNull(newOwnerId, "New manager ID");
+        Company company = getCompany(companyId);
+        UUID calledId = requireAuthenticatedMember(token);
+        requireOwner(company, calledId);
+        userService.appointManager(newOwnerId, token, managerPermissions);
+    }
+
+    /**
+     * Removes a manager from the company. Only an owner of the company may
+     * perform this action.
+     *
+     * <p><b>Incomplete:</b> the corresponding {@code UserService} method for
+     * revoking a manager appointment has not yet been implemented. This method
+     * performs authorization checks but does not yet update the member's role.
+     *
+     * @param token     an active member token; must not be null or blank
+     * @param companyId the target company's id; must not be null or blank
+     * @param managerId the id of the manager to remove; must not be null
+     * @throws IllegalArgumentException           if {@code companyId} is null/blank or {@code managerId} is null
+     * @throws InvalidTokenException              if the token is null, blank, or not valid
+     * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
+     * @throws CompanyNotFoundException           if no company with {@code companyId} exists
+     */
+    public void removeManager(String token, String companyId, UUID managerId) {
+        requireNonBlank(companyId, "Company ID");
+        requireNonNull(managerId, "Manager ID to remove");
+        Company company = getCompany(companyId);
+        UUID calledId = requireAuthenticatedMember(token);
+        requireOwner(company, calledId);
+        // TODO: call userService.removeManagerAppointment once that method is available
+    }
+
+    /**
+     * Replaces a manager's permission set. Only an owner of the company may
+     * perform this action.
+     *
+     * @param token              an active member token; must not be null or blank
+     * @param companyId          the target company's id; must not be null or blank
+     * @param managerId          the id of the manager whose permissions should change; must not be null
+     * @param managerPermissions the new set of permissions to assign; must not be null
+     * @throws IllegalArgumentException           if {@code companyId} is null/blank or {@code managerId} is null
+     * @throws InvalidTokenException              if the token is null, blank, or not valid
+     * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
+     * @throws CompanyNotFoundException           if no company with {@code companyId} exists
+     */
+    public void updateManagerPermissions(String token, String companyId, UUID managerId, Set<ManagerPermission> managerPermissions) {
+        requireNonBlank(companyId, "Company ID");
+        requireNonNull(managerId, "manager ID");
+        Company company = getCompany(companyId);
+        UUID calledId = requireAuthenticatedMember(token);
+        requireOwner(company, calledId);
+        userService.changeManagerPermissions(token, managerId, managerPermissions);
+    }
+
+    /**
+     * Returns the set of owner ids for the company. Only an existing owner
+     * of the company may query this information.
+     *
+     * @param token     an active member token; must not be null or blank
+     * @param companyId the target company's id; must not be null or blank
+     * @return an unmodifiable set of owner ids
+     * @throws IllegalArgumentException           if {@code companyId} is null or blank
+     * @throws InvalidTokenException              if the token is null, blank, or not valid
+     * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
+     * @throws CompanyNotFoundException           if no company with {@code companyId} exists
+     */
+    public Set<UUID> getOwnerIds(String token, String companyId) {
+        requireNonBlank(companyId, "Company ID");
+        Company company = getCompany(companyId);
+        UUID calledId = requireAuthenticatedMember(token);
+        requireOwner(company, calledId);
+        return company.getOwnerIds();
+    }
+
+    /**
+     * Returns all companies whose founder matches {@code founderId}.
+     *
+     * <p>Note: {@code token} is accepted for API consistency but no
+     * authorization check is currently enforced on this query.
+     *
+     * @param token     caller's token (currently unused for authorization)
+     * @param founderId the id of the founder to search by; must not be null
+     * @return a non-null, possibly empty list of matching companies
+     * @throws IllegalArgumentException if {@code founderId} is null
+     * @throws IllegalStateException    if the repository returns null instead of an empty list
+     */
+    public List<Company> findCompaniesByFounder(String token, UUID founderId) {
+        requireNonNull(founderId, "Founder ID");
+        List<Company> result = companyRepository.findByFounder(founderId);
+        if (result == null) {
+            throw new IllegalStateException("Repository returned null for findByFounder; expected an empty list");
+        }
+        return result;
+    }
+
+    /**
+     * Returns all companies in which {@code ownerId} is listed as an owner.
+     *
+     * <p>Note: {@code token} is accepted for API consistency but no
+     * authorization check is currently enforced on this query.
+     *
+     * @param token   caller's token (currently unused for authorization)
+     * @param ownerId the id of the owner to search by; must not be null
+     * @return a non-null, possibly empty list of matching companies
+     * @throws IllegalArgumentException if {@code ownerId} is null
+     * @throws IllegalStateException    if the repository returns null instead of an empty list
+     */
+    public List<Company> findCompaniesByOwner(String token, UUID ownerId) {
+        requireNonNull(ownerId, "Owner ID");
+        List<Company> result = companyRepository.findByOwner(ownerId);
+        if (result == null) {
+            throw new IllegalStateException("Repository returned null for findByOwner; expected an empty list");
+        }
+        return result;
     }
 
     /**
@@ -181,6 +393,10 @@ public class CompanyService {
             throw new UnauthorizedCompanyActionException(
                     "Only an owner of the company can perform this action");
         }
+        if (!userService.isActiveOwner(callerId)) {
+            throw new UnauthorizedCompanyActionException(
+                    "Only an owner of the company can perform this action");
+        }
     }
 
     /**
@@ -202,6 +418,10 @@ public class CompanyService {
         }
         UUID callerId = auth.extractUserId(token);
         if (!company.getFounderId().equals(callerId)) {
+            throw new UnauthorizedCompanyActionException(
+                    "Only the company's founder or a system admin can perform this action");
+        }
+        if (!userService.isActiveOwner(callerId)) {
             throw new UnauthorizedCompanyActionException(
                     "Only the company's founder or a system admin can perform this action");
         }

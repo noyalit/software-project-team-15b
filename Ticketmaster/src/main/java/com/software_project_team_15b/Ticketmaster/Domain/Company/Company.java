@@ -4,6 +4,14 @@ import jakarta.persistence.*;
 import java.util.*;
 import java.time.LocalDateTime;
 
+/**
+ * Aggregate root representing a company in the Ticketmaster domain.
+ *
+ * <p>A company is created by a founder who automatically becomes its first
+ * owner. Owners may be added or removed (the founder cannot be removed).
+ * Purchase and discount policies may only be updated while the company is
+ * {@link CompanyStatus#ACTIVE}.
+ */
 @Entity
 @Table(name = "companies")
 public class Company {
@@ -49,30 +57,37 @@ public class Company {
     // ==============================================================================================================
     // Getters
 
+    /** @return the company's unique identifier, assigned by the persistence layer */
     public String getId() {
         return id;
     }
 
+    /** @return the company's display name */
     public String getName() {
         return name;
     }
 
+    /** @return the id of the member who founded this company */
     public UUID getFounderId() {
         return founderId;
     }
 
+    /** @return an unmodifiable view of the current owner ids */
     public Set<UUID> getOwnerIds() {
         return Collections.unmodifiableSet(ownerIds);
     }
 
+    /** @return the current lifecycle status of the company */
     public CompanyStatus getStatus() {
         return status;
     }
 
+    /** @return the current purchase policy, or {@code null} if none has been set */
     public String getPurchasePolicy() {
         return purchasePolicy;
     }
 
+    /** @return the current discount policy, or {@code null} if none has been set */
     public String getDiscountPolicy() {
         return discountPolicy;
     }
@@ -80,8 +95,20 @@ public class Company {
     // =============================================================================================================
     // Usecase methods
 
+    /**
+     * Creates a new active company with the given name and founder.
+     * The founder is automatically added to the owner set.
+     *
+     * @param name      the company's display name; must not be null or blank
+     * @param founderId the id of the founding member; must not be null
+     * @throws IllegalArgumentException if {@code name} is null or blank
+     * @throws NullPointerException     if {@code founderId} is null
+     */
     // II.3.2
     public Company(String name, UUID founderId) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("name cannot be null or blank");
+        }
         this.name = name;
         this.founderId = Objects.requireNonNull(founderId, "founderId");
         this.ownerIds.add(founderId);
@@ -89,20 +116,75 @@ public class Company {
         this.lastModified = LocalDateTime.now();
     }
 
+    /**
+     * Replaces the purchase policy. The company must be {@link CompanyStatus#ACTIVE}.
+     *
+     * @param policy the new purchase policy; must not be null
+     * @throws IllegalStateException if the company is not active
+     */
     public void updatePurchasePolicy(String policy) {
         verifyActive();
         this.purchasePolicy = policy;
         touch();
     }
 
+    /**
+     * Replaces the discount policy. The company must be {@link CompanyStatus#ACTIVE}.
+     *
+     * @param policy the new discount policy; must not be null
+     * @throws IllegalStateException if the company is not active
+     */
     public void updateDiscountPolicy(String policy) {
         verifyActive();
         this.discountPolicy = policy;
         touch();
     }
 
+    /**
+     * Transitions the company to the given status.
+     *
+     * @param newStatus the target status; must not be null
+     */
     public void changeStatus(CompanyStatus newStatus) {
         this.status = newStatus;
+        touch();
+    }
+
+    /**
+     * Adds a member to the owner set.
+     *
+     * @param memberId the id of the member to add as owner; must not be null
+     * @throws IllegalArgumentException if {@code memberId} is null or already an owner
+     */
+    public void addOwner(UUID memberId) {
+        if (memberId == null) {
+            throw new IllegalArgumentException("memberId cannot be null");
+        }
+        if (ownerIds.contains(memberId)) {
+            throw new IllegalArgumentException("memberId is already an owner");
+        }
+        ownerIds.add(memberId);
+        touch();
+    }
+
+    /**
+     * Removes a member from the owner set. The founder cannot be removed.
+     *
+     * @param memberId the id of the owner to remove; must not be null
+     * @throws IllegalArgumentException if {@code memberId} is null, equals the founder id,
+     *                                  or is not currently an owner
+     */
+    public void removeOwner(UUID memberId) {
+        if (memberId == null) {
+            throw new IllegalArgumentException("memberId cannot be null");
+        }
+        if (memberId.equals(founderId)) {
+            throw new IllegalArgumentException("Cannot remove the founder from owners.");
+        }
+        if (!ownerIds.contains(memberId)) {
+            throw new IllegalArgumentException("memberId is not an owner");
+        }
+        ownerIds.remove(memberId);
         touch();
     }
 
