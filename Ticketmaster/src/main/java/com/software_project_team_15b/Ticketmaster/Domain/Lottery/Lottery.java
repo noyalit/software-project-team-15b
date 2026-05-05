@@ -20,35 +20,74 @@ public class Lottery {
             joinColumns = @JoinColumn(name = "event_id")
     )
     @Column(name = "entry", nullable = false)
-    private Set<String> lotterySet = new HashSet<>();
+    private Set<UUID> lotterySet = new HashSet<>();
 
-     @Version
+    @Column(name = "capacity", nullable = false)
+    private int capacity;
+
+    @Version
     private long version;
 
     // JPA only
     protected Lottery() {}
 
     /**
-     * Constructs a new Lottery instance for a specific event.
-     * 
      * @param eventId the unique identifier for the event this lottery is associated with
      */
     public Lottery(UUID eventId) {
+        this(eventId, Integer.MAX_VALUE);
+    }
+
+    /**
+     * @param eventId  the unique identifier for the event this lottery is associated with
+     * @param capacity the maximum number of entries the lottery may hold; must be non-negative
+     * @throws IllegalArgumentException if eventId is null or capacity is negative
+     */
+    public Lottery(UUID eventId, int capacity) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
+        if (capacity < 0) {
+            throw new IllegalArgumentException("capacity cannot be negative");
+        }
         this.eventId = eventId;
+        this.capacity = capacity;
+    }
+
+    /**
+     * @return the maximum number of entries this lottery can hold
+     */
+    public int getCapacity() {
+        return capacity;
+    }
+
+    /**
+     * @return {@code true} if the lottery has reached its capacity
+     */
+    public boolean isFull() {
+        return lotterySet.size() >= capacity;
+    }
+
+    /**
+     * @return the unique identifier for the event this lottery is associated with
+     */
+    public UUID getEventId() {
+        return eventId;
     }
 
     /**
      * Adds an option to the lottery.
-     * 
+     *
      * @param option the option to add to the lottery
      * @return true if the option was added successfully, false if it already existed
+     * @throws IllegalStateException if the lottery is full
      */
-    public boolean add(String option) {
+    public boolean add(UUID option) {
         if (option == null) {
             throw new IllegalArgumentException("option cannot be null");
+        }
+        if (isFull()) {
+            throw new IllegalStateException("lottery is full");
         }
         return lotterySet.add(option);
     }
@@ -59,7 +98,7 @@ public class Lottery {
      * @param option the specific option to remove from the lottery
      * @return the option if it was removed successfully, null otherwise
      */
-    public String pop(String option) {
+    public UUID pop(UUID option) {
         if (option == null) {
             throw new IllegalArgumentException("option cannot be null");
         }
@@ -71,7 +110,7 @@ public class Lottery {
      *
      * @return a randomly selected option, or null if the lottery is empty
      */
-    protected String getRandom() {
+    protected UUID getRandom() {
          if (lotterySet.isEmpty()) {
             return null;
         }
@@ -79,7 +118,7 @@ public class Lottery {
         int index = ThreadLocalRandom.current().nextInt(lotterySet.size());
         int i = 0;
 
-        for (String value : lotterySet) {
+        for (UUID value : lotterySet) {
             if (i++ == index) {
                 return value;
             }
@@ -93,8 +132,8 @@ public class Lottery {
      *
      * @return a randomly selected option that was removed from the lottery, or null if the lottery is empty
      */
-    public String popRandom() {
-        String value = getRandom();
+    public UUID popRandom() {
+        UUID value = getRandom();
         return value == null ? null : pop(value);
     }
 
@@ -104,15 +143,15 @@ public class Lottery {
      * @param count the number of options to pop from the lottery
      * @return a HashSet containing up to 'count' randomly selected options that were removed from the lottery
      */
-    public Set<String> popRandom(int count) {
+    public Set<UUID> popRandom(int count) {
         if (count < 0) {
             throw new IllegalArgumentException("count cannot be negative");
         }
 
-        Set<String> result = new HashSet<>();
+        Set<UUID> result = new HashSet<>();
 
         for (int i = 0; i < count; i++) {
-            String value = popRandom();
+            UUID value = popRandom();
 
             if (value == null) {
                 break;
