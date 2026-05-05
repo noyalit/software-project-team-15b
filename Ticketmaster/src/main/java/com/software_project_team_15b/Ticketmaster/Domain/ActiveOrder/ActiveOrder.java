@@ -84,6 +84,35 @@ public class ActiveOrder {
         this.createdAt = LocalDateTime.now();
         this.expiresAt = null;
     }
+    // Constructor for testing purposes
+    public ActiveOrder(UUID orderId,
+                   UUID userId,
+                   UUID eventId,
+                   LocalDateTime createdAt,
+                   LocalDateTime expiresAt) {
+
+        if (orderId == null || userId == null || eventId == null) {
+            throw new IllegalArgumentException("IDs cannot be null");
+        }
+
+        if (createdAt == null || expiresAt == null) {
+            throw new IllegalArgumentException("Dates cannot be null");
+        }
+
+        if (expiresAt.isBefore(createdAt)) {
+            throw new IllegalArgumentException("expiresAt cannot be before createdAt");
+        }
+
+        this.orderId = orderId;
+        this.userId = userId;
+        this.eventId = eventId;
+
+        this.createdAt = createdAt;
+        this.expiresAt = expiresAt;
+
+        this.status = ActiveOrderStatus.ACTIVE;
+        this.orderSeats = new HashSet<>();
+    }
 
     public UUID getOrderId() {
         return orderId;
