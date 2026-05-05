@@ -63,10 +63,18 @@ public class VirtualQueue {
         this.capacity = capacity;
     }
 
+    /**
+     * Get the maximum number of entries this queue can hold.
+     * @return {@code int} Queue's capacity
+     */
     public int getCapacity() {
         return capacity;
     }
 
+    /**
+     * Get the unique identifier for this queue.
+     * @return {@code UUID} Queue's ID
+     */
     public UUID getId() {
         return id;
     }

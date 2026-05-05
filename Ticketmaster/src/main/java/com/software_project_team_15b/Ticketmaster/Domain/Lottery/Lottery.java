@@ -22,37 +22,72 @@ public class Lottery {
     @Column(name = "entry", nullable = false)
     private Set<UUID> lotterySet = new HashSet<>();
 
-     @Version
+    @Column(name = "capacity", nullable = false)
+    private int capacity;
+
+    @Version
     private long version;
 
     // JPA only
     protected Lottery() {}
 
     /**
-     * Constructs a new Lottery instance for a specific event.
-     * 
      * @param eventId the unique identifier for the event this lottery is associated with
      */
     public Lottery(UUID eventId) {
+        this(eventId, Integer.MAX_VALUE);
+    }
+
+    /**
+     * @param eventId  the unique identifier for the event this lottery is associated with
+     * @param capacity the maximum number of entries the lottery may hold; must be non-negative
+     * @throws IllegalArgumentException if eventId is null or capacity is negative
+     */
+    public Lottery(UUID eventId, int capacity) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
+        if (capacity < 0) {
+            throw new IllegalArgumentException("capacity cannot be negative");
+        }
         this.eventId = eventId;
+        this.capacity = capacity;
     }
 
+    /**
+     * @return the maximum number of entries this lottery can hold
+     */
+    public int getCapacity() {
+        return capacity;
+    }
+
+    /**
+     * @return {@code true} if the lottery has reached its capacity
+     */
+    public boolean isFull() {
+        return lotterySet.size() >= capacity;
+    }
+
+    /**
+     * @return the unique identifier for the event this lottery is associated with
+     */
     public UUID getEventId() {
         return eventId;
     }
 
     /**
      * Adds an option to the lottery.
-     * 
+     *
      * @param option the option to add to the lottery
      * @return true if the option was added successfully, false if it already existed
+     * @throws IllegalStateException if the lottery is full
      */
     public boolean add(UUID option) {
         if (option == null) {
             throw new IllegalArgumentException("option cannot be null");
+        }
+        if (isFull()) {
+            throw new IllegalStateException("lottery is full");
         }
         return lotterySet.add(option);
     }
