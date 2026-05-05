@@ -173,10 +173,7 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    public Member appointFounder(String token, UUID memberId) {
-        if (!auth.isTokenValid(token) || !auth.isSystemAdmin(token)) {
-            throw new IllegalArgumentException("Only a system admin can appoint a founder");
-        }
+    public Member appointFounder(UUID memberId) {
         Member member = getMemberOrThrow(memberId);
         Role founderRole = new Founder(null);
         member.addRole(founderRole);
@@ -197,6 +194,26 @@ public class UserService {
                         "No owner appointment by this owner was found"
                 ));
         memberToRemove.removeRole(ownerRoleToRemove);
+        return memberRepository.save(memberToRemove);
+    }
+
+    public Member removeManagerAppointment(String token, UUID memberToRemoveId) {
+        UUID removerOwnerId = getAuthenticatedMemberId(token);
+        Member memberToRemove = getMemberOrThrow(memberToRemoveId);
+
+        validateOwnerAppointer(removerOwnerId);
+
+        Role managerRoleToRemove = memberToRemove.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof Manager)
+                .filter(role -> removerOwnerId.equals(role.getAppointedBy()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "No manager appointment by this owner was found"
+                ));
+
+        memberToRemove.removeRole(managerRoleToRemove);
+
         return memberRepository.save(memberToRemove);
     }
 
@@ -268,12 +285,28 @@ public class UserService {
 
     public boolean isActiveOwner(UUID userId) {
         Member member = getMemberOrThrow(userId);
-        return member.getActiveRole() instanceof Owner && member.getActiveRole().isAppointmentApproved();
+        return member.getAssignedRoles()
+                .stream()
+                .anyMatch(role -> role instanceof Owner
+                        && !(role instanceof Founder)
+                        && role.isAppointmentApproved());
+
     }
 
     public boolean isActiveManager(UUID userId) {
         Member member = getMemberOrThrow(userId);
-        return member.getActiveRole() instanceof Manager && member.getActiveRole().isAppointmentApproved();
+        return member.getAssignedRoles()
+                .stream()
+                .anyMatch(role -> role instanceof Manager
+                        && role.isAppointmentApproved());
+    }
+
+    public boolean isActiveFounder(UUID userId) {
+        Member member = getMemberOrThrow(userId);
+        return member.getAssignedRoles()
+                .stream()
+                .anyMatch(role -> role instanceof Founder
+                        && role.isAppointmentApproved());
     }
 
     public boolean isAppointmentApproved(UUID userId) {
