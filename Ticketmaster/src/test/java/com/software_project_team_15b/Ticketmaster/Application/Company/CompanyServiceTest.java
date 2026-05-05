@@ -3,9 +3,6 @@ package com.software_project_team_15b.Ticketmaster.Application.Company;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Field;
 import java.util.List;
@@ -40,17 +37,14 @@ class CompanyServiceTest {
 
     private FakeCompanyRepository repo;
     private FakeAuth auth;
-    private UserService userService;
+    private FakeUserService userService;
     private CompanyService service;
 
     @BeforeEach
     void setUp() {
         repo = new FakeCompanyRepository();
         auth = new FakeAuth();
-        userService = mock(UserService.class);
-        // By default every caller is treated as an active owner so individual
-        // tests focus on the behaviour under test, not on UserService state.
-        when(userService.isActiveOwner(any())).thenReturn(true);
+        userService = new FakeUserService(); // defaults: isActiveOwner → true, all mutations → no-op
         service = new CompanyService(repo, userService, auth);
     }
 
@@ -201,7 +195,7 @@ class CompanyServiceTest {
         UUID founderId = UUID.randomUUID();
         String founderToken = auth.registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
-        when(userService.isActiveOwner(founderId)).thenReturn(false);
+        userService.setActiveOwner(founderId, false);
 
         assertThatThrownBy(() -> service.addOwner(founderToken, company.getId(), UUID.randomUUID()))
                 .isInstanceOf(UnauthorizedCompanyActionException.class);
@@ -1128,6 +1122,41 @@ class CompanyServiceTest {
 
     // ===========================================================================================
     // Test fakes
+
+    /**
+     * Subclass of {@link UserService} that avoids all real dependencies.
+     * The four-arg constructor only assigns fields, so passing null is safe as
+     * long as every method that would dereference those fields is overridden.
+     *
+     * <p>{@link #isActiveOwner} returns {@code true} for all ids by default;
+     * call {@link #setActiveOwner} to override for a specific id in a test.
+     * All mutation methods (appoint*, resign, remove*, changeManagerPermissions)
+     * are no-ops that return {@code null}.
+     */
+    private static final class FakeUserService extends UserService {
+
+        private final Map<UUID, Boolean> activeOwnerOverrides = new ConcurrentHashMap<>();
+
+        FakeUserService() {
+            super(null, null, null, null);
+        }
+
+        void setActiveOwner(UUID userId, boolean active) {
+            activeOwnerOverrides.put(userId, active);
+        }
+
+        @Override
+        public boolean isActiveOwner(UUID userId) {
+            return activeOwnerOverrides.getOrDefault(userId, true);
+        }
+
+        @Override public Member appointFounder(String token, UUID memberId) { return null; }
+        @Override public Member appointOwner(UUID memberId, String token) { return null; }
+        @Override public Member ownerResign(String token) { return null; }
+        @Override public Member removeOwnerAppointment(String token, UUID memberToRemoveId) { return null; }
+        @Override public Member appointManager(UUID memberId, String token, Set<ManagerPermission> permissions) { return null; }
+        @Override public Member changeManagerPermissions(String token, UUID managerId, Set<ManagerPermission> newPermissions) { return null; }
+    }
 
     private static final class FakeCompanyRepository implements ICompanyRepository {
         private final Map<String, Company> storage = new ConcurrentHashMap<>();
