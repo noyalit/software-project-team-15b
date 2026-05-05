@@ -197,6 +197,26 @@ public class UserService {
         return memberRepository.save(memberToRemove);
     }
 
+    public Member removeManagerAppointment(String token, UUID memberToRemoveId) {
+        UUID removerOwnerId = getAuthenticatedMemberId(token);
+        Member memberToRemove = getMemberOrThrow(memberToRemoveId);
+
+        validateOwnerAppointer(removerOwnerId);
+
+        Role managerRoleToRemove = memberToRemove.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof Manager)
+                .filter(role -> removerOwnerId.equals(role.getAppointedBy()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "No manager appointment by this owner was found"
+                ));
+
+        memberToRemove.removeRole(managerRoleToRemove);
+
+        return memberRepository.save(memberToRemove);
+    }
+
     public Member ownerResign(String token) {
         UUID ownerId = getAuthenticatedMemberId(token);
         Member owner = getMemberOrThrow(ownerId);
