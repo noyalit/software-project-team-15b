@@ -62,7 +62,7 @@ public class CompanyService {
         requireNonBlank(name, "Company name");
         UUID founderId = requireAuthenticatedMember(token);
         Company company = new Company(name, founderId);
-        userService.appointFounder(token, founderId);
+        userService.appointFounder(founderId);
         return companyRepository.save(company);
     }
 
@@ -170,14 +170,11 @@ public class CompanyService {
      * Removes a manager from the company. Only an owner of the company may
      * perform this action.
      *
-     * <p><b>Incomplete:</b> the corresponding {@code UserService} method for
-     * revoking a manager appointment has not yet been implemented. This method
-     * performs authorization checks but does not yet update the member's role.
-     *
      * @param token     an active member token; must not be null or blank
      * @param companyId the target company's id; must not be null or blank
      * @param managerId the id of the manager to remove; must not be null
-     * @throws IllegalArgumentException           if {@code companyId} is null/blank or {@code managerId} is null
+     * @throws IllegalArgumentException           if {@code companyId} is null/blank, {@code managerId} is null,
+     *                                            or the manager was not appointed by the calling owner
      * @throws InvalidTokenException              if the token is null, blank, or not valid
      * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
@@ -188,7 +185,7 @@ public class CompanyService {
         Company company = getCompany(companyId);
         UUID calledId = requireAuthenticatedMember(token);
         requireOwner(company, calledId);
-        // TODO: call userService.removeManagerAppointment once that method is available
+        userService.removeManagerAppointment(token, managerId);
     }
 
     /**
@@ -386,14 +383,17 @@ public class CompanyService {
     /**
      * @param company  the target company; must not be null
      * @param callerId the id of the caller to authorize; must not be null
-     * @throws UnauthorizedCompanyActionException if {@code callerId} is not in the company's owner set
+     * @throws UnauthorizedCompanyActionException if {@code callerId} is not in the company's owner set,
+     *         or is neither an active owner nor an active founder in {@code UserService}
      */
     private void requireOwner(Company company, UUID callerId) {
         if (!company.getOwnerIds().contains(callerId)) {
             throw new UnauthorizedCompanyActionException(
                     "Only an owner of the company can perform this action");
         }
-        if (!userService.isActiveOwner(callerId)) {
+        // isActiveOwner excludes Founders; check isActiveFounder as well so that
+        // the company founder can exercise owner-level actions.
+        if (!userService.isActiveOwner(callerId) && !userService.isActiveFounder(callerId)) {
             throw new UnauthorizedCompanyActionException(
                     "Only an owner of the company can perform this action");
         }
@@ -421,7 +421,7 @@ public class CompanyService {
             throw new UnauthorizedCompanyActionException(
                     "Only the company's founder or a system admin can perform this action");
         }
-        if (!userService.isActiveOwner(callerId)) {
+        if (!userService.isActiveFounder(callerId)) {
             throw new UnauthorizedCompanyActionException(
                     "Only the company's founder or a system admin can perform this action");
         }

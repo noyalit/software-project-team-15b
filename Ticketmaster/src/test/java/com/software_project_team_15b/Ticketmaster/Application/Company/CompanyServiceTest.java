@@ -494,14 +494,14 @@ class CompanyServiceTest {
     // removeManager — positive
 
     @Test
-    void removeManager_completes_authorization_checks_without_throwing() {
+    void removeManager_succeeds_when_caller_is_owner() {
         UUID founderId = UUID.randomUUID();
         String founderToken = auth.registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
         UUID managerId = UUID.randomUUID();
 
-        // removeManager is incomplete (no UserService call yet), but auth checks must pass
         service.removeManager(founderToken, company.getId(), managerId);
+        // FakeUserService.removeManagerAppointment is a no-op; no exception expected
     }
 
     // removeManager — negative
@@ -1150,10 +1150,18 @@ class CompanyServiceTest {
             return activeOwnerOverrides.getOrDefault(userId, true);
         }
 
-        @Override public Member appointFounder(String token, UUID memberId) { return null; }
+        @Override
+        public boolean isActiveFounder(UUID userId) {
+            // Founders share the same override map so setActiveOwner(id, false)
+            // disables both owner and founder checks in a single call.
+            return activeOwnerOverrides.getOrDefault(userId, true);
+        }
+
+        @Override public Member appointFounder(UUID memberId) { return null; }
         @Override public Member appointOwner(UUID memberId, String token) { return null; }
         @Override public Member ownerResign(String token) { return null; }
         @Override public Member removeOwnerAppointment(String token, UUID memberToRemoveId) { return null; }
+        @Override public Member removeManagerAppointment(String token, UUID memberToRemoveId) { return null; }
         @Override public Member appointManager(UUID memberId, String token, Set<ManagerPermission> permissions) { return null; }
         @Override public Member changeManagerPermissions(String token, UUID managerId, Set<ManagerPermission> newPermissions) { return null; }
     }
