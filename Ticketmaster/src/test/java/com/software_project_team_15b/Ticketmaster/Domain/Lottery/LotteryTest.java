@@ -10,6 +10,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class LotteryTest {
 
+    private static final UUID ALICE = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID BOB   = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private static final UUID CAROL = UUID.fromString("00000000-0000-0000-0000-000000000003");
+
     private UUID eventId;
     private Lottery lottery;
 
@@ -36,13 +40,13 @@ public class LotteryTest {
 
     @Test
     void addShouldReturnTrueForNewOption() {
-        assertTrue(lottery.add("alice"));
+        assertTrue(lottery.add(ALICE));
     }
 
     @Test
     void addShouldReturnFalseForDuplicateOption() {
-        lottery.add("alice");
-        assertFalse(lottery.add("alice"));
+        lottery.add(ALICE);
+        assertFalse(lottery.add(ALICE));
     }
 
     @Test
@@ -54,20 +58,20 @@ public class LotteryTest {
 
     @Test
     void popShouldReturnOptionWhenItExists() {
-        lottery.add("alice");
-        assertEquals("alice", lottery.pop("alice"));
+        lottery.add(ALICE);
+        assertEquals(ALICE, lottery.pop(ALICE));
     }
 
     @Test
     void popShouldReturnNullWhenOptionDoesNotExist() {
-        assertNull(lottery.pop("alice"));
+        assertNull(lottery.pop(ALICE));
     }
 
     @Test
     void popShouldRemoveOptionSoItCannotBePoppedAgain() {
-        lottery.add("alice");
-        lottery.pop("alice");
-        assertNull(lottery.pop("alice"));
+        lottery.add(ALICE);
+        lottery.pop(ALICE);
+        assertNull(lottery.pop(ALICE));
     }
 
     @Test
@@ -84,29 +88,29 @@ public class LotteryTest {
 
     @Test
     void popRandomShouldReturnAnExistingOption() {
-        lottery.add("alice");
-        lottery.add("bob");
-        String result = lottery.popRandom();
-        assertTrue(result.equals("alice") || result.equals("bob"));
+        lottery.add(ALICE);
+        lottery.add(BOB);
+        UUID result = lottery.popRandom();
+        assertTrue(result.equals(ALICE) || result.equals(BOB));
     }
 
     @Test
     void popRandomShouldRemoveTheReturnedOption() {
-        lottery.add("alice");
-        String result = lottery.popRandom();
-        assertEquals("alice", result);
+        lottery.add(ALICE);
+        UUID result = lottery.popRandom();
+        assertEquals(ALICE, result);
         assertNull(lottery.popRandom());
     }
 
     @Test
     void popRandomShouldDrainLotteryOneByOne() {
-        lottery.add("alice");
-        lottery.add("bob");
-        lottery.add("carol");
+        lottery.add(ALICE);
+        lottery.add(BOB);
+        lottery.add(CAROL);
 
-        Set<String> popped = Set.of(lottery.popRandom(), lottery.popRandom(), lottery.popRandom());
+        Set<UUID> popped = Set.of(lottery.popRandom(), lottery.popRandom(), lottery.popRandom());
 
-        assertEquals(Set.of("alice", "bob", "carol"), popped);
+        assertEquals(Set.of(ALICE, BOB, CAROL), popped);
         assertNull(lottery.popRandom());
     }
 
@@ -119,7 +123,7 @@ public class LotteryTest {
 
     @Test
     void popRandomCountShouldReturnEmptySetWhenCountIsZero() {
-        lottery.add("alice");
+        lottery.add(ALICE);
         assertTrue(lottery.popRandom(0).isEmpty());
     }
 
@@ -130,46 +134,46 @@ public class LotteryTest {
 
     @Test
     void popRandomCountShouldReturnExactlyCountEntries() {
-        lottery.add("alice");
-        lottery.add("bob");
-        lottery.add("carol");
+        lottery.add(ALICE);
+        lottery.add(BOB);
+        lottery.add(CAROL);
 
-        Set<String> result = lottery.popRandom(2);
+        Set<UUID> result = lottery.popRandom(2);
 
         assertEquals(2, result.size());
-        assertTrue(Set.of("alice", "bob", "carol").containsAll(result));
+        assertTrue(Set.of(ALICE, BOB, CAROL).containsAll(result));
     }
 
     @Test
     void popRandomCountShouldReturnAllEntriesWhenCountExceedsSize() {
-        lottery.add("alice");
-        lottery.add("bob");
+        lottery.add(ALICE);
+        lottery.add(BOB);
 
-        Set<String> result = lottery.popRandom(10);
+        Set<UUID> result = lottery.popRandom(10);
 
-        assertEquals(Set.of("alice", "bob"), result);
+        assertEquals(Set.of(ALICE, BOB), result);
     }
 
     @Test
     void popRandomCountShouldRemoveReturnedEntriesFromLottery() {
-        lottery.add("alice");
-        lottery.add("bob");
-        lottery.add("carol");
+        lottery.add(ALICE);
+        lottery.add(BOB);
+        lottery.add(CAROL);
 
-        Set<String> result = lottery.popRandom(2);
+        Set<UUID> result = lottery.popRandom(2);
 
-        for (String entry : result) {
+        for (UUID entry : result) {
             assertNull(lottery.pop(entry));
         }
     }
 
     @Test
     void popRandomCountShouldReturnUniqueEntries() {
-        lottery.add("alice");
-        lottery.add("bob");
-        lottery.add("carol");
+        lottery.add(ALICE);
+        lottery.add(BOB);
+        lottery.add(CAROL);
 
-        Set<String> result = lottery.popRandom(3);
+        Set<UUID> result = lottery.popRandom(3);
 
         assertEquals(3, result.size());
     }

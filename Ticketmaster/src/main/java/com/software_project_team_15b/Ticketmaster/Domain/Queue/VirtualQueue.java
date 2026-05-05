@@ -27,6 +27,9 @@ public class VirtualQueue {
     @OrderColumn(name = "position")
     protected List<UUID> queue = new ArrayList<>();
 
+    @Column(name = "capacity", nullable = false)
+    protected int capacity;
+
     @Version
     private long version;
 
@@ -34,15 +37,46 @@ public class VirtualQueue {
     protected VirtualQueue() {}
 
     /**
+     * Creates an unbounded queue.
+     *
      * @param queueId the unique identifier for this queue; must not be null
      * @throws IllegalArgumentException if queueId is null
      */
     public VirtualQueue(UUID queueId) {
+        this(queueId, Integer.MAX_VALUE);
+    }
+
+    /**
+     * @param queueId the unique identifier for this queue; must not be null
+     * @param capacity the maximum number of entries the queue may hold; must be non-negative
+     * @throws IllegalArgumentException if queueId is null or capacity is negative
+     */
+    public VirtualQueue(UUID queueId, int capacity) {
         if (queueId == null) {
             throw new IllegalArgumentException("queueId cannot be null");
         }
+        if (capacity < 0) {
+            throw new IllegalArgumentException("capacity cannot be negative");
+        }
 
         this.id = queueId;
+        this.capacity = capacity;
+    }
+
+    /**
+     * Get the maximum number of entries this queue can hold.
+     * @return {@code int} Queue's capacity
+     */
+    public int getCapacity() {
+        return capacity;
+    }
+
+    /**
+     * Get the unique identifier for this queue.
+     * @return {@code UUID} Queue's ID
+     */
+    public UUID getId() {
+        return id;
     }
 
     /**
@@ -50,10 +84,15 @@ public class VirtualQueue {
      *
      * @param item the ID to enqueue; must not be null or already present
      * @throws IllegalArgumentException if item is null or already in the queue
+     * @throws IllegalStateException if the queue is full
      */
     public void push(UUID item) {
         if (item == null) {
             throw new IllegalArgumentException("item cannot be null");
+        }
+
+        if (isFull()) {
+            throw new IllegalStateException("queue is full");
         }
 
         if (queue.contains(item)) {
@@ -93,6 +132,13 @@ public class VirtualQueue {
      */
     public boolean isEmpty() {
         return queue.isEmpty();
+    }
+
+    /**
+     * @return {@code true} if the queue has reached its capacity
+     */
+    public boolean isFull() {
+        return queue.size() >= capacity;
     }
 
     /**
