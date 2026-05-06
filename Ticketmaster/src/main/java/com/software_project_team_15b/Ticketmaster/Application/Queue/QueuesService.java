@@ -1,6 +1,7 @@
-package com.software_project_team_15b.Ticketmaster.Application;
+package com.software_project_team_15b.Ticketmaster.Application.Queue;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.*;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.Lottery;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
@@ -13,6 +14,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Application service for managing virtual queues and lotteries associated with events.
@@ -25,10 +30,14 @@ import java.util.*;
  */
 @Service
 public class QueuesService {
+    private final int ACCESS_TIME = 100;
+
     private final IQueueRepository queueRepository;
     private final ILotteryRepository lotteryRepository;
     private final IAuth auth;
     private final Queue<String> siteQueue = new LinkedList<>();
+    private final ConcurrentHashMap<UUID, Set<UUID>> eventAccess = new ConcurrentHashMap<>();
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
     public QueuesService(IQueueRepository queueRepository, ILotteryRepository lotteryRepository, IAuth auth) {
         this.queueRepository = queueRepository;
@@ -57,6 +66,62 @@ public class QueuesService {
         return token;
     }
 
+    public int getPositionInEventQueue(UUID userId, UUID eventId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId cannot be null");
+        }
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+        VirtualQueue queue = queueRepository.getQueue(eventId);
+        if (queue == null) {
+            throw new QueueNotFoundException("Queue with id " + eventId + " not found");
+        }
+        return queue.getPosition(userId);
+    }
+
+    protected synchronized void clearEventAccess(UUID userId, UUID eventId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId cannot be null");
+        }
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+        Set<UUID> access = eventAccess.get(eventId);
+        if (access == null) return;
+        access.remove(userId);
+        advanceEventQueue(eventId);
+    }
+
+    protected synchronized void advanceEventQueue(UUID eventId) {
+        Set<UUID> access = eventAccess.get(eventId);
+        if (access == null) return;
+        while (access.size() < 100) {
+            try {
+                UUID nextUser = popFromEventQueue(eventId);
+                access.add(nextUser);
+                scheduler.schedule(() -> clearEventAccess(nextUser, eventId), ACCESS_TIME, TimeUnit.SECONDS);
+            } catch (EmptyQueueException e) {
+                break;
+            }
+        }
+    }
+
+    public boolean hasAccess(String token, UUID eventId) {
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
+        }
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+        if (!auth.isTokenValid(token)) {
+            throw new InvalidTokenException("Invalid token");
+        }
+        UUID userId = auth.extractUserId(token);
+        return eventAccess.get(eventId).contains(userId);
+    }
+
+
     /**
      * Creates a new, empty virtual queue for the given event.
      *
@@ -70,6 +135,8 @@ public class QueuesService {
         }
         VirtualQueue queue = new VirtualQueue(eventId);
         queueRepository.addQueue(queue);
+        eventAccess.put(eventId, ConcurrentHashMap.newKeySet());
+        advanceEventQueue(eventId);
     }
 
     /**
@@ -89,6 +156,7 @@ public class QueuesService {
             throw new QueueNotFoundException("Queue not found for eventId: " + eventId);
         }
         queueRepository.removeQueue(queue);
+        eventAccess.remove(eventId);
     }
 
     /**
@@ -148,8 +216,12 @@ public class QueuesService {
         if (queue.isFull()) {
             throw new QueueIsFullException("Event queue is full (eventId: " + eventId + ")");
         }
+        if (queue.contains(userId)) {
+            throw new AlreadyInQueueException("User with id " + userId + " is already in the queue for eventId: " + eventId);
+        }
         queue.push(userId);
         queueRepository.updateQueue(queue);
+        advanceEventQueue(eventId);
     }
 
     /**

@@ -152,4 +152,15 @@ public class VirtualQueue {
         }
         return queue.contains(item);
     }
+
+    public int getPosition(UUID item) {
+        if (item == null) {
+            throw new IllegalArgumentException("item cannot be null");
+        }
+        if (queue.contains(item)) {
+            return queue.indexOf(item);
+        } else {
+            throw new IllegalArgumentException("item is not in the queue");
+        }
+    }
 }

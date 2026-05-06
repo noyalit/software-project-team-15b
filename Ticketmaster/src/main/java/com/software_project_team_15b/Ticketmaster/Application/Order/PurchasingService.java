@@ -25,7 +25,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
 import com.software_project_team_15b.Ticketmaster.Application.Order.Commands.*;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessView;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueuesService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,7 +53,7 @@ public class PurchasingService {
     private final IOrderHistoryRepository orderHistoryRepository;
     private final IMemberRepository memberRepository;
     private final EventManagementService eventManagementService;
-    private final QueueService queueService;
+    private final QueuesService queueService;
     private final IPaymentAPI paymentGateway;
     private final ITicketSupplyAPI ticketProvider;
     private final Auth auth;
@@ -63,7 +63,7 @@ public class PurchasingService {
             IOrderHistoryRepository orderHistoryRepository,
             IMemberRepository memberRepository,
             EventManagementService eventManagementService,
-            QueueService queueService,
+            QueuesService queueService,
             IPaymentAPI paymentGateway,
             ITicketSupplyAPI ticketProvider,
             Auth auth
@@ -78,9 +78,9 @@ public class PurchasingService {
         this.auth = Objects.requireNonNull(auth);
     }
 
-    public QueueAccessView requestAccessToCreateActiveOrder(String token, UUID eventId) {
-        return queueService.requestAccess(token, eventId);
-    }
+//    public QueueAccessView requestAccessToCreateActiveOrder(String token, UUID eventId) {
+//        return queueService.requestAccess(token, eventId);
+//    }
 
     @Transactional
     public UUID createActiveOrder(String token, UUID eventId, UUID areaId) {

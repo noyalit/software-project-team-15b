@@ -1,10 +1,14 @@
 package com.software_project_team_15b.Ticketmaster.Application.QueuesServiceTest;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyInQueueException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyLotteryException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyQueueException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIsFullException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueuesService;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.Lottery;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
@@ -30,12 +34,111 @@ class QueuesServiceTests {
 
     @Mock private IQueueRepository queueRepository;
     @Mock private ILotteryRepository lotteryRepository;
-    @InjectMocks private QueueService service;
+    @Mock private IAuth auth;
+    @InjectMocks private QueuesService service;
 
     private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID USER_A   = UUID.fromString("00000000-0000-0000-0000-000000000002");
     private static final UUID USER_B   = UUID.fromString("00000000-0000-0000-0000-000000000003");
     private static final UUID USER_C   = UUID.fromString("00000000-0000-0000-0000-000000000004");
+
+    /**
+     * Promotes clearEventAccess from protected to public so tests can invoke it directly
+     * without waiting 100 seconds for the scheduler.
+     */
+    private static class ExposedQueuesService extends QueuesService {
+        ExposedQueuesService(IQueueRepository r, ILotteryRepository l, IAuth a) {
+            super(r, l, a);
+        }
+
+        @Override
+        public synchronized void clearEventAccess(UUID userId, UUID eventId) {
+            super.clearEventAccess(userId, eventId);
+        }
+    }
+
+    // =========================================================================
+    // Site queue — positive tests
+    // =========================================================================
+
+    @Test
+    void addUserToSiteQueue_addedTokenIsReturnedByGetNext() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        service.addUserToSiteQueue("token-a");
+        assertThat(service.getNextUserFromSiteQueue()).isEqualTo("token-a");
+    }
+
+    @Test
+    void getNextUserFromSiteQueue_skipsInvalidTokensAndReturnsFirstValid() {
+        when(auth.isTokenValid("expired")).thenReturn(false);
+        when(auth.isTokenValid("valid")).thenReturn(true);
+        service.addUserToSiteQueue("expired");
+        service.addUserToSiteQueue("valid");
+        assertThat(service.getNextUserFromSiteQueue()).isEqualTo("valid");
+    }
+
+    // =========================================================================
+    // Site queue — negative tests
+    // =========================================================================
+
+    @Test
+    void addUserToSiteQueue_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.addUserToSiteQueue(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void addUserToSiteQueue_duplicateToken_throwsIllegalArgument() {
+        service.addUserToSiteQueue("token-a");
+        assertThatThrownBy(() -> service.addUserToSiteQueue("token-a"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getNextUserFromSiteQueue_emptyQueue_throwsEmptyQueueException() {
+        assertThatThrownBy(() -> service.getNextUserFromSiteQueue())
+                .isInstanceOf(EmptyQueueException.class);
+    }
+
+    // =========================================================================
+    // getPositionInEventQueue — positive tests
+    // =========================================================================
+
+    @Test
+    void getPositionInEventQueue_returnsCorrectPosition() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        queue.push(USER_A);
+        queue.push(USER_B);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+
+        assertThat(service.getPositionInEventQueue(USER_A, EVENT_ID)).isEqualTo(0);
+        assertThat(service.getPositionInEventQueue(USER_B, EVENT_ID)).isEqualTo(1);
+    }
+
+    // =========================================================================
+    // getPositionInEventQueue — negative tests
+    // =========================================================================
+
+    @Test
+    void getPositionInEventQueue_nullUserId_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.getPositionInEventQueue(null, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(queueRepository);
+    }
+
+    @Test
+    void getPositionInEventQueue_nullEventId_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.getPositionInEventQueue(USER_A, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(queueRepository);
+    }
+
+    @Test
+    void getPositionInEventQueue_queueNotFound_throwsQueueNotFoundException() {
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
+        assertThatThrownBy(() -> service.getPositionInEventQueue(USER_A, EVENT_ID))
+                .isInstanceOf(QueueNotFoundException.class);
+    }
 
     // =========================================================================
     // Queue — positive tests
@@ -43,6 +146,9 @@ class QueuesServiceTests {
 
     @Test
     void createEventQueue_callsAddQueueOnRepository() {
+        // advanceEventQueue fires after creation; stub an empty queue so it exits cleanly.
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(new VirtualQueue(EVENT_ID));
+
         service.createEventQueue(EVENT_ID);
 
         verify(queueRepository).addQueue(any(VirtualQueue.class));
@@ -161,6 +267,28 @@ class QueuesServiceTests {
     }
 
     @Test
+    void pushToEventQueue_queueIsFull_throwsQueueIsFullException() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, 1);
+        queue.push(USER_A);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+
+        assertThatThrownBy(() -> service.pushToEventQueue(EVENT_ID, USER_B))
+                .isInstanceOf(QueueIsFullException.class);
+        verify(queueRepository, never()).updateQueue(any());
+    }
+
+    @Test
+    void pushToEventQueue_alreadyInQueue_throwsAlreadyInQueueException() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        queue.push(USER_A);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+
+        assertThatThrownBy(() -> service.pushToEventQueue(EVENT_ID, USER_A))
+                .isInstanceOf(AlreadyInQueueException.class);
+        verify(queueRepository, never()).updateQueue(any());
+    }
+
+    @Test
     void popFromEventQueue_nullEventId_throwsIllegalArgument() {
         assertThatThrownBy(() -> service.popFromEventQueue(null))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -184,6 +312,145 @@ class QueuesServiceTests {
         assertThatThrownBy(() -> service.popFromEventQueue(EVENT_ID))
                 .isInstanceOf(EmptyQueueException.class);
         verify(queueRepository, never()).updateQueue(any());
+    }
+
+    // =========================================================================
+    // Queue advancement / eventAccess — positive tests
+    // =========================================================================
+
+    @Test
+    void createEventQueue_advancesPreLoadedUsersIntoEventAccess() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        queue.push(USER_A);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+
+        service.createEventQueue(EVENT_ID);
+
+        assertThat(service.hasAccess("token-a", EVENT_ID)).isTrue();
+    }
+
+    @Test
+    void pushToEventQueue_promotesUserToEventAccessWhenSlotAvailable() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+
+        service.createEventQueue(EVENT_ID);       // queue empty, no one promoted yet
+        service.pushToEventQueue(EVENT_ID, USER_A); // USER_A pushed then immediately promoted
+
+        assertThat(service.hasAccess("token-a", EVENT_ID)).isTrue();
+    }
+
+    @Test
+    void clearEventAccess_removesUserFromEventAccess() {
+        ExposedQueuesService exposed = new ExposedQueuesService(queueRepository, lotteryRepository, auth);
+        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        queue.push(USER_A);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+
+        exposed.createEventQueue(EVENT_ID);          // USER_A promoted
+        exposed.clearEventAccess(USER_A, EVENT_ID);  // access revoked
+
+        assertThat(exposed.hasAccess("token-a", EVENT_ID)).isFalse();
+    }
+
+    @Test
+    void clearEventAccess_advancesNextUserFromQueueIntoEventAccess() {
+        ExposedQueuesService exposed = new ExposedQueuesService(queueRepository, lotteryRepository, auth);
+        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        queue.push(USER_A);
+        queue.push(USER_B);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.isTokenValid("token-b")).thenReturn(true);
+        when(auth.isTokenValid("token-c")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+        when(auth.extractUserId("token-b")).thenReturn(USER_B);
+        when(auth.extractUserId("token-c")).thenReturn(USER_C);
+
+        exposed.createEventQueue(EVENT_ID); // USER_A and USER_B both promoted (slots < 100)
+
+        // USER_C arrives while eventAccess is not yet at capacity after USER_A is cleared
+        queue.push(USER_C);
+        exposed.clearEventAccess(USER_A, EVENT_ID); // frees one slot → USER_C promoted
+
+        assertThat(exposed.hasAccess("token-a", EVENT_ID)).isFalse();
+        assertThat(exposed.hasAccess("token-b", EVENT_ID)).isTrue();
+        assertThat(exposed.hasAccess("token-c", EVENT_ID)).isTrue();
+    }
+
+    @Test
+    void clearEventAccess_afterQueueDeleted_doesNotThrow() {
+        ExposedQueuesService exposed = new ExposedQueuesService(queueRepository, lotteryRepository, auth);
+        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+
+        exposed.createEventQueue(EVENT_ID);
+        exposed.deleteEventQueue(EVENT_ID); // removes eventAccess entry
+
+        // Simulates a scheduled task firing after the queue was deleted
+        assertThatCode(() -> exposed.clearEventAccess(USER_A, EVENT_ID))
+                .doesNotThrowAnyException();
+    }
+
+    // =========================================================================
+    // hasAccess — positive tests
+    // =========================================================================
+
+    @Test
+    void hasAccess_returnsTrueWhenUserIsInEventAccess() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        queue.push(USER_A);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+
+        service.createEventQueue(EVENT_ID);
+
+        assertThat(service.hasAccess("token-a", EVENT_ID)).isTrue();
+    }
+
+    @Test
+    void hasAccess_returnsFalseWhenUserIsNotInEventAccess() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+
+        service.createEventQueue(EVENT_ID); // queue is empty, no one promoted
+
+        assertThat(service.hasAccess("token-a", EVENT_ID)).isFalse();
+    }
+
+    // =========================================================================
+    // hasAccess — negative tests
+    // =========================================================================
+
+    @Test
+    void hasAccess_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.hasAccess(null, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(auth);
+    }
+
+    @Test
+    void hasAccess_nullEventId_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.hasAccess("token-a", null))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(auth);
+    }
+
+    @Test
+    void hasAccess_invalidToken_throwsInvalidTokenException() {
+        when(auth.isTokenValid("bad-token")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.hasAccess("bad-token", EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
     }
 
     // =========================================================================
