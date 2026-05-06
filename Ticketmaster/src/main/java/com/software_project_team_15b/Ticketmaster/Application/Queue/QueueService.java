@@ -1,4 +1,4 @@
-package com.software_project_team_15b.Ticketmaster.Application;
+package com.software_project_team_15b.Ticketmaster.Application.Queue;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.*;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryRepository;
@@ -25,11 +25,11 @@ import java.util.UUID;
  * retried before propagating an error to the caller.
  */
 @Service
-public class QueuesService {
+public class QueueService {
     private final IQueueRepository queueRepository;
     private final ILotteryRepository lotteryRepository;
 
-    public QueuesService(IQueueRepository queueRepository, ILotteryRepository lotteryRepository) {
+    public QueueService(IQueueRepository queueRepository, ILotteryRepository lotteryRepository) {
         this.queueRepository = queueRepository;
         this.lotteryRepository = lotteryRepository;
     }
