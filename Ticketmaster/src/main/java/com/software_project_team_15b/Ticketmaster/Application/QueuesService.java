@@ -12,8 +12,7 @@ import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * Application service for managing virtual queues and lotteries associated with events.
@@ -28,10 +27,34 @@ import java.util.UUID;
 public class QueuesService {
     private final IQueueRepository queueRepository;
     private final ILotteryRepository lotteryRepository;
+    private final IAuth auth;
+    private final Queue<String> siteQueue = new LinkedList<>();
 
-    public QueuesService(IQueueRepository queueRepository, ILotteryRepository lotteryRepository) {
+    public QueuesService(IQueueRepository queueRepository, ILotteryRepository lotteryRepository, IAuth auth) {
         this.queueRepository = queueRepository;
         this.lotteryRepository = lotteryRepository;
+        this.auth = auth;
+    }
+
+    public void addUserToSiteQueue(String token) {
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
+        }
+        if (siteQueue.contains(token)) {
+            throw new IllegalArgumentException("User with token " + token + " is already in the site queue");
+        }
+        siteQueue.add(token);
+    }
+
+    public String getNextUserFromSiteQueue() {
+        String token = siteQueue.poll();
+        while (!auth.isTokenValid(token) && !siteQueue.isEmpty()) {
+            token = siteQueue.poll();
+        }
+        if (token == null) {
+            throw new EmptyQueueException("Site queue is empty");
+        }
+        return token;
     }
 
     /**
