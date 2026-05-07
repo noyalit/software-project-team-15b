@@ -29,6 +29,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.dao.DataIntegrityViolationException;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -99,6 +101,8 @@ class PurchasingServiceTest {
         seatId2 = UUID.randomUUID();
     }
 
+    // ---------- createActiveOrder ----------
+
     @Test
     void createActiveOrderShouldSaveNewOrderWhenUserHasAccess() {
         mockValidUser();
@@ -131,7 +135,84 @@ class PurchasingServiceTest {
         assertEquals(eventId, savedOrder.getEventId());
         assertEquals(areaId, savedOrder.getAreaId());
         assertEquals(ActiveOrderStatus.ACTIVE, savedOrder.getStatus());
+        assertEquals(Boolean.TRUE, savedOrder.getIsActive());
         assertNull(savedOrder.getExpiresAt());
+    }
+
+    @Test
+    void createActiveOrderShouldThrowWhenTokenIsInvalid() {
+        when(auth.isTokenValid(token)).thenReturn(false);
+
+        assertThrows(IllegalStateException.class, () ->
+                service.createActiveOrder(token, eventId, areaId)
+        );
+
+        verify(auth, never()).extractUserId(any());
+        verify(eventManagementService, never()).getEventAvailability(any());
+        verify(eventManagementService, never()).getAreaAvailability(any(), any());
+        verify(activeOrderRepository, never()).save(any());
+    }
+
+    @Test
+    void createActiveOrderShouldThrowWhenEventIdIsNull() {
+        mockValidUser();
+
+        assertThrows(IllegalArgumentException.class, () ->
+                service.createActiveOrder(token, null, areaId)
+        );
+
+        verify(eventManagementService, never()).getEventAvailability(any());
+        verify(eventManagementService, never()).getAreaAvailability(any(), any());
+        verify(activeOrderRepository, never()).save(any());
+    }
+
+    @Test
+    void createActiveOrderShouldThrowWhenEventIsNotAvailable() {
+        mockValidUser();
+
+        when(eventManagementService.getEventAvailability(eventId))
+                .thenReturn(null);
+
+        assertThrows(IllegalStateException.class, () ->
+                service.createActiveOrder(token, eventId, areaId)
+        );
+
+        verify(eventManagementService, never()).getAreaAvailability(any(), any());
+        verify(activeOrderRepository, never()).existsByUserIdAndEventIdAndStatus(any(), any(), any());
+        verify(activeOrderRepository, never()).save(any());
+    }
+
+    @Test
+    void createActiveOrderShouldThrowWhenAreaIdIsNull() {
+        mockValidUser();
+
+        when(eventManagementService.getEventAvailability(eventId))
+                .thenReturn(EventAvailability.AVAILABLE);
+
+        assertThrows(IllegalArgumentException.class, () ->
+                service.createActiveOrder(token, eventId, null)
+        );
+
+        verify(eventManagementService, never()).getAreaAvailability(any(), any());
+        verify(activeOrderRepository, never()).save(any());
+    }
+
+    @Test
+    void createActiveOrderShouldThrowWhenAreaIsNotAvailable() {
+        mockValidUser();
+
+        when(eventManagementService.getEventAvailability(eventId))
+                .thenReturn(EventAvailability.AVAILABLE);
+
+        when(eventManagementService.getAreaAvailability(eventId, areaId))
+                .thenReturn(false);
+
+        assertThrows(IllegalStateException.class, () ->
+                service.createActiveOrder(token, eventId, areaId)
+        );
+
+        verify(activeOrderRepository, never()).existsByUserIdAndEventIdAndStatus(any(), any(), any());
+        verify(activeOrderRepository, never()).save(any());
     }
 
     @Test
@@ -154,6 +235,7 @@ class PurchasingServiceTest {
                 service.createActiveOrder(token, eventId, areaId)
         );
 
+        verify(queueService, never()).hasAccess(any(), any());
         verify(activeOrderRepository, never()).save(any());
     }
 
@@ -181,6 +263,36 @@ class PurchasingServiceTest {
 
         verify(activeOrderRepository, never()).save(any());
     }
+
+    @Test
+    void createActiveOrderShouldConvertDataIntegrityViolationToIllegalStateException() {
+        mockValidUser();
+
+        when(eventManagementService.getEventAvailability(eventId))
+                .thenReturn(EventAvailability.AVAILABLE);
+
+        when(eventManagementService.getAreaAvailability(eventId, areaId))
+                .thenReturn(true);
+
+        when(activeOrderRepository.existsByUserIdAndEventIdAndStatus(
+                userId,
+                eventId,
+                ActiveOrderStatus.ACTIVE
+        )).thenReturn(false);
+
+        when(queueService.hasAccess(token, eventId)).thenReturn(true);
+
+        when(activeOrderRepository.save(any(ActiveOrder.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate active order"));
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
+                service.createActiveOrder(token, eventId, areaId)
+        );
+
+        assertTrue(exception.getMessage().contains("User already has an active order"));
+    }
+
+    // ---------- addSeatsToExistingOrder ----------
 
     @Test
     void addSeatsToExistingOrderShouldAddSeatsWhenAllRequestedSeatsAreAvailable() {
@@ -240,6 +352,8 @@ class PurchasingServiceTest {
         verify(activeOrderRepository, never()).save(order);
     }
 
+    // ---------- removeSeatsFromExistingOrder ----------
+
     @Test
     void removeSeatsFromExistingOrderShouldRemoveSeatsFromOrder() {
         mockValidUser();
@@ -260,6 +374,8 @@ class PurchasingServiceTest {
         assertEquals(Set.of(seatId2), order.getOrderSeats());
         verify(activeOrderRepository).save(order);
     }
+
+    // ---------- startCheckout ----------
 
     @Test
     void startCheckoutForGuestShouldHoldSeatsAndSetExpiration() {
@@ -331,6 +447,8 @@ class PurchasingServiceTest {
         verify(activeOrderRepository).save(order);
         verify(eventManagementService, never()).hold(any(), any());
     }
+
+    // ---------- completeCheckout ----------
 
     @Test
     void completeCheckoutForGuestShouldPayIssueTicketsSaveHistoryAndConfirm() {
@@ -424,6 +542,8 @@ class PurchasingServiceTest {
         verify(orderHistoryRepository, never()).save(any());
     }
 
+    // ---------- cancel ----------
+
     @Test
     void cancelAllActiveOrdersOfCurrentUserShouldCancelAllActiveOrders() {
         mockValidUser();
@@ -450,18 +570,18 @@ class PurchasingServiceTest {
         when(auth.extractUserId(token)).thenReturn(userId);
     }
 
-        @SuppressWarnings("unchecked")
-        private Response<Boolean> successfulResponse() {
+    @SuppressWarnings("unchecked")
+    private Response<Boolean> successfulResponse() {
         Response<Boolean> response = mock(Response.class);
         when(response.isSuccessful()).thenReturn(true);
         return response;
-        }
+    }
 
-        @SuppressWarnings("unchecked")
-        private Response<Boolean> failedResponse(String errorMessage) {
+    @SuppressWarnings("unchecked")
+    private Response<Boolean> failedResponse(String errorMessage) {
         Response<Boolean> response = mock(Response.class);
         when(response.isSuccessful()).thenReturn(false);
         when(response.getErrorMessage()).thenReturn(errorMessage);
         return response;
-        }
+    }
 }
