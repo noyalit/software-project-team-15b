@@ -1,7 +1,9 @@
-package com.software_project_team_15b.Ticketmaster.Application;
+package com.software_project_team_15b.Ticketmaster.Infrastructure;
 
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import com.software_project_team_15b.Ticketmaster.Application.IPasswordEncoder;
 
 @Service
 public class PasswordEncoderImpl implements IPasswordEncoder {

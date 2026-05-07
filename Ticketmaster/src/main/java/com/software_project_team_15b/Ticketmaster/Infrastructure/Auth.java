@@ -1,6 +1,7 @@
-package com.software_project_team_15b.Ticketmaster.Application;
+package com.software_project_team_15b.Ticketmaster.Infrastructure;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Domain.UserType;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 import io.jsonwebtoken.Claims;

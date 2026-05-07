@@ -1,12 +1,12 @@
 package com.software_project_team_15b.Ticketmaster.Application.Order;
 
-import com.software_project_team_15b.Ticketmaster.Application.Auth;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrderRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.*;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
+import com.software_project_team_15b.Ticketmaster.Infrastructure.Auth;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
