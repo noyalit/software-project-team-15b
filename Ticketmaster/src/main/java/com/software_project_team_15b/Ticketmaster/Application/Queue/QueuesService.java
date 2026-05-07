@@ -212,6 +212,49 @@ public class QueuesService {
         return new QueueAccessView(eventId, QueueAccessStatus.WAITING, position, null);
     }
 
+    /**
+     * Enters the user into the waiting queue for the given event and returns a snapshot
+     * of their current access state.
+     *
+     * <p>If the user is already admitted (promoted from the queue and their window has not
+     * yet expired), this method returns their current {@link QueueAccessView} immediately
+     * without re-queuing them. Re-queuing an admitted user would corrupt state: because
+     * the user was already popped from the persistent queue, {@code pushToEventQueue}
+     * would not detect the duplicate and would silently add them a second time.
+     *
+     * <p>If the user is not yet enrolled they are appended to the back of the queue.
+     * Depending on how many admission slots are currently free, the returned view will
+     * have status {@link QueueAccessStatus#ADMITTED} (promoted immediately) or
+     * {@link QueueAccessStatus#WAITING} (all 100 slots occupied).
+     *
+     * @param token   the user's auth token; must not be null
+     * @param eventId the unique identifier of the event; must not be null
+     * @return a {@link QueueAccessView} describing the user's current access state
+     * @throws IllegalArgumentException if {@code token} or {@code eventId} is null
+     * @throws InvalidTokenException    if the token is invalid
+     * @throws QueueNotFoundException   if no queue exists for the given event
+     * @throws QueueIsFullException     if the persistent queue has reached its capacity
+     * @throws AlreadyInQueueException  if the user is already waiting in the queue
+     */
+    public QueueAccessView requestAccess(String token, UUID eventId) {
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
+        }
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+        if (!auth.isTokenValid(token)) {
+            throw new InvalidTokenException("Invalid token");
+        }
+        UUID userId = auth.extractUserId(token);
+        ConcurrentHashMap<UUID, LocalDateTime> admittedUsers = eventAccess.get(eventId);
+        if (admittedUsers != null && admittedUsers.containsKey(userId)) {
+            return getQueueAccessView(token, eventId);
+        }
+        self.pushToEventQueue(eventId, userId);
+        return getQueueAccessView(token, eventId);
+    }
+
 
     /**
      * Creates a new, empty virtual queue for the given event.

@@ -78,9 +78,9 @@ public class PurchasingService {
         this.auth = Objects.requireNonNull(auth);
     }
 
-//    public QueueAccessView requestAccessToCreateActiveOrder(String token, UUID eventId) {
-//        return queueService.requestAccess(token, eventId);
-//    }
+    public QueueAccessView requestAccessToCreateActiveOrder(String token, UUID eventId) {
+        return queueService.requestAccess(token, eventId);
+    }
 
     @Transactional
     public UUID createActiveOrder(String token, UUID eventId, UUID areaId) {

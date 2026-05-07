@@ -604,6 +604,132 @@ class QueuesServiceTests {
     }
 
     // =========================================================================
+    // requestAccess — positive tests
+    // =========================================================================
+
+    @Test
+    void requestAccess_returnsAdmittedView_whenUserIsImmediatelyPromoted() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+
+        service.createEventQueue(EVENT_ID); // empty queue, slots available
+
+        QueueAccessView view = service.requestAccess("token-a", EVENT_ID);
+
+        // USER_A is pushed to queue then immediately promoted by advanceEventQueue
+        assertThat(view.status()).isEqualTo(QueueAccessStatus.ADMITTED);
+        assertThat(view.accessExpiresAt()).isNotNull().isAfter(LocalDateTime.now());
+        assertThat(view.canCreateActiveOrder()).isTrue();
+    }
+
+    @Test
+    void requestAccess_returnsAdmittedView_whenUserIsAlreadyAdmitted() {
+        // Seed eventAccess directly: USER_A already admitted, no queue interaction needed
+        LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(100);
+        ConcurrentHashMap<UUID, LocalDateTime> access = new ConcurrentHashMap<>();
+        access.put(USER_A, expiresAt);
+        eventAccessMap(service).put(EVENT_ID, access);
+
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+
+        QueueAccessView view = service.requestAccess("token-a", EVENT_ID);
+
+        assertThat(view.status()).isEqualTo(QueueAccessStatus.ADMITTED);
+        assertThat(view.accessExpiresAt()).isEqualTo(expiresAt);
+        verifyNoInteractions(queueRepository); // guard: no re-queuing occurred
+    }
+
+    @Test
+    void requestAccess_returnsWaitingView_whenAllAdmissionSlotsTaken() {
+        // Fill the 100-slot cap so USER_A cannot be promoted after joining
+        ConcurrentHashMap<UUID, LocalDateTime> fullAccess = new ConcurrentHashMap<>();
+        for (int i = 0; i < 100; i++) {
+            fullAccess.put(UUID.randomUUID(), LocalDateTime.now().plusSeconds(100));
+        }
+        eventAccessMap(service).put(EVENT_ID, fullAccess);
+
+        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+
+        QueueAccessView view = service.requestAccess("token-a", EVENT_ID);
+
+        assertThat(view.status()).isEqualTo(QueueAccessStatus.WAITING);
+        assertThat(view.position()).isEqualTo(0);
+        assertThat(view.accessExpiresAt()).isNull();
+        assertThat(view.canCreateActiveOrder()).isFalse();
+    }
+
+    // =========================================================================
+    // requestAccess — negative tests
+    // =========================================================================
+
+    @Test
+    void requestAccess_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.requestAccess(null, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(auth);
+    }
+
+    @Test
+    void requestAccess_nullEventId_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.requestAccess("token-a", null))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(auth);
+    }
+
+    @Test
+    void requestAccess_invalidToken_throwsInvalidTokenException() {
+        when(auth.isTokenValid("bad-token")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.requestAccess("bad-token", EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void requestAccess_noQueueForEvent_throwsQueueNotFoundException() {
+        // No createEventQueue → eventAccess has no entry → delegates to pushToEventQueue
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+
+        assertThatThrownBy(() -> service.requestAccess("token-a", EVENT_ID))
+                .isInstanceOf(QueueNotFoundException.class);
+    }
+
+    @Test
+    void requestAccess_queueFull_throwsQueueIsFullException() {
+        VirtualQueue fullQueue = new VirtualQueue(EVENT_ID, 1);
+        fullQueue.push(USER_B);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(fullQueue);
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+
+        assertThatThrownBy(() -> service.requestAccess("token-a", EVENT_ID))
+                .isInstanceOf(QueueIsFullException.class);
+    }
+
+    @Test
+    void requestAccess_userAlreadyInQueue_throwsAlreadyInQueueException() {
+        // Seed eventAccess so the admitted-check passes (USER_A not admitted),
+        // then set up VirtualQueue with USER_A already present.
+        eventAccessMap(service).put(EVENT_ID, new ConcurrentHashMap<>());
+
+        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        queue.push(USER_A);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+
+        assertThatThrownBy(() -> service.requestAccess("token-a", EVENT_ID))
+                .isInstanceOf(AlreadyInQueueException.class);
+    }
+
+    // =========================================================================
     // Lottery — positive tests
     // =========================================================================
 
@@ -1017,5 +1143,12 @@ class QueuesServiceTests {
             ids.add(UUID.randomUUID());
         }
         return ids;
+    }
+
+    /** Returns the live eventAccess map from the given service instance via reflection. */
+    @SuppressWarnings("unchecked")
+    private static ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>> eventAccessMap(QueuesService svc) {
+        return (ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>>)
+                ReflectionTestUtils.getField(svc, "eventAccess");
     }
 }
