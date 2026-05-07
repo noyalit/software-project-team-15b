@@ -1,4 +1,4 @@
-package com.software_project_team_15b.Ticketmaster.Application.Order;
+package com.software_project_team_15b.Ticketmaster.Application.ActiveOrder;
 
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
@@ -12,6 +12,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
+import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.*;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
@@ -23,7 +24,6 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.Policy
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
-import com.software_project_team_15b.Ticketmaster.Application.Order.Commands.*;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessView;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 
