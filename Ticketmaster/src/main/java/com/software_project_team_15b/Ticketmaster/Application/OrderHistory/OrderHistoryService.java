@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
+import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
@@ -25,10 +26,11 @@ public class OrderHistoryService implements EventSubscriber{
     private final IPaymentAPI paymentGateway;
     private final ITicketSupplyAPI ticketProvider;
 
-    public OrderHistoryService(IOrderHistoryRepository orderHistoryRepository, IPaymentAPI paymentGateway, ITicketSupplyAPI ticketProvider) {
+    public OrderHistoryService(IOrderHistoryRepository orderHistoryRepository, IPaymentAPI paymentGateway, ITicketSupplyAPI ticketProvider, EventCancelManager eventCancelManager) {
         this.orderHistoryRepository = orderHistoryRepository;
         this.paymentGateway = paymentGateway;
         this.ticketProvider = ticketProvider;
+        eventCancelManager.subscribe(this);
     }
 
     @Override
