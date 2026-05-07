@@ -7,12 +7,15 @@ import com.software_project_team_15b.Ticketmaster.Domain.Lottery.Lottery;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.VirtualQueue;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -23,10 +26,10 @@ import java.util.concurrent.TimeUnit;
  * Application service for managing virtual queues and lotteries associated with events.
  *
  * <p>Each event may have at most one queue and one lottery, both keyed by the event's UUID.
- * All mutating operations are transactional. Methods that perform a read-then-write are
- * additionally annotated with {@link Retryable} so that transient optimistic-lock conflicts
- * (arising when multiple threads update the same aggregate concurrently) are transparently
- * retried before propagating an error to the caller.
+ * Mutating operations on persistent queues and lotteries are transactional. Methods that
+ * perform a read-then-write are additionally annotated with {@link Retryable} so that
+ * transient optimistic-lock conflicts (arising when multiple threads update the same
+ * aggregate concurrently) are transparently retried before propagating an error to the caller.
  */
 @Service
 public class QueuesService {
@@ -35,8 +38,11 @@ public class QueuesService {
     private final IQueueRepository queueRepository;
     private final ILotteryRepository lotteryRepository;
     private final IAuth auth;
+    // Self-reference through the Spring proxy so that @Retryable and @Transactional
+    // on popFromEventQueue take effect when called from advanceEventQueue.
+    @Autowired @Lazy private QueuesService self;
     private final Queue<String> siteQueue = new LinkedList<>();
-    private final ConcurrentHashMap<UUID, Set<UUID>> eventAccess = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>> eventAccess = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
     public QueuesService(IQueueRepository queueRepository, ILotteryRepository lotteryRepository, IAuth auth) {
@@ -45,7 +51,13 @@ public class QueuesService {
         this.auth = auth;
     }
 
-    public void addUserToSiteQueue(String token) {
+    /**
+     * Appends the given token to the back of the site-wide waiting queue.
+     *
+     * @param token the user's auth token; must not be null
+     * @throws IllegalArgumentException if {@code token} is null or is already present in the queue
+     */
+    public synchronized void addUserToSiteQueue(String token) {
         if (token == null) {
             throw new IllegalArgumentException("token cannot be null");
         }
@@ -55,17 +67,34 @@ public class QueuesService {
         siteQueue.add(token);
     }
 
-    public String getNextUserFromSiteQueue() {
+    /**
+     * Removes and returns the first valid token from the front of the site-wide queue,
+     * skipping any expired or invalid tokens encountered along the way.
+     *
+     * @return the next valid auth token
+     * @throws EmptyQueueException if the queue is empty or contains no valid tokens
+     */
+    public synchronized String getNextUserFromSiteQueue() {
         String token = siteQueue.poll();
-        while (!auth.isTokenValid(token) && !siteQueue.isEmpty()) {
+        while (token != null && !auth.isTokenValid(token)) {
             token = siteQueue.poll();
         }
-        if (token == null) {
-            throw new EmptyQueueException("Site queue is empty");
+        if (token == null || !auth.isTokenValid(token)) {
+            throw new EmptyQueueException("Site queue is empty or contains no valid tokens");
         }
         return token;
     }
 
+    /**
+     * Returns the zero-based position of the given user in the event's waiting queue.
+     *
+     * @param userId  the unique identifier of the user; must not be null
+     * @param eventId the unique identifier of the event; must not be null
+     * @return the user's position (0 = next to be admitted)
+     * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null,
+     *                                  or if the user is not present in the queue
+     * @throws QueueNotFoundException   if no queue exists for the given event
+     */
     public int getPositionInEventQueue(UUID userId, UUID eventId) {
         if (userId == null) {
             throw new IllegalArgumentException("userId cannot be null");
@@ -87,19 +116,20 @@ public class QueuesService {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
-        Set<UUID> access = eventAccess.get(eventId);
+        ConcurrentHashMap<UUID, LocalDateTime> access = eventAccess.get(eventId);
         if (access == null) return;
         access.remove(userId);
         advanceEventQueue(eventId);
     }
 
     protected synchronized void advanceEventQueue(UUID eventId) {
-        Set<UUID> access = eventAccess.get(eventId);
+        ConcurrentHashMap<UUID, LocalDateTime> access = eventAccess.get(eventId);
         if (access == null) return;
         while (access.size() < 100) {
             try {
-                UUID nextUser = popFromEventQueue(eventId);
-                access.add(nextUser);
+                UUID nextUser = self.popFromEventQueue(eventId);
+                LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(ACCESS_TIME);
+                access.put(nextUser, expiresAt);
                 scheduler.schedule(() -> clearEventAccess(nextUser, eventId), ACCESS_TIME, TimeUnit.SECONDS);
             } catch (EmptyQueueException e) {
                 break;
@@ -107,6 +137,23 @@ public class QueuesService {
         }
     }
 
+    /**
+     * Returns {@code true} if the user identified by {@code token} is currently in the
+     * admitted window for the given event.
+     *
+     * <p><b>Note:</b> there is a small window between when a user's access time expires and
+     * when the background scheduler removes them from the admitted set. During this window
+     * this method may return {@code true} even though the access has technically expired.
+     * Callers that need strict expiry enforcement should use
+     * {@link #getQueueAccessView(String, UUID)} and check
+     * {@link QueueAccessView#canCreateActiveOrder()} instead.
+     *
+     * @param token   the user's auth token; must not be null
+     * @param eventId the unique identifier of the event; must not be null
+     * @return {@code true} if the user is currently admitted
+     * @throws IllegalArgumentException if {@code token} or {@code eventId} is null
+     * @throws InvalidTokenException    if the token is invalid
+     */
     public boolean hasAccess(String token, UUID eventId) {
         if (token == null) {
             throw new IllegalArgumentException("token cannot be null");
@@ -118,7 +165,51 @@ public class QueuesService {
             throw new InvalidTokenException("Invalid token");
         }
         UUID userId = auth.extractUserId(token);
-        return eventAccess.get(eventId).contains(userId);
+        ConcurrentHashMap<UUID, LocalDateTime> access = eventAccess.get(eventId);
+        return access != null && access.containsKey(userId);
+    }
+
+    /**
+     * Returns a snapshot of the user's current access state for the given event.
+     *
+     * <ul>
+     *   <li>{@link QueueAccessStatus#NO_QUEUE} — the event has no virtual queue; the user
+     *       may proceed directly.</li>
+     *   <li>{@link QueueAccessStatus#ADMITTED} — the user has been admitted; the view
+     *       includes the exact time at which access expires.</li>
+     *   <li>{@link QueueAccessStatus#WAITING} — the user is still in the queue; the view
+     *       includes their zero-based position.</li>
+     * </ul>
+     *
+     * @param token   the user's auth token; must not be null
+     * @param eventId the unique identifier of the event; must not be null
+     * @return a {@link QueueAccessView} describing the user's current state
+     * @throws IllegalArgumentException if {@code token} or {@code eventId} is null,
+     *                                  or if the user is not present in the queue (when WAITING)
+     * @throws InvalidTokenException    if the token is invalid
+     * @throws QueueNotFoundException   if a queue exists for the event but cannot be read
+     */
+    public QueueAccessView getQueueAccessView(String token, UUID eventId) {
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
+        }
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+        if (!auth.isTokenValid(token)) {
+            throw new InvalidTokenException("Invalid token");
+        }
+        UUID userId = auth.extractUserId(token);
+        ConcurrentHashMap<UUID, LocalDateTime> admittedUsers = eventAccess.get(eventId);
+        if (admittedUsers == null) {
+            return new QueueAccessView(eventId, QueueAccessStatus.NO_QUEUE, null, null);
+        }
+        LocalDateTime expiresAt = admittedUsers.get(userId);
+        if (expiresAt != null) {
+            return new QueueAccessView(eventId, QueueAccessStatus.ADMITTED, null, expiresAt);
+        }
+        int position = getPositionInEventQueue(userId, eventId);
+        return new QueueAccessView(eventId, QueueAccessStatus.WAITING, position, null);
     }
 
 
@@ -135,7 +226,7 @@ public class QueuesService {
         }
         VirtualQueue queue = new VirtualQueue(eventId);
         queueRepository.addQueue(queue);
-        eventAccess.put(eventId, ConcurrentHashMap.newKeySet());
+        eventAccess.put(eventId, new ConcurrentHashMap<>());
         advanceEventQueue(eventId);
     }
 
@@ -197,8 +288,10 @@ public class QueuesService {
      *
      * @param eventId the unique identifier of the event; must not be null
      * @param userId  the unique identifier of the user to enqueue; must not be null
-     * @throws IllegalArgumentException if {@code eventId} or {@code userId} is null
-     * @throws QueueNotFoundException   if no queue exists for the given event
+     * @throws IllegalArgumentException  if {@code eventId} or {@code userId} is null
+     * @throws QueueNotFoundException    if no queue exists for the given event
+     * @throws QueueIsFullException      if the queue has reached its capacity
+     * @throws AlreadyInQueueException   if the user is already waiting in the queue
      */
     @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
     @Transactional

@@ -8,17 +8,23 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Lottery
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIsFullException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessStatus;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessView;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueuesService;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.Lottery;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.VirtualQueue;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
+
+import java.time.LocalDateTime;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -36,6 +42,21 @@ class QueuesServiceTests {
     @Mock private ILotteryRepository lotteryRepository;
     @Mock private IAuth auth;
     @InjectMocks private QueuesService service;
+
+    @BeforeEach
+    void injectSelf() {
+        // @InjectMocks cannot satisfy the self-reference used for Spring-proxy-aware
+        // internal calls. Wire it manually so @Retryable/@Transactional semantics
+        // (and null-safety) are preserved in tests.
+        ReflectionTestUtils.setField(service, "self", service);
+    }
+
+    /** Constructs an ExposedQueuesService with its self-reference wired correctly. */
+    private ExposedQueuesService createExposed() {
+        ExposedQueuesService exposed = new ExposedQueuesService(queueRepository, lotteryRepository, auth);
+        ReflectionTestUtils.setField(exposed, "self", exposed);
+        return exposed;
+    }
 
     private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID USER_A   = UUID.fromString("00000000-0000-0000-0000-000000000002");
@@ -96,6 +117,16 @@ class QueuesServiceTests {
 
     @Test
     void getNextUserFromSiteQueue_emptyQueue_throwsEmptyQueueException() {
+        assertThatThrownBy(() -> service.getNextUserFromSiteQueue())
+                .isInstanceOf(EmptyQueueException.class);
+    }
+
+    @Test
+    void getNextUserFromSiteQueue_allTokensInvalid_throwsEmptyQueueException() {
+        when(auth.isTokenValid("expired1")).thenReturn(false);
+        when(auth.isTokenValid("expired2")).thenReturn(false);
+        service.addUserToSiteQueue("expired1");
+        service.addUserToSiteQueue("expired2");
         assertThatThrownBy(() -> service.getNextUserFromSiteQueue())
                 .isInstanceOf(EmptyQueueException.class);
     }
@@ -346,7 +377,7 @@ class QueuesServiceTests {
 
     @Test
     void clearEventAccess_removesUserFromEventAccess() {
-        ExposedQueuesService exposed = new ExposedQueuesService(queueRepository, lotteryRepository, auth);
+        ExposedQueuesService exposed = createExposed();
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         queue.push(USER_A);
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
@@ -361,7 +392,7 @@ class QueuesServiceTests {
 
     @Test
     void clearEventAccess_advancesNextUserFromQueueIntoEventAccess() {
-        ExposedQueuesService exposed = new ExposedQueuesService(queueRepository, lotteryRepository, auth);
+        ExposedQueuesService exposed = createExposed();
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         queue.push(USER_A);
         queue.push(USER_B);
@@ -386,7 +417,7 @@ class QueuesServiceTests {
 
     @Test
     void clearEventAccess_afterQueueDeleted_doesNotThrow() {
-        ExposedQueuesService exposed = new ExposedQueuesService(queueRepository, lotteryRepository, auth);
+        ExposedQueuesService exposed = createExposed();
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
 
@@ -451,6 +482,125 @@ class QueuesServiceTests {
 
         assertThatThrownBy(() -> service.hasAccess("bad-token", EVENT_ID))
                 .isInstanceOf(InvalidTokenException.class);
+    }
+
+    // =========================================================================
+    // getQueueAccessView — positive tests
+    // =========================================================================
+
+    @Test
+    void getQueueAccessView_returnsNoQueue_whenNoQueueExistsForEvent() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+
+        QueueAccessView view = service.getQueueAccessView("token-a", EVENT_ID);
+
+        assertThat(view.status()).isEqualTo(QueueAccessStatus.NO_QUEUE);
+        assertThat(view.position()).isNull();
+        assertThat(view.accessExpiresAt()).isNull();
+        assertThat(view.canCreateActiveOrder()).isTrue();
+    }
+
+    @Test
+    void getQueueAccessView_returnsAdmitted_withFutureExpiryAndCanCreateOrder() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        queue.push(USER_A);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+
+        service.createEventQueue(EVENT_ID); // USER_A promoted into eventAccess
+
+        QueueAccessView view = service.getQueueAccessView("token-a", EVENT_ID);
+
+        assertThat(view.status()).isEqualTo(QueueAccessStatus.ADMITTED);
+        assertThat(view.position()).isNull();
+        assertThat(view.accessExpiresAt()).isNotNull();
+        assertThat(view.accessExpiresAt()).isAfter(LocalDateTime.now());
+        assertThat(view.canCreateActiveOrder()).isTrue();
+    }
+
+    @Test
+    void getQueueAccessView_returnsWaiting_withCorrectPosition_whenUserNotYetAdmitted() {
+        // First getQueue call (from popFromEventQueue inside advanceEventQueue) returns an
+        // empty queue so nobody is promoted. Second call (from getPositionInEventQueue)
+        // returns a queue that already contains USER_A so the position can be resolved.
+        VirtualQueue emptyForAdvance = new VirtualQueue(EVENT_ID);
+        VirtualQueue withUserForPosition = new VirtualQueue(EVENT_ID);
+        withUserForPosition.push(USER_A);
+        when(queueRepository.getQueue(EVENT_ID))
+                .thenReturn(emptyForAdvance)
+                .thenReturn(withUserForPosition);
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+
+        service.createEventQueue(EVENT_ID); // advanceEventQueue finds empty queue → no promotions
+
+        QueueAccessView view = service.getQueueAccessView("token-a", EVENT_ID);
+
+        assertThat(view.status()).isEqualTo(QueueAccessStatus.WAITING);
+        assertThat(view.position()).isEqualTo(0);
+        assertThat(view.accessExpiresAt()).isNull();
+        assertThat(view.canCreateActiveOrder()).isFalse();
+    }
+
+    @Test
+    void getQueueAccessView_accessExpiresAt_matchesScheduledWindow() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        queue.push(USER_A);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+
+        LocalDateTime before = LocalDateTime.now();
+        service.createEventQueue(EVENT_ID);
+        LocalDateTime after = LocalDateTime.now();
+
+        QueueAccessView view = service.getQueueAccessView("token-a", EVENT_ID);
+
+        // accessExpiresAt should be ~100 s after admission, bounded by test wall-clock
+        assertThat(view.accessExpiresAt()).isAfterOrEqualTo(before.plusSeconds(100));
+        assertThat(view.accessExpiresAt()).isBeforeOrEqualTo(after.plusSeconds(100));
+    }
+
+    // =========================================================================
+    // getQueueAccessView — negative tests
+    // =========================================================================
+
+    @Test
+    void getQueueAccessView_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.getQueueAccessView(null, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(auth);
+    }
+
+    @Test
+    void getQueueAccessView_nullEventId_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.getQueueAccessView("token-a", null))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(auth);
+    }
+
+    @Test
+    void getQueueAccessView_invalidToken_throwsInvalidTokenException() {
+        when(auth.isTokenValid("bad-token")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getQueueAccessView("bad-token", EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void getQueueAccessView_userNotInQueueAndNotAdmitted_throwsIllegalArgument() {
+        VirtualQueue emptyQueue = new VirtualQueue(EVENT_ID);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(emptyQueue);
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+
+        service.createEventQueue(EVENT_ID); // queue empty → no promotions
+
+        // USER_A is neither admitted nor in the queue
+        assertThatThrownBy(() -> service.getQueueAccessView("token-a", EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     // =========================================================================
