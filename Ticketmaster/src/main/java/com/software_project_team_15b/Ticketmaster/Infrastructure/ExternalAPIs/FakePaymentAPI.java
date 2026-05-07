@@ -4,6 +4,8 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaym
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 
+import java.util.UUID;
+
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -28,6 +30,15 @@ public class FakePaymentAPI implements IPaymentAPI {
     public Response<Boolean> refundPayment(String token, Money amount) {
         if (token == null || token.isBlank() || amount == null) {
             return new Response<>("token and amount are required");
+        }
+
+        return new Response<>(true);
+    }
+
+    @Override
+    public Response<Boolean> refundPayment(UUID userId, Money amount) {
+        if (userId == null || amount == null) {
+            return new Response<>("userId and amount are required");
         }
 
         return new Response<>(true);
