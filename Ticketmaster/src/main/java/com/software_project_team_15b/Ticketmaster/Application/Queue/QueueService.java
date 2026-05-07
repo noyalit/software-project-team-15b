@@ -256,4 +256,14 @@ public class QueueService {
         lotteryRepository.updateLottery(lottery);
         return values;
     }
+
+    public boolean hasAccess(String token, UUID eventId) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'hasAccess'");
+    }
+
+    public QueueAccessView requestAccess(String token, UUID eventId) {
+        // TODO Auto-generated method stub
+        throw new UnsupportedOperationException("Unimplemented method 'requestAccess'");
+    }
 }
