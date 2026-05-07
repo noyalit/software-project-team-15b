@@ -18,10 +18,19 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 
 @Entity
-@Table(name = "active_orders")
+@Table(
+        name = "active_orders",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_active_order_user_event_active",
+                        columnNames = {"user_id", "event_id", "is_active"}
+                )
+        }
+)
 public class ActiveOrder {
 
     @Id
@@ -48,6 +57,9 @@ public class ActiveOrder {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private ActiveOrderStatus status;
+
+    @Column(name = "is_active")
+    private Boolean isActive;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -111,6 +123,7 @@ public class ActiveOrder {
         this.expiresAt = expiresAt;
 
         this.status = ActiveOrderStatus.ACTIVE;
+        this.isActive = true;
         this.orderSeats = new HashSet<>();
     }
 
@@ -136,6 +149,11 @@ public class ActiveOrder {
 
     public ActiveOrderStatus getStatus() {
         return status;
+    }
+
+    // isActive is used for the unique constraint to allow multiple non-active orders for the same user and event
+    public Boolean getIsActive() {
+        return isActive;
     }
 
     public LocalDateTime getCreatedAt() {
@@ -198,8 +216,7 @@ public class ActiveOrder {
 
     public void complete() {
         ensureOrderIsInCheckout();
-
-        status = ActiveOrderStatus.COMPLETED;
+        changeStatusFromActive(ActiveOrderStatus.COMPLETED);
     }
 
     public void cancel() {
@@ -207,7 +224,7 @@ public class ActiveOrder {
             throw new UnactiveOrderException("Order " + orderId + " is not active and cannot be canceled");
         }
 
-        status = ActiveOrderStatus.CANCELED;
+        changeStatusFromActive(ActiveOrderStatus.CANCELED);
     }
 
     public boolean isExpired() {
@@ -235,7 +252,7 @@ public class ActiveOrder {
             throw new IllegalStateException("Order " + orderId + " checkout has not expired yet");
         }
 
-        status = ActiveOrderStatus.EXPIRED;
+        changeStatusFromActive(ActiveOrderStatus.EXPIRED);
     }
 
     public void ensureOrderIsActive() {
@@ -284,5 +301,17 @@ public class ActiveOrder {
                 throw new IllegalArgumentException("seatId cannot be null");
             }
         }
+    }
+
+    private void changeStatusFromActive(ActiveOrderStatus newStatus) {
+        if (status != ActiveOrderStatus.ACTIVE) {
+            throw new UnactiveOrderException("Order " + orderId + " is not active and cannot change status to " + newStatus);
+        }
+        if (newStatus == ActiveOrderStatus.ACTIVE) {
+            throw new IllegalArgumentException("New status must be different from ACTIVE");
+        }
+
+        this.status = newStatus;
+        this.isActive = null;
     }
 }
