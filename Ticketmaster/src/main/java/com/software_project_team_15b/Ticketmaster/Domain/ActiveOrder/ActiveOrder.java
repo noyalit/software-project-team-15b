@@ -93,6 +93,7 @@ public class ActiveOrder {
         this.eventId = eventId;
         this.areaId = areaId;
         this.status = ActiveOrderStatus.ACTIVE;
+        this.isActive = true;
         this.createdAt = LocalDateTime.now();
         this.expiresAt = null;
     }
