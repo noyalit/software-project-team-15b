@@ -86,18 +86,18 @@ public class QueuesService {
     }
 
     /**
-     * Returns the zero-based position of the given user in the event's waiting queue.
+     * Returns the zero-based position of the given token in the event's waiting queue.
      *
-     * @param userId  the unique identifier of the user; must not be null
+     * @param token   the user's auth token; must not be null
      * @param eventId the unique identifier of the event; must not be null
-     * @return the user's position (0 = next to be admitted)
-     * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null,
-     *                                  or if the user is not present in the queue
+     * @return the token's position (0 = next to be admitted)
+     * @throws IllegalArgumentException if {@code token} or {@code eventId} is null,
+     *                                  or if the token is not present in the queue
      * @throws QueueNotFoundException   if no queue exists for the given event
      */
-    public int getPositionInEventQueue(UUID userId, UUID eventId) {
-        if (userId == null) {
-            throw new IllegalArgumentException("userId cannot be null");
+    public int getPositionInEventQueue(String token, UUID eventId) {
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
         }
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
@@ -106,7 +106,7 @@ public class QueuesService {
         if (queue == null) {
             throw new QueueNotFoundException("Queue with id " + eventId + " not found");
         }
-        return queue.getPosition(userId);
+        return queue.getPosition(token);
     }
 
     protected synchronized void clearEventAccess(UUID userId, UUID eventId) {
@@ -127,7 +127,8 @@ public class QueuesService {
         if (access == null) return;
         while (access.size() < 100) {
             try {
-                UUID nextUser = self.popFromEventQueue(eventId);
+                String nextToken = self.popFromEventQueue(eventId);
+                UUID nextUser = auth.extractUserId(nextToken);
                 LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(ACCESS_TIME);
                 access.put(nextUser, expiresAt);
                 scheduler.schedule(() -> clearEventAccess(nextUser, eventId), ACCESS_TIME, TimeUnit.SECONDS);
@@ -208,7 +209,7 @@ public class QueuesService {
         if (expiresAt != null) {
             return new QueueAccessView(eventId, QueueAccessStatus.ADMITTED, null, expiresAt);
         }
-        int position = getPositionInEventQueue(userId, eventId);
+        int position = getPositionInEventQueue(token, eventId);
         return new QueueAccessView(eventId, QueueAccessStatus.WAITING, position, null);
     }
 
@@ -251,7 +252,7 @@ public class QueuesService {
         if (admittedUsers != null && admittedUsers.containsKey(userId)) {
             return getQueueAccessView(token, eventId);
         }
-        self.pushToEventQueue(eventId, userId);
+        self.pushToEventQueue(eventId, token);
         return getQueueAccessView(token, eventId);
     }
 
@@ -300,14 +301,14 @@ public class QueuesService {
      * retried up to 3 times with a short backoff before the exception propagates.
      *
      * @param eventId the unique identifier of the event; must not be null
-     * @return the UUID of the user at the front of the queue
+     * @return the auth token of the user at the front of the queue
      * @throws IllegalArgumentException if {@code eventId} is null
      * @throws QueueNotFoundException   if no queue exists for the given event
      * @throws EmptyQueueException      if the queue contains no entries
      */
     @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
     @Transactional
-    public UUID popFromEventQueue(UUID eventId) {
+    public String popFromEventQueue(UUID eventId) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
@@ -318,7 +319,7 @@ public class QueuesService {
         if (queue.isEmpty()) {
             throw new EmptyQueueException("Event queue is empty (eventId: " + eventId + ")");
         }
-        UUID value = queue.pop();
+        String value = queue.pop();
         queueRepository.updateQueue(queue);
         return value;
     }
@@ -330,20 +331,20 @@ public class QueuesService {
      * retried up to 3 times with a short backoff before the exception propagates.
      *
      * @param eventId the unique identifier of the event; must not be null
-     * @param userId  the unique identifier of the user to enqueue; must not be null
-     * @throws IllegalArgumentException  if {@code eventId} or {@code userId} is null
+     * @param token   the user's auth token; must not be null
+     * @throws IllegalArgumentException  if {@code eventId} or {@code token} is null
      * @throws QueueNotFoundException    if no queue exists for the given event
      * @throws QueueIsFullException      if the queue has reached its capacity
-     * @throws AlreadyInQueueException   if the user is already waiting in the queue
+     * @throws AlreadyInQueueException   if the token is already waiting in the queue
      */
     @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
     @Transactional
-    public void pushToEventQueue(UUID eventId, UUID userId) {
+    public void pushToEventQueue(UUID eventId, String token) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
-        if (userId == null) {
-            throw new IllegalArgumentException("userId cannot be null");
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
         }
         VirtualQueue queue = queueRepository.getQueue(eventId);
         if (queue == null) {
@@ -352,10 +353,10 @@ public class QueuesService {
         if (queue.isFull()) {
             throw new QueueIsFullException("Event queue is full (eventId: " + eventId + ")");
         }
-        if (queue.contains(userId)) {
-            throw new AlreadyInQueueException("User with id " + userId + " is already in the queue for eventId: " + eventId);
+        if (queue.contains(token)) {
+            throw new AlreadyInQueueException("Token " + token + " is already in the queue for eventId: " + eventId);
         }
-        queue.push(userId);
+        queue.push(token);
         queueRepository.updateQueue(queue);
         advanceEventQueue(eventId);
     }

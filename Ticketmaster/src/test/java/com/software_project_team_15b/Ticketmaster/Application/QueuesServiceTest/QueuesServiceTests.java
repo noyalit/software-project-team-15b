@@ -138,12 +138,12 @@ class QueuesServiceTests {
     @Test
     void getPositionInEventQueue_returnsCorrectPosition() {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push(USER_A);
-        queue.push(USER_B);
+        queue.push("token-a");
+        queue.push("token-b");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
 
-        assertThat(service.getPositionInEventQueue(USER_A, EVENT_ID)).isEqualTo(0);
-        assertThat(service.getPositionInEventQueue(USER_B, EVENT_ID)).isEqualTo(1);
+        assertThat(service.getPositionInEventQueue("token-a", EVENT_ID)).isEqualTo(0);
+        assertThat(service.getPositionInEventQueue("token-b", EVENT_ID)).isEqualTo(1);
     }
 
     // =========================================================================
@@ -151,7 +151,7 @@ class QueuesServiceTests {
     // =========================================================================
 
     @Test
-    void getPositionInEventQueue_nullUserId_throwsIllegalArgument() {
+    void getPositionInEventQueue_nullToken_throwsIllegalArgument() {
         assertThatThrownBy(() -> service.getPositionInEventQueue(null, EVENT_ID))
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(queueRepository);
@@ -159,7 +159,7 @@ class QueuesServiceTests {
 
     @Test
     void getPositionInEventQueue_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.getPositionInEventQueue(USER_A, null))
+        assertThatThrownBy(() -> service.getPositionInEventQueue("token-a", null))
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(queueRepository);
     }
@@ -167,7 +167,7 @@ class QueuesServiceTests {
     @Test
     void getPositionInEventQueue_queueNotFound_throwsQueueNotFoundException() {
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
-        assertThatThrownBy(() -> service.getPositionInEventQueue(USER_A, EVENT_ID))
+        assertThatThrownBy(() -> service.getPositionInEventQueue("token-a", EVENT_ID))
                 .isInstanceOf(QueueNotFoundException.class);
     }
 
@@ -200,29 +200,29 @@ class QueuesServiceTests {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
 
-        service.pushToEventQueue(EVENT_ID, USER_A);
+        service.pushToEventQueue(EVENT_ID, "token-a");
 
-        assertThat(queue.contains(USER_A)).isTrue();
+        assertThat(queue.contains("token-a")).isTrue();
         verify(queueRepository).updateQueue(queue);
     }
 
     @Test
     void popFromEventQueue_returnsFrontUserAndUpdatesRepository() {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push(USER_A);
-        queue.push(USER_B);
+        queue.push("token-a");
+        queue.push("token-b");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
 
-        UUID result = service.popFromEventQueue(EVENT_ID);
+        String result = service.popFromEventQueue(EVENT_ID);
 
-        assertThat(result).isEqualTo(USER_A);
+        assertThat(result).isEqualTo("token-a");
         verify(queueRepository).updateQueue(queue);
     }
 
     @Test
     void popFromEventQueue_removesUserFromQueue() {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push(USER_A);
+        queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
 
         service.popFromEventQueue(EVENT_ID);
@@ -233,18 +233,18 @@ class QueuesServiceTests {
     @Test
     void popFromEventQueue_maintainsFifoOrder() {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push(USER_A);
-        queue.push(USER_B);
-        queue.push(USER_C);
+        queue.push("token-a");
+        queue.push("token-b");
+        queue.push("token-c");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
 
-        UUID first  = service.popFromEventQueue(EVENT_ID);
-        UUID second = service.popFromEventQueue(EVENT_ID);
-        UUID third  = service.popFromEventQueue(EVENT_ID);
+        String first  = service.popFromEventQueue(EVENT_ID);
+        String second = service.popFromEventQueue(EVENT_ID);
+        String third  = service.popFromEventQueue(EVENT_ID);
 
-        assertThat(first).isEqualTo(USER_A);
-        assertThat(second).isEqualTo(USER_B);
-        assertThat(third).isEqualTo(USER_C);
+        assertThat(first).isEqualTo("token-a");
+        assertThat(second).isEqualTo("token-b");
+        assertThat(third).isEqualTo("token-c");
     }
 
     // =========================================================================
@@ -276,13 +276,13 @@ class QueuesServiceTests {
 
     @Test
     void pushToEventQueue_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.pushToEventQueue(null, USER_A))
+        assertThatThrownBy(() -> service.pushToEventQueue(null, "token-a"))
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(queueRepository);
     }
 
     @Test
-    void pushToEventQueue_nullUserId_throwsIllegalArgument() {
+    void pushToEventQueue_nullToken_throwsIllegalArgument() {
         assertThatThrownBy(() -> service.pushToEventQueue(EVENT_ID, null))
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(queueRepository);
@@ -292,7 +292,7 @@ class QueuesServiceTests {
     void pushToEventQueue_queueNotFound_throwsQueueNotFoundException() {
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
 
-        assertThatThrownBy(() -> service.pushToEventQueue(EVENT_ID, USER_A))
+        assertThatThrownBy(() -> service.pushToEventQueue(EVENT_ID, "token-a"))
                 .isInstanceOf(QueueNotFoundException.class);
         verify(queueRepository, never()).updateQueue(any());
     }
@@ -300,10 +300,10 @@ class QueuesServiceTests {
     @Test
     void pushToEventQueue_queueIsFull_throwsQueueIsFullException() {
         VirtualQueue queue = new VirtualQueue(EVENT_ID, 1);
-        queue.push(USER_A);
+        queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
 
-        assertThatThrownBy(() -> service.pushToEventQueue(EVENT_ID, USER_B))
+        assertThatThrownBy(() -> service.pushToEventQueue(EVENT_ID, "token-b"))
                 .isInstanceOf(QueueIsFullException.class);
         verify(queueRepository, never()).updateQueue(any());
     }
@@ -311,10 +311,10 @@ class QueuesServiceTests {
     @Test
     void pushToEventQueue_alreadyInQueue_throwsAlreadyInQueueException() {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push(USER_A);
+        queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
 
-        assertThatThrownBy(() -> service.pushToEventQueue(EVENT_ID, USER_A))
+        assertThatThrownBy(() -> service.pushToEventQueue(EVENT_ID, "token-a"))
                 .isInstanceOf(AlreadyInQueueException.class);
         verify(queueRepository, never()).updateQueue(any());
     }
@@ -352,7 +352,7 @@ class QueuesServiceTests {
     @Test
     void createEventQueue_advancesPreLoadedUsersIntoEventAccess() {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push(USER_A);
+        queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
         when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
@@ -370,7 +370,7 @@ class QueuesServiceTests {
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         service.createEventQueue(EVENT_ID);       // queue empty, no one promoted yet
-        service.pushToEventQueue(EVENT_ID, USER_A); // USER_A pushed then immediately promoted
+        service.pushToEventQueue(EVENT_ID, "token-a"); // USER_A pushed then immediately promoted
 
         assertThat(service.hasAccess("token-a", EVENT_ID)).isTrue();
     }
@@ -379,7 +379,7 @@ class QueuesServiceTests {
     void clearEventAccess_removesUserFromEventAccess() {
         ExposedQueuesService exposed = createExposed();
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push(USER_A);
+        queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
         when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
@@ -394,8 +394,8 @@ class QueuesServiceTests {
     void clearEventAccess_advancesNextUserFromQueueIntoEventAccess() {
         ExposedQueuesService exposed = createExposed();
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push(USER_A);
-        queue.push(USER_B);
+        queue.push("token-a");
+        queue.push("token-b");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
         when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.isTokenValid("token-b")).thenReturn(true);
@@ -407,7 +407,7 @@ class QueuesServiceTests {
         exposed.createEventQueue(EVENT_ID); // USER_A and USER_B both promoted (slots < 100)
 
         // USER_C arrives while eventAccess is not yet at capacity after USER_A is cleared
-        queue.push(USER_C);
+        queue.push("token-c");
         exposed.clearEventAccess(USER_A, EVENT_ID); // frees one slot → USER_C promoted
 
         assertThat(exposed.hasAccess("token-a", EVENT_ID)).isFalse();
@@ -436,7 +436,7 @@ class QueuesServiceTests {
     @Test
     void hasAccess_returnsTrueWhenUserIsInEventAccess() {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push(USER_A);
+        queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
         when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
@@ -504,7 +504,7 @@ class QueuesServiceTests {
     @Test
     void getQueueAccessView_returnsAdmitted_withFutureExpiryAndCanCreateOrder() {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push(USER_A);
+        queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
         when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
@@ -527,7 +527,7 @@ class QueuesServiceTests {
         // returns a queue that already contains USER_A so the position can be resolved.
         VirtualQueue emptyForAdvance = new VirtualQueue(EVENT_ID);
         VirtualQueue withUserForPosition = new VirtualQueue(EVENT_ID);
-        withUserForPosition.push(USER_A);
+        withUserForPosition.push("token-a");
         when(queueRepository.getQueue(EVENT_ID))
                 .thenReturn(emptyForAdvance)
                 .thenReturn(withUserForPosition);
@@ -547,7 +547,7 @@ class QueuesServiceTests {
     @Test
     void getQueueAccessView_accessExpiresAt_matchesScheduledWindow() {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push(USER_A);
+        queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
         when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
@@ -704,7 +704,7 @@ class QueuesServiceTests {
     @Test
     void requestAccess_queueFull_throwsQueueIsFullException() {
         VirtualQueue fullQueue = new VirtualQueue(EVENT_ID, 1);
-        fullQueue.push(USER_B);
+        fullQueue.push("token-b");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(fullQueue);
         when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
@@ -720,7 +720,7 @@ class QueuesServiceTests {
         eventAccessMap(service).put(EVENT_ID, new ConcurrentHashMap<>());
 
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push(USER_A);
+        queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
         when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
@@ -944,9 +944,9 @@ class QueuesServiceTests {
     @Test
     void concurrentPushes_allUniqueUsersRecordedWithNoLostUpdates() throws InterruptedException {
         int n = 20;
-        List<UUID> users = generateUserIds(n);
-        // Thread-safe set to capture every userId that reaches push()
-        Set<UUID> capturedPushes = ConcurrentHashMap.newKeySet();
+        List<String> tokens = generateTokens(n);
+        // Thread-safe set to capture every token that reaches push()
+        Set<String> capturedPushes = ConcurrentHashMap.newKeySet();
 
         VirtualQueue mockQueue = mock(VirtualQueue.class);
         doAnswer(inv -> { capturedPushes.add(inv.getArgument(0)); return null; })
@@ -957,11 +957,11 @@ class QueuesServiceTests {
         ExecutorService pool = Executors.newFixedThreadPool(n);
         AtomicInteger successes = new AtomicInteger();
 
-        for (UUID userId : users) {
+        for (String token : tokens) {
             pool.submit(() -> {
                 try {
                     start.await();
-                    service.pushToEventQueue(EVENT_ID, userId);
+                    service.pushToEventQueue(EVENT_ID, token);
                     successes.incrementAndGet();
                 } catch (Exception ignored) {}
                 return null;
@@ -973,7 +973,7 @@ class QueuesServiceTests {
         assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
 
         assertThat(successes.get()).isEqualTo(n);
-        assertThat(capturedPushes).containsExactlyInAnyOrderElementsOf(users);
+        assertThat(capturedPushes).containsExactlyInAnyOrderElementsOf(tokens);
     }
 
     @Test
@@ -983,8 +983,8 @@ class QueuesServiceTests {
         // ensuring no two threads receive the same element.
         int items   = 20;
         int threads = 10;
-        List<UUID> users = generateUserIds(items);
-        ConcurrentLinkedDeque<UUID> deque = new ConcurrentLinkedDeque<>(users);
+        List<String> tokens = generateTokens(items);
+        ConcurrentLinkedDeque<String> deque = new ConcurrentLinkedDeque<>(tokens);
 
         VirtualQueue mockQueue = mock(VirtualQueue.class);
         when(mockQueue.isEmpty()).thenAnswer(inv -> deque.isEmpty());
@@ -993,14 +993,14 @@ class QueuesServiceTests {
 
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(threads);
-        Set<UUID> results = ConcurrentHashMap.newKeySet();
+        Set<String> results = ConcurrentHashMap.newKeySet();
         AtomicInteger successes = new AtomicInteger();
 
         for (int i = 0; i < threads; i++) {
             pool.submit(() -> {
                 try {
                     start.await();
-                    UUID popped = service.popFromEventQueue(EVENT_ID);
+                    String popped = service.popFromEventQueue(EVENT_ID);
                     results.add(popped);
                     successes.incrementAndGet();
                 } catch (Exception ignored) {}
@@ -1022,8 +1022,8 @@ class QueuesServiceTests {
         // EmptyQueueException once the queue is drained.
         int items   = 5;
         int threads = 20;
-        List<UUID> users = generateUserIds(items);
-        ConcurrentLinkedDeque<UUID> deque = new ConcurrentLinkedDeque<>(users);
+        List<String> tokens = generateTokens(items);
+        ConcurrentLinkedDeque<String> deque = new ConcurrentLinkedDeque<>(tokens);
 
         VirtualQueue mockQueue = mock(VirtualQueue.class);
         when(mockQueue.isEmpty()).thenAnswer(inv -> deque.isEmpty());
@@ -1032,7 +1032,7 @@ class QueuesServiceTests {
 
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(threads);
-        Set<UUID> results = ConcurrentHashMap.newKeySet();
+        Set<String> results = ConcurrentHashMap.newKeySet();
         AtomicInteger successes  = new AtomicInteger();
         AtomicInteger emptyThrown = new AtomicInteger();
 
@@ -1040,7 +1040,7 @@ class QueuesServiceTests {
             pool.submit(() -> {
                 try {
                     start.await();
-                    UUID popped = service.popFromEventQueue(EVENT_ID);
+                    String popped = service.popFromEventQueue(EVENT_ID);
                     results.add(popped);
                     successes.incrementAndGet();
                 } catch (EmptyQueueException e) {
@@ -1143,6 +1143,14 @@ class QueuesServiceTests {
             ids.add(UUID.randomUUID());
         }
         return ids;
+    }
+
+    private static List<String> generateTokens(int n) {
+        List<String> tokens = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            tokens.add("token-" + UUID.randomUUID());
+        }
+        return tokens;
     }
 
     /** Returns the live eventAccess map from the given service instance via reflection. */
