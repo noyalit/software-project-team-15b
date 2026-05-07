@@ -1,4 +1,4 @@
-package com.software_project_team_15b.Ticketmaster.Application.QueuesServiceTest;
+package com.software_project_team_15b.Ticketmaster.Application.Queue;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyLotteryException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyQueueException;
