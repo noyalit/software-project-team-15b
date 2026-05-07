@@ -14,9 +14,10 @@ import java.util.Date;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import org.springframework.stereotype.Service;
 
-@Service
+import org.springframework.stereotype.Component;
+
+@Component
 public class Auth implements IAuth {
 
     private static final String SECRET = "mySuperSecretKeyForJwtToken123!!!!";

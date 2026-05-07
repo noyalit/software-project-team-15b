@@ -1,11 +1,11 @@
 package com.software_project_team_15b.Ticketmaster.Infrastructure;
 
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
 import com.software_project_team_15b.Ticketmaster.Application.IPasswordEncoder;
 
-@Service
+@Component
 public class PasswordEncoderImpl implements IPasswordEncoder {
 
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
