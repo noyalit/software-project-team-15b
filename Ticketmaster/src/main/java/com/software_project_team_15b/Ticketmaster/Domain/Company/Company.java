@@ -21,7 +21,7 @@ public class Company {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
-    private String id;
+    private UUID id;
 
     @Version
     private Long version;
@@ -58,7 +58,7 @@ public class Company {
     // Getters
 
     /** @return the company's unique identifier, assigned by the persistence layer */
-    public String getId() {
+    public UUID getId() {
         return id;
     }
 

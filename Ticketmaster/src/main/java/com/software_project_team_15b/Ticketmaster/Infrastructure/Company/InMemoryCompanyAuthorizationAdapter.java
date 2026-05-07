@@ -56,7 +56,7 @@ public class InMemoryCompanyAuthorizationAdapter implements ICompanyAuthorizatio
         if (companyId == null || callerId == null) {
             return false;
         }
-        return companyRepository.findById(companyId.toString())
+        return companyRepository.findById(companyId)
                 .map(company -> company.getOwnerIds().contains(callerId))
                 .orElse(true); // company not registered: permit (pre-Company-domain callers)
     }

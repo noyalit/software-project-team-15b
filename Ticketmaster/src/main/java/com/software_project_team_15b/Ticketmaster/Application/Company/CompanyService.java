@@ -2,6 +2,7 @@ package com.software_project_team_15b.Ticketmaster.Application.Company;
 
 import java.util.*;
 
+import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,7 @@ public class CompanyService {
 
     private final ICompanyRepository companyRepository;
     private final UserService userService;
+    private final EventManagementService eventManagementService;
     private final IAuth auth;
 
     /**
@@ -42,10 +44,11 @@ public class CompanyService {
      * @param auth authentication/authorization gateway; must not be null
      * @throws NullPointerException if any argument is null
      */
-    public CompanyService(ICompanyRepository companyRepository, UserService userService, IAuth auth) {
+    public CompanyService(ICompanyRepository companyRepository, UserService userService, EventManagementService eventManagementService, IAuth auth) {
         this.companyRepository = Objects.requireNonNull(companyRepository, "companyRepository cannot be null");
         this.userService = Objects.requireNonNull(userService, "userService cannot be null");
         this.auth = Objects.requireNonNull(auth, "auth cannot be null");
+        this.eventManagementService = Objects.requireNonNull(eventManagementService, "eventManagementService cannot be null");
     }
 
     /**
@@ -78,8 +81,8 @@ public class CompanyService {
      * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
-    public void addOwner(String token, String companyId, UUID newOwnerId) {
-        requireNonBlank(companyId, "Company ID");
+    public void addOwner(String token, UUID companyId, UUID newOwnerId) {
+        requireNonNull(companyId, "Company ID");
         requireNonNull(newOwnerId, "New owner ID");
         Company company = getCompany(companyId);
         UUID appointingUserId = requireAuthenticatedMember(token);
@@ -102,8 +105,8 @@ public class CompanyService {
      * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
-    public void removeOwner(String token, String companyId, UUID ownerId) {
-        requireNonBlank(companyId, "Company ID");
+    public void removeOwner(String token, UUID companyId, UUID ownerId) {
+        requireNonNull(companyId, "Company ID");
         requireNonNull(ownerId, "Owner ID to remove");
         Company company = getCompany(companyId);
         UUID calledId = requireAuthenticatedMember(token);
@@ -120,31 +123,6 @@ public class CompanyService {
     }
 
     /**
-     * Transitions the company to the given status. Only the founder or a
-     * system administrator may perform this action.
-     *
-     * <p>Prefer {@link #changeStatus(String, String, CompanyStatus)} which returns
-     * the updated company. This overload exists for callers that do not need
-     * the return value.
-     *
-     * @param token     an active member or system-admin token; must not be null or blank
-     * @param companyId the target company's id; must not be null or blank
-     * @param newStatus the status to transition to; must not be null
-     * @throws IllegalArgumentException           if {@code companyId} is null/blank or {@code newStatus} is null
-     * @throws InvalidTokenException              if the token is null, blank, or not valid
-     * @throws UnauthorizedCompanyActionException if the caller is neither the founder nor a system admin
-     * @throws CompanyNotFoundException           if no company with {@code companyId} exists
-     */
-    public void changeCompanyStatus(String token, String companyId, CompanyStatus newStatus) {
-        requireNonBlank(companyId, "Company ID");
-        requireNonNull(newStatus, "New status");
-        Company company = getCompany(companyId);
-        requireFounderOrSystemAdmin(token, company);
-        company.changeStatus(newStatus);
-        companyRepository.save(company);
-    }
-
-    /**
      * Appoints a member as a manager of the company with the given permissions.
      * Only an owner of the company may perform this action.
      *
@@ -157,8 +135,8 @@ public class CompanyService {
      * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
-    public void addManager(String token, String companyId, UUID newOwnerId, Set<ManagerPermission> managerPermissions) {
-        requireNonBlank(companyId, "Company ID");
+    public void addManager(String token, UUID companyId, UUID newOwnerId, Set<ManagerPermission> managerPermissions) {
+        requireNonNull(companyId, "Company ID");
         requireNonNull(newOwnerId, "New manager ID");
         Company company = getCompany(companyId);
         UUID calledId = requireAuthenticatedMember(token);
@@ -179,8 +157,8 @@ public class CompanyService {
      * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
-    public void removeManager(String token, String companyId, UUID managerId) {
-        requireNonBlank(companyId, "Company ID");
+    public void removeManager(String token, UUID companyId, UUID managerId) {
+        requireNonNull(companyId, "Company ID");
         requireNonNull(managerId, "Manager ID to remove");
         Company company = getCompany(companyId);
         UUID calledId = requireAuthenticatedMember(token);
@@ -201,8 +179,8 @@ public class CompanyService {
      * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
-    public void updateManagerPermissions(String token, String companyId, UUID managerId, Set<ManagerPermission> managerPermissions) {
-        requireNonBlank(companyId, "Company ID");
+    public void updateManagerPermissions(String token, UUID companyId, UUID managerId, Set<ManagerPermission> managerPermissions) {
+        requireNonNull(companyId, "Company ID");
         requireNonNull(managerId, "manager ID");
         Company company = getCompany(companyId);
         UUID calledId = requireAuthenticatedMember(token);
@@ -222,8 +200,8 @@ public class CompanyService {
      * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
-    public Set<UUID> getOwnerIds(String token, String companyId) {
-        requireNonBlank(companyId, "Company ID");
+    public Set<UUID> getOwnerIds(String token, UUID companyId) {
+        requireNonNull(companyId, "Company ID");
         Company company = getCompany(companyId);
         UUID calledId = requireAuthenticatedMember(token);
         requireOwner(company, calledId);
@@ -286,8 +264,8 @@ public class CompanyService {
      * @throws CompanyNotFoundException if no company with {@code companyId} exists
      * @throws IllegalStateException if the company is not active
      */
-    public Company updatePurchasePolicy(String token, String companyId, String policy) {
-        requireNonBlank(companyId, "Company ID");
+    public Company updatePurchasePolicy(String token, UUID companyId, String policy) {
+        requireNonNull(companyId, "Company ID");
         requireNonNull(policy, "Purchase policy");
         UUID callerId = requireAuthenticatedMember(token);
         Company company = getCompanyOrThrow(companyId);
@@ -310,8 +288,8 @@ public class CompanyService {
      * @throws CompanyNotFoundException if no company with {@code companyId} exists
      * @throws IllegalStateException if the company is not active
      */
-    public Company updateDiscountPolicy(String token, String companyId, String policy) {
-        requireNonBlank(companyId, "Company ID");
+    public Company updateDiscountPolicy(String token, UUID companyId, String policy) {
+        requireNonNull(companyId, "Company ID");
         requireNonNull(policy, "Discount policy");
         UUID callerId = requireAuthenticatedMember(token);
         Company company = getCompanyOrThrow(companyId);
@@ -333,12 +311,16 @@ public class CompanyService {
      * @throws UnauthorizedCompanyActionException if the caller is neither the founder nor a system admin
      * @throws CompanyNotFoundException if no company with {@code companyId} exists
      */
-    public Company changeStatus(String token, String companyId, CompanyStatus newStatus) {
-        requireNonBlank(companyId, "Company ID");
+    public Company changeStatus(String token, UUID companyId, CompanyStatus newStatus) {
+        requireNonNull(companyId, "Company ID");
         requireNonNull(newStatus, "Company status");
         Company company = getCompanyOrThrow(companyId);
         requireFounderOrSystemAdmin(token, company);
         company.changeStatus(newStatus);
+        if (newStatus == CompanyStatus.CLOSED) {
+            eventManagementService.searchInCompany(companyId, null)
+                    .forEach(event -> eventManagementService.cancel(event.eventId(), auth.extractUserId(token)));
+        }
         return companyRepository.save(company);
     }
 
@@ -350,8 +332,8 @@ public class CompanyService {
      * @throws IllegalArgumentException if {@code companyId} is null or blank
      * @throws CompanyNotFoundException if no company with {@code companyId} exists
      */
-    public Company getCompany(String companyId) {
-        requireNonBlank(companyId, "Company ID");
+    public Company getCompany(UUID companyId) {
+        requireNonNull(companyId, "Company ID");
         return getCompanyOrThrow(companyId);
     }
 
@@ -362,8 +344,8 @@ public class CompanyService {
      * @return an {@link Optional} containing the company if found, or empty
      *         when the id is null/blank or no matching company exists
      */
-    public Optional<Company> findCompany(String companyId) {
-        if (companyId == null || companyId.isBlank()) {
+    public Optional<Company> findCompany(UUID companyId) {
+        if (companyId == null) {
             return Optional.empty();
         }
         return companyRepository.findById(companyId);
@@ -374,7 +356,7 @@ public class CompanyService {
      * @return the company with the given id
      * @throws CompanyNotFoundException if no matching company exists
      */
-    private Company getCompanyOrThrow(String companyId) {
+    private Company getCompanyOrThrow(UUID companyId) {
         return companyRepository.findById(companyId)
                 .orElseThrow(() -> new CompanyNotFoundException(
                         "Company not found with id: " + companyId));

@@ -20,8 +20,11 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
+import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
@@ -38,6 +41,7 @@ class CompanyServiceTest {
     private FakeCompanyRepository repo;
     private FakeAuth auth;
     private FakeUserService userService;
+    private FakeEventManagementService fakeEventManagementService;
     private CompanyService service;
 
     @BeforeEach
@@ -45,7 +49,8 @@ class CompanyServiceTest {
         repo = new FakeCompanyRepository();
         auth = new FakeAuth();
         userService = new FakeUserService(); // defaults: isActiveOwner → true, all mutations → no-op
-        service = new CompanyService(repo, userService, auth);
+        fakeEventManagementService = new FakeEventManagementService();
+        service = new CompanyService(repo, userService, fakeEventManagementService, auth);
     }
 
     // ===========================================================================================
@@ -53,19 +58,19 @@ class CompanyServiceTest {
 
     @Test
     void constructor_throws_when_repository_is_null() {
-        assertThatThrownBy(() -> new CompanyService(null, userService, auth))
+        assertThatThrownBy(() -> new CompanyService(null, userService, fakeEventManagementService, auth))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_userService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(repo, null, auth))
+        assertThatThrownBy(() -> new CompanyService(repo, null, fakeEventManagementService, auth))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_auth_is_null() {
-        assertThatThrownBy(() -> new CompanyService(repo, userService, null))
+        assertThatThrownBy(() -> new CompanyService(repo, userService, fakeEventManagementService, null))
                 .isInstanceOf(NullPointerException.class);
     }
 
@@ -223,7 +228,7 @@ class CompanyServiceTest {
     @Test
     void addOwner_throws_when_company_not_found() {
         String founderToken = auth.registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.addOwner(founderToken, UUID.randomUUID().toString(), UUID.randomUUID()))
+        assertThatThrownBy(() -> service.addOwner(founderToken, UUID.randomUUID(), UUID.randomUUID()))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
@@ -315,7 +320,7 @@ class CompanyServiceTest {
     @Test
     void removeOwner_throws_when_company_not_found() {
         String founderToken = auth.registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.removeOwner(founderToken, UUID.randomUUID().toString(), UUID.randomUUID()))
+        assertThatThrownBy(() -> service.removeOwner(founderToken, UUID.randomUUID(), UUID.randomUUID()))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
@@ -360,7 +365,7 @@ class CompanyServiceTest {
         String founderToken = auth.registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
 
-        service.changeCompanyStatus(founderToken, company.getId(), CompanyStatus.CLOSED);
+        service.changeStatus(founderToken, company.getId(), CompanyStatus.CLOSED);
 
         assertThat(repo.findById(company.getId()).orElseThrow().getStatus()).isEqualTo(CompanyStatus.CLOSED);
     }
@@ -372,7 +377,7 @@ class CompanyServiceTest {
         Company company = service.createCompany(founderToken, "Acme");
         String adminToken = auth.registerSystemAdmin(UUID.randomUUID());
 
-        service.changeCompanyStatus(adminToken, company.getId(), CompanyStatus.SUSPENDED);
+        service.changeStatus(adminToken, company.getId(), CompanyStatus.SUSPENDED);
 
         assertThat(repo.findById(company.getId()).orElseThrow().getStatus()).isEqualTo(CompanyStatus.SUSPENDED);
     }
@@ -386,7 +391,7 @@ class CompanyServiceTest {
         Company company = service.createCompany(founderToken, "Acme");
         String strangerToken = auth.registerMember(UUID.randomUUID());
 
-        assertThatThrownBy(() -> service.changeCompanyStatus(strangerToken, company.getId(), CompanyStatus.CLOSED))
+        assertThatThrownBy(() -> service.changeStatus(strangerToken, company.getId(), CompanyStatus.CLOSED))
                 .isInstanceOf(UnauthorizedCompanyActionException.class);
     }
 
@@ -397,7 +402,7 @@ class CompanyServiceTest {
         Company company = service.createCompany(founderToken, "Acme");
         String guestToken = auth.registerGuest(UUID.randomUUID());
 
-        assertThatThrownBy(() -> service.changeCompanyStatus(guestToken, company.getId(), CompanyStatus.CLOSED))
+        assertThatThrownBy(() -> service.changeStatus(guestToken, company.getId(), CompanyStatus.CLOSED))
                 .isInstanceOf(UnauthorizedCompanyActionException.class);
     }
 
@@ -407,15 +412,15 @@ class CompanyServiceTest {
         String founderToken = auth.registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
 
-        assertThatThrownBy(() -> service.changeCompanyStatus(founderToken, company.getId(), null))
+        assertThatThrownBy(() -> service.changeStatus(founderToken, company.getId(), null))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("New status");
+                .hasMessageContaining("Company status");
     }
 
     @Test
     void changeCompanyStatus_throws_when_company_id_is_null() {
         String founderToken = auth.registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.changeCompanyStatus(founderToken, null, CompanyStatus.CLOSED))
+        assertThatThrownBy(() -> service.changeStatus(founderToken, null, CompanyStatus.CLOSED))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Company ID");
     }
@@ -423,7 +428,7 @@ class CompanyServiceTest {
     @Test
     void changeCompanyStatus_throws_when_company_not_found() {
         String founderToken = auth.registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.changeCompanyStatus(founderToken, UUID.randomUUID().toString(), CompanyStatus.CLOSED))
+        assertThatThrownBy(() -> service.changeStatus(founderToken, UUID.randomUUID(), CompanyStatus.CLOSED))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
@@ -476,7 +481,7 @@ class CompanyServiceTest {
     @Test
     void addManager_throws_when_company_not_found() {
         String founderToken = auth.registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.addManager(founderToken, UUID.randomUUID().toString(), UUID.randomUUID(), Set.of()))
+        assertThatThrownBy(() -> service.addManager(founderToken, UUID.randomUUID(), UUID.randomUUID(), Set.of()))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
@@ -578,7 +583,7 @@ class CompanyServiceTest {
     @Test
     void updateManagerPermissions_throws_when_company_not_found() {
         String founderToken = auth.registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.updateManagerPermissions(founderToken, UUID.randomUUID().toString(), UUID.randomUUID(), Set.of()))
+        assertThatThrownBy(() -> service.updateManagerPermissions(founderToken, UUID.randomUUID(), UUID.randomUUID(), Set.of()))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
@@ -622,7 +627,7 @@ class CompanyServiceTest {
     @Test
     void getOwnerIds_throws_when_company_not_found() {
         String founderToken = auth.registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.getOwnerIds(founderToken, UUID.randomUUID().toString()))
+        assertThatThrownBy(() -> service.getOwnerIds(founderToken, UUID.randomUUID()))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
@@ -744,7 +749,7 @@ class CompanyServiceTest {
     @Test
     void updatePurchasePolicy_throws_when_company_not_found() {
         String token = auth.registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.updatePurchasePolicy(token, UUID.randomUUID().toString(), "x"))
+        assertThatThrownBy(() -> service.updatePurchasePolicy(token, UUID.randomUUID(), "x"))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
@@ -754,13 +759,6 @@ class CompanyServiceTest {
         assertThatThrownBy(() -> service.updatePurchasePolicy(token, null, "x"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Company ID");
-    }
-
-    @Test
-    void updatePurchasePolicy_throws_when_companyId_is_blank() {
-        String token = auth.registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.updatePurchasePolicy(token, "  ", "x"))
-                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
@@ -920,7 +918,7 @@ class CompanyServiceTest {
     @Test
     void changeStatus_throws_when_company_not_found() {
         String founderToken = auth.registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.changeStatus(founderToken, UUID.randomUUID().toString(), CompanyStatus.CLOSED))
+        assertThatThrownBy(() -> service.changeStatus(founderToken, UUID.randomUUID(), CompanyStatus.CLOSED))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
@@ -948,19 +946,13 @@ class CompanyServiceTest {
 
     @Test
     void getCompany_throws_when_not_found() {
-        assertThatThrownBy(() -> service.getCompany(UUID.randomUUID().toString()))
+        assertThatThrownBy(() -> service.getCompany(UUID.randomUUID()))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
     @Test
     void getCompany_throws_when_id_is_null() {
         assertThatThrownBy(() -> service.getCompany(null))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void getCompany_throws_when_id_is_blank() {
-        assertThatThrownBy(() -> service.getCompany("   "))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -977,17 +969,12 @@ class CompanyServiceTest {
 
     @Test
     void findCompany_returns_empty_when_not_found() {
-        assertThat(service.findCompany(UUID.randomUUID().toString())).isEmpty();
+        assertThat(service.findCompany(UUID.randomUUID())).isEmpty();
     }
 
     @Test
     void findCompany_returns_empty_when_id_is_null() {
         assertThat(service.findCompany(null)).isEmpty();
-    }
-
-    @Test
-    void findCompany_returns_empty_when_id_is_blank() {
-        assertThat(service.findCompany("  ")).isEmpty();
     }
 
     // ===========================================================================================
@@ -998,7 +985,7 @@ class CompanyServiceTest {
         int N = 50;
         ExecutorService pool = Executors.newFixedThreadPool(16);
         CountDownLatch start = new CountDownLatch(1);
-        Set<String> ids = ConcurrentHashMap.newKeySet();
+        Set<UUID> ids = ConcurrentHashMap.newKeySet();
         AtomicInteger failures = new AtomicInteger();
 
         for (int i = 0; i < N; i++) {
@@ -1060,7 +1047,7 @@ class CompanyServiceTest {
         int N = 30;
         ExecutorService pool = Executors.newFixedThreadPool(16);
         CountDownLatch start = new CountDownLatch(1);
-        Set<String> successfulCompanyIds = ConcurrentHashMap.newKeySet();
+        Set<UUID> successfulCompanyIds = ConcurrentHashMap.newKeySet();
         AtomicInteger failures = new AtomicInteger();
 
         for (int i = 0; i < N; i++) {
@@ -1166,8 +1153,23 @@ class CompanyServiceTest {
         @Override public Member changeManagerPermissions(String token, UUID managerId, Set<ManagerPermission> newPermissions) { return null; }
     }
 
+    private static final class FakeEventManagementService extends EventManagementService {
+        FakeEventManagementService() {
+            super(null, null, null, null);
+        }
+
+        @Override
+        public List<EventView> searchInCompany(UUID companyId, SearchCriteria criteria) {
+            return List.of();
+        }
+
+        @Override
+        public void cancel(UUID eventId, UUID callerId) {
+        }
+    }
+
     private static final class FakeCompanyRepository implements ICompanyRepository {
-        private final Map<String, Company> storage = new ConcurrentHashMap<>();
+        private final Map<UUID, Company> storage = new ConcurrentHashMap<>();
 
         @Override
         public Company save(Company company) {
@@ -1175,9 +1177,9 @@ class CompanyServiceTest {
             try {
                 Field idField = Company.class.getDeclaredField("id");
                 idField.setAccessible(true);
-                String id = (String) idField.get(company);
+                UUID id = (UUID) idField.get(company);
                 if (id == null) {
-                    id = UUID.randomUUID().toString();
+                    id = UUID.randomUUID();
                     idField.set(company, id);
                 }
                 storage.put(id, company);
@@ -1195,7 +1197,7 @@ class CompanyServiceTest {
         }
 
         @Override
-        public Optional<Company> findById(String id) {
+        public Optional<Company> findById(UUID id) {
             if (id == null) return Optional.empty();
             return Optional.ofNullable(storage.get(id));
         }
