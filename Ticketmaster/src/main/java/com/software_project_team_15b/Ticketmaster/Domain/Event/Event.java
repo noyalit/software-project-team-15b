@@ -110,6 +110,91 @@ public class Event {
         areas.add(area);
     }
 
+    /**
+     * Patch the descriptive fields. Null arguments leave the corresponding
+     * attribute unchanged. Forbidden once the event has been cancelled, since
+     * historical purchases must remain consistent with the receipts emitted
+     * at sale time.
+     */
+    public void updateDetails(String newName, String newArtist, Category newCategory,
+                              Instant newStartsAt, String newLocation) {
+        if (status == EventStatus.CANCELLED) {
+            throw new InvalidEventStateException("cannot update cancelled event");
+        }
+        if (newName != null) {
+            if (newName.isBlank()) throw new IllegalArgumentException("name must not be blank");
+            this.name = newName;
+        }
+        if (newArtist != null) {
+            if (newArtist.isBlank()) throw new IllegalArgumentException("artist must not be blank");
+            this.artist = newArtist;
+        }
+        if (newCategory != null) this.category = newCategory;
+        if (newStartsAt != null) this.startsAt = newStartsAt;
+        if (newLocation != null) {
+            if (newLocation.isBlank()) throw new IllegalArgumentException("location must not be blank");
+            this.location = newLocation;
+        }
+    }
+
+    /**
+     * Patch a single area's mutable attributes. Null arguments leave the
+     * corresponding attribute unchanged. Forbidden on a cancelled event.
+     */
+    public void updateArea(UUID areaId, String newName, Money newBasePrice, Integer newStandingCapacity) {
+        if (status == EventStatus.CANCELLED) {
+            throw new InvalidEventStateException("cannot update area on cancelled event");
+        }
+        EventArea area = areas.stream()
+                .filter(a -> a.areaId().equals(areaId))
+                .findFirst()
+                .orElseThrow(() -> new InvalidEventStateException("area not found: " + areaId));
+        if (newStandingCapacity != null && !(area instanceof StandingEventArea)) {
+            throw new InvalidEventStateException("standingCapacity only applies to standing areas");
+        }
+        if (newName != null) area.rename(newName);
+        if (newBasePrice != null) area.reprice(newBasePrice);
+        if (newStandingCapacity != null) {
+            ((StandingEventArea) area).resizeTo(newStandingCapacity);
+        }
+    }
+
+    /**
+     * Remove an area. Allowed only while the event is still in DRAFT — once
+     * published, areas may have holds or sales and so must be preserved
+     * (use {@link #cancel()} to retire the entire event instead).
+     */
+    public void removeArea(UUID areaId) {
+        requireState(EventStatus.DRAFT, "removeArea");
+        boolean removed = areas.removeIf(a -> a.areaId().equals(areaId));
+        if (!removed) {
+            throw new InvalidEventStateException("area not found: " + areaId);
+        }
+    }
+
+    /** Replace the purchase-policy chain. Forbidden on cancelled events. */
+    public void replacePurchasePolicies(List<IEventPurchasePolicy> policies) {
+        if (status == EventStatus.CANCELLED) {
+            throw new InvalidEventStateException("cannot update policies on cancelled event");
+        }
+        Objects.requireNonNull(policies, "policies");
+        List<IEventPurchasePolicy> copy = new ArrayList<>(policies);
+        copy.forEach(p -> Objects.requireNonNull(p, "purchase policy element"));
+        this.purchasePolicies = copy;
+    }
+
+    /** Replace the discount-policy chain. Forbidden on cancelled events. */
+    public void replaceDiscountPolicies(List<IEventDiscountPolicy> policies) {
+        if (status == EventStatus.CANCELLED) {
+            throw new InvalidEventStateException("cannot update policies on cancelled event");
+        }
+        Objects.requireNonNull(policies, "policies");
+        List<IEventDiscountPolicy> copy = new ArrayList<>(policies);
+        copy.forEach(p -> Objects.requireNonNull(p, "discount policy element"));
+        this.discountPolicies = copy;
+    }
+
+
     public void publish() {
         if (status != EventStatus.DRAFT) {
             throw new InvalidEventStateException("cannot publish from status " + status);

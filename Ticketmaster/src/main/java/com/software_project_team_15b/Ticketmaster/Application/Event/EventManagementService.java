@@ -4,6 +4,8 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Add
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
+import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventArea;
@@ -63,7 +65,7 @@ import org.springframework.transaction.annotation.Transactional;
  * the same transaction open across retries and never see a different version.
  */
 @Service
-public class EventManagementService {
+public class EventManagementService implements IEventManagementService {
 
     private static final Logger AUDIT = LoggerFactory.getLogger("audit.event-management");
 
@@ -374,7 +376,7 @@ public class EventManagementService {
                 .filter(a -> a.areaId().equals(areaId))
                 .findFirst()
                 .orElseThrow(() -> new InvalidEventStateException("area not found: " + areaId));
-        Map<UUID, Seat> seats = areaSeats(area);
+        Map<UUID, Seat> seats = seatsOf(area);
 
         Set<UUID> available = new HashSet<>();
         Set<UUID> unavailable = new HashSet<>();
@@ -393,10 +395,25 @@ public class EventManagementService {
         return result;
     }
 
-    private Map<UUID, Seat> areaSeats(EventArea area) {
+    private Map<UUID, Seat> seatsOf(EventArea area) {
         if (area instanceof SeatingEventArea s) return s.seats();
         if (area instanceof StandingEventArea s) return s.seats();
         return Map.of();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<EventView.SeatView> areaSeats(UUID eventId, UUID areaId) {
+        Objects.requireNonNull(areaId, "areaId");
+        Event event = requireEvent(eventId);
+        EventArea area = event.areas().stream()
+                .filter(a -> a.areaId().equals(areaId))
+                .findFirst()
+                .orElseThrow(() -> new InvalidEventStateException("area not found: " + areaId));
+        return seatsOf(area).values().stream()
+                .map(seat -> new EventView.SeatView(
+                        seat.seatId(), seat.row(), seat.number(), seat.status().name()))
+                .toList();
     }
 
     private Event requireEvent(UUID eventId) {
@@ -429,5 +446,126 @@ public class EventManagementService {
                 yield new StandingEventArea(areaId, cmd.name(), cmd.basePrice(), cmd.standingCapacity());
             }
         };
+    }
+
+    // -------------------------------------------------------------------------
+    // Catalog mutability — II.4.1 / II.4.3
+    // -------------------------------------------------------------------------
+
+    @Override
+    @Transactional
+    public void updateEvent(UUID eventId, UpdateEventCommand cmd, UUID callerId) {
+        Objects.requireNonNull(cmd, "cmd");
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            Event event = requireEvent(eventId);
+            requireAuthorized(event.companyId(), callerId);
+            event.updateDetails(cmd.name(), cmd.artist(), cmd.category(), cmd.startsAt(), cmd.location());
+            events.save(event);
+            AUDIT.info("op=updateEvent event={} caller={} result=ok", eventId, callerId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=updateEvent event={} caller={} result=rejected reason={}",
+                    eventId, callerId, e.getMessage());
+            throw e;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    @Retryable(retryFor = {
+            OptimisticLockException.class,
+            PessimisticLockException.class,
+            PessimisticLockingFailureException.class,
+            CannotAcquireLockException.class,
+            ObjectOptimisticLockingFailureException.class
+    }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
+    public void updateArea(UUID eventId, UUID areaId, UpdateAreaCommand cmd, UUID callerId) {
+        Objects.requireNonNull(cmd, "cmd");
+        Objects.requireNonNull(areaId, "areaId");
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            txTemplate.executeWithoutResult(status -> {
+                Event event = events.findByIdForUpdate(eventId)
+                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
+                requireAuthorized(event.companyId(), callerId);
+                event.updateArea(areaId, cmd.name(), cmd.basePrice(), cmd.standingCapacity());
+                events.save(event);
+            });
+            AUDIT.info("op=updateArea event={} area={} caller={} result=ok", eventId, areaId, callerId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=updateArea event={} area={} caller={} result=rejected reason={}",
+                    eventId, areaId, callerId, e.getMessage());
+            throw e;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    @Transactional
+    public void removeArea(UUID eventId, UUID areaId, UUID callerId) {
+        Objects.requireNonNull(areaId, "areaId");
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            Event event = requireEvent(eventId);
+            requireAuthorized(event.companyId(), callerId);
+            event.removeArea(areaId);
+            events.save(event);
+            AUDIT.info("op=removeArea event={} area={} caller={} result=ok", eventId, areaId, callerId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=removeArea event={} area={} caller={} result=rejected reason={}",
+                    eventId, areaId, callerId, e.getMessage());
+            throw e;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    @Transactional
+    public void replacePurchasePolicies(UUID eventId, List<IEventPurchasePolicy> policies, UUID callerId) {
+        Objects.requireNonNull(policies, "policies");
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            Event event = requireEvent(eventId);
+            requireAuthorized(event.companyId(), callerId);
+            event.replacePurchasePolicies(policies);
+            events.save(event);
+            AUDIT.info("op=replacePurchasePolicies event={} caller={} count={} result=ok",
+                    eventId, callerId, policies.size());
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=replacePurchasePolicies event={} caller={} result=rejected reason={}",
+                    eventId, callerId, e.getMessage());
+            throw e;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    @Transactional
+    public void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies, UUID callerId) {
+        Objects.requireNonNull(policies, "policies");
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            Event event = requireEvent(eventId);
+            requireAuthorized(event.companyId(), callerId);
+            event.replaceDiscountPolicies(policies);
+            events.save(event);
+            AUDIT.info("op=replaceDiscountPolicies event={} caller={} count={} result=ok",
+                    eventId, callerId, policies.size());
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=replaceDiscountPolicies event={} caller={} result=rejected reason={}",
+                    eventId, callerId, e.getMessage());
+            throw e;
+        } finally {
+            lock.unlock();
+        }
     }
 }
