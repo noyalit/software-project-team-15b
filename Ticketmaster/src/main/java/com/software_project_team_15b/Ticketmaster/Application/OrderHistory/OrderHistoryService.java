@@ -112,8 +112,8 @@ public class OrderHistoryService implements EventSubscriber{
         validateUser(token);
         Company company = companyService.getCompany(companyId.toString());
         UUID callerId = auth.extractUserId(token);
-        if (!company.getFounderId().equals(callerId) && !companyAuthorization.canManageEvent(companyId, callerId)) {
-            throw new UnauthorizedCompanyActionException("Only the company founder or appointed managers can view sold tickets");
+        if (!company.getFounderId().equals(callerId) && !company.getOwnerIds().contains(callerId)) {
+            throw new UnauthorizedCompanyActionException("Only the company founder or owner can view sold tickets");
         }   
         SearchCriteria criteria = new SearchCriteria();
         List<Event> events = eventsRepository.searchByCompany(companyId, criteria);
@@ -137,9 +137,10 @@ public class OrderHistoryService implements EventSubscriber{
         }
         validateUser(token);
         UUID callerId = auth.extractUserId(token);
-        if (!companyAuthorization.canManageEvent(companyId, callerId)) { 
-            throw new UnauthorizedCompanyActionException("Caller is not authorized to generate sales report");
-        }
+        Company company = companyService.getCompany(companyId.toString());
+        if (!company.getFounderId().equals(callerId) && !company.getOwnerIds().contains(callerId)) {
+            throw new UnauthorizedCompanyActionException("Only the company founder or owner can view sold tickets");
+        } 
         List<Event> events = eventsRepository.searchByCompany(companyId, SearchCriteria.empty());
         if (events.isEmpty()) {
             return Map.of("ticketsSold", 0,"totalRevenue", 0.0);
