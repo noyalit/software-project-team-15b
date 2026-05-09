@@ -3,6 +3,7 @@ package com.software_project_team_15b.Ticketmaster.Application.Company;
 import java.util.*;
 
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
+import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 import org.springframework.stereotype.Service;
@@ -38,19 +39,21 @@ public class CompanyService {
 
     private final ICompanyRepository companyRepository;
     private final UserService userService;
-    private final EventManagementService eventManagementService;
+    private final EventCancelManager eventCancelManager;
     private final IAuth auth;
 
     /**
-     * @param companyRepository repository used to load and persist companies; must not be null
-     * @param auth authentication/authorization gateway; must not be null
+     * @param companyRepository  repository used to load and persist companies; must not be null
+     * @param userService        member directory used for owner/founder/manager lifecycle effects; must not be null
+     * @param eventCancelManager publisher used to broadcast event cancellations when a company closes; must not be null
+     * @param auth               authentication/authorization gateway; must not be null
      * @throws NullPointerException if any argument is null
      */
-    public CompanyService(ICompanyRepository companyRepository, UserService userService, EventManagementService eventManagementService, IAuth auth) {
+    public CompanyService(ICompanyRepository companyRepository, UserService userService, EventCancelManager eventCancelManager, IAuth auth) {
         this.companyRepository = Objects.requireNonNull(companyRepository, "companyRepository cannot be null");
         this.userService = Objects.requireNonNull(userService, "userService cannot be null");
         this.auth = Objects.requireNonNull(auth, "auth cannot be null");
-        this.eventManagementService = Objects.requireNonNull(eventManagementService, "eventManagementService cannot be null");
+        this.eventCancelManager = Objects.requireNonNull(eventCancelManager, "eventCancelManager cannot be null");
     }
 
     /**
@@ -125,47 +128,57 @@ public class CompanyService {
     }
 
     /**
-     * Appoints a member as a manager of the company with the given permissions.
-     * Only an owner of the company may perform this action.
+     * Appoints a member as a manager of a specific event within the company,
+     * granting the supplied permission set. Only an owner of the company may
+     * perform this action.
      *
      * @param token              an active member token; must not be null or blank
-     * @param companyId          the target company's id; must not be null or blank
+     * @param companyId          the target company's id; must not be null
+     * @param eventId            the event the member will manage; must not be null
      * @param newOwnerId         the id of the member to appoint as manager; must not be null
      * @param managerPermissions the set of permissions to grant; must not be null
-     * @throws IllegalArgumentException           if {@code companyId} is null/blank or {@code newOwnerId} is null
+     * @throws IllegalArgumentException           if {@code companyId}, {@code eventId} or {@code newOwnerId} is null,
+     *                                            or if {@code newOwnerId} is already a manager of {@code eventId}
      * @throws InvalidTokenException              if the token is null, blank, or not valid
      * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
-    public void addManager(String token, UUID companyId, UUID newOwnerId, Set<ManagerPermission> managerPermissions) {
+    public void addManager(String token, UUID companyId, UUID eventId, UUID newOwnerId, Set<ManagerPermission> managerPermissions) {
         requireNonNull(companyId, "Company ID");
+        requireNonNull(eventId, "Event ID");
         requireNonNull(newOwnerId, "New manager ID");
         Company company = getCompany(companyId);
         UUID calledId = requireAuthenticatedMember(token);
         requireOwner(company, calledId);
         userService.appointManager(newOwnerId, token, managerPermissions);
+        company.addManager(eventId, newOwnerId);
+        companyRepository.save(company);
     }
 
     /**
-     * Removes a manager from the company. Only an owner of the company may
-     * perform this action.
+     * Removes a manager from a specific event in the company. Only an owner
+     * of the company may perform this action.
      *
      * @param token     an active member token; must not be null or blank
-     * @param companyId the target company's id; must not be null or blank
+     * @param companyId the target company's id; must not be null
+     * @param eventId   the event the manager is being removed from; must not be null
      * @param managerId the id of the manager to remove; must not be null
-     * @throws IllegalArgumentException           if {@code companyId} is null/blank, {@code managerId} is null,
-     *                                            or the manager was not appointed by the calling owner
+     * @throws IllegalArgumentException           if {@code companyId}, {@code eventId} or {@code managerId} is null,
+     *                                            or if {@code managerId} is not currently a manager of {@code eventId}
      * @throws InvalidTokenException              if the token is null, blank, or not valid
      * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
-    public void removeManager(String token, UUID companyId, UUID managerId) {
+    public void removeManager(String token, UUID companyId, UUID eventId, UUID managerId) {
         requireNonNull(companyId, "Company ID");
+        requireNonNull(eventId, "Event ID");
         requireNonNull(managerId, "Manager ID to remove");
         Company company = getCompany(companyId);
         UUID calledId = requireAuthenticatedMember(token);
         requireOwner(company, calledId);
         userService.removeManagerAppointment(token, managerId);
+        company.removeManager(eventId, managerId);
+        companyRepository.save(company);
     }
 
     /**
@@ -320,8 +333,14 @@ public class CompanyService {
         requireFounderOrSystemAdmin(token, company);
         company.changeStatus(newStatus);
         if (newStatus == CompanyStatus.CLOSED) {
-            eventManagementService.searchInCompany(companyId, null)
-                    .forEach(event -> eventManagementService.cancel(event.eventId(), auth.extractUserId(token)));
+            // Snapshot the keys: removeAllManagersOfEvent + downstream cancellation
+            // listeners may mutate the manager map, which would otherwise break
+            // iteration with ConcurrentModificationException.
+            Set<UUID> eventIds = new HashSet<>(company.getEventManagers().keySet());
+            for (UUID eventId : eventIds) {
+                company.removeAllManagersOfEvent(eventId);
+                eventCancelManager.cancelEvent(eventId);
+            }
         }
         return companyRepository.save(company);
     }
@@ -338,7 +357,7 @@ public class CompanyService {
     public void validatePurchaseEligibility(UUID companyId, PurchaseRequest request) {
         requireNonNull(companyId, "Company ID");
         requireNonNull(request, "Purchase request");
-        Optional<Company> company = companyRepository.findById(companyId.toString());
+        Optional<Company> company = companyRepository.findById(companyId);
         if (company.isEmpty()) return;
         // TODO: once Company stores a typed ICompanyPurchasePolicy, invoke its validate(request, null) here.
     }
@@ -359,7 +378,7 @@ public class CompanyService {
         requireNonNull(companyId, "Company ID");
         requireNonNull(subtotal, "Subtotal");
         requireNonNull(request, "Purchase request");
-        Optional<Company> company = companyRepository.findById(companyId.toString());
+        Optional<Company> company = companyRepository.findById(companyId);
         if (company.isEmpty()) return subtotal;
         // TODO: once Company stores a typed ICompanyDiscountPolicy, evaluate it and clamp to subtotal.
         return subtotal;

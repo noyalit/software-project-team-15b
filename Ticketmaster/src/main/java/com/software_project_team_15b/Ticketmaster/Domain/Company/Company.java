@@ -39,6 +39,11 @@ public class Company {
     @Column(name = "owner_id", nullable = false)
     private Set<UUID> ownerIds = new HashSet<>();
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "company_managers", joinColumns = @JoinColumn(name = "company_id"))
+    @Column(name = "user_id", nullable = false)
+    private HashMap<UUID, Set<UUID>> eventManagers = new HashMap<>();
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private CompanyStatus status;
@@ -186,6 +191,81 @@ public class Company {
         }
         ownerIds.remove(memberId);
         touch();
+    }
+
+    /**
+     * Records {@code userId} as a manager of {@code eventId} for this company.
+     *
+     * @param eventId the event the user is being assigned to manage; must not be null
+     * @param userId  the id of the member to register as a manager; must not be null
+     * @throws IllegalArgumentException if either argument is null, or if
+     *                                  {@code userId} is already a manager of {@code eventId}
+     */
+    public void addManager(UUID eventId, UUID userId) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+        if (userId == null) {
+            throw new IllegalArgumentException("userId cannot be null");
+        }
+        Set<UUID> managers = eventManagers.computeIfAbsent(eventId, k -> new HashSet<>());
+        if (!managers.add(userId)) {
+            throw new IllegalArgumentException("userId is already a manager");
+        }
+        touch();
+    }
+
+    /**
+     * Removes {@code userId} from the managers of {@code eventId}.
+     *
+     * @param eventId the event whose manager set is being modified; must not be null
+     * @param userId  the id of the manager to remove; must not be null
+     * @throws IllegalArgumentException if either argument is null, or if
+     *                                  {@code userId} is not currently a manager of {@code eventId}
+     */
+    public void removeManager(UUID eventId, UUID userId) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+        if (userId == null) {
+            throw new IllegalArgumentException("userId cannot be null");
+        }
+        Set<UUID> managers = eventManagers.get(eventId);
+        if (managers == null || !managers.remove(userId)) {
+            throw new IllegalArgumentException("userId is not a manager of this event");
+        }
+        touch();
+    }
+
+    /**
+     * Clears the manager set for {@code eventId} (the entry itself is preserved).
+     *
+     * @param eventId the event whose manager set should be cleared; must not be null
+     * @throws IllegalArgumentException if {@code eventId} is null or has no manager entry
+     */
+    public void removeAllManagersOfEvent(UUID eventId) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+        Set<UUID> managers = eventManagers.get(eventId);
+        if (managers == null) {
+            throw new IllegalArgumentException("eventId has no managers");
+        }
+        managers.clear();
+        touch();
+    }
+
+    /**
+     * @return an unmodifiable view of the per-event manager mapping; the inner
+     *         sets are also unmodifiable so callers cannot mutate domain state
+     *         through the returned reference
+     */
+    public Map<UUID, Set<UUID>> getEventManagers() {
+        Map<UUID, Set<UUID>> snapshot = new HashMap<>(eventManagers.size());
+        for (Map.Entry<UUID, Set<UUID>> e : eventManagers.entrySet()) {
+            snapshot.put(e.getKey(), Collections.unmodifiableSet(e.getValue()));
+        }
+        return Collections.unmodifiableMap(snapshot);
     }
 
     // =============================================================================================================
