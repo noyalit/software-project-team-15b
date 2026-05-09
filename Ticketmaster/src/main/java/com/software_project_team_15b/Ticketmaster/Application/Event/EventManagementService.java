@@ -1,6 +1,9 @@
 package com.software_project_team_15b.Ticketmaster.Application.Event;
 
 import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
@@ -27,6 +30,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.Invali
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.EventAction;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompanyAuthorizationPort;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PessimisticLockException;
@@ -76,19 +80,22 @@ public class EventManagementService implements IEventManagementService, EventSub
     private final TransactionTemplate txTemplate;
     private final EventCancelManager cancelManager;
     private final CompanyService companyService;
+    private final IAuth auth;
 
     public EventManagementService(IEventRepository events,
                                   EventLockRegistry locks,
                                   ICompanyAuthorizationPort authorization,
                                   PlatformTransactionManager txManager,
                                   EventCancelManager cancelManager,
-                                  CompanyService companyService) {
+                                  CompanyService companyService,
+                                  IAuth auth) {
         this.events = events;
         this.locks = locks;
         this.authorization = authorization;
         this.txTemplate = new TransactionTemplate(txManager);
         this.cancelManager = cancelManager;
         this.companyService = companyService;
+        this.auth = auth;
         try {
             this.cancelManager.subscribe(this);
         } catch (Exception e) {
@@ -98,7 +105,7 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Transactional
     public UUID createEvent(CreateEventCommand cmd, UUID callerId) {
-        requireAuthorized(cmd.companyId(), callerId);
+        authorization.require(cmd.companyId(), callerId, EventAction.MANAGE_EVENT);
         List<IEventPurchasePolicy> purchasePolicies = cmd.purchasePolicies() == null
                 ? List.of()
                 : cmd.purchasePolicies();
@@ -127,7 +134,7 @@ public class EventManagementService implements IEventManagementService, EventSub
         lock.lock();
         try {
             Event event = requireEvent(eventId);
-            requireAuthorized(event.companyId(), callerId);
+            authorization.require(event.companyId(), callerId, EventAction.CONFIGURE_HALL);
             EventArea area = buildArea(cmd);
             event.addArea(area);
             events.save(event);
@@ -147,7 +154,7 @@ public class EventManagementService implements IEventManagementService, EventSub
         lock.lock();
         try {
             Event event = requireEvent(eventId);
-            requireAuthorized(event.companyId(), callerId);
+            authorization.require(event.companyId(), callerId, EventAction.PUBLISH);
             event.publish();
             events.save(event);
             AUDIT.info("op=publish event={} caller={} result=ok", eventId, callerId);
@@ -173,7 +180,7 @@ public class EventManagementService implements IEventManagementService, EventSub
             txTemplate.executeWithoutResult(status -> {
                 Event event = events.findByIdForUpdate(eventId)
                         .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
-                requireAuthorized(event.companyId(), callerId);
+                authorization.require(event.companyId(), callerId, EventAction.CANCEL);
                 event.cancel();
                 events.save(event);
             });
@@ -436,10 +443,84 @@ public class EventManagementService implements IEventManagementService, EventSub
                 .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
     }
 
-    private void requireAuthorized(UUID companyId, UUID callerId) {
-        if (!authorization.canManageEvent(companyId, callerId)) {
-            throw new PolicyViolationException("caller " + callerId + " not authorized for company " + companyId);
+    /**
+     * Resolves a member token to its caller id.
+     * <p>
+     * Authentication only — per-action authorization is delegated to
+     * {@link ICompanyAuthorizationPort#require}.
+     *
+     * @param token an active member token
+     * @return the authenticated member's id
+     * @throws InvalidTokenException              if the token is null, blank, or not valid
+     * @throws UnauthorizedCompanyActionException if the bearer is not a member
+     */
+    private UUID resolveMemberCallerId(String token) {
+        if (token == null || token.isBlank()) {
+            throw new InvalidTokenException("Token cannot be null or blank");
         }
+        if (!auth.isTokenValid(token)) {
+            throw new InvalidTokenException("Invalid or expired token");
+        }
+        if (!auth.isMember(token)) {
+            throw new UnauthorizedCompanyActionException(
+                    "Only members can perform Event management actions");
+        }
+        UUID callerId = auth.extractUserId(token);
+        if (callerId == null) {
+            throw new InvalidTokenException("Token does not contain a valid user id");
+        }
+        return callerId;
+    }
+
+    // -------------------------------------------------------------------------
+    // Token-authenticated overloads. Each resolves the token to a caller id and
+    // delegates to its UUID-based counterpart, which performs per-action
+    // authorization through the company port.
+    // -------------------------------------------------------------------------
+
+    @Override
+    public UUID createEvent(CreateEventCommand cmd, String token) {
+        return createEvent(cmd, resolveMemberCallerId(token));
+    }
+
+    @Override
+    public UUID addArea(UUID eventId, AddAreaCommand cmd, String token) {
+        return addArea(eventId, cmd, resolveMemberCallerId(token));
+    }
+
+    @Override
+    public void publish(UUID eventId, String token) {
+        publish(eventId, resolveMemberCallerId(token));
+    }
+
+    @Override
+    public void cancel(UUID eventId, String token) {
+        cancel(eventId, resolveMemberCallerId(token));
+    }
+
+    @Override
+    public void updateEvent(UUID eventId, UpdateEventCommand cmd, String token) {
+        updateEvent(eventId, cmd, resolveMemberCallerId(token));
+    }
+
+    @Override
+    public void updateArea(UUID eventId, UUID areaId, UpdateAreaCommand cmd, String token) {
+        updateArea(eventId, areaId, cmd, resolveMemberCallerId(token));
+    }
+
+    @Override
+    public void removeArea(UUID eventId, UUID areaId, String token) {
+        removeArea(eventId, areaId, resolveMemberCallerId(token));
+    }
+
+    @Override
+    public void replacePurchasePolicies(UUID eventId, List<IEventPurchasePolicy> policies, String token) {
+        replacePurchasePolicies(eventId, policies, resolveMemberCallerId(token));
+    }
+
+    @Override
+    public void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies, String token) {
+        replaceDiscountPolicies(eventId, policies, resolveMemberCallerId(token));
     }
 
     private EventArea buildArea(AddAreaCommand cmd) {
@@ -475,7 +556,7 @@ public class EventManagementService implements IEventManagementService, EventSub
         lock.lock();
         try {
             Event event = requireEvent(eventId);
-            requireAuthorized(event.companyId(), callerId);
+            authorization.require(event.companyId(), callerId, EventAction.MANAGE_EVENT);
             event.updateDetails(cmd.name(), cmd.artist(), cmd.category(), cmd.startsAt(), cmd.location());
             events.save(event);
             AUDIT.info("op=updateEvent event={} caller={} result=ok", eventId, callerId);
@@ -505,7 +586,7 @@ public class EventManagementService implements IEventManagementService, EventSub
             txTemplate.executeWithoutResult(status -> {
                 Event event = events.findByIdForUpdate(eventId)
                         .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
-                requireAuthorized(event.companyId(), callerId);
+                authorization.require(event.companyId(), callerId, EventAction.UPDATE_EVENT_MAP);
                 event.updateArea(areaId, cmd.name(), cmd.basePrice(), cmd.standingCapacity());
                 events.save(event);
             });
@@ -527,7 +608,7 @@ public class EventManagementService implements IEventManagementService, EventSub
         lock.lock();
         try {
             Event event = requireEvent(eventId);
-            requireAuthorized(event.companyId(), callerId);
+            authorization.require(event.companyId(), callerId, EventAction.CONFIGURE_HALL);
             event.removeArea(areaId);
             events.save(event);
             AUDIT.info("op=removeArea event={} area={} caller={} result=ok", eventId, areaId, callerId);
@@ -548,7 +629,7 @@ public class EventManagementService implements IEventManagementService, EventSub
         lock.lock();
         try {
             Event event = requireEvent(eventId);
-            requireAuthorized(event.companyId(), callerId);
+            authorization.require(event.companyId(), callerId, EventAction.DEFINE_PURCHASE_POLICY);
             event.replacePurchasePolicies(policies);
             events.save(event);
             AUDIT.info("op=replacePurchasePolicies event={} caller={} count={} result=ok",
@@ -570,7 +651,7 @@ public class EventManagementService implements IEventManagementService, EventSub
         lock.lock();
         try {
             Event event = requireEvent(eventId);
-            requireAuthorized(event.companyId(), callerId);
+            authorization.require(event.companyId(), callerId, EventAction.DEFINE_DISCOUNT_POLICY);
             event.replaceDiscountPolicies(policies);
             events.save(event);
             AUDIT.info("op=replaceDiscountPolicies event={} caller={} count={} result=ok",
