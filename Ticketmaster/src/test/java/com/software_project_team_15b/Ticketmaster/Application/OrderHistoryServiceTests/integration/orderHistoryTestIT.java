@@ -23,25 +23,22 @@ import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.OrderHistory.OrderHistoryService;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 
+import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
+
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompanyAuthorizationPort;
 
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.Ticket;
 
-import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
-
-import org.aspectj.weaver.ast.Or;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest
@@ -58,9 +55,6 @@ class OrderHistoryServiceIT {
 
     @MockitoBean
     IAuth auth;
-
-    @MockitoBean
-    ICompanyAuthorizationPort companyAuthorization;
 
     @MockitoBean
     CompanyService companyService;
@@ -90,12 +84,14 @@ class OrderHistoryServiceIT {
         when(auth.isTokenValid(token)).thenReturn(true);
         when(auth.isMember(token)).thenReturn(true);
         when(auth.extractUserId(token)).thenReturn(callerId);
-        when(companyAuthorization.canManageEvent(companyId, callerId)).thenReturn(true);
 
         Company company = org.mockito.Mockito.mock(Company.class);
 
         when(company.getFounderId()).thenReturn(callerId);
-        when(companyService.getCompany(companyId.toString())).thenReturn(company);
+        when(company.getOwnerIds()).thenReturn(Set.of());
+
+        when(companyService.getCompany(companyId.toString()))
+                .thenReturn(company);
     }
 
     // =========================================================
@@ -119,7 +115,9 @@ class OrderHistoryServiceIT {
 
         List<OrderHistory> result = service.getOrderHistoryByUserId(token);
 
-        assertThat(result).hasSize(2).allMatch(o -> o.getUserId().equals(userId));
+        assertThat(result)
+                .hasSize(2)
+                .allMatch(order -> order.getUserId().equals(userId));
     }
 
     @Test
@@ -138,12 +136,13 @@ class OrderHistoryServiceIT {
     // =========================================================
 
     @Test
-    void getSoldTicketsForCompany_returns_tickets_grouped_by_event_when_user_is_founder_and_authorized() {
+    void getSoldTicketsForCompany_returns_tickets_grouped_by_event_when_user_is_founder() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
+
         when(company.getFounderId()).thenReturn(callerId);
+        when(company.getOwnerIds()).thenReturn(Set.of());
         when(companyService.getCompany(companyId.toString())).thenReturn(company);
-        when(companyAuthorization.canManageEvent(companyId, callerId)).thenReturn(true);
 
         UUID company2Id = UUID.randomUUID();
 
@@ -165,37 +164,43 @@ class OrderHistoryServiceIT {
         assertThat(result).hasSize(2);
         assertThat(result).containsKeys(e1.eventId(), e2.eventId());
         assertThat(result).doesNotContainKey(e3.eventId());
-
         assertThat(result.get(e1.eventId())).hasSize(3);
         assertThat(result.get(e2.eventId())).hasSize(3);
     }
 
     @Test
-    void getSoldTicketsForCompany_throws_when_user_is_not_founder() {
+    void getSoldTicketsForCompany_returns_tickets_grouped_by_event_when_user_is_owner() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
 
         when(company.getFounderId()).thenReturn(UUID.randomUUID());
+        when(company.getOwnerIds()).thenReturn(Set.of(callerId));
         when(companyService.getCompany(companyId.toString())).thenReturn(company);
-        when(auth.extractUserId(token)).thenReturn(callerId);
-        
-        assertThatThrownBy(() ->
-                service.getSoldTicketsForCompany(token, companyId))
-                .isInstanceOf(UnauthorizedCompanyActionException.class);
+
+        Event event = createEvent(companyId);
+
+        eventsRepository.save(event);
+        orderHistoryRepository.save(createOrder(userId, event.eventId(), 2, "10.00"));
+
+        Map<UUID, List<Ticket>> result = service.getSoldTicketsForCompany(token, companyId);
+
+        assertThat(result).containsKey(event.eventId());
+        assertThat(result.get(event.eventId())).hasSize(2);
     }
 
     @Test
-    void getSoldTicketsForCompany_throws_when_user_cannot_manage_events() {
+    void getSoldTicketsForCompany_throws_when_user_is_not_founder_and_not_owner() {
+
         Company company = org.mockito.Mockito.mock(Company.class);
-        when(company.getFounderId()).thenReturn(callerId); // is founder
+
+        when(company.getFounderId()).thenReturn(UUID.randomUUID());
+        when(company.getOwnerIds()).thenReturn(Set.of());
         when(companyService.getCompany(companyId.toString())).thenReturn(company);
-        
-        when(companyAuthorization.canManageEvent(companyId, callerId)).thenReturn(false);
 
         assertThatThrownBy(() ->
                 service.getSoldTicketsForCompany(token, companyId))
-                .isInstanceOf(UnauthorizedCompanyActionException.class)
-                .hasMessageContaining("not authorized to manage events");
+                .isInstanceOf(UnauthorizedCompanyActionException.class);
+
     }
 
     // =========================================================
@@ -203,7 +208,13 @@ class OrderHistoryServiceIT {
     // =========================================================
 
     @Test
-    void generateSalesReport_returns_correct_totals() {
+    void generateSalesReport_returns_correct_totals_when_user_is_founder() {
+
+        Company company = org.mockito.Mockito.mock(Company.class);
+
+        when(company.getFounderId()).thenReturn(callerId);
+        when(company.getOwnerIds()).thenReturn(Set.of());
+        when(companyService.getCompany(companyId.toString())).thenReturn(company);
 
         Event e1 = createEvent(companyId);
         Event e2 = createEvent(companyId);
@@ -212,30 +223,50 @@ class OrderHistoryServiceIT {
         eventsRepository.save(e2);
 
         orderHistoryRepository.save(createOrder(userId, e1.eventId(), 3, "10.00"));
+
         orderHistoryRepository.save(createOrder(userId, e2.eventId(), 2, "20.00"));
 
-        Map<String, Object> report =
-                service.generateSalesReport(token, companyId);
+        Map<String, Object> report = service.generateSalesReport(token, companyId);
 
         assertThat(report.get("ticketsSold")).isEqualTo(5);
-        assertThat(report.get("totalRevenue"))
-                .isEqualTo(Money.of("70.00", "USD"));
+        assertThat(report.get("totalRevenue")).isEqualTo(Money.of("70.00", "USD"));
+    }
+
+    @Test
+    void generateSalesReport_returns_correct_totals_when_user_is_owner() {
+
+        Company company = org.mockito.Mockito.mock(Company.class);
+
+        when(company.getFounderId()).thenReturn(UUID.randomUUID());
+        when(company.getOwnerIds()).thenReturn(Set.of(callerId));
+        when(companyService.getCompany(companyId.toString())).thenReturn(company);
+
+        Event event = createEvent(companyId);
+        eventsRepository.save(event);
+        orderHistoryRepository.save(createOrder(userId, event.eventId(), 2, "15.00"));
+
+        Map<String, Object> report = service.generateSalesReport(token, companyId);
+
+        assertThat(report.get("ticketsSold")).isEqualTo(2);
+        assertThat(report.get("totalRevenue")).isEqualTo(Money.of("30.00", "USD"));
     }
 
     @Test
     void generateSalesReport_returns_zero_when_no_events_exist() {
 
-        Map<String, Object> report =
-                service.generateSalesReport(token, companyId);
+        Map<String, Object> report = service.generateSalesReport(token, companyId);
 
         assertThat(report.get("ticketsSold")).isEqualTo(0);
     }
 
     @Test
-    void generateSalesReport_throws_when_user_is_unauthorized() {
+    void generateSalesReport_throws_when_user_is_not_founder_and_not_owner() {
 
-        when(companyAuthorization.canManageEvent(companyId, callerId))
-                .thenReturn(false);
+        Company company = org.mockito.Mockito.mock(Company.class);
+
+        when(company.getFounderId()).thenReturn(UUID.randomUUID());
+        when(company.getOwnerIds()).thenReturn(Set.of());
+        when(companyService.getCompany(companyId.toString())).thenReturn(company);
 
         assertThatThrownBy(() ->
                 service.generateSalesReport(token, companyId))
@@ -250,19 +281,13 @@ class OrderHistoryServiceIT {
     void notifyEventIsCancelled_refunds_payment_and_cancels_tickets() {
 
         UUID eventId = UUID.randomUUID();
-
         OrderHistory order =
                 createOrder(userId, eventId, 2, "15.00");
 
         orderHistoryRepository.save(order);
-
         service.notifyEventIsCancelled(eventId);
-
-        verify(paymentGateway)
-                .refundPayment(order.getUserId(), order.getTotalPrice());
-
-        verify(ticketProvider)
-                .cancelTickets(eq(eventId), eq(order.getAreaId()), any(Set.class));
+        verify(paymentGateway).refundPayment(order.getUserId(), order.getTotalPrice());
+        verify(ticketProvider).cancelTickets(eq(eventId),eq(order.getAreaId()),any(Set.class));
     }
 
     // =========================================================
@@ -296,7 +321,13 @@ class OrderHistoryServiceIT {
         Set<Ticket> tickets = new HashSet<>();
 
         for (int i = 0; i < ticketCount; i++) {
-            tickets.add(new Ticket(UUID.randomUUID(), basePrice));
+
+            tickets.add(
+                    new Ticket(
+                            UUID.randomUUID(),
+                            basePrice
+                    )
+            );
         }
 
         BigDecimal total =
@@ -316,4 +347,3 @@ class OrderHistoryServiceIT {
         );
     }
 }
-
