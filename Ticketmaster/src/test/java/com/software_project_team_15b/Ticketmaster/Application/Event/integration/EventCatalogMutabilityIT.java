@@ -19,7 +19,6 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.AgeRestrictionPolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.MaxTicketsPerOrderPolicy;
@@ -224,8 +223,7 @@ class EventCatalogMutabilityIT {
                 Instant.now().plusSeconds(86400), "V",
                 List.of(new MaxTicketsPerOrderPolicy(1), new AgeRestrictionPolicy(18)), null), caller);
 
-        service.replacePurchasePolicies(strict,
-                List.of(new DelegatingEventPurchasePolicy()), caller);
+        service.replacePurchasePolicies(strict, List.of(), caller);
 
         PurchaseRequest req = new PurchaseRequest(strict, UUID.randomUUID(), UUID.randomUUID(),
                 LocalDate.now().minusYears(30), 99, List.of(), null);
@@ -246,7 +244,7 @@ class EventCatalogMutabilityIT {
         Setup s = createPublishedSeatingEvent(1, "10.00");
         service.cancel(s.eventId(), s.callerId());
 
-        List<IEventPurchasePolicy> p = List.of(new DelegatingEventPurchasePolicy());
+        List<IEventPurchasePolicy> p = List.of();
         assertThatThrownBy(() -> service.replacePurchasePolicies(s.eventId(), p, s.callerId()))
                 .isInstanceOf(InvalidEventStateException.class)
                 .hasMessageContaining("cancelled");

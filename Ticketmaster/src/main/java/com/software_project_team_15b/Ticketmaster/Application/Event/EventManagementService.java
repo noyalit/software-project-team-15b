@@ -1,11 +1,14 @@
 package com.software_project_team_15b.Ticketmaster.Application.Event;
 
+import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
+import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventArea;
@@ -22,8 +25,6 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatingEventArea;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.StandingEventArea;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventDiscountPolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompanyAuthorizationPort;
@@ -65,7 +66,7 @@ import org.springframework.transaction.annotation.Transactional;
  * the same transaction open across retries and never see a different version.
  */
 @Service
-public class EventManagementService implements IEventManagementService {
+public class EventManagementService implements IEventManagementService, EventSubscriber {
 
     private static final Logger AUDIT = LoggerFactory.getLogger("audit.event-management");
 
@@ -73,25 +74,36 @@ public class EventManagementService implements IEventManagementService {
     private final EventLockRegistry locks;
     private final ICompanyAuthorizationPort authorization;
     private final TransactionTemplate txTemplate;
+    private final EventCancelManager cancelManager;
+    private final CompanyService companyService;
 
     public EventManagementService(IEventRepository events,
                                   EventLockRegistry locks,
                                   ICompanyAuthorizationPort authorization,
-                                  PlatformTransactionManager txManager) {
+                                  PlatformTransactionManager txManager,
+                                  EventCancelManager cancelManager,
+                                  CompanyService companyService) {
         this.events = events;
         this.locks = locks;
         this.authorization = authorization;
         this.txTemplate = new TransactionTemplate(txManager);
+        this.cancelManager = cancelManager;
+        this.companyService = companyService;
+        try {
+            this.cancelManager.subscribe(this);
+        } catch (Exception e) {
+            throw new RuntimeException("failed to subscribe to event cancel manager", e);
+        }
     }
 
     @Transactional
     public UUID createEvent(CreateEventCommand cmd, UUID callerId) {
         requireAuthorized(cmd.companyId(), callerId);
-        List<IEventPurchasePolicy> purchasePolicies = (cmd.purchasePolicies() == null || cmd.purchasePolicies().isEmpty())
-                ? List.of(new DelegatingEventPurchasePolicy())
+        List<IEventPurchasePolicy> purchasePolicies = cmd.purchasePolicies() == null
+                ? List.of()
                 : cmd.purchasePolicies();
-        List<IEventDiscountPolicy> discountPolicies = (cmd.discountPolicies() == null || cmd.discountPolicies().isEmpty())
-                ? List.of(new DelegatingEventDiscountPolicy())
+        List<IEventDiscountPolicy> discountPolicies = cmd.discountPolicies() == null
+                ? List.of()
                 : cmd.discountPolicies();
         Event event = new Event(
                 UUID.randomUUID(),
@@ -324,7 +336,9 @@ public class EventManagementService implements IEventManagementService {
                 eventId, query.areaId(), query.buyerId(), query.buyerBirthDate(),
                 query.quantity(), List.of(), query.couponCode()
         );
-        Money total = event.cheapestPriceFor(query.areaId(), query.quantity(), request, null); //TODO: Talk with Kfir how to integrate company discount.
+        Money eventTotal = event.cheapestPriceFor(query.areaId(), query.quantity(), request);
+        Money companyTotal = companyService.cheapestPriceFor(event.companyId(), subtotal, request);
+        Money total = eventTotal.amount().compareTo(companyTotal.amount()) <= 0 ? eventTotal : companyTotal;
         Money discount = subtotal.subtract(total);
         return new PriceBreakdown(area.basePrice(), subtotal, discount, total);
     }
@@ -339,8 +353,9 @@ public class EventManagementService implements IEventManagementService {
         Event event = requireEvent(eventId);
         try {
             for (IEventPurchasePolicy policy : event.purchasePolicies()) {
-                policy.validate(request, event, null); //TODO: integrate ICompPurchasePolicy from company port.
+                policy.validate(request, event);
             }
+            companyService.validatePurchaseEligibility(event.companyId(), request);
             AUDIT.info("op=validatePurchaseEligibility event={} buyer={} result=ok",
                     eventId, request.buyerId());
         } catch (PolicyViolationException e) {
@@ -563,6 +578,35 @@ public class EventManagementService implements IEventManagementService {
         } catch (RuntimeException e) {
             AUDIT.warn("op=replaceDiscountPolicies event={} caller={} result=rejected reason={}",
                     eventId, callerId, e.getMessage());
+            throw e;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    @Retryable(retryFor = {
+            OptimisticLockException.class,
+            PessimisticLockException.class,
+            PessimisticLockingFailureException.class,
+            CannotAcquireLockException.class,
+            ObjectOptimisticLockingFailureException.class
+    }, maxAttempts = 8, backoff = @Backoff(delay = 20, multiplier = 2))
+    public void notifyEventIsCancelled(UUID event) {
+        Objects.requireNonNull(event, "event");
+        ReentrantLock lock = locks.forEvent(event);
+        lock.lock();
+        try {
+            txTemplate.executeWithoutResult(status -> {
+                Event ev = events.findByIdForUpdate(event)
+                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + event));
+                ev.cancel();
+                events.save(ev);
+            });
+            AUDIT.info("op=notifyEventIsCancelled event={} result=ok", event);
+            locks.forget(event);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=notifyEventIsCancelled event={} result=rejected reason={}", event, e.getMessage());
             throw e;
         } finally {
             lock.unlock();

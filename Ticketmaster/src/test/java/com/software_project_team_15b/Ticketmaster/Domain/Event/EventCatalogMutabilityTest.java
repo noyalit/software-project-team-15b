@@ -5,8 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventDiscountPolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 import java.time.Instant;
@@ -197,7 +195,7 @@ class EventCatalogMutabilityTest {
     @Test
     void replacePurchasePolicies_swaps_the_chain() {
         Event event = EventTestFixtures.draft();
-        IEventPurchasePolicy newPolicy = new DelegatingEventPurchasePolicy();
+        IEventPurchasePolicy newPolicy = (req, ev) -> {};
 
         event.replacePurchasePolicies(List.of(newPolicy, newPolicy));
 
@@ -231,7 +229,8 @@ class EventCatalogMutabilityTest {
     void replacePurchasePolicies_on_cancelled_event_throws() {
         Event event = EventTestFixtures.draft();
         event.cancel();
-        assertThatThrownBy(() -> event.replacePurchasePolicies(List.of(new DelegatingEventPurchasePolicy())))
+        IEventPurchasePolicy noop = (req, ev) -> {};
+        assertThatThrownBy(() -> event.replacePurchasePolicies(List.of(noop)))
                 .isInstanceOf(InvalidEventStateException.class)
                 .hasMessageContaining("cancelled");
     }
@@ -239,7 +238,7 @@ class EventCatalogMutabilityTest {
     @Test
     void replaceDiscountPolicies_swaps_the_chain() {
         Event event = EventTestFixtures.draft();
-        IEventDiscountPolicy d = new DelegatingEventDiscountPolicy();
+        IEventDiscountPolicy d = (sub, req) -> sub;
         event.replaceDiscountPolicies(List.of(d));
         assertThat(event.discountPolicies()).containsExactly(d);
     }
@@ -248,7 +247,8 @@ class EventCatalogMutabilityTest {
     void replaceDiscountPolicies_on_cancelled_event_throws() {
         Event event = EventTestFixtures.draft();
         event.cancel();
-        assertThatThrownBy(() -> event.replaceDiscountPolicies(List.of(new DelegatingEventDiscountPolicy())))
+        IEventDiscountPolicy noop = (sub, req) -> sub;
+        assertThatThrownBy(() -> event.replaceDiscountPolicies(List.of(noop)))
                 .isInstanceOf(InvalidEventStateException.class)
                 .hasMessageContaining("cancelled");
     }
