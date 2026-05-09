@@ -42,6 +42,25 @@ public class InMemoryActiveOrderRepository implements IActiveOrderRepository {
         }
 
         synchronized (lock) {
+            if (order.getStatus() == ActiveOrderStatus.ACTIVE
+                    && Boolean.TRUE.equals(order.getActiveUniquenessKey())) {
+
+                boolean duplicateActiveOrderExists = storage.values().stream()
+                        .anyMatch(existing ->
+                                !existing.getOrderId().equals(order.getOrderId())
+                                        && existing.getUserId().equals(order.getUserId())
+                                        && existing.getEventId().equals(order.getEventId())
+                                        && existing.getStatus() == ActiveOrderStatus.ACTIVE
+                                        && Boolean.TRUE.equals(existing.getActiveUniquenessKey())
+                        );
+
+                if (duplicateActiveOrderExists) {
+                    throw new org.springframework.dao.DataIntegrityViolationException(
+                            "User already has an active order for this event"
+                    );
+                }
+            }
+
             storage.put(order.getOrderId(), order);
             return order;
         }

@@ -134,4 +134,37 @@ public class StandingEventArea extends EventArea {
                 .filter(s -> s.status() == SeatStatus.HELD && token.equals(s.heldBy()))
                 .count();
     }
+
+    /**
+     * Resize the standing area's capacity. Growing adds new AVAILABLE seats;
+     * shrinking removes only AVAILABLE seats and is rejected if the requested
+     * capacity is below the current sold + held floor.
+     */
+    public void resizeTo(int newCapacity) {
+        if (newCapacity < 1) {
+            throw new InvalidEventStateException("capacity must be >= 1");
+        }
+        int floor = soldCount() + activeHeldQuantity();
+        if (newCapacity < floor) {
+            throw new InvalidEventStateException(
+                    "cannot shrink capacity to " + newCapacity + " below sold+held floor " + floor);
+        }
+        int current = seats.size();
+        if (newCapacity == current) return;
+        if (newCapacity > current) {
+            for (int i = current; i < newCapacity; i++) {
+                UUID seatId = UUID.randomUUID();
+                seats.put(seatId, new Seat(seatId, STANDING_ROW, String.valueOf(i)));
+            }
+            return;
+        }
+        int toRemove = current - newCapacity;
+        List<UUID> available = new ArrayList<>();
+        for (Seat s : seats.values()) {
+            if (s.status() == SeatStatus.AVAILABLE) available.add(s.seatId());
+        }
+        for (int i = 0; i < toRemove; i++) {
+            seats.remove(available.get(i));
+        }
+    }
 }
