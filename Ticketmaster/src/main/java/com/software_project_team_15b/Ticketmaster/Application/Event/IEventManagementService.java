@@ -29,6 +29,17 @@ import java.util.UUID;
  * <p>
  * Implementations own transactions, retry on lock conflicts, per-event locking,
  * and authorization checks via the company port.
+ *
+ * <p>Authorization model: every mutating method has two flavors:
+ * <ul>
+ *   <li>A {@code String token} variant intended for external entry points; the
+ *       implementation resolves the token via the {@code IAuth} service and
+ *       enforces that the bearer is an authenticated member.</li>
+ *   <li>A {@code UUID callerId} variant intended for trusted internal callers
+ *       (subscribers, tests, system flows) that have already authenticated.</li>
+ * </ul>
+ * Both variants delegate to the company authorization port for the per-action
+ * role / permission check.
  */
 public interface IEventManagementService {
 
@@ -175,6 +186,9 @@ public interface IEventManagementService {
      */
     void cancel(UUID eventId, UUID callerId);
 
+    /** Token-authenticated variant of {@link #cancel(UUID, UUID)}. */
+    void cancel(UUID eventId, String token);
+
     /**
      * Transitions the event from DRAFT to PUBLISHED. Requires at least one area.
      * <p>
@@ -187,6 +201,9 @@ public interface IEventManagementService {
      * @throws PolicyViolationException   if {@code callerId} is not authorized
      */
     void publish(UUID eventId, UUID callerId);
+
+    /** Token-authenticated variant of {@link #publish(UUID, UUID)}. */
+    void publish(UUID eventId, String token);
 
     /**
      * Adds a seating or standing area to the event. Allowed only in DRAFT.
@@ -203,6 +220,9 @@ public interface IEventManagementService {
      */
     UUID addArea(UUID eventId, AddAreaCommand cmd, UUID callerId);
 
+    /** Token-authenticated variant of {@link #addArea(UUID, AddAreaCommand, UUID)}. */
+    UUID addArea(UUID eventId, AddAreaCommand cmd, String token);
+
     /**
      * Creates a new event in DRAFT under the given company. Default purchase /
      * discount policies are injected when the command supplies none.
@@ -217,6 +237,9 @@ public interface IEventManagementService {
      * @throws PolicyViolationException if {@code callerId} is not authorized
      */
     UUID createEvent(CreateEventCommand cmd, UUID callerId);
+
+    /** Token-authenticated variant of {@link #createEvent(CreateEventCommand, UUID)}. */
+    UUID createEvent(CreateEventCommand cmd, String token);
 
     // -------------------------------------------------------------------------
     // Catalog read & validation
@@ -290,6 +313,9 @@ public interface IEventManagementService {
      */
     void updateEvent(UUID eventId, UpdateEventCommand cmd, UUID callerId);
 
+    /** Token-authenticated variant of {@link #updateEvent(UUID, UpdateEventCommand, UUID)}. */
+    void updateEvent(UUID eventId, UpdateEventCommand cmd, String token);
+
     /**
      * Patches an area's name, base price, and/or standing capacity; null fields
      * are skipped. {@code standingCapacity} is only valid on standing areas, and
@@ -308,6 +334,9 @@ public interface IEventManagementService {
      */
     void updateArea(UUID eventId, UUID areaId, UpdateAreaCommand cmd, UUID callerId);
 
+    /** Token-authenticated variant of {@link #updateArea(UUID, UUID, UpdateAreaCommand, UUID)}. */
+    void updateArea(UUID eventId, UUID areaId, UpdateAreaCommand cmd, String token);
+
     /**
      * Removes an area. Allowed only while the event is in DRAFT.
      * <p>
@@ -320,6 +349,9 @@ public interface IEventManagementService {
      * @throws PolicyViolationException   if {@code callerId} is not authorized
      */
     void removeArea(UUID eventId, UUID areaId, UUID callerId);
+
+    /** Token-authenticated variant of {@link #removeArea(UUID, UUID, UUID)}. */
+    void removeArea(UUID eventId, UUID areaId, String token);
 
     /**
      * Replaces the event's purchase-policy chain. An empty list clears all rules.
@@ -335,6 +367,9 @@ public interface IEventManagementService {
      */
     void replacePurchasePolicies(UUID eventId, List<IEventPurchasePolicy> policies, UUID callerId);
 
+    /** Token-authenticated variant of {@link #replacePurchasePolicies(UUID, List, UUID)}. */
+    void replacePurchasePolicies(UUID eventId, List<IEventPurchasePolicy> policies, String token);
+
     /**
      * Replaces the event's discount-policy chain. An empty list clears all discounts.
      * <p>
@@ -348,6 +383,9 @@ public interface IEventManagementService {
      * @throws NullPointerException       if {@code policies} or any element is {@code null}
      */
     void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies, UUID callerId);
+
+    /** Token-authenticated variant of {@link #replaceDiscountPolicies(UUID, List, UUID)}. */
+    void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies, String token);
 
     /*
      * =========================================================================
