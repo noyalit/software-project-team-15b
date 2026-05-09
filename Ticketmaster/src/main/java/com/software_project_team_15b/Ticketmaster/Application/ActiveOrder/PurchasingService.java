@@ -207,6 +207,9 @@ public class PurchasingService {
     })
     public CheckoutStartedView startCheckoutForMember(String token, UUID orderId) {
         UUID userId = requireValidUser(token);
+        if (!auth.isMember(token)) {
+            throw new IllegalStateException("Only members can use this method");
+        }
         LocalDate birthDate = getUserBirthDate(userId);
         return startCheckoutForUser(token, userId, orderId, birthDate);
     }
@@ -218,6 +221,9 @@ public class PurchasingService {
     })
     public CheckoutStartedView startCheckoutForGuest(String token, UUID orderId, LocalDate guestBirthDate) {
         UUID userId = requireValidUser(token);
+        if (auth.isGuest(token)) {
+            throw new IllegalStateException("Only guests can use this method");
+        }
         return startCheckoutForUser(token, userId, orderId, guestBirthDate);
     }
 
@@ -284,6 +290,9 @@ public class PurchasingService {
     })
     public void completeCheckoutForMember(String token, UUID orderId, String couponCode) {
         UUID userId = requireValidUser(token);
+        if (!auth.isMember(token)) {
+            throw new IllegalStateException("Only members can use this method");
+        }
         LocalDate birthDate = getUserBirthDate(userId);
 
         completeCheckoutForUser(token, userId, orderId, birthDate, couponCode);
@@ -296,7 +305,9 @@ public class PurchasingService {
     })
     public void completeCheckoutForGuest(String token, UUID orderId, LocalDate birthDate, String couponCode) {
         UUID userId = requireValidUser(token);
-
+        if (auth.isGuest(token)) {
+            throw new IllegalStateException("Only guests can use this method");
+        }
         completeCheckoutForUser(token, userId, orderId, birthDate, couponCode);
     }
 
