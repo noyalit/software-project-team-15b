@@ -1,17 +1,18 @@
-package com.software_project_team_15b.Ticketmaster.Application.Order;
+package com.software_project_team_15b.Ticketmaster.Application.ActiveOrder;
 
-import com.software_project_team_15b.Ticketmaster.Application.Auth;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrderRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.*;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
+import com.software_project_team_15b.Ticketmaster.Infrastructure.Auth;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
+import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.*;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
@@ -23,7 +24,8 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.Policy
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
-import com.software_project_team_15b.Ticketmaster.Application.Order.Commands.*;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessView;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,6 +53,7 @@ public class PurchasingService {
     private final IOrderHistoryRepository orderHistoryRepository;
     private final IMemberRepository memberRepository;
     private final EventManagementService eventManagementService;
+    private final QueueService queueService;
     private final IPaymentAPI paymentGateway;
     private final ITicketSupplyAPI ticketProvider;
     private final Auth auth;
@@ -60,6 +63,7 @@ public class PurchasingService {
             IOrderHistoryRepository orderHistoryRepository,
             IMemberRepository memberRepository,
             EventManagementService eventManagementService,
+            QueueService queueService,
             IPaymentAPI paymentGateway,
             ITicketSupplyAPI ticketProvider,
             Auth auth
@@ -68,9 +72,14 @@ public class PurchasingService {
         this.orderHistoryRepository = Objects.requireNonNull(orderHistoryRepository);
         this.memberRepository = Objects.requireNonNull(memberRepository);
         this.eventManagementService = Objects.requireNonNull(eventManagementService);
+        this.queueService = Objects.requireNonNull(queueService);
         this.paymentGateway = Objects.requireNonNull(paymentGateway);
         this.ticketProvider = Objects.requireNonNull(ticketProvider);
         this.auth = Objects.requireNonNull(auth);
+    }
+
+    public QueueAccessView requestAccessToCreateActiveOrder(String token, UUID eventId) {
+        return queueService.requestAccess(token, eventId);
     }
 
     @Transactional
@@ -82,6 +91,8 @@ public class PurchasingService {
             requireAreaIsValid(eventId, areaId);
 
             requireOrderIsUniqueForUser(userId, eventId);
+
+            requireAccessForActiveOrder(token, eventId);
 
             UUID orderId = UUID.randomUUID();
 
@@ -116,7 +127,7 @@ public class PurchasingService {
 
             UUID userId = requireValidUser(token);
 
-            activeOrder = requireOwnedModifiableOrderForUpdate(cmd.orderId(), userId);
+            activeOrder = requireOwnedModifiableOrderForUpdate(token, cmd.orderId(), userId);
 
             Set<UUID> availableSeats = requireSeatsAvailable(
                 activeOrder.getEventId(),
@@ -153,7 +164,7 @@ public class PurchasingService {
             requireRemoveOrAddSeatsFromActiveOrderCommand(cmd);
 
             UUID userId = requireValidUser(token);
-            activeOrder = requireOwnedModifiableOrderForUpdate(cmd.orderId(), userId);
+            activeOrder = requireOwnedModifiableOrderForUpdate(token, cmd.orderId(), userId);
             
             removeSeatsFromActiveOrder(activeOrder, cmd.seatIds());
 
@@ -175,6 +186,7 @@ public class PurchasingService {
             ActiveOrder activeOrder = requireActiveOrderForUpdate(orderId);
             requireOrderOwnership(activeOrder, userId);
             requireOrderIsActive(activeOrder);
+            requireAccessForActiveOrder(token, activeOrder.getEventId());
             syncOrderSeatsAvailability(activeOrder);
 
             ActiveOrderView view = buildActiveOrderView(activeOrder);
@@ -195,8 +207,11 @@ public class PurchasingService {
     })
     public CheckoutStartedView startCheckoutForMember(String token, UUID orderId) {
         UUID userId = requireValidUser(token);
+        if (!auth.isMember(token)) {
+            throw new IllegalStateException("Only members can use this method");
+        }
         LocalDate birthDate = getUserBirthDate(userId);
-        return startCheckoutForUser(userId, orderId, birthDate);
+        return startCheckoutForUser(token, userId, orderId, birthDate);
     }
 
     @Transactional(noRollbackFor = {
@@ -206,17 +221,20 @@ public class PurchasingService {
     })
     public CheckoutStartedView startCheckoutForGuest(String token, UUID orderId, LocalDate guestBirthDate) {
         UUID userId = requireValidUser(token);
-        return startCheckoutForUser(userId, orderId, guestBirthDate);
+        if (auth.isGuest(token)) {
+            throw new IllegalStateException("Only guests can use this method");
+        }
+        return startCheckoutForUser(token, userId, orderId, guestBirthDate);
     }
 
-    private CheckoutStartedView startCheckoutForUser(UUID userId, UUID orderId, LocalDate birthDate) {
+    private CheckoutStartedView startCheckoutForUser(String token, UUID userId, UUID orderId, LocalDate birthDate) {
         ActiveOrder activeOrder = null;
         HoldReceipt holdCreated = null;
 
         try {
             activeOrder = requireActiveOrderForUpdate(orderId);
             requireOrderOwnership(activeOrder, userId);
-            ensureOrderIsModifiable(activeOrder);
+            ensureOrderIsModifiable(token, activeOrder);
 
             if (syncOrderSeatsAvailability(activeOrder)) {
                 throw new OrderSeatsUnavailableException("Some seats in the order are no longer available");
@@ -272,6 +290,9 @@ public class PurchasingService {
     })
     public void completeCheckoutForMember(String token, UUID orderId, String couponCode) {
         UUID userId = requireValidUser(token);
+        if (!auth.isMember(token)) {
+            throw new IllegalStateException("Only members can use this method");
+        }
         LocalDate birthDate = getUserBirthDate(userId);
 
         completeCheckoutForUser(token, userId, orderId, birthDate, couponCode);
@@ -284,7 +305,9 @@ public class PurchasingService {
     })
     public void completeCheckoutForGuest(String token, UUID orderId, LocalDate birthDate, String couponCode) {
         UUID userId = requireValidUser(token);
-
+        if (auth.isGuest(token)) {
+            throw new IllegalStateException("Only guests can use this method");
+        }
         completeCheckoutForUser(token, userId, orderId, birthDate, couponCode);
     }
 
@@ -567,7 +590,7 @@ public class PurchasingService {
         }
     }
 
-    private void ensureOrderIsModifiable(ActiveOrder activeOrder) {
+    private void ensureOrderIsModifiable(String token, ActiveOrder activeOrder) {
         if (activeOrder == null) {
             throw new IllegalArgumentException("Active order cannot be null");
         }
@@ -578,6 +601,8 @@ public class PurchasingService {
             expireAndSave(activeOrder);
             throw e;
         } 
+
+        requireAccessForActiveOrder(token, activeOrder.getEventId());
     }
 
     private void requireOrderIsActive(ActiveOrder activeOrder) {
@@ -623,6 +648,16 @@ public class PurchasingService {
         return true;
     }
 
+    private void requireAccessForActiveOrder(String token, UUID eventId) {
+        if (token == null || eventId == null) {
+            throw new IllegalArgumentException("Token and event ID cannot be null");
+        }
+
+        if (!queueService.hasAccess(token, eventId)) {
+            throw new TimeExpiredException("User does not have access to create or modify orders for this event at the moment");
+        }
+    }
+
     private void requireEventIsValid(UUID eventId) {
         if (eventId == null) {
             throw new IllegalArgumentException("Event ID cannot be null");
@@ -654,10 +689,10 @@ public class PurchasingService {
         }
     }
 
-    private ActiveOrder requireOwnedModifiableOrderForUpdate(UUID orderId, UUID userId) {
+    private ActiveOrder requireOwnedModifiableOrderForUpdate(String token, UUID orderId, UUID userId) {
         ActiveOrder activeOrder = requireActiveOrderForUpdate(orderId);
         requireOrderOwnership(activeOrder, userId);
-        ensureOrderIsModifiable(activeOrder);
+        ensureOrderIsModifiable(token, activeOrder);
         return activeOrder;
     }
 
