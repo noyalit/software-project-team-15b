@@ -6,7 +6,6 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.SeatUn
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.PolicyJsonConverter;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompDiscountPolicy;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
@@ -311,11 +310,11 @@ public class Event {
      * Each policy is applied independently to the base subtotal — discounts are NOT combined.
      * The result is clamped to the subtotal so a misbehaving policy cannot raise the price.
      */
-    public Money cheapestPriceFor(UUID areaId, int quantity, PurchaseRequest request, ICompDiscountPolicy companyPolicy) {
+    public Money cheapestPriceFor(UUID areaId, int quantity, PurchaseRequest request) {
         Money subtotal = priceFor(areaId, quantity);
         Money best = subtotal;
         for (IEventDiscountPolicy policy : discountPolicies) {
-            Money candidate = policy.apply(subtotal, request, companyPolicy);
+            Money candidate = policy.apply(subtotal, request);
             if (candidate == null) continue;
             if (!candidate.currency().equals(subtotal.currency())) {
                 throw new InvalidEventStateException("discount policy returned mismatched currency: "
