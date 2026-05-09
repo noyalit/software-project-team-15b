@@ -86,7 +86,6 @@ class ValidatePurchaseEligibilityIT {
     void passes_when_event_has_no_purchase_policies() {
         UUID caller = UUID.randomUUID();
         UUID companyId = UUID.randomUUID();
-        // null/empty -> service applies a single Delegating purchase policy that no-ops without a company port
         UUID eventId = service.createEvent(new CreateEventCommand(
                 companyId, "Show", "Artist", Category.CONCERT,
                 Instant.now().plusSeconds(86400), "Venue", null, null), caller);
