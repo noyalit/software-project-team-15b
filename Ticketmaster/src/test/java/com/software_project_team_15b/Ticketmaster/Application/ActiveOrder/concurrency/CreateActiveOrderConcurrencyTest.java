@@ -55,6 +55,6 @@ class CreateActiveOrderConcurrencyTest extends ConcurrencyTestSupport {
         assertEquals(eventId, savedOrder.getEventId());
         assertEquals(areaId, savedOrder.getAreaId());
         assertEquals(ActiveOrderStatus.ACTIVE, savedOrder.getStatus());
-        // assertEquals(Boolean.TRUE, savedOrder.getIsActive());
+        // assertEquals(Boolean.TRUE, savedOrder.getActiveUniquenessKey());
     }
 }
