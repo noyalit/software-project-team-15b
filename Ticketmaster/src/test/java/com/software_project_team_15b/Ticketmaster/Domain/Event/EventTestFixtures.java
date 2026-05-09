@@ -1,7 +1,5 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Event;
 
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventDiscountPolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventPurchasePolicy;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -35,8 +33,8 @@ public final class EventTestFixtures {
                 Category.CONCERT,
                 Instant.now().plusSeconds(86400),
                 "Venue",
-                List.of(new DelegatingEventPurchasePolicy()),
-                List.of(new DelegatingEventDiscountPolicy())
+                List.of(),
+                List.of()
         );
     }
 
