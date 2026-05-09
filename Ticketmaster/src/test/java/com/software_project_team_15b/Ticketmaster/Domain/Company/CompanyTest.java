@@ -274,7 +274,22 @@ class CompanyTest {
 
         c.removeManager(eventId, userId);
 
-        assertFalse(c.getEventManagers().get(eventId).contains(userId));
+        assertFalse(c.getEventManagers().containsKey(eventId));
+    }
+
+    @Test
+    void removeManager_keeps_other_managers_for_same_event() {
+        Company c = new Company("Acme", UUID.randomUUID());
+        UUID eventId = UUID.randomUUID();
+        UUID u1 = UUID.randomUUID();
+        UUID u2 = UUID.randomUUID();
+        c.addManager(eventId, u1);
+        c.addManager(eventId, u2);
+
+        c.removeManager(eventId, u1);
+
+        assertTrue(c.getEventManagers().get(eventId).contains(u2));
+        assertFalse(c.getEventManagers().get(eventId).contains(u1));
     }
 
     @Test
@@ -288,7 +303,8 @@ class CompanyTest {
 
         c.removeManager(eventA, userId);
 
-        assertFalse(c.getEventManagers().get(eventA).contains(userId));
+        // Last manager removed → entry for eventA is dropped from the view.
+        assertFalse(c.getEventManagers().containsKey(eventA));
         assertTrue(c.getEventManagers().get(eventB).contains(userId));
     }
 
@@ -322,7 +338,7 @@ class CompanyTest {
     }
 
     @Test
-    void removeAllManagersOfEvent_clears_set_but_keeps_entry() {
+    void removeAllManagersOfEvent_drops_entry_for_event() {
         Company c = new Company("Acme", UUID.randomUUID());
         UUID eventId = UUID.randomUUID();
         c.addManager(eventId, UUID.randomUUID());
@@ -330,8 +346,22 @@ class CompanyTest {
 
         c.removeAllManagersOfEvent(eventId);
 
-        assertTrue(c.getEventManagers().containsKey(eventId));
-        assertTrue(c.getEventManagers().get(eventId).isEmpty());
+        assertFalse(c.getEventManagers().containsKey(eventId));
+    }
+
+    @Test
+    void removeAllManagersOfEvent_does_not_affect_other_events() {
+        Company c = new Company("Acme", UUID.randomUUID());
+        UUID eventA = UUID.randomUUID();
+        UUID eventB = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        c.addManager(eventA, userId);
+        c.addManager(eventB, userId);
+
+        c.removeAllManagersOfEvent(eventA);
+
+        assertFalse(c.getEventManagers().containsKey(eventA));
+        assertTrue(c.getEventManagers().get(eventB).contains(userId));
     }
 
     @Test

@@ -39,10 +39,14 @@ public class Company {
     @Column(name = "owner_id", nullable = false)
     private Set<UUID> ownerIds = new HashSet<>();
 
+    /**
+     * Flat (eventId, userId) pairs persisted via {@link EventManagerAssignment}.
+     * The aggregate-facing API still exposes a logical {@code Map<UUID, Set<UUID>>}
+     * through {@link #getEventManagers()}; storing it flat is what JPA can map.
+     */
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "company_managers", joinColumns = @JoinColumn(name = "company_id"))
-    @Column(name = "user_id", nullable = false)
-    private HashMap<UUID, Set<UUID>> eventManagers = new HashMap<>();
+    private Set<EventManagerAssignment> eventManagers = new HashSet<>();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -208,8 +212,7 @@ public class Company {
         if (userId == null) {
             throw new IllegalArgumentException("userId cannot be null");
         }
-        Set<UUID> managers = eventManagers.computeIfAbsent(eventId, k -> new HashSet<>());
-        if (!managers.add(userId)) {
+        if (!eventManagers.add(new EventManagerAssignment(eventId, userId))) {
             throw new IllegalArgumentException("userId is already a manager");
         }
         touch();
@@ -230,42 +233,46 @@ public class Company {
         if (userId == null) {
             throw new IllegalArgumentException("userId cannot be null");
         }
-        Set<UUID> managers = eventManagers.get(eventId);
-        if (managers == null || !managers.remove(userId)) {
+        if (!eventManagers.remove(new EventManagerAssignment(eventId, userId))) {
             throw new IllegalArgumentException("userId is not a manager of this event");
         }
         touch();
     }
 
     /**
-     * Clears the manager set for {@code eventId} (the entry itself is preserved).
+     * Removes every manager assignment for {@code eventId}. Unlike the prior
+     * implementation the event no longer keeps an empty entry afterwards —
+     * with the flat representation an event simply has no rows.
      *
      * @param eventId the event whose manager set should be cleared; must not be null
-     * @throws IllegalArgumentException if {@code eventId} is null or has no manager entry
+     * @throws IllegalArgumentException if {@code eventId} is null or has no manager assignments
      */
     public void removeAllManagersOfEvent(UUID eventId) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
-        Set<UUID> managers = eventManagers.get(eventId);
-        if (managers == null) {
+        boolean removedAny = eventManagers.removeIf(a -> a.getEventId().equals(eventId));
+        if (!removedAny) {
             throw new IllegalArgumentException("eventId has no managers");
         }
-        managers.clear();
         touch();
     }
 
     /**
-     * @return an unmodifiable view of the per-event manager mapping; the inner
-     *         sets are also unmodifiable so callers cannot mutate domain state
-     *         through the returned reference
+     * @return an unmodifiable snapshot keyed by event id, with each value an
+     *         unmodifiable set of the manager user ids for that event. Mutations
+     *         to the company after this call are NOT reflected in the snapshot.
      */
     public Map<UUID, Set<UUID>> getEventManagers() {
-        Map<UUID, Set<UUID>> snapshot = new HashMap<>(eventManagers.size());
-        for (Map.Entry<UUID, Set<UUID>> e : eventManagers.entrySet()) {
-            snapshot.put(e.getKey(), Collections.unmodifiableSet(e.getValue()));
+        Map<UUID, Set<UUID>> snapshot = new HashMap<>();
+        for (EventManagerAssignment a : eventManagers) {
+            snapshot.computeIfAbsent(a.getEventId(), k -> new HashSet<>()).add(a.getUserId());
         }
-        return Collections.unmodifiableMap(snapshot);
+        Map<UUID, Set<UUID>> view = new HashMap<>(snapshot.size());
+        for (Map.Entry<UUID, Set<UUID>> e : snapshot.entrySet()) {
+            view.put(e.getKey(), Collections.unmodifiableSet(e.getValue()));
+        }
+        return Collections.unmodifiableMap(view);
     }
 
     // =============================================================================================================

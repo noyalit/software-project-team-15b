@@ -541,7 +541,8 @@ class CompanyServiceTest {
         service.removeManager(founderToken, company.getId(), eventId, managerId);
 
         Company saved = repo.findById(company.getId()).orElseThrow();
-        assertThat(saved.getEventManagers().get(eventId)).doesNotContain(managerId);
+        // Removing the last manager for an event drops the entry entirely.
+        assertThat(saved.getEventManagers()).doesNotContainKey(eventId);
     }
 
     // removeManager — negative
@@ -1002,8 +1003,7 @@ class CompanyServiceTest {
 
         assertThat(eventCancelManager.cancelledEvents).containsExactlyInAnyOrder(eventA, eventB);
         Company saved = repo.findById(company.getId()).orElseThrow();
-        assertThat(saved.getEventManagers().get(eventA)).isEmpty();
-        assertThat(saved.getEventManagers().get(eventB)).isEmpty();
+        assertThat(saved.getEventManagers()).isEmpty();
     }
 
     @Test
