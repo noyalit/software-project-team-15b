@@ -51,7 +51,7 @@ public class ActiveOrderTest {
         assertEquals(userId, order.getUserId());
         assertEquals(eventId, order.getEventId());
         assertEquals(areaId, order.getAreaId());
-        assertEquals(Boolean.TRUE, order.getIsActive());
+        assertEquals(Boolean.TRUE, order.getActiveUniquenessKey());
         assertEquals(ActiveOrderStatus.ACTIVE, order.getStatus());
     }
 
@@ -159,7 +159,7 @@ public class ActiveOrderTest {
         order.complete();
 
         assertEquals(ActiveOrderStatus.COMPLETED, order.getStatus());
-        assertNull(order.getIsActive());
+        assertNull(order.getActiveUniquenessKey());
     }
 
     @Test
@@ -168,7 +168,7 @@ public class ActiveOrderTest {
         order.cancel();
 
         assertEquals(ActiveOrderStatus.CANCELED, order.getStatus());
-        assertNull(order.getIsActive());
+        assertNull(order.getActiveUniquenessKey());
     }
 
     @Test
@@ -230,7 +230,7 @@ public class ActiveOrderTest {
         expiredOrder.expire();
 
         assertEquals(ActiveOrderStatus.EXPIRED, expiredOrder.getStatus());
-        assertNull(expiredOrder.getIsActive());
+        assertNull(expiredOrder.getActiveUniquenessKey());
     }
 
 

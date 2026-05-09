@@ -43,7 +43,7 @@ public class InMemoryActiveOrderRepository implements IActiveOrderRepository {
 
         synchronized (lock) {
             if (order.getStatus() == ActiveOrderStatus.ACTIVE
-                    && Boolean.TRUE.equals(order.getIsActive())) {
+                    && Boolean.TRUE.equals(order.getActiveUniquenessKey())) {
 
                 boolean duplicateActiveOrderExists = storage.values().stream()
                         .anyMatch(existing ->
@@ -51,7 +51,7 @@ public class InMemoryActiveOrderRepository implements IActiveOrderRepository {
                                         && existing.getUserId().equals(order.getUserId())
                                         && existing.getEventId().equals(order.getEventId())
                                         && existing.getStatus() == ActiveOrderStatus.ACTIVE
-                                        && Boolean.TRUE.equals(existing.getIsActive())
+                                        && Boolean.TRUE.equals(existing.getActiveUniquenessKey())
                         );
 
                 if (duplicateActiveOrderExists) {

@@ -21,13 +21,14 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 
+// Orders are intentionally not reactivated after leaving ACTIVE status.
 @Entity
 @Table(
         name = "active_orders",
         uniqueConstraints = {
                 @UniqueConstraint(
                         name = "uk_active_order_user_event_active",
-                        columnNames = {"user_id", "event_id", "is_active"}
+                        columnNames = {"user_id", "event_id", "active_uniqueness_key"}
                 )
         }
 )
@@ -58,8 +59,19 @@ public class ActiveOrder {
     @Column(name = "status", nullable = false)
     private ActiveOrderStatus status;
 
-    @Column(name = "is_active")
-    private Boolean isActive;
+
+    /**
+     * Technical field used only for the database uniqueness constraint.
+     *
+     * ACTIVE orders have activeUniquenessKey = true.
+     * Non-active orders have activeUniquenessKey = null.
+     *
+     * This allows the database to enforce only one active order per user/event,
+     * while allowing multiple completed/canceled/expired historical orders
+     * for the same user/event because unique constraints allow multiple NULLs.
+     */
+    @Column(name = "activeUniquenessKey", nullable = true)
+    private Boolean activeUniquenessKey;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -93,7 +105,7 @@ public class ActiveOrder {
         this.eventId = eventId;
         this.areaId = areaId;
         this.status = ActiveOrderStatus.ACTIVE;
-        this.isActive = true;
+        this.activeUniquenessKey = true;
         this.createdAt = LocalDateTime.now();
         this.expiresAt = null;
     }
@@ -124,7 +136,7 @@ public class ActiveOrder {
         this.expiresAt = expiresAt;
 
         this.status = ActiveOrderStatus.ACTIVE;
-        this.isActive = true;
+        this.activeUniquenessKey = true;
         this.orderSeats = new HashSet<>();
     }
 
@@ -153,8 +165,8 @@ public class ActiveOrder {
     }
 
     // isActive is used for the unique constraint to allow multiple non-active orders for the same user and event
-    public Boolean getIsActive() {
-        return isActive;
+    public Boolean getActiveUniquenessKey() {
+        return activeUniquenessKey;
     }
 
     public LocalDateTime getCreatedAt() {
@@ -274,7 +286,6 @@ public class ActiveOrder {
             if (hasTimeExpired()) {
                 throw new TimeExpiredException("Order " + orderId + " checkout has expired");
             }
-
             throw new IllegalStateException("Order " + orderId + " is already in checkout");
         }
     }
@@ -313,6 +324,11 @@ public class ActiveOrder {
         }
 
         this.status = newStatus;
-        this.isActive = null;
+        syncActiveUniquenessKey();
+    }
+
+    private void syncActiveUniquenessKey() {
+        this.activeUniquenessKey =
+            status == ActiveOrderStatus.ACTIVE ? Boolean.TRUE : null;
     }
 }
