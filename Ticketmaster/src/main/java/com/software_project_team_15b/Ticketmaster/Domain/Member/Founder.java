@@ -12,8 +12,8 @@ public class Founder extends Owner {
         // JPA only
     }
 
-    public Founder(Member appointedBy) {
-        super(null);
+    public Founder(Member appointedBy, UUID companyId) {
+        super(null, companyId);
         approveAppointment();
     }
 

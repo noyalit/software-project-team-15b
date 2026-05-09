@@ -18,6 +18,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 
+
 @Service
 public class UserService {
 
@@ -151,44 +152,45 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    public Member appointManager(UUID memberId, String token, Set<ManagerPermission> permissions) {
+    public Member appointManager(UUID memberId, String token, UUID companyId, Set<ManagerPermission> permissions) {
         UUID ownerId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(memberId);
-        validateNoAppointmentCycle(member, ownerId);
-        validateOwnerAppointer(ownerId);
+        validateNoAppointmentCycle(member, ownerId, companyId);
+        validateOwnerAppointer(ownerId, companyId);
 
-        Role managerRole = new Manager(ownerId, permissions);
+        Role managerRole = new Manager(ownerId, companyId, permissions);
         member.addRole(managerRole);
         return memberRepository.save(member);
     }
 
-    public Member appointOwner(UUID memberId, String token) {
+    public Member appointOwner(UUID memberId, String token, UUID companyId) {
         UUID ownerId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(memberId);
-        validateNoAppointmentCycle(member, ownerId);
-        validateOwnerAppointer(ownerId);
+        validateNoAppointmentCycle(member, ownerId, companyId);
+        validateOwnerAppointer(ownerId, companyId);
 
-        Role ownerRole = new Owner(ownerId);
+        Role ownerRole = new Owner(ownerId, companyId);
         member.addRole(ownerRole);
         return memberRepository.save(member);
     }
 
-    public Member appointFounder(UUID memberId) {
+    public Member appointFounder(UUID memberId, UUID companyId) {
         Member member = getMemberOrThrow(memberId);
-        Role founderRole = new Founder(null);
+        Role founderRole = new Founder(null, companyId);
         member.addRole(founderRole);
         return memberRepository.save(member);
     }
 
-    public Member removeOwnerAppointment(String token, UUID memberToRemoveId) {
+    public Member removeOwnerAppointment(String token, UUID memberToRemoveId, UUID companyId) {
         UUID removerOwnerId = getAuthenticatedMemberId(token);
         Member memberToRemove = getMemberOrThrow(memberToRemoveId);
-        validateOwnerAppointer(removerOwnerId);
+        validateOwnerAppointer(removerOwnerId, companyId);
         Role ownerRoleToRemove = memberToRemove.getAssignedRoles()
                 .stream()
                 .filter(role -> role instanceof Owner)
                 .filter(role -> !(role instanceof Founder))
                 .filter(role -> removerOwnerId.equals(role.getAppointedBy()))
+                .filter(role -> role.belongsToCompany(companyId))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No owner appointment by this owner was found"
@@ -197,39 +199,45 @@ public class UserService {
         return memberRepository.save(memberToRemove);
     }
 
-    public Member removeManagerAppointment(String token, UUID memberToRemoveId) {
+    public Member removeManagerAppointment(String token, UUID memberToRemoveId, UUID companyId) {
         UUID removerOwnerId = getAuthenticatedMemberId(token);
         Member memberToRemove = getMemberOrThrow(memberToRemoveId);
 
-        validateOwnerAppointer(removerOwnerId);
+        validateOwnerAppointer(removerOwnerId, companyId);
 
         Role managerRoleToRemove = memberToRemove.getAssignedRoles()
                 .stream()
                 .filter(role -> role instanceof Manager)
                 .filter(role -> removerOwnerId.equals(role.getAppointedBy()))
+                .filter(role -> role.belongsToCompany(companyId))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No manager appointment by this owner was found"
                 ));
 
         memberToRemove.removeRole(managerRoleToRemove);
-
         return memberRepository.save(memberToRemove);
     }
 
-    public Member ownerResign(String token) {
+    public Member ownerResign(String token, UUID companyId) {
         UUID ownerId = getAuthenticatedMemberId(token);
         Member owner = getMemberOrThrow(ownerId);
-        Role activeRole = owner.getActiveRole();
 
-        if (!(activeRole instanceof Owner)) {
-            throw new IllegalArgumentException("Member is not an owner");
-        }
-        if (activeRole instanceof Founder) {
-            throw new IllegalArgumentException("Founder cannot resign");
+        if (companyId == null) {
+            throw new IllegalArgumentException("Company ID cannot be null");
         }
 
-        owner.removeRole(activeRole); 
+        Role ownerRole = owner.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof Owner)
+                .filter(role -> !(role instanceof Founder))
+                .filter(role -> role.belongsToCompany(companyId))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Member is not an owner in this company"
+                ));
+
+        owner.removeRole(ownerRole);
         return memberRepository.save(owner);
     }
 
@@ -327,35 +335,66 @@ public class UserService {
 
     private void validateOwnerAppointer(UUID appointedByUserId) {
         Member appointedBy = getMemberOrThrow(appointedByUserId);
-        if (!(appointedBy.getActiveRole() instanceof Owner)) {
-            throw new IllegalArgumentException("Only an owner can appoint another owner or manager");
-        }
-        if (!appointedBy.getActiveRole().isAppointmentApproved()) {
-            throw new IllegalStateException("Appointer owner appointment must be approved first");
+        boolean isApprovedOwner = appointedBy.getAssignedRoles()
+                .stream()
+                .anyMatch(role -> role instanceof Owner
+                        && role.isAppointmentApproved());
+
+        if (!isApprovedOwner) {
+            throw new IllegalArgumentException("Only an approved owner can perform this action");
         }
     }
 
-    private void validateNoAppointmentCycle(Member member, UUID appointedById) {
-        if (member == null || appointedById == null) {
-            return;
+    private void validateOwnerAppointer(UUID appointedByUserId, UUID companyId) {
+        Member appointedBy = getMemberOrThrow(appointedByUserId);
+
+        boolean isApprovedOwnerInCompany = appointedBy.getAssignedRoles()
+                .stream()
+                .anyMatch(role -> role instanceof Owner
+                        && role.isAppointmentApproved()
+                        && role.belongsToCompany(companyId));
+
+        if (!isApprovedOwnerInCompany) {
+            throw new IllegalArgumentException("Only an approved owner of this company can perform this action");
+        }
+    }
+
+    private void validateNoAppointmentCycle(Member member, UUID appointedById, UUID companyId) {
+        if (member == null) {
+            throw new IllegalArgumentException("Member cannot be null");
+        }
+        if (appointedById == null) {
+            throw new IllegalArgumentException("Appointer ID cannot be null");
+        }
+        if (companyId == null) {
+            throw new IllegalArgumentException("Company ID cannot be null");
         }
         if (member.getUserId().equals(appointedById)) {
             throw new IllegalArgumentException("Member cannot be appointed by themselves");
         }
         UUID currentId = appointedById;
+
         while (currentId != null) {
             Member current = getMemberOrThrow(currentId);
-            if (current.getActiveRole() == null) {
+
+            UUID nextAppointerId = current.getAssignedRoles()
+                    .stream()
+                    .filter(role -> role.belongsToCompany(companyId))
+                    .filter(role -> role instanceof Owner || role instanceof Manager || role instanceof Founder)
+                    .map(Role::getAppointedBy)
+                    .filter(appointerId -> appointerId != null)
+                    .findFirst()
+                    .orElse(null);
+
+            if (nextAppointerId == null) {
                 return;
             }
-            UUID currentAppointerId = current.getActiveRole().getAppointedBy();
-            if (currentAppointerId == null) {
-                return;
-            }
-            if (currentAppointerId.equals(member.getUserId())) {
+
+            if (nextAppointerId.equals(member.getUserId())) {
                 throw new IllegalArgumentException("Appointment cycle detected");
             }
-            currentId = currentAppointerId;
+
+            currentId = nextAppointerId;
         }
     }
 
@@ -386,6 +425,56 @@ public class UserService {
         }
 
         return auth.extractUserId(token);
+    }
+
+    public List<UUID> getAppointedMembersTree(UUID memberId, UUID companyId) {
+        if (companyId == null) {
+            throw new IllegalArgumentException("Company ID cannot be null");
+        }
+
+        Member root = getMemberOrThrow(memberId);
+
+        boolean hasRoleInCompany = root.getAssignedRoles()
+                .stream()
+                .anyMatch(role ->
+                        (role instanceof Manager || role instanceof Owner || role instanceof Founder)
+                                && role.isAppointmentApproved()
+                                && role.belongsToCompany(companyId)
+                );
+
+        if (!hasRoleInCompany) {
+            throw new IllegalArgumentException("Member does not have an approved role in this company");
+        }
+
+        List<UUID> result = new java.util.ArrayList<>();
+        Set<UUID> visited = new java.util.HashSet<>();
+        result.add(memberId);
+
+        collectAppointedMembers(memberId, companyId, result, visited);
+
+        return result;
+    }
+
+    private void collectAppointedMembers(UUID appointerId, UUID companyId, List<UUID> result, Set<UUID> visited) {
+        if (appointerId == null || visited.contains(appointerId)) {
+            return;
+        }
+
+        visited.add(appointerId);
+
+        for (Member candidate : memberRepository.findAll()) {
+            boolean wasAppointedByCurrentMemberInCompany = candidate.getAssignedRoles()
+                    .stream()
+                    .anyMatch(role ->
+                            appointerId.equals(role.getAppointedBy())
+                                    && role.belongsToCompany(companyId)
+                    );
+
+            if (wasAppointedByCurrentMemberInCompany && !visited.contains(candidate.getUserId())) {
+                result.add(candidate.getUserId());
+                collectAppointedMembers(candidate.getUserId(), companyId, result, visited);
+            }
+        }
     }
 
 }
