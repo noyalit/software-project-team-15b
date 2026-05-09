@@ -125,7 +125,7 @@ class PurchasingServiceTest {
 
         UUID createdOrderId = service.createActiveOrder(token, eventId, areaId);
 
-        verify(activeOrderRepository).save(captor.capture());
+        verify(activeOrderRepository).saveAndFlush(captor.capture());
 
         ActiveOrder savedOrder = captor.getValue();
 
@@ -150,7 +150,7 @@ class PurchasingServiceTest {
         verify(auth, never()).extractUserId(any());
         verify(eventManagementService, never()).getEventAvailability(any());
         verify(eventManagementService, never()).getAreaAvailability(any(), any());
-        verify(activeOrderRepository, never()).save(any());
+        verify(activeOrderRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -163,7 +163,7 @@ class PurchasingServiceTest {
 
         verify(eventManagementService, never()).getEventAvailability(any());
         verify(eventManagementService, never()).getAreaAvailability(any(), any());
-        verify(activeOrderRepository, never()).save(any());
+        verify(activeOrderRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -179,7 +179,7 @@ class PurchasingServiceTest {
 
         verify(eventManagementService, never()).getAreaAvailability(any(), any());
         verify(activeOrderRepository, never()).existsByUserIdAndEventIdAndStatus(any(), any(), any());
-        verify(activeOrderRepository, never()).save(any());
+        verify(activeOrderRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -194,7 +194,7 @@ class PurchasingServiceTest {
         );
 
         verify(eventManagementService, never()).getAreaAvailability(any(), any());
-        verify(activeOrderRepository, never()).save(any());
+        verify(activeOrderRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -212,7 +212,7 @@ class PurchasingServiceTest {
         );
 
         verify(activeOrderRepository, never()).existsByUserIdAndEventIdAndStatus(any(), any(), any());
-        verify(activeOrderRepository, never()).save(any());
+        verify(activeOrderRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -236,7 +236,7 @@ class PurchasingServiceTest {
         );
 
         verify(queueService, never()).hasAccess(any(), any());
-        verify(activeOrderRepository, never()).save(any());
+        verify(activeOrderRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -261,7 +261,7 @@ class PurchasingServiceTest {
                 service.createActiveOrder(token, eventId, areaId)
         );
 
-        verify(activeOrderRepository, never()).save(any());
+        verify(activeOrderRepository, never()).saveAndFlush(any());
     }
 
     @Test
@@ -282,7 +282,7 @@ class PurchasingServiceTest {
 
         when(queueService.hasAccess(token, eventId)).thenReturn(true);
 
-        when(activeOrderRepository.save(any(ActiveOrder.class)))
+        when(activeOrderRepository.saveAndFlush(any(ActiveOrder.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate active order"));
 
         IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
