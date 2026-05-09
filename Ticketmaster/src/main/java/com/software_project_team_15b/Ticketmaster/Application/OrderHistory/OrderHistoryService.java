@@ -112,7 +112,7 @@ public class OrderHistoryService implements EventSubscriber{
         validateUser(token);
         Company company = companyService.getCompany(companyId.toString());
         UUID callerId = auth.extractUserId(token);
-        if (!company.getFounderId().equals(callerId)  || (!companyAuthorization.canManageEvent(companyId, callerId))) {
+        if (!company.getFounderId().equals(callerId) && !companyAuthorization.canManageEvent(companyId, callerId)) {
             throw new UnauthorizedCompanyActionException("Only the company founder or appointed managers can view sold tickets");
         }   
         SearchCriteria criteria = new SearchCriteria();
