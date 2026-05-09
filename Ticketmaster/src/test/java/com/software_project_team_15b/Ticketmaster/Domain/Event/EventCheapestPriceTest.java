@@ -3,8 +3,6 @@ package com.software_project_team_15b.Ticketmaster.Domain.Event;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.CouponDiscountPolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventDiscountPolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.EarlyBirdDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import java.math.BigDecimal;
@@ -22,17 +20,7 @@ class EventCheapestPriceTest {
         SeatingEventArea area = EventTestFixtures.seatingArea(5, "20.00");
         Event event = newPublished(List.of(), area);
 
-        Money total = event.cheapestPriceFor(area.areaId(), 4, null, null);
-
-        assertThat(total).isEqualTo(EventTestFixtures.usd("80.00"));
-    }
-
-    @Test
-    void single_no_op_discount_returns_subtotal() {
-        SeatingEventArea area = EventTestFixtures.seatingArea(5, "20.00");
-        Event event = newPublished(List.of(new DelegatingEventDiscountPolicy()), area);
-
-        Money total = event.cheapestPriceFor(area.areaId(), 4, null, null);
+        Money total = event.cheapestPriceFor(area.areaId(), 4, null);
 
         assertThat(total).isEqualTo(EventTestFixtures.usd("80.00"));
     }
@@ -47,7 +35,7 @@ class EventCheapestPriceTest {
                         Instant.now().plus(Duration.ofDays(1)))
         ), area);
 
-        Money total = event.cheapestPriceFor(area.areaId(), 2, null, null);
+        Money total = event.cheapestPriceFor(area.areaId(), 2, null);
 
         // subtotal is 200, best discount is 25% -> 150
         assertThat(total).isEqualTo(EventTestFixtures.usd("150.00"));
@@ -64,7 +52,7 @@ class EventCheapestPriceTest {
                         Instant.now().plus(Duration.ofDays(1)))
         ), area);
 
-        Money total = event.cheapestPriceFor(area.areaId(), 1, null, null);
+        Money total = event.cheapestPriceFor(area.areaId(), 1, null);
 
         assertThat(total).isEqualTo(EventTestFixtures.usd("70.00"));
     }
@@ -79,7 +67,7 @@ class EventCheapestPriceTest {
                         Instant.now().plus(Duration.ofDays(1)))
         ), area);
 
-        Money total = event.cheapestPriceFor(area.areaId(), 1, null, null);
+        Money total = event.cheapestPriceFor(area.areaId(), 1, null);
 
         assertThat(total).isEqualTo(EventTestFixtures.usd("90.00"));
     }
@@ -97,7 +85,7 @@ class EventCheapestPriceTest {
         // so cheapest is the 15% early bird = 85.
         PurchaseRequest noCoupon = new PurchaseRequest(event.eventId(), area.areaId(),
                 UUID.randomUUID(), LocalDate.of(1990, 1, 1), 1, List.of(), null);
-        Money totalNoCoupon = event.cheapestPriceFor(area.areaId(), 1, noCoupon, null);
+        Money totalNoCoupon = event.cheapestPriceFor(area.areaId(), 1, noCoupon);
         assertThat(totalNoCoupon).isEqualTo(EventTestFixtures.usd("85.00"));
 
         // With coupon -> 40% beats 15%, total = 60.
@@ -106,18 +94,18 @@ class EventCheapestPriceTest {
         // String.equalsIgnoreCase). This assertion pins that contract.
         PurchaseRequest withCoupon = new PurchaseRequest(event.eventId(), area.areaId(),
                 UUID.randomUUID(), LocalDate.of(1990, 1, 1), 1, List.of(), "promo");
-        Money totalWithCoupon = event.cheapestPriceFor(area.areaId(), 1, withCoupon, null);
+        Money totalWithCoupon = event.cheapestPriceFor(area.areaId(), 1, withCoupon);
         assertThat(totalWithCoupon).isEqualTo(EventTestFixtures.usd("60.00"));
     }
 
     @Test
     void misbehaving_discount_that_increases_price_is_clamped_to_subtotal() {
         SeatingEventArea area = EventTestFixtures.seatingArea(5, "100.00");
-        IEventDiscountPolicy bumpUp = (subtotal, req, comp) ->
+        IEventDiscountPolicy bumpUp = (subtotal, req) ->
                 subtotal.add(Money.of("50.00", subtotal.currency()));
         Event event = newPublished(List.of(bumpUp), area);
 
-        Money total = event.cheapestPriceFor(area.areaId(), 1, null, null);
+        Money total = event.cheapestPriceFor(area.areaId(), 1, null);
 
         assertThat(total).isEqualTo(EventTestFixtures.usd("100.00"));
     }
@@ -126,7 +114,7 @@ class EventCheapestPriceTest {
         Event event = new Event(
                 UUID.randomUUID(), UUID.randomUUID(), "Test Event", "Artist",
                 Category.CONCERT, Instant.now().plusSeconds(86400), "Venue",
-                List.of(new DelegatingEventPurchasePolicy()),
+                List.of(),
                 discounts
         );
         event.addArea(area);
