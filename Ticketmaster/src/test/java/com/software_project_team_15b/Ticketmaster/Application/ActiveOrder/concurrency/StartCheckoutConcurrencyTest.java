@@ -5,7 +5,6 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
 import java.time.LocalDate;
 import java.util.Map;
@@ -16,12 +15,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-@SpringBootTest(properties = {
-        "app.storage.mode=jpa",
-        "spring.sql.init.mode=never",
-        "spring.jpa.hibernate.ddl-auto=create-drop",
-        "spring.datasource.url=jdbc:h2:mem:start-checkout-concurrency;DB_CLOSE_DELAY=-1;MODE=PostgreSQL"
-})
 class StartCheckoutConcurrencyTest extends ConcurrencyTestSupport {
 
     private UUID userId;
@@ -75,6 +68,12 @@ class StartCheckoutConcurrencyTest extends ConcurrencyTestSupport {
 
         assertEquals(1, result.successCount());
         assertEquals(1, result.failureCount());
+
+        Throwable failure = result.singleFailure();
+
+        assertTrue(failure instanceof IllegalStateException);
+        assertTrue(failure.getMessage().contains("already in checkout"));
+
         assertNotNull(updatedOrder.getExpiresAt());
         assertTrue(updatedOrder.isInCheckout());
 

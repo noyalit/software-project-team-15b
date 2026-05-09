@@ -16,6 +16,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -87,6 +88,12 @@ class CompleteCheckoutConcurrencyTest extends ConcurrencyTestSupport {
 
         ActiveOrder completedOrder =
                 activeOrderRepository.findById(orderId).orElseThrow();
+        Throwable failure = result.singleFailure();
+
+        assertTrue(
+                failure instanceof com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.UnactiveOrderException,
+                "Expected UnactiveOrderException but got: " + failure.getClass().getName()
+        );
 
         assertEquals(1, result.successCount());
         assertEquals(1, result.failureCount());

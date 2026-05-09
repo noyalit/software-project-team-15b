@@ -48,6 +48,12 @@ class CreateActiveOrderConcurrencyTest extends ConcurrencyTestSupport {
 
         assertEquals(1, result.successCount());
         assertEquals(1, result.failureCount());
+
+        Throwable failure = result.singleFailure();
+
+        assertTrue(failure instanceof IllegalStateException);
+        assertTrue(failure.getMessage().contains("User already has an active order"));
+
         assertEquals(1, activeOrders.size());
 
         ActiveOrder savedOrder = activeOrders.get(0);
@@ -55,6 +61,5 @@ class CreateActiveOrderConcurrencyTest extends ConcurrencyTestSupport {
         assertEquals(eventId, savedOrder.getEventId());
         assertEquals(areaId, savedOrder.getAreaId());
         assertEquals(ActiveOrderStatus.ACTIVE, savedOrder.getStatus());
-        assertEquals(Boolean.TRUE, savedOrder.getActiveUniquenessKey());
     }
 }

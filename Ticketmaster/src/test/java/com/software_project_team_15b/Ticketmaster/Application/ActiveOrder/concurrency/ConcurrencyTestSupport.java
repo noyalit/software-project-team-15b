@@ -79,23 +79,21 @@ public abstract class ConcurrencyTestSupport {
     }
 
     protected ConcurrencyResult runTwoThreads(ConcurrentAction action) throws Exception {
-        int threads = 2;
-
-        CountDownLatch ready = new CountDownLatch(threads);
+        CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
 
         AtomicInteger successCount = new AtomicInteger();
-        AtomicInteger failureCount = new AtomicInteger();
+        java.util.List<Throwable> failures = new java.util.concurrent.CopyOnWriteArrayList<>();
 
-        var executor = Executors.newFixedThreadPool(threads);
+        var executor = Executors.newFixedThreadPool(2);
 
         try {
             Future<?> first = executor.submit(() ->
-                    runConcurrentAction(action, ready, start, successCount, failureCount)
+                    runAction(action, ready, start, successCount, failures)
             );
 
             Future<?> second = executor.submit(() ->
-                    runConcurrentAction(action, ready, start, successCount, failureCount)
+                    runAction(action, ready, start, successCount, failures)
             );
 
             ready.await();
@@ -104,19 +102,23 @@ public abstract class ConcurrencyTestSupport {
             first.get();
             second.get();
 
-            return new ConcurrencyResult(successCount.get(), failureCount.get());
+            return new ConcurrencyResult(
+                    successCount.get(),
+                    failures.size(),
+                    failures
+            );
 
         } finally {
             executor.shutdownNow();
         }
     }
 
-    private void runConcurrentAction(
+    private void runAction(
             ConcurrentAction action,
             CountDownLatch ready,
             CountDownLatch start,
             AtomicInteger successCount,
-            AtomicInteger failureCount
+            java.util.List<Throwable> failures
     ) {
         try {
             ready.countDown();
@@ -125,12 +127,12 @@ public abstract class ConcurrencyTestSupport {
             action.run();
             successCount.incrementAndGet();
 
-        } catch (RuntimeException e) {
-            failureCount.incrementAndGet();
-
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException(e);
+            failures.add(e);
+
+        } catch (Throwable t) {
+            failures.add(t);
         }
     }
 
@@ -143,9 +145,19 @@ public abstract class ConcurrencyTestSupport {
 
     @FunctionalInterface
     protected interface ConcurrentAction {
-        void run() throws InterruptedException;
+        void run() throws Exception;
     }
 
-    protected record ConcurrencyResult(int successCount, int failureCount) {
+    protected record ConcurrencyResult(
+        int successCount,
+        int failureCount,
+        java.util.List<Throwable> failures
+    ) {
+        public Throwable singleFailure() {
+            if (failures.size() != 1) {
+                throw new AssertionError("Expected exactly one failure, but got " + failures.size());
+            }
+            return failures.get(0);
+        }
     }
 }

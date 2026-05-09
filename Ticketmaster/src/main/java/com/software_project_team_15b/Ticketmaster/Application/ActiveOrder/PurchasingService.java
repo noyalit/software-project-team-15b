@@ -98,7 +98,7 @@ public class PurchasingService {
 
             ActiveOrder activeOrder = new ActiveOrder(orderId, userId, eventId, areaId);
 
-            activeOrderRepository.save(activeOrder);
+            activeOrderRepository.saveAndFlush(activeOrder);
 
             AUDIT.info("op=createActiveOrder order={} user={} event={} area={} result=ok",
                     orderId, userId, eventId, areaId);
