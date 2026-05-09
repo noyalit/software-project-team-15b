@@ -90,6 +90,51 @@ public class OrderHistoryTest {
     }
 
     @Test
+    void constructorShouldInitializeOrderAsNotCancelled() {
+        OrderHistory orderHistory = new OrderHistory(
+                orderId,
+                userId,
+                eventId,
+                areaId,
+                totalPrice,
+                Set.of(new Ticket(seatId1, basePricePerTicket))
+        );
+
+        assertFalse(orderHistory.isCancelled());
+    }
+
+    @Test
+    void cancelShouldMarkOrderAsCancelled() {
+        OrderHistory orderHistory = new OrderHistory(
+                orderId,
+                userId,
+                eventId,
+                areaId,
+                totalPrice,
+                Set.of(new Ticket(seatId1, basePricePerTicket))
+        );
+
+        orderHistory.cancel();
+
+        assertTrue(orderHistory.isCancelled());
+    }
+
+    @Test
+    void cancelShouldThrowWhenOrderAlreadyCancelled() {
+        OrderHistory orderHistory = new OrderHistory(
+                orderId,
+                userId,
+                eventId,
+                areaId,
+                totalPrice,
+                Set.of(new Ticket(seatId1, basePricePerTicket))
+        );
+        orderHistory.cancel();
+
+        assertThrows(IllegalStateException.class, orderHistory::cancel);
+    }
+
+    @Test
     void getTicketsShouldProtectInternalState() {
         OrderHistory orderHistory = new OrderHistory(
                 orderId,

@@ -45,6 +45,9 @@ public class OrderHistory {
             joinColumns = @JoinColumn(name = "order_id")
     )
     private Set<Ticket> tickets = new HashSet<>();
+    
+    @Column(name = "is_cancelled", nullable = false, updatable = true)
+    private boolean isCancelled = false;
 
     protected OrderHistory() {
     }
@@ -146,5 +149,16 @@ public class OrderHistory {
 
     public Set<Ticket> getTickets() {
         return Set.copyOf(tickets);
+    }
+
+    public boolean isCancelled() {
+        return isCancelled;
+    }
+
+    public void cancel() {
+        if (isCancelled) {
+            throw new IllegalStateException("Order is already cancelled");
+        }
+        this.isCancelled = true;
     }
 }
