@@ -4,7 +4,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyLo
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyQueueException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
-import com.software_project_team_15b.Ticketmaster.Application.QueuesService;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.Lottery;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
@@ -30,7 +30,7 @@ class QueuesServiceTests {
 
     @Mock private IQueueRepository queueRepository;
     @Mock private ILotteryRepository lotteryRepository;
-    @InjectMocks private QueuesService service;
+    @InjectMocks private QueueService service;
 
     private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID USER_A   = UUID.fromString("00000000-0000-0000-0000-000000000002");

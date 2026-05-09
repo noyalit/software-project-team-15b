@@ -1,4 +1,4 @@
-package com.software_project_team_15b.Ticketmaster.Application.Order;
+package com.software_project_team_15b.Ticketmaster.Application.ActiveOrder;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
