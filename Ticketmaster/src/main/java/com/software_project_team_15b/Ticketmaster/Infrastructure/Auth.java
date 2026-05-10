@@ -141,8 +141,8 @@ public class Auth implements IAuth {
             throw new IllegalArgumentException("Invalid or expired session");
         }
 
-        if (!(session.isMember() || session.isSystemAdmin())) {
-            throw new IllegalArgumentException("Only members or system admins can logout");
+        if (!session.isMember()) {
+            throw new IllegalArgumentException("Only members can logout");
         }
 
         activeSessions.remove(memberToken);
