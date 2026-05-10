@@ -39,7 +39,7 @@ class StartCheckoutConcurrencyTest extends ConcurrencyTestSupport {
 
         LotteryEligibilityResult lotteryEligibilityResult = mock(LotteryEligibilityResult.class);
 
-        when(queueService.getLotteryEligibilityForEvent(userId, eventId))
+        when(lotteryService.getLotteryEligibilityForEvent(userId, eventId))
                 .thenReturn(lotteryEligibilityResult);
 
         when(lotteryEligibilityResult.canCreateActiveOrder())

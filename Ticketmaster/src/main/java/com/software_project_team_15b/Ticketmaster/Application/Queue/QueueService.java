@@ -267,8 +267,4 @@ public class QueueService {
         throw new UnsupportedOperationException("Unimplemented method 'requestAccess'");
     }
 
-    public LotteryEligibilityResult getLotteryEligibilityForEvent(UUID userId, UUID eventId) {
-        // TODO Auto-generated method stub
-        throw new UnsupportedOperationException("Unimplemented method 'getLotteryEligibilityForEvent'");
-    }
 }

@@ -55,6 +55,7 @@ public class PurchasingService {
     private final IMemberRepository memberRepository;
     private final EventManagementService eventManagementService;
     private final QueueService queueService;
+    private final LotteryService lotteryService;
     private final IPaymentAPI paymentGateway;
     private final ITicketSupplyAPI ticketProvider;
     private final IAuth auth;
@@ -65,6 +66,7 @@ public class PurchasingService {
             IMemberRepository memberRepository,
             EventManagementService eventManagementService,
             QueueService queueService,
+            LotteryService lotteryService,
             IPaymentAPI paymentGateway,
             ITicketSupplyAPI ticketProvider,
             IAuth auth
@@ -74,6 +76,7 @@ public class PurchasingService {
         this.memberRepository = Objects.requireNonNull(memberRepository);
         this.eventManagementService = Objects.requireNonNull(eventManagementService);
         this.queueService = Objects.requireNonNull(queueService);
+        this.lotteryService = Objects.requireNonNull(lotteryService);
         this.paymentGateway = Objects.requireNonNull(paymentGateway);
         this.ticketProvider = Objects.requireNonNull(ticketProvider);
         this.auth = Objects.requireNonNull(auth);
@@ -666,7 +669,7 @@ public class PurchasingService {
             throw new IllegalArgumentException("User ID and event ID cannot be null");
         }
 
-        LotteryEligibilityResult eligibilityResult = queueService.getLotteryEligibilityForEvent(userId, eventId);
+        LotteryEligibilityResult eligibilityResult = lotteryService.getLotteryEligibilityForEvent(userId, eventId);
         if (!eligibilityResult.canCreateActiveOrder()) {
             throw new IllegalStateException("User is not eligible to create an active order for this event: " + eligibilityResult.status());
         }

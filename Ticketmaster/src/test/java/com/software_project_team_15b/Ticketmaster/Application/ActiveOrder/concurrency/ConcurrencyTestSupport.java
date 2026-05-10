@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.concurrency;
 
+import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.LotteryService;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
@@ -38,6 +39,9 @@ public abstract class ConcurrencyTestSupport {
 
     @MockitoBean
     protected QueueService queueService;
+
+    @MockitoBean
+    protected LotteryService lotteryService;
 
     @MockitoBean
     protected IPaymentAPI paymentGateway;
