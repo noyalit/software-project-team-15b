@@ -2,6 +2,7 @@ package com.software_project_team_15b.Ticketmaster.Application.Queue;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.*;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.Lottery;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
@@ -48,6 +49,8 @@ public class QueuesService {
     private final Set<String> acceptedTokens = new HashSet<>();
     private final ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>> eventAccess = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    @Autowired
+    private UserService userService;
 
     public QueuesService(IQueueRepository queueRepository, ILotteryRepository lotteryRepository, IAuth auth) {
         this.queueRepository = queueRepository;
@@ -97,6 +100,7 @@ public class QueuesService {
             String token = siteQueue.poll();
             if (auth.isTokenValid(token)) {
                 acceptedTokens.add(token);
+                userService.tryEnterFromQueue(token);
             }
         }
     }

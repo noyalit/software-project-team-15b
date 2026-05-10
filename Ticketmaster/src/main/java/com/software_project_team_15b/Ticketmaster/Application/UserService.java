@@ -388,4 +388,7 @@ public class UserService {
         return auth.extractUserId(token);
     }
 
+    public void tryEnterFromQueue(String token) {
+
+    }
 }
