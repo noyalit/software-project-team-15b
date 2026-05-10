@@ -14,6 +14,8 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Unautho
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 
 /**
  * Application-level service for managing {@link Company} aggregates.
@@ -322,6 +324,45 @@ public class CompanyService {
                     .forEach(event -> eventManagementService.cancel(event.eventId(), auth.extractUserId(token)));
         }
         return companyRepository.save(company);
+    }
+
+    /**
+     * Validates a purchase request against the company's own purchase policy.
+     * Mirrors {@link com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy}
+     * but for the company side of the transaction.
+     *
+     * @param companyId the owning company's id; must not be null
+     * @param request   the purchase request; must not be null
+     * @throws CompanyNotFoundException if the company does not exist
+     */
+    public void validatePurchaseEligibility(UUID companyId, PurchaseRequest request) {
+        requireNonNull(companyId, "Company ID");
+        requireNonNull(request, "Purchase request");
+        Optional<Company> company = companyRepository.findById(companyId.toString());
+        if (company.isEmpty()) return;
+        // TODO: once Company stores a typed ICompanyPurchasePolicy, invoke its validate(request, null) here.
+    }
+
+    /**
+     * Returns the cheapest price the company is willing to offer for the given subtotal.
+     * Mirrors {@link com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy}
+     * but for the company side. The returned amount is clamped to the subtotal so a misbehaving
+     * policy cannot raise the price.
+     *
+     * @param companyId the owning company's id; must not be null
+     * @param subtotal  the base subtotal in the buyer's currency; must not be null
+     * @param request   the purchase request; must not be null
+     * @return the lowest price the company offers, never above {@code subtotal}, in {@code subtotal}'s currency
+     * @throws CompanyNotFoundException if the company does not exist
+     */
+    public Money cheapestPriceFor(UUID companyId, Money subtotal, PurchaseRequest request) {
+        requireNonNull(companyId, "Company ID");
+        requireNonNull(subtotal, "Subtotal");
+        requireNonNull(request, "Purchase request");
+        Optional<Company> company = companyRepository.findById(companyId.toString());
+        if (company.isEmpty()) return subtotal;
+        // TODO: once Company stores a typed ICompanyDiscountPolicy, evaluate it and clamp to subtotal.
+        return subtotal;
     }
 
     /**

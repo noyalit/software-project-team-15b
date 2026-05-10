@@ -54,7 +54,7 @@ class EventGetPriceTest {
         Event event = EventTestFixtures.published(area);
         Money subtotal = event.priceFor(area.areaId(), 4);
 
-        Money total = event.cheapestPriceFor(area.areaId(), 4, null, null);
+        Money total = event.cheapestPriceFor(area.areaId(), 4, null);
 
         assertThat(total).isEqualTo(subtotal);
     }

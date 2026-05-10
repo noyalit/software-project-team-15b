@@ -8,7 +8,6 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Seat;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatingEventArea;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompPurchasePolicy;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -22,8 +21,7 @@ public class NoLonelySeatPolicy implements IEventPurchasePolicy {
     public NoLonelySeatPolicy() {}
 
     @Override
-    public void validate(PurchaseRequest request, Event event, ICompPurchasePolicy companyPolicy) {
-        if (companyPolicy != null) companyPolicy.validate(request);
+    public void validate(PurchaseRequest request, Event event) {
         if (request.seatIds() == null || request.seatIds().isEmpty()) return;
 
         EventArea area = event.areas().stream()

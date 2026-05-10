@@ -1,13 +1,12 @@
 package com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder;
 
-import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
-import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.AlreadyDoneException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.UnactiveOrderException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -17,7 +16,6 @@ import java.time.LocalDateTime;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Disabled;
 
 public class ActiveOrderTest {
 
@@ -52,6 +50,8 @@ public class ActiveOrderTest {
         assertEquals(orderId, order.getOrderId());
         assertEquals(userId, order.getUserId());
         assertEquals(eventId, order.getEventId());
+        assertEquals(areaId, order.getAreaId());
+        assertEquals(Boolean.TRUE, order.getActiveUniquenessKey());
         assertEquals(ActiveOrderStatus.ACTIVE, order.getStatus());
     }
 
@@ -159,6 +159,7 @@ public class ActiveOrderTest {
         order.complete();
 
         assertEquals(ActiveOrderStatus.COMPLETED, order.getStatus());
+        assertNull(order.getActiveUniquenessKey());
     }
 
     @Test
@@ -167,6 +168,7 @@ public class ActiveOrderTest {
         order.cancel();
 
         assertEquals(ActiveOrderStatus.CANCELED, order.getStatus());
+        assertNull(order.getActiveUniquenessKey());
     }
 
     @Test
@@ -228,6 +230,7 @@ public class ActiveOrderTest {
         expiredOrder.expire();
 
         assertEquals(ActiveOrderStatus.EXPIRED, expiredOrder.getStatus());
+        assertNull(expiredOrder.getActiveUniquenessKey());
     }
 
 
