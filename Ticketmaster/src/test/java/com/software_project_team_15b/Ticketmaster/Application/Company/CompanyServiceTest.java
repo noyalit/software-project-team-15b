@@ -20,8 +20,21 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
+import com.software_project_team_15b.Ticketmaster.Application.Event.IEventManagementService;
+import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
+import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
@@ -978,6 +991,341 @@ class CompanyServiceTest {
     }
 
     // ===========================================================================================
+    // isCompanyFounderOrOwner — positive
+
+    @Test
+    void isCompanyFounderOrOwner_returns_true_for_founder() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+
+        assertThat(service.isCompanyFounderOrOwner(company.getId(), founderId)).isTrue();
+    }
+
+    @Test
+    void isCompanyFounderOrOwner_returns_true_for_added_owner() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+        UUID coOwnerId = UUID.randomUUID();
+        service.addOwner(founderToken, company.getId(), coOwnerId);
+
+        assertThat(service.isCompanyFounderOrOwner(company.getId(), coOwnerId)).isTrue();
+    }
+
+    @Test
+    void isCompanyFounderOrOwner_returns_false_for_non_owner() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+
+        assertThat(service.isCompanyFounderOrOwner(company.getId(), UUID.randomUUID())).isFalse();
+    }
+
+    // isCompanyFounderOrOwner — negative
+
+    @Test
+    void isCompanyFounderOrOwner_throws_when_companyId_is_null() {
+        assertThatThrownBy(() -> service.isCompanyFounderOrOwner(null, UUID.randomUUID()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Company ID");
+    }
+
+    @Test
+    void isCompanyFounderOrOwner_throws_when_userId_is_null() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+
+        assertThatThrownBy(() -> service.isCompanyFounderOrOwner(company.getId(), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("User ID");
+    }
+
+    @Test
+    void isCompanyFounderOrOwner_throws_when_company_not_found() {
+        assertThatThrownBy(() -> service.isCompanyFounderOrOwner(UUID.randomUUID(), UUID.randomUUID()))
+                .isInstanceOf(CompanyNotFoundException.class);
+    }
+
+    // ===========================================================================================
+    // isEventManager — positive
+
+    @Test
+    void isEventManager_returns_true_after_addEventManager() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+        UUID eventId = UUID.randomUUID();
+        UUID managerId = UUID.randomUUID();
+        fakeEventManagementService.registerEvent(eventId, company.getId());
+
+        service.addEventManager(founderToken, company.getId(), eventId, managerId);
+
+        assertThat(service.isEventManager(eventId, managerId)).isTrue();
+    }
+
+    @Test
+    void isEventManager_returns_false_for_user_not_assigned() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+        UUID eventId = UUID.randomUUID();
+        fakeEventManagementService.registerEvent(eventId, company.getId());
+
+        assertThat(service.isEventManager(eventId, UUID.randomUUID())).isFalse();
+    }
+
+    @Test
+    void isEventManager_returns_false_after_removeEventManager() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+        UUID eventId = UUID.randomUUID();
+        UUID managerId = UUID.randomUUID();
+        fakeEventManagementService.registerEvent(eventId, company.getId());
+        service.addEventManager(founderToken, company.getId(), eventId, managerId);
+
+        service.removeEventManager(founderToken, company.getId(), eventId, managerId);
+
+        assertThat(service.isEventManager(eventId, managerId)).isFalse();
+    }
+
+    // isEventManager — negative
+
+    @Test
+    void isEventManager_throws_when_eventId_is_null() {
+        assertThatThrownBy(() -> service.isEventManager(null, UUID.randomUUID()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Event ID");
+    }
+
+    @Test
+    void isEventManager_throws_when_userId_is_null() {
+        assertThatThrownBy(() -> service.isEventManager(UUID.randomUUID(), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("User ID");
+    }
+
+    // ===========================================================================================
+    // addEventManager — positive
+
+    @Test
+    void addEventManager_assigns_manager_to_event_in_company() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+        UUID eventId = UUID.randomUUID();
+        UUID managerId = UUID.randomUUID();
+        fakeEventManagementService.registerEvent(eventId, company.getId());
+
+        service.addEventManager(founderToken, company.getId(), eventId, managerId);
+
+        Company saved = repo.findById(company.getId()).orElseThrow();
+        assertThat(saved.getEventManagers(eventId)).contains(managerId);
+    }
+
+    @Test
+    void addEventManager_allows_multiple_managers_for_same_event() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+        UUID eventId = UUID.randomUUID();
+        UUID manager1 = UUID.randomUUID();
+        UUID manager2 = UUID.randomUUID();
+        fakeEventManagementService.registerEvent(eventId, company.getId());
+
+        service.addEventManager(founderToken, company.getId(), eventId, manager1);
+        service.addEventManager(founderToken, company.getId(), eventId, manager2);
+
+        assertThat(repo.findById(company.getId()).orElseThrow().getEventManagers(eventId))
+                .containsExactlyInAnyOrder(manager1, manager2);
+    }
+
+    // addEventManager — negative
+
+    @Test
+    void addEventManager_throws_when_caller_is_not_owner() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+        String strangerToken = auth.registerMember(UUID.randomUUID());
+
+        assertThatThrownBy(() -> service.addEventManager(strangerToken, company.getId(), UUID.randomUUID(), UUID.randomUUID()))
+                .isInstanceOf(UnauthorizedCompanyActionException.class);
+    }
+
+    @Test
+    void addEventManager_throws_when_token_is_invalid() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+
+        assertThatThrownBy(() -> service.addEventManager("bad-token", company.getId(), UUID.randomUUID(), UUID.randomUUID()))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void addEventManager_throws_when_companyId_is_null() {
+        String founderToken = auth.registerMember(UUID.randomUUID());
+        assertThatThrownBy(() -> service.addEventManager(founderToken, null, UUID.randomUUID(), UUID.randomUUID()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Company ID");
+    }
+
+    @Test
+    void addEventManager_throws_when_eventId_is_null() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+
+        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), null, UUID.randomUUID()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Event ID");
+    }
+
+    @Test
+    void addEventManager_throws_when_userId_is_null() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+
+        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), UUID.randomUUID(), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("User ID");
+    }
+
+    @Test
+    void addEventManager_throws_when_company_not_found() {
+        String founderToken = auth.registerMember(UUID.randomUUID());
+        assertThatThrownBy(() -> service.addEventManager(founderToken, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID()))
+                .isInstanceOf(CompanyNotFoundException.class);
+    }
+
+    @Test
+    void addEventManager_throws_when_user_is_already_manager_for_event() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+        UUID eventId = UUID.randomUUID();
+        UUID managerId = UUID.randomUUID();
+        fakeEventManagementService.registerEvent(eventId, company.getId());
+        service.addEventManager(founderToken, company.getId(), eventId, managerId);
+
+        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), eventId, managerId))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // ===========================================================================================
+    // removeEventManager — positive
+
+    @Test
+    void removeEventManager_removes_manager_from_event() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+        UUID eventId = UUID.randomUUID();
+        UUID managerId = UUID.randomUUID();
+        fakeEventManagementService.registerEvent(eventId, company.getId());
+        service.addEventManager(founderToken, company.getId(), eventId, managerId);
+
+        service.removeEventManager(founderToken, company.getId(), eventId, managerId);
+
+        assertThat(repo.findById(company.getId()).orElseThrow().getEventManagers(eventId))
+                .doesNotContain(managerId);
+    }
+
+    @Test
+    void removeEventManager_leaves_other_managers_intact() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+        UUID eventId = UUID.randomUUID();
+        UUID manager1 = UUID.randomUUID();
+        UUID manager2 = UUID.randomUUID();
+        fakeEventManagementService.registerEvent(eventId, company.getId());
+        service.addEventManager(founderToken, company.getId(), eventId, manager1);
+        service.addEventManager(founderToken, company.getId(), eventId, manager2);
+
+        service.removeEventManager(founderToken, company.getId(), eventId, manager1);
+
+        assertThat(repo.findById(company.getId()).orElseThrow().getEventManagers(eventId))
+                .containsExactly(manager2);
+    }
+
+    // removeEventManager — negative
+
+    @Test
+    void removeEventManager_throws_when_caller_is_not_owner() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+        String strangerToken = auth.registerMember(UUID.randomUUID());
+
+        assertThatThrownBy(() -> service.removeEventManager(strangerToken, company.getId(), UUID.randomUUID(), UUID.randomUUID()))
+                .isInstanceOf(UnauthorizedCompanyActionException.class);
+    }
+
+    @Test
+    void removeEventManager_throws_when_token_is_invalid() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+
+        assertThatThrownBy(() -> service.removeEventManager("bad-token", company.getId(), UUID.randomUUID(), UUID.randomUUID()))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void removeEventManager_throws_when_companyId_is_null() {
+        String founderToken = auth.registerMember(UUID.randomUUID());
+        assertThatThrownBy(() -> service.removeEventManager(founderToken, null, UUID.randomUUID(), UUID.randomUUID()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Company ID");
+    }
+
+    @Test
+    void removeEventManager_throws_when_eventId_is_null() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+
+        assertThatThrownBy(() -> service.removeEventManager(founderToken, company.getId(), null, UUID.randomUUID()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Event ID");
+    }
+
+    @Test
+    void removeEventManager_throws_when_userId_is_null() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+
+        assertThatThrownBy(() -> service.removeEventManager(founderToken, company.getId(), UUID.randomUUID(), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("User ID");
+    }
+
+    @Test
+    void removeEventManager_throws_when_user_is_not_a_manager_for_event() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = auth.registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+        UUID eventId = UUID.randomUUID();
+        fakeEventManagementService.registerEvent(eventId, company.getId());
+
+        assertThatThrownBy(() -> service.removeEventManager(founderToken, company.getId(), eventId, UUID.randomUUID()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void removeEventManager_throws_when_company_not_found() {
+        String founderToken = auth.registerMember(UUID.randomUUID());
+        assertThatThrownBy(() -> service.removeEventManager(founderToken, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID()))
+                .isInstanceOf(CompanyNotFoundException.class);
+    }
+
+    // ===========================================================================================
     // Concurrency
 
     @Test
@@ -1153,19 +1501,55 @@ class CompanyServiceTest {
         @Override public Member changeManagerPermissions(String token, UUID managerId, Set<ManagerPermission> newPermissions) { return null; }
     }
 
-    private static final class FakeEventManagementService extends EventManagementService {
-        FakeEventManagementService() {
-            super(null, null, null, null);
+    private static final class FakeEventManagementService implements IEventManagementService {
+
+        private final Map<UUID, UUID> eventToCompany = new ConcurrentHashMap<>();
+
+        void registerEvent(UUID eventId, UUID companyId) {
+            eventToCompany.put(eventId, companyId);
         }
 
         @Override
-        public List<EventView> searchInCompany(UUID companyId, SearchCriteria criteria) {
-            return List.of();
+        public EventView getEvent(UUID eventId) {
+            UUID companyId = eventToCompany.get(eventId);
+            if (companyId == null) throw new IllegalArgumentException("Event not registered in fake: " + eventId);
+            return new EventView(eventId, companyId, null, null, null, null, null, null, null);
         }
 
         @Override
-        public void cancel(UUID eventId, UUID callerId) {
-        }
+        public List<EventView> searchInCompany(UUID companyId, SearchCriteria criteria) { return List.of(); }
+
+        @Override
+        public void cancel(UUID eventId, UUID callerId) {}
+
+        @Override public Map<Boolean, Set<UUID>> getSeatsAvailability(UUID e, UUID a, Set<UUID> s) { throw new UnsupportedOperationException(); }
+        @Override public List<EventView.SeatView> areaSeats(UUID e, UUID a) { throw new UnsupportedOperationException(); }
+        @Override public boolean getAreaAvailability(UUID e, UUID a) { throw new UnsupportedOperationException(); }
+        @Override public EventAvailability getEventAvailability(UUID e) { throw new UnsupportedOperationException(); }
+        @Override public PriceBreakdown getPrice(UUID e, PriceQuery q) { throw new UnsupportedOperationException(); }
+        @Override public boolean releaseSeats(UUID e, UUID t, List<UUID> s) { throw new UnsupportedOperationException(); }
+        @Override public ConfirmationReceipt confirm(UUID e, UUID t) { throw new UnsupportedOperationException(); }
+        @Override public void release(UUID e, UUID t) { throw new UnsupportedOperationException(); }
+        @Override public HoldReceipt hold(UUID e, HoldCommand c) { throw new UnsupportedOperationException(); }
+        @Override public void cancel(UUID e, String t) { throw new UnsupportedOperationException(); }
+        @Override public void publish(UUID e, UUID c) { throw new UnsupportedOperationException(); }
+        @Override public void publish(UUID e, String t) { throw new UnsupportedOperationException(); }
+        @Override public UUID addArea(UUID e, AddAreaCommand c, UUID caller) { throw new UnsupportedOperationException(); }
+        @Override public UUID addArea(UUID e, AddAreaCommand c, String t) { throw new UnsupportedOperationException(); }
+        @Override public UUID createEvent(CreateEventCommand c, UUID caller) { throw new UnsupportedOperationException(); }
+        @Override public UUID createEvent(CreateEventCommand c, String t) { throw new UnsupportedOperationException(); }
+        @Override public List<EventView> search(SearchCriteria c) { throw new UnsupportedOperationException(); }
+        @Override public void validatePurchaseEligibility(UUID e, PurchaseRequest r) { throw new UnsupportedOperationException(); }
+        @Override public void updateEvent(UUID e, UpdateEventCommand c, UUID caller) { throw new UnsupportedOperationException(); }
+        @Override public void updateEvent(UUID e, UpdateEventCommand c, String t) { throw new UnsupportedOperationException(); }
+        @Override public void updateArea(UUID e, UUID a, UpdateAreaCommand c, UUID caller) { throw new UnsupportedOperationException(); }
+        @Override public void updateArea(UUID e, UUID a, UpdateAreaCommand c, String t) { throw new UnsupportedOperationException(); }
+        @Override public void removeArea(UUID e, UUID a, UUID caller) { throw new UnsupportedOperationException(); }
+        @Override public void removeArea(UUID e, UUID a, String t) { throw new UnsupportedOperationException(); }
+        @Override public void replacePurchasePolicies(UUID e, List<IEventPurchasePolicy> p, UUID caller) { throw new UnsupportedOperationException(); }
+        @Override public void replacePurchasePolicies(UUID e, List<IEventPurchasePolicy> p, String t) { throw new UnsupportedOperationException(); }
+        @Override public void replaceDiscountPolicies(UUID e, List<IEventDiscountPolicy> p, UUID caller) { throw new UnsupportedOperationException(); }
+        @Override public void replaceDiscountPolicies(UUID e, List<IEventDiscountPolicy> p, String t) { throw new UnsupportedOperationException(); }
     }
 
     private static final class FakeCompanyRepository implements ICompanyRepository {
