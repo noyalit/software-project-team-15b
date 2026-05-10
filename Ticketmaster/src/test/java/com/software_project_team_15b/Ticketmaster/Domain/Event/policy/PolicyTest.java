@@ -10,8 +10,6 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Seat;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatingEventArea;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompDiscountPolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompPurchasePolicy;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -22,15 +20,12 @@ import org.junit.jupiter.api.Test;
 
 class PolicyTest {
 
-    private static final ICompPurchasePolicy NOOP_COMPANY = req -> {};
-    private static final ICompDiscountPolicy NOOP_DISCOUNT = (sub, req) -> sub;
-
     @Test
     void max_tickets_policy_rejects_above_cap() {
         MaxTicketsPerOrderPolicy policy = new MaxTicketsPerOrderPolicy(4);
         PurchaseRequest req = new PurchaseRequest(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 LocalDate.of(2000, 1, 1), 5, List.of(), null);
-        assertThatThrownBy(() -> policy.validate(req, null, NOOP_COMPANY))
+        assertThatThrownBy(() -> policy.validate(req, null))
                 .isInstanceOf(PolicyViolationException.class);
     }
 
@@ -39,7 +34,7 @@ class PolicyTest {
         MaxTicketsPerOrderPolicy policy = new MaxTicketsPerOrderPolicy(4);
         PurchaseRequest req = new PurchaseRequest(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 LocalDate.of(2000, 1, 1), 4, List.of(), null);
-        policy.validate(req, null, NOOP_COMPANY);
+        policy.validate(req, null);
     }
 
     @Test
@@ -48,7 +43,7 @@ class PolicyTest {
         LocalDate birth = LocalDate.now().minusYears(10);
         PurchaseRequest req = new PurchaseRequest(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 birth, 1, List.of(), null);
-        assertThatThrownBy(() -> policy.validate(req, null, NOOP_COMPANY))
+        assertThatThrownBy(() -> policy.validate(req, null))
                 .isInstanceOf(PolicyViolationException.class);
     }
 
@@ -58,7 +53,7 @@ class PolicyTest {
         LocalDate birth = LocalDate.now().minusYears(25);
         PurchaseRequest req = new PurchaseRequest(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 birth, 1, List.of(), null);
-        policy.validate(req, null, NOOP_COMPANY);
+        policy.validate(req, null);
     }
 
     @Test
@@ -66,7 +61,7 @@ class PolicyTest {
         AgeRestrictionPolicy policy = new AgeRestrictionPolicy(18);
         PurchaseRequest req = new PurchaseRequest(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 null, 1, List.of(), null);
-        assertThatThrownBy(() -> policy.validate(req, null, NOOP_COMPANY))
+        assertThatThrownBy(() -> policy.validate(req, null))
                 .isInstanceOf(PolicyViolationException.class);
     }
 
@@ -85,7 +80,7 @@ class PolicyTest {
         NoLonelySeatPolicy policy = new NoLonelySeatPolicy();
         PurchaseRequest req = new PurchaseRequest(event.eventId(), area.areaId(), UUID.randomUUID(),
                 LocalDate.of(1990, 1, 1), 1, List.of(s3), null);
-        assertThatThrownBy(() -> policy.validate(req, event, NOOP_COMPANY))
+        assertThatThrownBy(() -> policy.validate(req, event))
                 .isInstanceOf(PolicyViolationException.class);
     }
 
@@ -103,7 +98,7 @@ class PolicyTest {
         NoLonelySeatPolicy policy = new NoLonelySeatPolicy();
         PurchaseRequest req = new PurchaseRequest(event.eventId(), area.areaId(), UUID.randomUUID(),
                 LocalDate.of(1990, 1, 1), 2, List.of(s1, s2), null);
-        policy.validate(req, event, NOOP_COMPANY);
+        policy.validate(req, event);
     }
 
     @Test
@@ -113,7 +108,7 @@ class PolicyTest {
         Money subtotal = Money.of("100.00", "USD");
         PurchaseRequest req = new PurchaseRequest(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 LocalDate.of(1990, 1, 1), 1, List.of(), null);
-        Money result = policy.apply(subtotal, req, NOOP_DISCOUNT);
+        Money result = policy.apply(subtotal, req);
         assertThat(result).isEqualTo(Money.of("80.00", "USD"));
     }
 
@@ -124,7 +119,7 @@ class PolicyTest {
         Money subtotal = Money.of("100.00", "USD");
         PurchaseRequest req = new PurchaseRequest(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 LocalDate.of(1990, 1, 1), 1, List.of(), null);
-        Money result = policy.apply(subtotal, req, NOOP_DISCOUNT);
+        Money result = policy.apply(subtotal, req);
         assertThat(result).isEqualTo(Money.of("100.00", "USD"));
     }
 
@@ -134,7 +129,7 @@ class PolicyTest {
         Money subtotal = Money.of("200.00", "USD");
         PurchaseRequest req = new PurchaseRequest(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 LocalDate.of(1990, 1, 1), 1, List.of(), "promo10");
-        Money result = policy.apply(subtotal, req, NOOP_DISCOUNT);
+        Money result = policy.apply(subtotal, req);
         assertThat(result).isEqualTo(Money.of("180.00", "USD"));
     }
 
@@ -144,19 +139,8 @@ class PolicyTest {
         Money subtotal = Money.of("200.00", "USD");
         PurchaseRequest req = new PurchaseRequest(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 LocalDate.of(1990, 1, 1), 1, List.of(), null);
-        Money result = policy.apply(subtotal, req, NOOP_DISCOUNT);
+        Money result = policy.apply(subtotal, req);
         assertThat(result).isEqualTo(Money.of("200.00", "USD"));
-    }
-
-    @Test
-    void delegating_purchase_policy_delegates_to_company() {
-        boolean[] called = {false};
-        ICompPurchasePolicy company = req -> called[0] = true;
-        DelegatingEventPurchasePolicy policy = new DelegatingEventPurchasePolicy();
-        PurchaseRequest req = new PurchaseRequest(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-                LocalDate.of(1990, 1, 1), 1, List.of(), null);
-        policy.validate(req, null, company);
-        assertThat(called[0]).isTrue();
     }
 
     @Test

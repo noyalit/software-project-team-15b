@@ -18,10 +18,20 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 
+// Orders are intentionally not reactivated after leaving ACTIVE status.
 @Entity
-@Table(name = "active_orders")
+@Table(
+        name = "active_orders",
+        uniqueConstraints = {
+                @UniqueConstraint(
+                        name = "uk_active_order_user_event_active",
+                        columnNames = {"user_id", "event_id", "active_uniqueness_key"}
+                )
+        }
+)
 public class ActiveOrder {
 
     @Id
@@ -48,6 +58,20 @@ public class ActiveOrder {
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
     private ActiveOrderStatus status;
+
+
+    /**
+     * Technical field used only for the database uniqueness constraint.
+     *
+     * ACTIVE orders have activeUniquenessKey = true.
+     * Non-active orders have activeUniquenessKey = null.
+     *
+     * This allows the database to enforce only one active order per user/event,
+     * while allowing multiple completed/canceled/expired historical orders
+     * for the same user/event because unique constraints allow multiple NULLs.
+     */
+    @Column(name = "activeUniquenessKey", nullable = true)
+    private Boolean activeUniquenessKey;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -81,6 +105,7 @@ public class ActiveOrder {
         this.eventId = eventId;
         this.areaId = areaId;
         this.status = ActiveOrderStatus.ACTIVE;
+        this.activeUniquenessKey = true;
         this.createdAt = LocalDateTime.now();
         this.expiresAt = null;
     }
@@ -111,6 +136,7 @@ public class ActiveOrder {
         this.expiresAt = expiresAt;
 
         this.status = ActiveOrderStatus.ACTIVE;
+        this.activeUniquenessKey = true;
         this.orderSeats = new HashSet<>();
     }
 
@@ -136,6 +162,11 @@ public class ActiveOrder {
 
     public ActiveOrderStatus getStatus() {
         return status;
+    }
+
+    // isActive is used for the unique constraint to allow multiple non-active orders for the same user and event
+    public Boolean getActiveUniquenessKey() {
+        return activeUniquenessKey;
     }
 
     public LocalDateTime getCreatedAt() {
@@ -198,8 +229,7 @@ public class ActiveOrder {
 
     public void complete() {
         ensureOrderIsInCheckout();
-
-        status = ActiveOrderStatus.COMPLETED;
+        changeStatusFromActive(ActiveOrderStatus.COMPLETED);
     }
 
     public void cancel() {
@@ -207,7 +237,7 @@ public class ActiveOrder {
             throw new UnactiveOrderException("Order " + orderId + " is not active and cannot be canceled");
         }
 
-        status = ActiveOrderStatus.CANCELED;
+        changeStatusFromActive(ActiveOrderStatus.CANCELED);
     }
 
     public boolean isExpired() {
@@ -235,7 +265,7 @@ public class ActiveOrder {
             throw new IllegalStateException("Order " + orderId + " checkout has not expired yet");
         }
 
-        status = ActiveOrderStatus.EXPIRED;
+        changeStatusFromActive(ActiveOrderStatus.EXPIRED);
     }
 
     public void ensureOrderIsActive() {
@@ -256,7 +286,6 @@ public class ActiveOrder {
             if (hasTimeExpired()) {
                 throw new TimeExpiredException("Order " + orderId + " checkout has expired");
             }
-
             throw new IllegalStateException("Order " + orderId + " is already in checkout");
         }
     }
@@ -284,5 +313,22 @@ public class ActiveOrder {
                 throw new IllegalArgumentException("seatId cannot be null");
             }
         }
+    }
+
+    private void changeStatusFromActive(ActiveOrderStatus newStatus) {
+        if (status != ActiveOrderStatus.ACTIVE) {
+            throw new UnactiveOrderException("Order " + orderId + " is not active and cannot change status to " + newStatus);
+        }
+        if (newStatus == ActiveOrderStatus.ACTIVE) {
+            throw new IllegalArgumentException("New status must be different from ACTIVE");
+        }
+
+        this.status = newStatus;
+        syncActiveUniquenessKey();
+    }
+
+    private void syncActiveUniquenessKey() {
+        this.activeUniquenessKey =
+            status == ActiveOrderStatus.ACTIVE ? Boolean.TRUE : null;
     }
 }

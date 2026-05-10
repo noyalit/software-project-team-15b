@@ -5,7 +5,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompPurchasePolicy;
 import java.time.LocalDate;
 import java.time.Period;
 
@@ -22,8 +21,7 @@ public class AgeRestrictionPolicy implements IEventPurchasePolicy {
     public int minAge() { return minAge; }
 
     @Override
-    public void validate(PurchaseRequest request, Event event, ICompPurchasePolicy companyPolicy) {
-        if (companyPolicy != null) companyPolicy.validate(request);
+    public void validate(PurchaseRequest request, Event event) {
         LocalDate birth = request.buyerBirthDate();
         if (birth == null) {
             throw new PolicyViolationException("buyer birth date required for age-restricted event");

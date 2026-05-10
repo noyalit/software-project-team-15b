@@ -1,9 +1,17 @@
 package com.software_project_team_15b.Ticketmaster.Application.Event;
 
+import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
+import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
+import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventArea;
@@ -20,10 +28,9 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatingEventArea;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.StandingEventArea;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventDiscountPolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.EventAction;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompanyAuthorizationPort;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PessimisticLockException;
@@ -63,7 +70,7 @@ import org.springframework.transaction.annotation.Transactional;
  * the same transaction open across retries and never see a different version.
  */
 @Service
-public class EventManagementService {
+public class EventManagementService implements IEventManagementService, EventSubscriber {
 
     private static final Logger AUDIT = LoggerFactory.getLogger("audit.event-management");
 
@@ -71,25 +78,39 @@ public class EventManagementService {
     private final EventLockRegistry locks;
     private final ICompanyAuthorizationPort authorization;
     private final TransactionTemplate txTemplate;
+    private final EventCancelManager cancelManager;
+    private final CompanyService companyService;
+    private final IAuth auth;
 
     public EventManagementService(IEventRepository events,
                                   EventLockRegistry locks,
                                   ICompanyAuthorizationPort authorization,
-                                  PlatformTransactionManager txManager) {
+                                  PlatformTransactionManager txManager,
+                                  EventCancelManager cancelManager,
+                                  CompanyService companyService,
+                                  IAuth auth) {
         this.events = events;
         this.locks = locks;
         this.authorization = authorization;
         this.txTemplate = new TransactionTemplate(txManager);
+        this.cancelManager = cancelManager;
+        this.companyService = companyService;
+        this.auth = auth;
+        try {
+            this.cancelManager.subscribe(this);
+        } catch (Exception e) {
+            throw new RuntimeException("failed to subscribe to event cancel manager", e);
+        }
     }
 
     @Transactional
     public UUID createEvent(CreateEventCommand cmd, UUID callerId) {
-        requireAuthorized(cmd.companyId(), callerId);
-        List<IEventPurchasePolicy> purchasePolicies = (cmd.purchasePolicies() == null || cmd.purchasePolicies().isEmpty())
-                ? List.of(new DelegatingEventPurchasePolicy())
+        authorization.require(cmd.companyId(), callerId, EventAction.MANAGE_EVENT);
+        List<IEventPurchasePolicy> purchasePolicies = cmd.purchasePolicies() == null
+                ? List.of()
                 : cmd.purchasePolicies();
-        List<IEventDiscountPolicy> discountPolicies = (cmd.discountPolicies() == null || cmd.discountPolicies().isEmpty())
-                ? List.of(new DelegatingEventDiscountPolicy())
+        List<IEventDiscountPolicy> discountPolicies = cmd.discountPolicies() == null
+                ? List.of()
                 : cmd.discountPolicies();
         Event event = new Event(
                 UUID.randomUUID(),
@@ -113,7 +134,7 @@ public class EventManagementService {
         lock.lock();
         try {
             Event event = requireEvent(eventId);
-            requireAuthorized(event.companyId(), callerId);
+            authorization.require(event.companyId(), callerId, EventAction.CONFIGURE_HALL);
             EventArea area = buildArea(cmd);
             event.addArea(area);
             events.save(event);
@@ -133,7 +154,7 @@ public class EventManagementService {
         lock.lock();
         try {
             Event event = requireEvent(eventId);
-            requireAuthorized(event.companyId(), callerId);
+            authorization.require(event.companyId(), callerId, EventAction.PUBLISH);
             event.publish();
             events.save(event);
             AUDIT.info("op=publish event={} caller={} result=ok", eventId, callerId);
@@ -159,7 +180,7 @@ public class EventManagementService {
             txTemplate.executeWithoutResult(status -> {
                 Event event = events.findByIdForUpdate(eventId)
                         .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
-                requireAuthorized(event.companyId(), callerId);
+                authorization.require(event.companyId(), callerId, EventAction.CANCEL);
                 event.cancel();
                 events.save(event);
             });
@@ -322,7 +343,9 @@ public class EventManagementService {
                 eventId, query.areaId(), query.buyerId(), query.buyerBirthDate(),
                 query.quantity(), List.of(), query.couponCode()
         );
-        Money total = event.cheapestPriceFor(query.areaId(), query.quantity(), request, null); //TODO: Talk with Kfir how to integrate company discount.
+        Money eventTotal = event.cheapestPriceFor(query.areaId(), query.quantity(), request);
+        Money companyTotal = companyService.cheapestPriceFor(event.companyId(), subtotal, request);
+        Money total = eventTotal.amount().compareTo(companyTotal.amount()) <= 0 ? eventTotal : companyTotal;
         Money discount = subtotal.subtract(total);
         return new PriceBreakdown(area.basePrice(), subtotal, discount, total);
     }
@@ -337,8 +360,9 @@ public class EventManagementService {
         Event event = requireEvent(eventId);
         try {
             for (IEventPurchasePolicy policy : event.purchasePolicies()) {
-                policy.validate(request, event, null); //TODO: integrate ICompPurchasePolicy from company port.
+                policy.validate(request, event);
             }
+            companyService.validatePurchaseEligibility(event.companyId(), request);
             AUDIT.info("op=validatePurchaseEligibility event={} buyer={} result=ok",
                     eventId, request.buyerId());
         } catch (PolicyViolationException e) {
@@ -374,7 +398,7 @@ public class EventManagementService {
                 .filter(a -> a.areaId().equals(areaId))
                 .findFirst()
                 .orElseThrow(() -> new InvalidEventStateException("area not found: " + areaId));
-        Map<UUID, Seat> seats = areaSeats(area);
+        Map<UUID, Seat> seats = seatsOf(area);
 
         Set<UUID> available = new HashSet<>();
         Set<UUID> unavailable = new HashSet<>();
@@ -393,10 +417,25 @@ public class EventManagementService {
         return result;
     }
 
-    private Map<UUID, Seat> areaSeats(EventArea area) {
+    private Map<UUID, Seat> seatsOf(EventArea area) {
         if (area instanceof SeatingEventArea s) return s.seats();
         if (area instanceof StandingEventArea s) return s.seats();
         return Map.of();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<EventView.SeatView> areaSeats(UUID eventId, UUID areaId) {
+        Objects.requireNonNull(areaId, "areaId");
+        Event event = requireEvent(eventId);
+        EventArea area = event.areas().stream()
+                .filter(a -> a.areaId().equals(areaId))
+                .findFirst()
+                .orElseThrow(() -> new InvalidEventStateException("area not found: " + areaId));
+        return seatsOf(area).values().stream()
+                .map(seat -> new EventView.SeatView(
+                        seat.seatId(), seat.row(), seat.number(), seat.status().name()))
+                .toList();
     }
 
     private Event requireEvent(UUID eventId) {
@@ -404,10 +443,84 @@ public class EventManagementService {
                 .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
     }
 
-    private void requireAuthorized(UUID companyId, UUID callerId) {
-        if (!authorization.canManageEvent(companyId, callerId)) {
-            throw new PolicyViolationException("caller " + callerId + " not authorized for company " + companyId);
+    /**
+     * Resolves a member token to its caller id.
+     * <p>
+     * Authentication only — per-action authorization is delegated to
+     * {@link ICompanyAuthorizationPort#require}.
+     *
+     * @param token an active member token
+     * @return the authenticated member's id
+     * @throws InvalidTokenException              if the token is null, blank, or not valid
+     * @throws UnauthorizedCompanyActionException if the bearer is not a member
+     */
+    private UUID resolveMemberCallerId(String token) {
+        if (token == null || token.isBlank()) {
+            throw new InvalidTokenException("Token cannot be null or blank");
         }
+        if (!auth.isTokenValid(token)) {
+            throw new InvalidTokenException("Invalid or expired token");
+        }
+        if (!auth.isMember(token)) {
+            throw new UnauthorizedCompanyActionException(
+                    "Only members can perform Event management actions");
+        }
+        UUID callerId = auth.extractUserId(token);
+        if (callerId == null) {
+            throw new InvalidTokenException("Token does not contain a valid user id");
+        }
+        return callerId;
+    }
+
+    // -------------------------------------------------------------------------
+    // Token-authenticated overloads. Each resolves the token to a caller id and
+    // delegates to its UUID-based counterpart, which performs per-action
+    // authorization through the company port.
+    // -------------------------------------------------------------------------
+
+    @Override
+    public UUID createEvent(CreateEventCommand cmd, String token) {
+        return createEvent(cmd, resolveMemberCallerId(token));
+    }
+
+    @Override
+    public UUID addArea(UUID eventId, AddAreaCommand cmd, String token) {
+        return addArea(eventId, cmd, resolveMemberCallerId(token));
+    }
+
+    @Override
+    public void publish(UUID eventId, String token) {
+        publish(eventId, resolveMemberCallerId(token));
+    }
+
+    @Override
+    public void cancel(UUID eventId, String token) {
+        cancel(eventId, resolveMemberCallerId(token));
+    }
+
+    @Override
+    public void updateEvent(UUID eventId, UpdateEventCommand cmd, String token) {
+        updateEvent(eventId, cmd, resolveMemberCallerId(token));
+    }
+
+    @Override
+    public void updateArea(UUID eventId, UUID areaId, UpdateAreaCommand cmd, String token) {
+        updateArea(eventId, areaId, cmd, resolveMemberCallerId(token));
+    }
+
+    @Override
+    public void removeArea(UUID eventId, UUID areaId, String token) {
+        removeArea(eventId, areaId, resolveMemberCallerId(token));
+    }
+
+    @Override
+    public void replacePurchasePolicies(UUID eventId, List<IEventPurchasePolicy> policies, String token) {
+        replacePurchasePolicies(eventId, policies, resolveMemberCallerId(token));
+    }
+
+    @Override
+    public void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies, String token) {
+        replaceDiscountPolicies(eventId, policies, resolveMemberCallerId(token));
     }
 
     private EventArea buildArea(AddAreaCommand cmd) {
@@ -429,5 +542,155 @@ public class EventManagementService {
                 yield new StandingEventArea(areaId, cmd.name(), cmd.basePrice(), cmd.standingCapacity());
             }
         };
+    }
+
+    // -------------------------------------------------------------------------
+    // Catalog mutability — II.4.1 / II.4.3
+    // -------------------------------------------------------------------------
+
+    @Override
+    @Transactional
+    public void updateEvent(UUID eventId, UpdateEventCommand cmd, UUID callerId) {
+        Objects.requireNonNull(cmd, "cmd");
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            Event event = requireEvent(eventId);
+            authorization.require(event.companyId(), callerId, EventAction.MANAGE_EVENT);
+            event.updateDetails(cmd.name(), cmd.artist(), cmd.category(), cmd.startsAt(), cmd.location());
+            events.save(event);
+            AUDIT.info("op=updateEvent event={} caller={} result=ok", eventId, callerId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=updateEvent event={} caller={} result=rejected reason={}",
+                    eventId, callerId, e.getMessage());
+            throw e;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    @Retryable(retryFor = {
+            OptimisticLockException.class,
+            PessimisticLockException.class,
+            PessimisticLockingFailureException.class,
+            CannotAcquireLockException.class,
+            ObjectOptimisticLockingFailureException.class
+    }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
+    public void updateArea(UUID eventId, UUID areaId, UpdateAreaCommand cmd, UUID callerId) {
+        Objects.requireNonNull(cmd, "cmd");
+        Objects.requireNonNull(areaId, "areaId");
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            txTemplate.executeWithoutResult(status -> {
+                Event event = events.findByIdForUpdate(eventId)
+                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
+                authorization.require(event.companyId(), callerId, EventAction.UPDATE_EVENT_MAP);
+                event.updateArea(areaId, cmd.name(), cmd.basePrice(), cmd.standingCapacity());
+                events.save(event);
+            });
+            AUDIT.info("op=updateArea event={} area={} caller={} result=ok", eventId, areaId, callerId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=updateArea event={} area={} caller={} result=rejected reason={}",
+                    eventId, areaId, callerId, e.getMessage());
+            throw e;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    @Transactional
+    public void removeArea(UUID eventId, UUID areaId, UUID callerId) {
+        Objects.requireNonNull(areaId, "areaId");
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            Event event = requireEvent(eventId);
+            authorization.require(event.companyId(), callerId, EventAction.CONFIGURE_HALL);
+            event.removeArea(areaId);
+            events.save(event);
+            AUDIT.info("op=removeArea event={} area={} caller={} result=ok", eventId, areaId, callerId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=removeArea event={} area={} caller={} result=rejected reason={}",
+                    eventId, areaId, callerId, e.getMessage());
+            throw e;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    @Transactional
+    public void replacePurchasePolicies(UUID eventId, List<IEventPurchasePolicy> policies, UUID callerId) {
+        Objects.requireNonNull(policies, "policies");
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            Event event = requireEvent(eventId);
+            authorization.require(event.companyId(), callerId, EventAction.DEFINE_PURCHASE_POLICY);
+            event.replacePurchasePolicies(policies);
+            events.save(event);
+            AUDIT.info("op=replacePurchasePolicies event={} caller={} count={} result=ok",
+                    eventId, callerId, policies.size());
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=replacePurchasePolicies event={} caller={} result=rejected reason={}",
+                    eventId, callerId, e.getMessage());
+            throw e;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    @Transactional
+    public void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies, UUID callerId) {
+        Objects.requireNonNull(policies, "policies");
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            Event event = requireEvent(eventId);
+            authorization.require(event.companyId(), callerId, EventAction.DEFINE_DISCOUNT_POLICY);
+            event.replaceDiscountPolicies(policies);
+            events.save(event);
+            AUDIT.info("op=replaceDiscountPolicies event={} caller={} count={} result=ok",
+                    eventId, callerId, policies.size());
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=replaceDiscountPolicies event={} caller={} result=rejected reason={}",
+                    eventId, callerId, e.getMessage());
+            throw e;
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    @Override
+    @Retryable(retryFor = {
+            OptimisticLockException.class,
+            PessimisticLockException.class,
+            PessimisticLockingFailureException.class,
+            CannotAcquireLockException.class,
+            ObjectOptimisticLockingFailureException.class
+    }, maxAttempts = 8, backoff = @Backoff(delay = 20, multiplier = 2))
+    public void notifyEventIsCancelled(UUID event) {
+        Objects.requireNonNull(event, "event");
+        ReentrantLock lock = locks.forEvent(event);
+        lock.lock();
+        try {
+            txTemplate.executeWithoutResult(status -> {
+                Event ev = events.findByIdForUpdate(event)
+                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + event));
+                ev.cancel();
+                events.save(ev);
+            });
+            AUDIT.info("op=notifyEventIsCancelled event={} result=ok", event);
+            locks.forget(event);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=notifyEventIsCancelled event={} result=rejected reason={}", event, e.getMessage());
+            throw e;
+        } finally {
+            lock.unlock();
+        }
     }
 }

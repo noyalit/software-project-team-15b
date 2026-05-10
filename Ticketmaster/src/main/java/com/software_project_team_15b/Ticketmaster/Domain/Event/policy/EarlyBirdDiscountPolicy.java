@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompDiscountPolicy;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Objects;
@@ -32,11 +31,10 @@ public class EarlyBirdDiscountPolicy implements IEventDiscountPolicy {
     public Instant until() { return until; }
 
     @Override
-    public Money apply(Money subtotal, PurchaseRequest request, ICompDiscountPolicy companyPolicy) {
-        Money afterCompany = companyPolicy != null ? companyPolicy.apply(subtotal, request) : subtotal;
+    public Money apply(Money subtotal, PurchaseRequest request) {
         if (Instant.now().isBefore(until)) {
-            return afterCompany.subtract(afterCompany.percent(percentage));
+            return subtotal.subtract(subtotal.percent(percentage));
         }
-        return afterCompany;
+        return subtotal;
     }
 }

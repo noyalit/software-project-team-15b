@@ -5,7 +5,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompPurchasePolicy;
 
 public class MaxTicketsPerOrderPolicy implements IEventPurchasePolicy {
 
@@ -21,8 +20,7 @@ public class MaxTicketsPerOrderPolicy implements IEventPurchasePolicy {
     public int max() { return max; }
 
     @Override
-    public void validate(PurchaseRequest request, Event event, ICompPurchasePolicy companyPolicy) {
-        if (companyPolicy != null) companyPolicy.validate(request);
+    public void validate(PurchaseRequest request, Event event) {
         if (request.quantity() > max) {
             throw new PolicyViolationException("quantity " + request.quantity() + " exceeds max " + max);
         }
