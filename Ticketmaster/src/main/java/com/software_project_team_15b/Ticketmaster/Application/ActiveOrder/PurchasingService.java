@@ -6,12 +6,12 @@ import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrde
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.*;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
-import com.software_project_team_15b.Ticketmaster.Infrastructure.Auth;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.*;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
@@ -56,7 +56,7 @@ public class PurchasingService {
     private final QueuesService QueuesService;
     private final IPaymentAPI paymentGateway;
     private final ITicketSupplyAPI ticketProvider;
-    private final Auth auth;
+    private final IAuth auth;
 
     public PurchasingService(
             IActiveOrderRepository activeOrderRepository,
@@ -66,7 +66,7 @@ public class PurchasingService {
             QueuesService QueuesService,
             IPaymentAPI paymentGateway,
             ITicketSupplyAPI ticketProvider,
-            Auth auth
+            IAuth auth
     ) {
         this.activeOrderRepository = Objects.requireNonNull(activeOrderRepository);
         this.orderHistoryRepository = Objects.requireNonNull(orderHistoryRepository);
@@ -98,7 +98,7 @@ public class PurchasingService {
 
             ActiveOrder activeOrder = new ActiveOrder(orderId, userId, eventId, areaId);
 
-            activeOrderRepository.save(activeOrder);
+            activeOrderRepository.saveAndFlush(activeOrder);
 
             AUDIT.info("op=createActiveOrder order={} user={} event={} area={} result=ok",
                     orderId, userId, eventId, areaId);
