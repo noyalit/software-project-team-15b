@@ -30,7 +30,7 @@ class MemberTest {
     @Test
     void switchActiveRole_shouldThrowException_whenRoleWasNotAssigned() {
         Member member = new Member("john", "hashedPassword123", null, LocalDate.of(2000, 1, 1));
-        Role role = new Owner(UUID.randomUUID());
+        Role role = new Owner(UUID.randomUUID(), UUID.randomUUID());
 
         assertThrows(IllegalArgumentException.class, () -> member.switchActiveRole(role));
     }
