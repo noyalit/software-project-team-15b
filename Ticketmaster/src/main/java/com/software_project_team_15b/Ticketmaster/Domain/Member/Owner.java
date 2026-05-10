@@ -12,8 +12,8 @@ public class Owner extends Role {
         // JPA only
     }
 
-    public Owner(UUID appointedBy) {
-        super(appointedBy);
+    public Owner(UUID appointedBy, UUID companyId) {
+        super(appointedBy, companyId);
         if (appointedBy == null && getClass().equals(Owner.class)) {
             throw new IllegalArgumentException("appointedBy cannot be null");
         }
