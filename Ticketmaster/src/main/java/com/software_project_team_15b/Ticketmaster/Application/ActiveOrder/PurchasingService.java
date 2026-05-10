@@ -24,6 +24,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.Policy
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.LotteryEligibilityResult;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessView;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueuesService;
 
@@ -54,6 +55,7 @@ public class PurchasingService {
     private final IMemberRepository memberRepository;
     private final EventManagementService eventManagementService;
     private final QueuesService QueuesService;
+    private final LotteryService lotteryService;
     private final IPaymentAPI paymentGateway;
     private final ITicketSupplyAPI ticketProvider;
     private final IAuth auth;
@@ -63,7 +65,8 @@ public class PurchasingService {
             IOrderHistoryRepository orderHistoryRepository,
             IMemberRepository memberRepository,
             EventManagementService eventManagementService,
-            QueuesService QueuesService,
+            QueuesService queuesService,
+            LotteryService lotteryService,
             IPaymentAPI paymentGateway,
             ITicketSupplyAPI ticketProvider,
             IAuth auth
@@ -72,14 +75,15 @@ public class PurchasingService {
         this.orderHistoryRepository = Objects.requireNonNull(orderHistoryRepository);
         this.memberRepository = Objects.requireNonNull(memberRepository);
         this.eventManagementService = Objects.requireNonNull(eventManagementService);
-        this.QueuesService = Objects.requireNonNull(QueuesService);
+        this.queuesService = Objects.requireNonNull(queueService);
+        this.lotteryService = Objects.requireNonNull(lotteryService);
         this.paymentGateway = Objects.requireNonNull(paymentGateway);
         this.ticketProvider = Objects.requireNonNull(ticketProvider);
         this.auth = Objects.requireNonNull(auth);
     }
 
     public QueueAccessView requestAccessToCreateActiveOrder(String token, UUID eventId) {
-        return QueuesService.requestAccess(token, eventId);
+        return queuesService.requestAccess(token, eventId);
     }
 
     @Transactional
@@ -186,7 +190,7 @@ public class PurchasingService {
             ActiveOrder activeOrder = requireActiveOrderForUpdate(orderId);
             requireOrderOwnership(activeOrder, userId);
             requireOrderIsActive(activeOrder);
-            requireAccessForActiveOrder(token, activeOrder.getEventId());
+            requireAccessForActiveOrder(token, userId, activeOrder.getEventId());
             syncOrderSeatsAvailability(activeOrder);
 
             ActiveOrderView view = buildActiveOrderView(activeOrder);
@@ -602,7 +606,7 @@ public class PurchasingService {
             throw e;
         } 
 
-        requireAccessForActiveOrder(token, activeOrder.getEventId());
+        requireAccessForActiveOrder(token, activeOrder.getUserId(), activeOrder.getEventId());
     }
 
     private void requireOrderIsActive(ActiveOrder activeOrder) {
@@ -648,13 +652,26 @@ public class PurchasingService {
         return true;
     }
 
-    private void requireAccessForActiveOrder(String token, UUID eventId) {
-        if (token == null || eventId == null) {
-            throw new IllegalArgumentException("Token and event ID cannot be null");
+    private void requireAccessForActiveOrder(String token, UUID userId, UUID eventId) {
+        if (token == null || userId == null || eventId == null) {
+            throw new IllegalArgumentException("Token, user ID, and event ID cannot be null");
         }
 
-        if (!QueuesService.hasAccess(token, eventId)) {
+        requireUserLotteryEligibilityForEvent(userId, eventId);
+
+        if (!queuesService.hasAccess(token, eventId)) {
             throw new TimeExpiredException("User does not have access to create or modify orders for this event at the moment");
+        }
+    }
+
+    private void requireUserLotteryEligibilityForEvent(UUID userId, UUID eventId) {
+        if (userId == null || eventId == null) {
+            throw new IllegalArgumentException("User ID and event ID cannot be null");
+        }
+
+        LotteryEligibilityResult eligibilityResult = lotteryService.getLotteryEligibilityForEvent(userId, eventId);
+        if (!eligibilityResult.canCreateActiveOrder()) {
+            throw new IllegalStateException("User is not eligible to create an active order for this event: " + eligibilityResult.status());
         }
     }
 
