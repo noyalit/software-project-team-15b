@@ -11,9 +11,12 @@ import java.util.*;
 import java.util.concurrent.*;
 
 import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
+
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.OrderHistory.OrderHistoryService;
+import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 
+import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.*;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompanyAuthorizationPort;
 
@@ -46,6 +49,9 @@ class ConcurrentSalesReportGenerationTest {
     CompanyService companyService;
 
     @Mock
+    EventCancelManager eventCancelManager;
+
+    @Mock
     ICompanyAuthorizationPort companyAuthorization;
 
     private final String token = "token";
@@ -58,7 +64,10 @@ class ConcurrentSalesReportGenerationTest {
     void setUp() {
         when(auth.isTokenValid(token)).thenReturn(true);
         when(auth.extractUserId(token)).thenReturn(callerId);
-        when(companyAuthorization.canManageEvent(companyId, callerId)).thenReturn(true);
+
+        Company company = org.mockito.Mockito.mock(Company.class);
+        when(company.getFounderId()).thenReturn(callerId);
+        when(companyService.getCompany(companyId.toString())).thenReturn(company);
 
         UUID eventId1 = UUID.randomUUID();
         UUID eventId2 = UUID.randomUUID();

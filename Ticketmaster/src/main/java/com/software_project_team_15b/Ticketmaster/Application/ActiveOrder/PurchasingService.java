@@ -6,7 +6,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrde
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.*;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
-import com.software_project_team_15b.Ticketmaster.Infrastructure.Auth;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
@@ -56,7 +56,7 @@ public class PurchasingService {
     private final QueueService queueService;
     private final IPaymentAPI paymentGateway;
     private final ITicketSupplyAPI ticketProvider;
-    private final Auth auth;
+    private final IAuth auth;
 
     public PurchasingService(
             IActiveOrderRepository activeOrderRepository,
@@ -65,8 +65,8 @@ public class PurchasingService {
             EventManagementService eventManagementService,
             QueueService queueService,
             IPaymentAPI paymentGateway,
-            ITicketSupplyAPI ticketProvider,
-            Auth auth
+                ITicketSupplyAPI ticketProvider,
+                IAuth auth
     ) {
         this.activeOrderRepository = Objects.requireNonNull(activeOrderRepository);
         this.orderHistoryRepository = Objects.requireNonNull(orderHistoryRepository);
