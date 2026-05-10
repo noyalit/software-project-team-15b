@@ -16,6 +16,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 
@@ -29,19 +30,22 @@ public class UserService {
     private final IAuth auth;
     private final IPasswordEncoder passwordEncoder;
     private final PurchasingService purchasingService;
+    private final QueueService queueService;
 
     public UserService(
             IMemberRepository memberRepository,
             ISystemAdminRepository systemAdminRepository,
             IAuth auth,
             IPasswordEncoder passwordEncoder,
-            PurchasingService purchasingService
+            PurchasingService purchasingService,
+            QueueService queueService
     ) {
         this.memberRepository = memberRepository;
         this.systemAdminRepository = systemAdminRepository;
         this.auth = auth;
         this.passwordEncoder = passwordEncoder;
         this.purchasingService = purchasingService;
+        this.queueService = queueService;
     }
 
     public Member registerMember(String username, String password, LocalDate birthDate) {
@@ -66,6 +70,36 @@ public class UserService {
 
     public String enterAsGuest() {
         return auth.generateGuestToken();
+    }
+
+    public String enterSystem() {
+        if (queueService.canAccessToWebsite()) {
+            return enterAsGuest();
+        }
+
+        String tempToken = auth.generateTempToken();
+        queueService.addToGlobalQueue(tempToken);
+
+        return tempToken;
+    }
+
+    public String tryEnterFromQueue(String tempToken) {
+        if (!auth.isTokenValid(tempToken)) {
+            throw new IllegalArgumentException("Invalid or expired token");
+        }
+
+        if (!auth.isTemp(tempToken)) {
+            throw new IllegalArgumentException("Token is not a temporary queue token");
+        }
+
+        boolean canExitQueue = queueService.validateAndExitQueue(tempToken);
+
+        if (!canExitQueue) {
+            throw new IllegalStateException("User is still waiting in the queue");
+        }
+
+        auth.exitSystem(tempToken);
+        return enterAsGuest();
     }
 
     public String loginSystemAdmin(String username, String password) {
