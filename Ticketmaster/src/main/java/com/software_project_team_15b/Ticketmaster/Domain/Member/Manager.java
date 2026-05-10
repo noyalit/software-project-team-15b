@@ -33,8 +33,8 @@ public class Manager extends Role {
         // JPA only
     }
 
-    public Manager(UUID appointedBy, Set<ManagerPermission> permissions) {
-        super(appointedBy);
+    public Manager(UUID appointedBy, UUID companyId, Set<ManagerPermission> permissions) {
+        super(appointedBy, companyId);
         setPermissions(permissions);
     }
 
