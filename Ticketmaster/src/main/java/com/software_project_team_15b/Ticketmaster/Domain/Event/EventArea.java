@@ -46,6 +46,18 @@ public abstract class EventArea {
     public String name() { return name; }
     public Money basePrice() { return basePrice; }
 
+    public void rename(String newName) {
+        if (newName == null || newName.isBlank()) {
+            throw new IllegalArgumentException("name must not be null or blank");
+        }
+        this.name = newName;
+    }
+
+    public void reprice(Money newBasePrice) {
+        Objects.requireNonNull(newBasePrice, "basePrice must not be null");
+        this.basePrice = newBasePrice;
+    }
+
     public abstract int availableCapacity();
     public abstract boolean releaseByToken(UUID token);
     public abstract boolean releaseSpecificSeats(List<UUID> seatIds, UUID token);

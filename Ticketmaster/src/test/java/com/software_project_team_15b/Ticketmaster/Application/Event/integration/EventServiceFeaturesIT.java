@@ -319,6 +319,54 @@ class EventServiceFeaturesIT {
                 .hasMessageContaining("area not found");
     }
 
+    // ── Task 6: areaSeats ────────────────────────────────────────────────────
+
+    @Test
+    void areaSeats_returns_all_seats_of_a_seating_area_with_status() {
+        SeatingSetup setup = createSeatingEvent(3, "20.00");
+        UUID heldSeat = setup.seatIds().get(0);
+        service.hold(setup.eventId(),
+                new HoldCommand(setup.areaId(), List.of(heldSeat), null, UUID.randomUUID()));
+
+        List<EventView.SeatView> seats = service.areaSeats(setup.eventId(), setup.areaId());
+
+        assertThat(seats).hasSize(3);
+        assertThat(seats).extracting(EventView.SeatView::seatId)
+                .containsExactlyInAnyOrderElementsOf(setup.seatIds());
+        assertThat(seats).filteredOn(s -> s.seatId().equals(heldSeat))
+                .extracting(EventView.SeatView::status)
+                .containsExactly("HELD");
+        assertThat(seats).filteredOn(s -> !s.seatId().equals(heldSeat))
+                .extracting(EventView.SeatView::status)
+                .containsOnly("AVAILABLE");
+    }
+
+    @Test
+    void areaSeats_returns_synthetic_seats_for_a_standing_area() {
+        StandingSetup setup = createStandingEvent(4, "10.00");
+
+        List<EventView.SeatView> seats = service.areaSeats(setup.eventId(), setup.areaId());
+
+        assertThat(seats).hasSize(4);
+        assertThat(seats).extracting(EventView.SeatView::status).containsOnly("AVAILABLE");
+        assertThat(seats).extracting(EventView.SeatView::row).containsOnly("GA");
+    }
+
+    @Test
+    void areaSeats_throws_when_area_not_found() {
+        SeatingSetup setup = createSeatingEvent(1, "10.00");
+        assertThatThrownBy(() -> service.areaSeats(setup.eventId(), UUID.randomUUID()))
+                .isInstanceOf(InvalidEventStateException.class)
+                .hasMessageContaining("area not found");
+    }
+
+    @Test
+    void areaSeats_throws_when_event_not_found() {
+        assertThatThrownBy(() -> service.areaSeats(UUID.randomUUID(), UUID.randomUUID()))
+                .isInstanceOf(InvalidEventStateException.class)
+                .hasMessageContaining("event not found");
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private record SeatingSetup(UUID eventId, UUID areaId, List<UUID> seatIds, UUID callerId) {}

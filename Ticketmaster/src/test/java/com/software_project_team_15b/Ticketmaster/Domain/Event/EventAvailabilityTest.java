@@ -2,8 +2,6 @@ package com.software_project_team_15b.Ticketmaster.Domain.Event;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventDiscountPolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.DelegatingEventPurchasePolicy;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -73,8 +71,8 @@ class EventAvailabilityTest {
         Event event = new Event(
                 UUID.randomUUID(), UUID.randomUUID(), "Past Show", "Artist",
                 Category.CONCERT, Instant.now().minusSeconds(3600), "Venue",
-                List.of(new DelegatingEventPurchasePolicy()),
-                List.of(new DelegatingEventDiscountPolicy())
+                List.of(),
+                List.of()
         );
         event.addArea(EventTestFixtures.seatingArea(1, "10.00"));
         event.publish();
