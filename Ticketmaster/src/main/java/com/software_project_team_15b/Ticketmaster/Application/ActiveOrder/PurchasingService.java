@@ -25,7 +25,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepositor
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessView;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueuesService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -53,7 +53,7 @@ public class PurchasingService {
     private final IOrderHistoryRepository orderHistoryRepository;
     private final IMemberRepository memberRepository;
     private final EventManagementService eventManagementService;
-    private final QueueService queueService;
+    private final QueuesService QueuesService;
     private final IPaymentAPI paymentGateway;
     private final ITicketSupplyAPI ticketProvider;
     private final Auth auth;
@@ -63,7 +63,7 @@ public class PurchasingService {
             IOrderHistoryRepository orderHistoryRepository,
             IMemberRepository memberRepository,
             EventManagementService eventManagementService,
-            QueueService queueService,
+            QueuesService QueuesService,
             IPaymentAPI paymentGateway,
             ITicketSupplyAPI ticketProvider,
             Auth auth
@@ -72,14 +72,14 @@ public class PurchasingService {
         this.orderHistoryRepository = Objects.requireNonNull(orderHistoryRepository);
         this.memberRepository = Objects.requireNonNull(memberRepository);
         this.eventManagementService = Objects.requireNonNull(eventManagementService);
-        this.queueService = Objects.requireNonNull(queueService);
+        this.QueuesService = Objects.requireNonNull(QueuesService);
         this.paymentGateway = Objects.requireNonNull(paymentGateway);
         this.ticketProvider = Objects.requireNonNull(ticketProvider);
         this.auth = Objects.requireNonNull(auth);
     }
 
     public QueueAccessView requestAccessToCreateActiveOrder(String token, UUID eventId) {
-        return queueService.requestAccess(token, eventId);
+        return QueuesService.requestAccess(token, eventId);
     }
 
     @Transactional
@@ -653,7 +653,7 @@ public class PurchasingService {
             throw new IllegalArgumentException("Token and event ID cannot be null");
         }
 
-        if (!queueService.hasAccess(token, eventId)) {
+        if (!QueuesService.hasAccess(token, eventId)) {
             throw new TimeExpiredException("User does not have access to create or modify orders for this event at the moment");
         }
     }

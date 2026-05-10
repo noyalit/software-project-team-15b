@@ -7,6 +7,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Lottery.Lottery;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.VirtualQueue;
 
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -34,6 +35,8 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class QueuesService {
     private final int ACCESS_TIME = 100;
+    private final int MAX_VISITORS = 100;
+    private final int SITE_QUEUE_INTERVAL = 10;
 
     private final IQueueRepository queueRepository;
     private final ILotteryRepository lotteryRepository;
@@ -42,6 +45,7 @@ public class QueuesService {
     // on popFromEventQueue take effect when called from advanceEventQueue.
     @Autowired @Lazy private QueuesService self;
     private final Queue<String> siteQueue = new LinkedList<>();
+    private final Set<String> acceptedTokens = new HashSet<>();
     private final ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>> eventAccess = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
@@ -49,6 +53,17 @@ public class QueuesService {
         this.queueRepository = queueRepository;
         this.lotteryRepository = lotteryRepository;
         this.auth = auth;
+    }
+
+    /**
+     * Starts the periodic site-queue advancement task on application startup.
+     *
+     * <p>Runs {@link #acceptUsersFromSiteQueue()} immediately and then once every
+     * {@link #SITE_QUEUE_INTERVAL} seconds for the lifetime of the application.
+     */
+    @PostConstruct
+    private void startSiteQueueScheduler() {
+        scheduler.scheduleAtFixedRate(this::acceptUsersFromSiteQueue, 0, SITE_QUEUE_INTERVAL, TimeUnit.SECONDS);
     }
 
     /**
@@ -68,21 +83,58 @@ public class QueuesService {
     }
 
     /**
-     * Removes and returns the first valid token from the front of the site-wide queue,
-     * skipping any expired or invalid tokens encountered along the way.
+     * Advances the site-wide queue by admitting waiting users up to {@link #MAX_VISITORS}.
      *
-     * @return the next valid auth token
-     * @throws EmptyQueueException if the queue is empty or contains no valid tokens
+     * <p>First evicts any previously admitted tokens that are no longer valid (e.g. the
+     * user's session expired), then drains the front of {@code siteQueue} into
+     * {@code acceptedTokens} until either the queue is empty or the admitted set reaches
+     * {@link #MAX_VISITORS}. Tokens in the queue that have since expired are skipped and
+     * discarded. Called automatically by the scheduler; not intended for direct use.
      */
-    public synchronized String getNextUserFromSiteQueue() {
-        String token = siteQueue.poll();
-        while (token != null && !auth.isTokenValid(token)) {
-            token = siteQueue.poll();
+    private synchronized void acceptUsersFromSiteQueue() {
+        acceptedTokens.removeIf(token -> !auth.isTokenValid(token));
+        while (!siteQueue.isEmpty() && acceptedTokens.size() < MAX_VISITORS) {
+            String token = siteQueue.poll();
+            if (auth.isTokenValid(token)) {
+                acceptedTokens.add(token);
+            }
         }
-        if (token == null || !auth.isTokenValid(token)) {
-            throw new EmptyQueueException("Site queue is empty or contains no valid tokens");
+    }
+
+    /**
+     * Returns {@code true} if the given token has been admitted from the site queue and
+     * may proceed to access the website.
+     *
+     * <p>A token is admitted once {@link #acceptUsersFromSiteQueue()} has moved it from
+     * the waiting queue into the accepted set. Admitted tokens remain valid until the
+     * underlying session expires, at which point the next scheduled run of
+     * {@link #acceptUsersFromSiteQueue()} removes them automatically.
+     *
+     * @param token the user's auth token; must not be null
+     * @return {@code true} if the token is currently in the admitted set
+     * @throws IllegalArgumentException if {@code token} is null
+     */
+    public boolean validateAndExitQueue(String token) {
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
         }
-        return token;
+        return acceptedTokens.contains(token);
+    }
+
+    /**
+     * Returns {@code true} if the site currently has capacity for additional visitors.
+     *
+     * <p>This is a pure capacity signal — it does <em>not</em> admit the caller. A
+     * controller may use this to decide whether to redirect an arriving user to the
+     * queue page. To actually gain access the user must still call
+     * {@link #addUserToSiteQueue(String)} so that their token enters the admitted set
+     * via the scheduler; bypassing that step leaves the user untracked and unable to
+     * pass {@link #validateAndExitQueue(String)}.
+     *
+     * @return {@code true} if the number of currently admitted users is below {@link #MAX_VISITORS}
+     */
+    public boolean canAccessWebsite() {
+        return acceptedTokens.size() < MAX_VISITORS;
     }
 
     /**
@@ -109,6 +161,18 @@ public class QueuesService {
         return queue.getPosition(token);
     }
 
+    /**
+     * Removes a user's timed access window for an event and immediately tries to fill
+     * the vacated slot from the waiting queue.
+     *
+     * <p>Called automatically by the scheduler when a user's {@link #ACCESS_TIME}-second
+     * window expires, and also by {@link #advanceEventQueue} indirectly. If the event
+     * has been deleted (no access map present) the call is a no-op.
+     *
+     * @param userId  the unique identifier of the user whose access is expiring; must not be null
+     * @param eventId the unique identifier of the event; must not be null
+     * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
+     */
     protected synchronized void clearEventAccess(UUID userId, UUID eventId) {
         if (userId == null) {
             throw new IllegalArgumentException("userId cannot be null");
@@ -122,6 +186,21 @@ public class QueuesService {
         advanceEventQueue(eventId);
     }
 
+    /**
+     * Fills available admission slots for the given event by promoting users from its
+     * persistent waiting queue.
+     *
+     * <p>Up to 100 users may hold simultaneous access to an event. Each promoted user is
+     * granted a {@link #ACCESS_TIME}-second window; a callback is registered with the
+     * scheduler to call {@link #clearEventAccess(UUID, UUID)} when that window closes.
+     * Stops early if the queue is empty.
+     *
+     * <p>Uses {@code self} (the Spring proxy) to invoke {@link #popFromEventQueue} so
+     * that {@link org.springframework.retry.annotation.Retryable} and
+     * {@link org.springframework.transaction.annotation.Transactional} take effect.
+     *
+     * @param eventId the unique identifier of the event; must not be null
+     */
     protected synchronized void advanceEventQueue(UUID eventId) {
         ConcurrentHashMap<UUID, LocalDateTime> access = eventAccess.get(eventId);
         if (access == null) return;

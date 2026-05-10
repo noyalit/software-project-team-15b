@@ -83,19 +83,131 @@ class QueuesServiceTests {
     // =========================================================================
 
     @Test
-    void addUserToSiteQueue_addedTokenIsReturnedByGetNext() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
+    void addUserToSiteQueue_tokenAppearsInQueue() {
         service.addUserToSiteQueue("token-a");
-        assertThat(service.getNextUserFromSiteQueue()).isEqualTo("token-a");
+        assertThat(siteQueue(service)).contains("token-a");
     }
 
     @Test
-    void getNextUserFromSiteQueue_skipsInvalidTokensAndReturnsFirstValid() {
+    void addUserToSiteQueue_maintainsFifoOrder() {
+        service.addUserToSiteQueue("token-a");
+        service.addUserToSiteQueue("token-b");
+        service.addUserToSiteQueue("token-c");
+        assertThat(siteQueue(service)).containsExactly("token-a", "token-b", "token-c");
+    }
+
+    @Test
+    void acceptUsersFromSiteQueue_admitsValidTokensAndDrainsQueue() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.isTokenValid("token-b")).thenReturn(true);
+        service.addUserToSiteQueue("token-a");
+        service.addUserToSiteQueue("token-b");
+
+        invokeAcceptUsers(service);
+
+        assertThat(service.validateAndExitQueue("token-a")).isTrue();
+        assertThat(service.validateAndExitQueue("token-b")).isTrue();
+        assertThat(siteQueue(service)).isEmpty();
+    }
+
+    @Test
+    void acceptUsersFromSiteQueue_skipsAndDiscardsExpiredTokensInQueue() {
         when(auth.isTokenValid("expired")).thenReturn(false);
         when(auth.isTokenValid("valid")).thenReturn(true);
         service.addUserToSiteQueue("expired");
         service.addUserToSiteQueue("valid");
-        assertThat(service.getNextUserFromSiteQueue()).isEqualTo("valid");
+
+        invokeAcceptUsers(service);
+
+        assertThat(service.validateAndExitQueue("expired")).isFalse();
+        assertThat(service.validateAndExitQueue("valid")).isTrue();
+        assertThat(siteQueue(service)).isEmpty(); // expired is discarded, not re-queued
+    }
+
+    @Test
+    void acceptUsersFromSiteQueue_evictsExpiredTokensFromAcceptedSet() {
+        acceptedTokens(service).add("expired");
+        when(auth.isTokenValid("expired")).thenReturn(false);
+
+        invokeAcceptUsers(service);
+
+        assertThat(service.validateAndExitQueue("expired")).isFalse();
+    }
+
+    @Test
+    void acceptUsersFromSiteQueue_freesSlotsAndAdmitsWaitingUsersAfterEviction() {
+        acceptedTokens(service).add("expired");
+        when(auth.isTokenValid("expired")).thenReturn(false);
+        when(auth.isTokenValid("waiting")).thenReturn(true);
+        service.addUserToSiteQueue("waiting");
+
+        invokeAcceptUsers(service);
+
+        assertThat(service.validateAndExitQueue("expired")).isFalse();
+        assertThat(service.validateAndExitQueue("waiting")).isTrue();
+    }
+
+    @Test
+    void acceptUsersFromSiteQueue_stopsAdmittingWhenMaxVisitorsReached() {
+        when(auth.isTokenValid(anyString())).thenReturn(true);
+        Set<String> accepted = acceptedTokens(service);
+        for (int i = 0; i < 100; i++) {
+            accepted.add("admitted-" + i);
+        }
+        service.addUserToSiteQueue("overflow");
+
+        invokeAcceptUsers(service);
+
+        assertThat(service.validateAndExitQueue("overflow")).isFalse();
+        assertThat(siteQueue(service)).contains("overflow");
+    }
+
+    @Test
+    void validateAndExitQueue_returnsFalse_whenTokenNotYetAdmitted() {
+        service.addUserToSiteQueue("token-a");
+        assertThat(service.validateAndExitQueue("token-a")).isFalse();
+    }
+
+    @Test
+    void validateAndExitQueue_returnsTrue_afterSchedulerAdmitsToken() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        service.addUserToSiteQueue("token-a");
+        invokeAcceptUsers(service);
+
+        assertThat(service.validateAndExitQueue("token-a")).isTrue();
+    }
+
+    @Test
+    void validateAndExitQueue_returnsFalse_afterTokenExpiresAndSchedulerEvictsIt() {
+        acceptedTokens(service).add("token-a");
+        when(auth.isTokenValid("token-a")).thenReturn(false);
+
+        invokeAcceptUsers(service);
+
+        assertThat(service.validateAndExitQueue("token-a")).isFalse();
+    }
+
+    @Test
+    void canAccessWebsite_returnsTrue_whenEmpty() {
+        assertThat(service.canAccessWebsite()).isTrue();
+    }
+
+    @Test
+    void canAccessWebsite_returnsTrue_whenOneSlotRemaining() {
+        Set<String> accepted = acceptedTokens(service);
+        for (int i = 0; i < 99; i++) {
+            accepted.add("token-" + i);
+        }
+        assertThat(service.canAccessWebsite()).isTrue();
+    }
+
+    @Test
+    void canAccessWebsite_returnsFalse_whenAtCapacity() {
+        Set<String> accepted = acceptedTokens(service);
+        for (int i = 0; i < 100; i++) {
+            accepted.add("token-" + i);
+        }
+        assertThat(service.canAccessWebsite()).isFalse();
     }
 
     // =========================================================================
@@ -116,19 +228,139 @@ class QueuesServiceTests {
     }
 
     @Test
-    void getNextUserFromSiteQueue_emptyQueue_throwsEmptyQueueException() {
-        assertThatThrownBy(() -> service.getNextUserFromSiteQueue())
-                .isInstanceOf(EmptyQueueException.class);
+    void validateAndExitQueue_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.validateAndExitQueue(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // =========================================================================
+    // Site queue — concurrency tests
+    // =========================================================================
+
+    @Test
+    void concurrentAddToSiteQueue_sameToken_exactlyOneSucceeds() throws InterruptedException {
+        int threads = 20;
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        AtomicInteger successes = new AtomicInteger();
+        AtomicInteger duplicates = new AtomicInteger();
+
+        for (int i = 0; i < threads; i++) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    service.addUserToSiteQueue("shared-token");
+                    successes.incrementAndGet();
+                } catch (IllegalArgumentException e) {
+                    duplicates.incrementAndGet();
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
+
+        assertThat(successes.get()).isEqualTo(1);
+        assertThat(duplicates.get()).isEqualTo(threads - 1);
+        assertThat(siteQueue(service)).containsExactly("shared-token");
     }
 
     @Test
-    void getNextUserFromSiteQueue_allTokensInvalid_throwsEmptyQueueException() {
-        when(auth.isTokenValid("expired1")).thenReturn(false);
-        when(auth.isTokenValid("expired2")).thenReturn(false);
-        service.addUserToSiteQueue("expired1");
-        service.addUserToSiteQueue("expired2");
-        assertThatThrownBy(() -> service.getNextUserFromSiteQueue())
-                .isInstanceOf(EmptyQueueException.class);
+    void concurrentAddToSiteQueue_distinctTokens_allSucceed() throws InterruptedException {
+        int n = 30;
+        List<String> tokens = generateTokens(n);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(n);
+        AtomicInteger successes = new AtomicInteger();
+
+        for (String token : tokens) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    service.addUserToSiteQueue(token);
+                    successes.incrementAndGet();
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
+
+        assertThat(successes.get()).isEqualTo(n);
+        assertThat(siteQueue(service)).containsExactlyInAnyOrderElementsOf(tokens);
+    }
+
+    @Test
+    void concurrentAddAndAcceptSiteQueue_noTokensLost() throws InterruptedException {
+        int n = 50;
+        List<String> tokens = generateTokens(n);
+        when(auth.isTokenValid(anyString())).thenReturn(true);
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(n + 2);
+        AtomicInteger addSuccesses = new AtomicInteger();
+
+        for (String token : tokens) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    service.addUserToSiteQueue(token);
+                    addSuccesses.incrementAndGet();
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+        for (int i = 0; i < 2; i++) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    invokeAcceptUsers(service);
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
+        invokeAcceptUsers(service); // drain any tokens still in queue
+
+        int totalTracked = acceptedTokens(service).size() + siteQueue(service).size();
+        assertThat(totalTracked).isEqualTo(addSuccesses.get());
+    }
+
+    @Test
+    void concurrentValidateAndExitQueue_allThreadsSeeConsistentAdmittedState() throws InterruptedException {
+        int threads = 30;
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        service.addUserToSiteQueue("token-a");
+        invokeAcceptUsers(service);
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        AtomicInteger trueCount = new AtomicInteger();
+
+        for (int i = 0; i < threads; i++) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    if (service.validateAndExitQueue("token-a")) {
+                        trueCount.incrementAndGet();
+                    }
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
+
+        assertThat(trueCount.get()).isEqualTo(threads);
     }
 
     // =========================================================================
@@ -1158,5 +1390,22 @@ class QueuesServiceTests {
     private static ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>> eventAccessMap(QueuesService svc) {
         return (ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>>)
                 ReflectionTestUtils.getField(svc, "eventAccess");
+    }
+
+    /** Returns the live siteQueue from the given service instance via reflection. */
+    @SuppressWarnings("unchecked")
+    private static Queue<String> siteQueue(QueuesService svc) {
+        return (Queue<String>) ReflectionTestUtils.getField(svc, "siteQueue");
+    }
+
+    /** Returns the live acceptedTokens set from the given service instance via reflection. */
+    @SuppressWarnings("unchecked")
+    private static Set<String> acceptedTokens(QueuesService svc) {
+        return (Set<String>) ReflectionTestUtils.getField(svc, "acceptedTokens");
+    }
+
+    /** Invokes the private acceptUsersFromSiteQueue() method directly, bypassing the scheduler. */
+    private static void invokeAcceptUsers(QueuesService svc) {
+        ReflectionTestUtils.invokeMethod(svc, "acceptUsersFromSiteQueue");
     }
 }
