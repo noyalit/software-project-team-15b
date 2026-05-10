@@ -115,7 +115,7 @@ public class OrderHistoryService implements EventSubscriber{
         if (!company.getFounderId().equals(callerId) && !company.getOwnerIds().contains(callerId)) {
             throw new UnauthorizedCompanyActionException("Only the company founder or owner can view sold tickets");
         }   
-        SearchCriteria criteria = new SearchCriteria();
+        SearchCriteria criteria = SearchCriteria.empty();
         List<Event> events = eventsRepository.searchByCompany(companyId, criteria);
         if (events.isEmpty()) {return Map.of();}
         List<UUID> eventIds = events.stream().map(Event::eventId).toList();

@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompDiscountPolicy;
 import java.math.BigDecimal;
 
 public class CouponDiscountPolicy implements IEventDiscountPolicy {
@@ -27,12 +26,11 @@ public class CouponDiscountPolicy implements IEventDiscountPolicy {
     public BigDecimal percentage() { return percentage; }
 
     @Override
-    public Money apply(Money subtotal, PurchaseRequest request, ICompDiscountPolicy companyPolicy) {
-        Money afterCompany = companyPolicy != null ? companyPolicy.apply(subtotal, request) : subtotal;
-        if (request.couponCode() == null) return afterCompany;
+    public Money apply(Money subtotal, PurchaseRequest request) {
+        if (request.couponCode() == null) return subtotal;
         if (code.equalsIgnoreCase(request.couponCode())) {
-            return afterCompany.subtract(afterCompany.percent(percentage));
+            return subtotal.subtract(subtotal.percent(percentage));
         }
-        return afterCompany;
+        return subtotal;
     }
 }
