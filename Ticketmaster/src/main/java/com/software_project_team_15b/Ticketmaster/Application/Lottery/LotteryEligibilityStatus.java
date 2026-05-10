@@ -1,4 +1,4 @@
-package com.software_project_team_15b.Ticketmaster.Application.Queue;
+package com.software_project_team_15b.Ticketmaster.Application.Lottery;
 
 public enum LotteryEligibilityStatus {
     NO_LOTTERY_REQUIRED,

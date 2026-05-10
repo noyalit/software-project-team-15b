@@ -1,6 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.acceptance;
 
-import com.software_project_team_15b.Ticketmaster.Application.Queue.LotteryEligibilityResult;
+import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;

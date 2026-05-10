@@ -1,6 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Lottery;
 
 import jakarta.persistence.*;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
@@ -21,6 +22,14 @@ public class Lottery {
     )
     @Column(name = "entry", nullable = false)
     private Set<UUID> lotterySet = new HashSet<>();
+
+    @ElementCollection
+    @CollectionTable(
+            name = "lottery_winners",
+            joinColumns = @JoinColumn(name = "event_id")
+    )
+    @Column(name = "winner", nullable = false)
+    private Set<UUID> winners = new HashSet<>();
 
     @Column(name = "capacity", nullable = false)
     private int capacity;
@@ -128,13 +137,30 @@ public class Lottery {
     }
 
     /**
-     * Removes and returns a random option from the lottery.
+     * Removes and returns a random option from the lottery, recording it in the winners set.
      *
      * @return a randomly selected option that was removed from the lottery, or null if the lottery is empty
      */
     public UUID popRandom() {
         UUID value = getRandom();
-        return value == null ? null : pop(value);
+        if (value == null) return null;
+        pop(value);
+        winners.add(value);
+        return value;
+    }
+
+    /**
+     * @return an unmodifiable view of the winners drawn so far
+     */
+    public Set<UUID> getWinners() {
+        return Collections.unmodifiableSet(winners);
+    }
+
+    /**
+     * Clears the winners set.
+     */
+    public void clearWinners() {
+        winners.clear();
     }
 
     /**

@@ -24,7 +24,8 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.Policy
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.LotteryEligibilityResult;
+import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
+import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryService;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessView;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueuesService;
 
@@ -54,7 +55,7 @@ public class PurchasingService {
     private final IOrderHistoryRepository orderHistoryRepository;
     private final IMemberRepository memberRepository;
     private final EventManagementService eventManagementService;
-    private final QueuesService QueuesService;
+    private final QueuesService queuesService;
     private final LotteryService lotteryService;
     private final IPaymentAPI paymentGateway;
     private final ITicketSupplyAPI ticketProvider;
@@ -75,7 +76,7 @@ public class PurchasingService {
         this.orderHistoryRepository = Objects.requireNonNull(orderHistoryRepository);
         this.memberRepository = Objects.requireNonNull(memberRepository);
         this.eventManagementService = Objects.requireNonNull(eventManagementService);
-        this.queuesService = Objects.requireNonNull(queueService);
+        this.queuesService = Objects.requireNonNull(queuesService);
         this.lotteryService = Objects.requireNonNull(lotteryService);
         this.paymentGateway = Objects.requireNonNull(paymentGateway);
         this.ticketProvider = Objects.requireNonNull(ticketProvider);
@@ -96,7 +97,7 @@ public class PurchasingService {
 
             requireOrderIsUniqueForUser(userId, eventId);
 
-            requireAccessForActiveOrder(token, eventId);
+            requireAccessForActiveOrder(token, userId, eventId);
 
             UUID orderId = UUID.randomUUID();
 
