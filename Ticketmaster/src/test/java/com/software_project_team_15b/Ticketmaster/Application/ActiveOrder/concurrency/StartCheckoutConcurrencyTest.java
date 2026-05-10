@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.concurrency;
 
+import com.software_project_team_15b.Ticketmaster.Application.Queue.LotteryEligibilityResult;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
 
@@ -34,6 +35,14 @@ class StartCheckoutConcurrencyTest extends ConcurrencyTestSupport {
         mockValidUser(userId);
 
         when(queueService.hasAccess(token, eventId))
+                .thenReturn(true);
+
+        LotteryEligibilityResult lotteryEligibilityResult = mock(LotteryEligibilityResult.class);
+
+        when(queueService.getLotteryEligibilityForEvent(userId, eventId))
+                .thenReturn(lotteryEligibilityResult);
+
+        when(lotteryEligibilityResult.canCreateActiveOrder())
                 .thenReturn(true);
 
         when(eventManagementService.getSeatsAvailability(eventId, areaId, Set.of(seatId)))

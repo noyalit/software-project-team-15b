@@ -6,6 +6,8 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagem
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.LotteryEligibilityResult;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.LotteryEligibilityStatus;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
@@ -104,7 +106,7 @@ class PurchasingServiceTest {
     // ---------- createActiveOrder ----------
 
     @Test
-    void createActiveOrderShouldSaveNewOrderWhenUserHasAccess() {
+    void createActiveOrderShouldSaveNewOrderWhenUserHasAccessAndIsLotteryEligible() {
         mockValidUser();
 
         when(eventManagementService.getEventAvailability(eventId))
@@ -119,8 +121,10 @@ class PurchasingServiceTest {
                 ActiveOrderStatus.ACTIVE
         )).thenReturn(false);
 
-        when(queueService.hasAccess(token, eventId)).thenReturn(true);
+        mockLotteryEligibility();
 
+        when(queueService.hasAccess(token, eventId)).thenReturn(true);
+        
         ArgumentCaptor<ActiveOrder> captor = ArgumentCaptor.forClass(ActiveOrder.class);
 
         UUID createdOrderId = service.createActiveOrder(token, eventId, areaId);
@@ -255,6 +259,8 @@ class PurchasingServiceTest {
                 ActiveOrderStatus.ACTIVE
         )).thenReturn(false);
 
+        mockLotteryEligibility();
+
         when(queueService.hasAccess(token, eventId)).thenReturn(false);
 
         assertThrows(RuntimeException.class, () ->
@@ -280,6 +286,8 @@ class PurchasingServiceTest {
                 ActiveOrderStatus.ACTIVE
         )).thenReturn(false);
 
+        mockLotteryEligibility();
+
         when(queueService.hasAccess(token, eventId)).thenReturn(true);
 
         when(activeOrderRepository.saveAndFlush(any(ActiveOrder.class)))
@@ -292,6 +300,28 @@ class PurchasingServiceTest {
         assertTrue(exception.getMessage().contains("User already has an active order"));
     }
 
+        @Test
+        void createActiveOrderShouldThrowWhenLotteryAccessIsMissing() {
+        mockValidUser();
+
+        when(eventManagementService.getEventAvailability(eventId))
+                .thenReturn(EventAvailability.AVAILABLE);
+
+        when(eventManagementService.getAreaAvailability(eventId, areaId))
+                .thenReturn(true);
+        
+        LotteryEligibilityResult lotteryEligibilityResult = mock(LotteryEligibilityResult.class);
+        when(lotteryEligibilityResult.canCreateActiveOrder()).thenReturn(false);
+        when(queueService.getLotteryEligibilityForEvent(userId, eventId))
+                .thenReturn(lotteryEligibilityResult);
+
+        assertThrows(IllegalStateException.class, () ->
+                service.createActiveOrder(token, eventId, areaId)
+        );
+
+        verify(activeOrderRepository, never()).saveAndFlush(any());
+        }
+
     // ---------- addSeatsToExistingOrder ----------
 
     @Test
@@ -302,6 +332,8 @@ class PurchasingServiceTest {
 
         when(activeOrderRepository.findByIdForUpdate(orderId))
                 .thenReturn(Optional.of(order));
+
+        mockLotteryEligibility();
 
         when(queueService.hasAccess(token, eventId)).thenReturn(true);
 
@@ -330,6 +362,8 @@ class PurchasingServiceTest {
 
         when(activeOrderRepository.findByIdForUpdate(orderId))
                 .thenReturn(Optional.of(order));
+
+        mockLotteryEligibility();
 
         when(queueService.hasAccess(token, eventId)).thenReturn(true);
 
@@ -364,6 +398,8 @@ class PurchasingServiceTest {
         when(activeOrderRepository.findByIdForUpdate(orderId))
                 .thenReturn(Optional.of(order));
 
+        mockLotteryEligibility();
+
         when(queueService.hasAccess(token, eventId)).thenReturn(true);
 
         RemoveOrAddSeatsFromActiveOrderCommand cmd =
@@ -386,6 +422,8 @@ class PurchasingServiceTest {
 
         when(activeOrderRepository.findByIdForUpdate(orderId))
                 .thenReturn(Optional.of(order));
+
+        mockLotteryEligibility();
 
         when(queueService.hasAccess(token, eventId)).thenReturn(true);
 
@@ -427,6 +465,8 @@ class PurchasingServiceTest {
 
         when(activeOrderRepository.findByIdForUpdate(orderId))
                 .thenReturn(Optional.of(order));
+
+        mockLotteryEligibility();
 
         when(queueService.hasAccess(token, eventId)).thenReturn(true);
 
@@ -568,6 +608,18 @@ class PurchasingServiceTest {
     private void mockValidUser() {
         when(auth.isTokenValid(token)).thenReturn(true);
         when(auth.extractUserId(token)).thenReturn(userId);
+    }
+
+    private void mockLotteryEligibility() {
+        mockValidUser();
+        
+        LotteryEligibilityResult lotteryEligibilityResult = mock(LotteryEligibilityResult.class);
+
+        when(queueService.getLotteryEligibilityForEvent(userId, eventId))
+                .thenReturn(lotteryEligibilityResult);
+
+        when(lotteryEligibilityResult.canCreateActiveOrder())
+                .thenReturn(true);
     }
 
     @SuppressWarnings("unchecked")
