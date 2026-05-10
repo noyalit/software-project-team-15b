@@ -64,6 +64,10 @@ public class UserService {
         return auth.generateMemberToken(member);
     }
 
+    public String enterAsGuest() {
+        return auth.generateGuestToken();
+    }
+
     public String loginSystemAdmin(String username, String password) {
         SystemAdmin admin = systemAdminRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid username or password"));
