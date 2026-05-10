@@ -81,7 +81,7 @@ public class UserService {
         }
 
         String tempToken = auth.generateTempToken();
-        queueService.addToGlobalQueue(tempToken);
+        queueService.addUserToSiteQueue(tempToken);
 
         return tempToken;
     }
