@@ -62,6 +62,10 @@ public class Auth implements IAuth {
         public boolean isSystemAdmin() {
             return userType == UserType.SYSTEM_ADMIN;
         }
+
+        public boolean isTemp() {
+            return userType == UserType.TEMP;
+        }
     }
 
     @Override
@@ -121,6 +125,22 @@ public class Auth implements IAuth {
                 .compact();
 
         activeSessions.put(token, new Session(token, admin.getAdminId(), UserType.SYSTEM_ADMIN));
+        return token;
+    }
+
+    @Override
+    public String generateTempToken() {
+        UUID tempId = UUID.randomUUID();
+
+        String token = Jwts.builder()
+                .subject(tempId.toString())
+                .claim("userType", UserType.TEMP.name())
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
+                .signWith(KEY)
+                .compact();
+
+        activeSessions.put(token, new Session(token, tempId, UserType.TEMP));
         return token;
     }
 
@@ -192,6 +212,12 @@ public class Auth implements IAuth {
     public boolean isSystemAdmin(String token) {
         Session session = activeSessions.get(token);
         return session != null && session.isSystemAdmin();
+    }
+
+    @Override
+    public boolean isTemp(String token) {
+        Session session = activeSessions.get(token);
+        return session != null && session.isTemp();
     }
 
     public boolean isTokenExpired(String token) {
