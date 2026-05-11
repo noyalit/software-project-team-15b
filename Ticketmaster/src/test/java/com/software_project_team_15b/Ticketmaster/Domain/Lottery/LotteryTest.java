@@ -177,4 +177,91 @@ public class LotteryTest {
 
         assertEquals(3, result.size());
     }
+
+    // --- winners ---
+
+    @Test
+    void getWinnersShouldBeEmptyInitially() {
+        assertTrue(lottery.getWinners().isEmpty());
+    }
+
+    @Test
+    void popRandomShouldAddDrawnEntryToWinners() {
+        lottery.add(ALICE);
+
+        UUID drawn = lottery.popRandom();
+
+        assertEquals(Set.of(drawn), lottery.getWinners());
+    }
+
+    @Test
+    void popRandomShouldAccumulateAllDrawnEntriesInWinners() {
+        lottery.add(ALICE);
+        lottery.add(BOB);
+        lottery.add(CAROL);
+
+        lottery.popRandom();
+        lottery.popRandom();
+        lottery.popRandom();
+
+        assertEquals(Set.of(ALICE, BOB, CAROL), lottery.getWinners());
+    }
+
+    @Test
+    void popRandomCountShouldAddAllDrawnEntriesToWinners() {
+        lottery.add(ALICE);
+        lottery.add(BOB);
+        lottery.add(CAROL);
+
+        Set<UUID> drawn = lottery.popRandom(2);
+
+        assertEquals(drawn, lottery.getWinners());
+    }
+
+    @Test
+    void popRandomOnEmptyLotteryShouldNotAddToWinners() {
+        lottery.popRandom();
+
+        assertTrue(lottery.getWinners().isEmpty());
+    }
+
+    @Test
+    void getWinnersShouldReturnUnmodifiableView() {
+        lottery.add(ALICE);
+        lottery.popRandom();
+
+        Set<UUID> winners = lottery.getWinners();
+
+        assertThrows(UnsupportedOperationException.class, () -> winners.add(BOB));
+    }
+
+    @Test
+    void clearWinnersShouldEmptyTheWinnersSet() {
+        lottery.add(ALICE);
+        lottery.add(BOB);
+        lottery.popRandom(2);
+
+        lottery.clearWinners();
+
+        assertTrue(lottery.getWinners().isEmpty());
+    }
+
+    @Test
+    void clearWinnersIsIdempotentOnEmptySet() {
+        lottery.clearWinners();
+
+        assertTrue(lottery.getWinners().isEmpty());
+    }
+
+    @Test
+    void winnersDoNotIncludeEntriesRemovedByPop() {
+        lottery.add(ALICE);
+        lottery.add(BOB);
+
+        lottery.pop(ALICE); // direct removal, not a draw
+        lottery.popRandom(); // draws BOB
+
+        assertFalse(lottery.getWinners().contains(ALICE));
+        assertTrue(lottery.getWinners().contains(BOB));
+    }
 }

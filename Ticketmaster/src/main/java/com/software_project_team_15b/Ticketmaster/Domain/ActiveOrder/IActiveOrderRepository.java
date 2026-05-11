@@ -22,6 +22,8 @@ public interface IActiveOrderRepository {
      */
     ActiveOrder save(ActiveOrder order);
 
+    ActiveOrder saveAndFlush(ActiveOrder order);
+
     Optional<ActiveOrder> findById(UUID id);
 
     List<ActiveOrder> findAll();

@@ -67,6 +67,11 @@ public class InMemoryActiveOrderRepository implements IActiveOrderRepository {
     }
 
     @Override
+    public ActiveOrder saveAndFlush(ActiveOrder order) {
+        return save(order);
+    }
+
+    @Override
     public Optional<ActiveOrder> findById(UUID orderId) {
         if (orderId == null) {
             throw new IllegalArgumentException("orderId cannot be null");

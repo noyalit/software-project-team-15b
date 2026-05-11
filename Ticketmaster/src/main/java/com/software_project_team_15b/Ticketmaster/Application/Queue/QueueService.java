@@ -2,11 +2,10 @@ package com.software_project_team_15b.Ticketmaster.Application.Queue;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.*;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.Lottery.Lottery;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.VirtualQueue;
 
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -23,60 +22,44 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Application service for managing virtual queues and lotteries associated with events.
+ * Application service for managing virtual queues associated with events.
  *
- * <p>Each event may have at most one queue and one lottery, both keyed by the event's UUID.
- * Mutating operations on persistent queues and lotteries are transactional. Methods that
+ * <p>Each event may have at most one queue, keyed by the event's UUID.
+ * Mutating operations on persistent queues are transactional. Methods that
  * perform a read-then-write are additionally annotated with {@link Retryable} so that
  * transient optimistic-lock conflicts (arising when multiple threads update the same
  * aggregate concurrently) are transparently retried before propagating an error to the caller.
  */
 @Service
-public class QueuesService {
+public class QueueService {
     private final int ACCESS_TIME = 100;
+    private final int MAX_VISITORS = 100;
+    private final int SITE_QUEUE_INTERVAL = 10;
 
     private final IQueueRepository queueRepository;
-    private final ILotteryRepository lotteryRepository;
     private final IAuth auth;
     // Self-reference through the Spring proxy so that @Retryable and @Transactional
     // on popFromEventQueue take effect when called from advanceEventQueue.
-    @Autowired @Lazy private QueuesService self;
+    @Autowired @Lazy private QueueService self;
     private final Queue<String> siteQueue = new LinkedList<>();
+    private final Set<String> acceptedTokens = new HashSet<>();
     private final ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>> eventAccess = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
-    public QueuesService(IQueueRepository queueRepository, ILotteryRepository lotteryRepository, IAuth auth) {
+    public QueueService(IQueueRepository queueRepository, IAuth auth) {
         this.queueRepository = queueRepository;
-        this.lotteryRepository = lotteryRepository;
         this.auth = auth;
     }
 
-    public synchronized boolean canAccessToWebsite() {
-        while (!siteQueue.isEmpty() && !auth.isTokenValid(siteQueue.peek())) {
-            siteQueue.poll();
-        }
-        return siteQueue.isEmpty();
-    }
-
-    public synchronized boolean validateAndExitQueue(String token) {
-        if (token == null) {
-            throw new IllegalArgumentException("token cannot be null");
-        }
-
-        while (!siteQueue.isEmpty() && !auth.isTokenValid(siteQueue.peek())) {
-            siteQueue.poll();
-        }
-
-        if (siteQueue.isEmpty()) {
-            return true;
-        }
-
-        if (token.equals(siteQueue.peek())) {
-            siteQueue.poll();
-            return true;
-        }
-
-        return false;
+    /**
+     * Starts the periodic site-queue advancement task on application startup.
+     *
+     * <p>Runs {@link #acceptUsersFromSiteQueue()} immediately and then once every
+     * {@link #SITE_QUEUE_INTERVAL} seconds for the lifetime of the application.
+     */
+    @PostConstruct
+    private void startSiteQueueScheduler() {
+        scheduler.scheduleAtFixedRate(this::acceptUsersFromSiteQueue, 0, SITE_QUEUE_INTERVAL, TimeUnit.SECONDS);
     }
 
     /**
@@ -96,21 +79,58 @@ public class QueuesService {
     }
 
     /**
-     * Removes and returns the first valid token from the front of the site-wide queue,
-     * skipping any expired or invalid tokens encountered along the way.
+     * Advances the site-wide queue by admitting waiting users up to {@link #MAX_VISITORS}.
      *
-     * @return the next valid auth token
-     * @throws EmptyQueueException if the queue is empty or contains no valid tokens
+     * <p>First evicts any previously admitted tokens that are no longer valid (e.g. the
+     * user's session expired), then drains the front of {@code siteQueue} into
+     * {@code acceptedTokens} until either the queue is empty or the admitted set reaches
+     * {@link #MAX_VISITORS}. Tokens in the queue that have since expired are skipped and
+     * discarded. Called automatically by the scheduler; not intended for direct use.
      */
-    public synchronized String getNextUserFromSiteQueue() {
-        String token = siteQueue.poll();
-        while (token != null && !auth.isTokenValid(token)) {
-            token = siteQueue.poll();
+    private synchronized void acceptUsersFromSiteQueue() {
+        acceptedTokens.removeIf(token -> !auth.isTokenValid(token));
+        while (!siteQueue.isEmpty() && acceptedTokens.size() < MAX_VISITORS) {
+            String token = siteQueue.poll();
+            if (auth.isTokenValid(token)) {
+                acceptedTokens.add(token);
+            }
         }
-        if (token == null || !auth.isTokenValid(token)) {
-            throw new EmptyQueueException("Site queue is empty or contains no valid tokens");
+    }
+
+    /**
+     * Returns {@code true} if the given token has been admitted from the site queue and
+     * may proceed to access the website.
+     *
+     * <p>A token is admitted once {@link #acceptUsersFromSiteQueue()} has moved it from
+     * the waiting queue into the accepted set. Admitted tokens remain valid until the
+     * underlying session expires, at which point the next scheduled run of
+     * {@link #acceptUsersFromSiteQueue()} removes them automatically.
+     *
+     * @param token the user's auth token; must not be null
+     * @return {@code true} if the token is currently in the admitted set
+     * @throws IllegalArgumentException if {@code token} is null
+     */
+    public boolean validateAndExitQueue(String token) {
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
         }
-        return token;
+        return acceptedTokens.contains(token);
+    }
+
+    /**
+     * Returns {@code true} if the site currently has capacity for additional visitors.
+     *
+     * <p>This is a pure capacity signal — it does <em>not</em> admit the caller. A
+     * controller may use this to decide whether to redirect an arriving user to the
+     * queue page. To actually gain access the user must still call
+     * {@link #addUserToSiteQueue(String)} so that their token enters the admitted set
+     * via the scheduler; bypassing that step leaves the user untracked and unable to
+     * pass {@link #validateAndExitQueue(String)}.
+     *
+     * @return {@code true} if the number of currently admitted users is below {@link #MAX_VISITORS}
+     */
+    public boolean canAccessWebsite() {
+        return acceptedTokens.size() < MAX_VISITORS;
     }
 
     /**
@@ -137,6 +157,18 @@ public class QueuesService {
         return queue.getPosition(token);
     }
 
+    /**
+     * Removes a user's timed access window for an event and immediately tries to fill
+     * the vacated slot from the waiting queue.
+     *
+     * <p>Called automatically by the scheduler when a user's {@link #ACCESS_TIME}-second
+     * window expires, and also by {@link #advanceEventQueue} indirectly. If the event
+     * has been deleted (no access map present) the call is a no-op.
+     *
+     * @param userId  the unique identifier of the user whose access is expiring; must not be null
+     * @param eventId the unique identifier of the event; must not be null
+     * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
+     */
     protected synchronized void clearEventAccess(UUID userId, UUID eventId) {
         if (userId == null) {
             throw new IllegalArgumentException("userId cannot be null");
@@ -150,6 +182,21 @@ public class QueuesService {
         advanceEventQueue(eventId);
     }
 
+    /**
+     * Fills available admission slots for the given event by promoting users from its
+     * persistent waiting queue.
+     *
+     * <p>Up to 100 users may hold simultaneous access to an event. Each promoted user is
+     * granted a {@link #ACCESS_TIME}-second window; a callback is registered with the
+     * scheduler to call {@link #clearEventAccess(UUID, UUID)} when that window closes.
+     * Stops early if the queue is empty.
+     *
+     * <p>Uses {@code self} (the Spring proxy) to invoke {@link #popFromEventQueue} so
+     * that {@link org.springframework.retry.annotation.Retryable} and
+     * {@link org.springframework.transaction.annotation.Transactional} take effect.
+     *
+     * @param eventId the unique identifier of the event; must not be null
+     */
     protected synchronized void advanceEventQueue(UUID eventId) {
         ConcurrentHashMap<UUID, LocalDateTime> access = eventAccess.get(eventId);
         if (access == null) return;
@@ -389,131 +436,4 @@ public class QueuesService {
         advanceEventQueue(eventId);
     }
 
-    /**
-     * Creates a new, empty lottery for the given event.
-     *
-     * @param eventId the unique identifier of the event; must not be null
-     * @throws IllegalArgumentException if {@code eventId} is null
-     */
-    @Transactional
-    public void createEventLottery(UUID eventId) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
-        }
-        Lottery lottery = new Lottery(eventId);
-        lotteryRepository.addLottery(lottery);
-    }
-
-    /**
-     * Deletes the lottery associated with the given event.
-     *
-     * @param eventId the unique identifier of the event; must not be null
-     * @throws IllegalArgumentException  if {@code eventId} is null
-     * @throws LotteryNotFoundException  if no lottery exists for the given event
-     */
-    @Transactional
-    public void deleteEventLottery(UUID eventId) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
-        }
-        Lottery lottery = lotteryRepository.getLottery(eventId);
-        if (lottery == null) {
-            throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
-        }
-        lotteryRepository.removeLottery(lottery);
-    }
-
-    /**
-     * Enters a user into the event's lottery. Duplicate entries for the same user are silently ignored.
-     *
-     * <p>If a concurrent update causes an optimistic-lock conflict the operation is
-     * retried up to 3 times with a short backoff before the exception propagates.
-     *
-     * @param eventId the unique identifier of the event; must not be null
-     * @param userId  the unique identifier of the user to enter; must not be null
-     * @throws IllegalArgumentException if {@code eventId} or {@code userId} is null
-     * @throws LotteryNotFoundException if no lottery exists for the given event
-     */
-    @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
-    @Transactional
-    public void addToEventLottery(UUID eventId, UUID userId) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
-        }
-        if (userId == null) {
-            throw new IllegalArgumentException("userId cannot be null");
-        }
-        Lottery lottery = lotteryRepository.getLottery(eventId);
-        if (lottery == null) {
-            throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
-        }
-        lottery.add(userId);
-        lotteryRepository.updateLottery(lottery);
-    }
-
-    /**
-     * Draws one random winner from the event's lottery, removing them from the pool.
-     *
-     * <p>If a concurrent update causes an optimistic-lock conflict the operation is
-     * retried up to 3 times with a short backoff before the exception propagates.
-     *
-     * @param eventId the unique identifier of the event; must not be null
-     * @return the UUID of the randomly selected winner
-     * @throws IllegalArgumentException if {@code eventId} is null
-     * @throws LotteryNotFoundException if no lottery exists for the given event
-     * @throws EmptyLotteryException    if the lottery contains no entries
-     */
-    @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
-    @Transactional
-    public UUID popRandomFromEventLottery(UUID eventId) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
-        }
-        Lottery lottery = lotteryRepository.getLottery(eventId);
-        if (lottery == null) {
-            throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
-        }
-        UUID value = lottery.popRandom();
-        if (value == null) {
-            throw new EmptyLotteryException("Event lottery is empty (eventId: " + eventId + ")");
-        }
-        lotteryRepository.updateLottery(lottery);
-        return value;
-    }
-
-    /**
-     * Draws up to {@code count} random winners from the event's lottery, removing each
-     * from the pool. If the lottery has fewer than {@code count} entries, all remaining
-     * entries are returned.
-     *
-     * <p>If a concurrent update causes an optimistic-lock conflict the operation is
-     * retried up to 3 times with a short backoff before the exception propagates.
-     *
-     * @param eventId the unique identifier of the event; must not be null
-     * @param count   the maximum number of winners to draw; must not be negative
-     * @return a set of randomly selected winner UUIDs (size &le; {@code count})
-     * @throws IllegalArgumentException if {@code eventId} is null or {@code count} is negative
-     * @throws LotteryNotFoundException if no lottery exists for the given event
-     * @throws EmptyLotteryException    if the lottery contains no entries
-     */
-    @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
-    @Transactional
-    public Set<UUID> popRandomFromEventLottery(UUID eventId, int count) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
-        }
-        if (count < 0) {
-            throw new IllegalArgumentException("count cannot be negative");
-        }
-        Lottery lottery = lotteryRepository.getLottery(eventId);
-        if (lottery == null) {
-            throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
-        }
-        Set<UUID> values = lottery.popRandom(count);
-        if (values.isEmpty()) {
-            throw new EmptyLotteryException("Event lottery is empty (eventId: " + eventId + ")");
-        }
-        lotteryRepository.updateLottery(lottery);
-        return values;
-    }
 }

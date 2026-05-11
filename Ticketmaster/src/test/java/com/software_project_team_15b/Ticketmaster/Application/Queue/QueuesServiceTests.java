@@ -1,18 +1,14 @@
-package com.software_project_team_15b.Ticketmaster.Application.QueuesServiceTest;
+package com.software_project_team_15b.Ticketmaster.Application.Queue;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyInQueueException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyLotteryException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyQueueException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIsFullException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessView;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueuesService;
-import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.Lottery.Lottery;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.VirtualQueue;
 
@@ -39,9 +35,8 @@ import static org.mockito.Mockito.*;
 class QueuesServiceTests {
 
     @Mock private IQueueRepository queueRepository;
-    @Mock private ILotteryRepository lotteryRepository;
     @Mock private IAuth auth;
-    @InjectMocks private QueuesService service;
+    @InjectMocks private QueueService service;
 
     @BeforeEach
     void injectSelf() {
@@ -53,7 +48,7 @@ class QueuesServiceTests {
 
     /** Constructs an ExposedQueuesService with its self-reference wired correctly. */
     private ExposedQueuesService createExposed() {
-        ExposedQueuesService exposed = new ExposedQueuesService(queueRepository, lotteryRepository, auth);
+        ExposedQueuesService exposed = new ExposedQueuesService(queueRepository, auth);
         ReflectionTestUtils.setField(exposed, "self", exposed);
         return exposed;
     }
@@ -67,9 +62,9 @@ class QueuesServiceTests {
      * Promotes clearEventAccess from protected to public so tests can invoke it directly
      * without waiting 100 seconds for the scheduler.
      */
-    private static class ExposedQueuesService extends QueuesService {
-        ExposedQueuesService(IQueueRepository r, ILotteryRepository l, IAuth a) {
-            super(r, l, a);
+    private static class ExposedQueuesService extends QueueService {
+        ExposedQueuesService(IQueueRepository r, IAuth a) {
+            super(r, a);
         }
 
         @Override
@@ -83,19 +78,131 @@ class QueuesServiceTests {
     // =========================================================================
 
     @Test
-    void addUserToSiteQueue_addedTokenIsReturnedByGetNext() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
+    void addUserToSiteQueue_tokenAppearsInQueue() {
         service.addUserToSiteQueue("token-a");
-        assertThat(service.getNextUserFromSiteQueue()).isEqualTo("token-a");
+        assertThat(siteQueue(service)).contains("token-a");
     }
 
     @Test
-    void getNextUserFromSiteQueue_skipsInvalidTokensAndReturnsFirstValid() {
+    void addUserToSiteQueue_maintainsFifoOrder() {
+        service.addUserToSiteQueue("token-a");
+        service.addUserToSiteQueue("token-b");
+        service.addUserToSiteQueue("token-c");
+        assertThat(siteQueue(service)).containsExactly("token-a", "token-b", "token-c");
+    }
+
+    @Test
+    void acceptUsersFromSiteQueue_admitsValidTokensAndDrainsQueue() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.isTokenValid("token-b")).thenReturn(true);
+        service.addUserToSiteQueue("token-a");
+        service.addUserToSiteQueue("token-b");
+
+        invokeAcceptUsers(service);
+
+        assertThat(service.validateAndExitQueue("token-a")).isTrue();
+        assertThat(service.validateAndExitQueue("token-b")).isTrue();
+        assertThat(siteQueue(service)).isEmpty();
+    }
+
+    @Test
+    void acceptUsersFromSiteQueue_skipsAndDiscardsExpiredTokensInQueue() {
         when(auth.isTokenValid("expired")).thenReturn(false);
         when(auth.isTokenValid("valid")).thenReturn(true);
         service.addUserToSiteQueue("expired");
         service.addUserToSiteQueue("valid");
-        assertThat(service.getNextUserFromSiteQueue()).isEqualTo("valid");
+
+        invokeAcceptUsers(service);
+
+        assertThat(service.validateAndExitQueue("expired")).isFalse();
+        assertThat(service.validateAndExitQueue("valid")).isTrue();
+        assertThat(siteQueue(service)).isEmpty(); // expired is discarded, not re-queued
+    }
+
+    @Test
+    void acceptUsersFromSiteQueue_evictsExpiredTokensFromAcceptedSet() {
+        acceptedTokens(service).add("expired");
+        when(auth.isTokenValid("expired")).thenReturn(false);
+
+        invokeAcceptUsers(service);
+
+        assertThat(service.validateAndExitQueue("expired")).isFalse();
+    }
+
+    @Test
+    void acceptUsersFromSiteQueue_freesSlotsAndAdmitsWaitingUsersAfterEviction() {
+        acceptedTokens(service).add("expired");
+        when(auth.isTokenValid("expired")).thenReturn(false);
+        when(auth.isTokenValid("waiting")).thenReturn(true);
+        service.addUserToSiteQueue("waiting");
+
+        invokeAcceptUsers(service);
+
+        assertThat(service.validateAndExitQueue("expired")).isFalse();
+        assertThat(service.validateAndExitQueue("waiting")).isTrue();
+    }
+
+    @Test
+    void acceptUsersFromSiteQueue_stopsAdmittingWhenMaxVisitorsReached() {
+        when(auth.isTokenValid(anyString())).thenReturn(true);
+        Set<String> accepted = acceptedTokens(service);
+        for (int i = 0; i < 100; i++) {
+            accepted.add("admitted-" + i);
+        }
+        service.addUserToSiteQueue("overflow");
+
+        invokeAcceptUsers(service);
+
+        assertThat(service.validateAndExitQueue("overflow")).isFalse();
+        assertThat(siteQueue(service)).contains("overflow");
+    }
+
+    @Test
+    void validateAndExitQueue_returnsFalse_whenTokenNotYetAdmitted() {
+        service.addUserToSiteQueue("token-a");
+        assertThat(service.validateAndExitQueue("token-a")).isFalse();
+    }
+
+    @Test
+    void validateAndExitQueue_returnsTrue_afterSchedulerAdmitsToken() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        service.addUserToSiteQueue("token-a");
+        invokeAcceptUsers(service);
+
+        assertThat(service.validateAndExitQueue("token-a")).isTrue();
+    }
+
+    @Test
+    void validateAndExitQueue_returnsFalse_afterTokenExpiresAndSchedulerEvictsIt() {
+        acceptedTokens(service).add("token-a");
+        when(auth.isTokenValid("token-a")).thenReturn(false);
+
+        invokeAcceptUsers(service);
+
+        assertThat(service.validateAndExitQueue("token-a")).isFalse();
+    }
+
+    @Test
+    void canAccessWebsite_returnsTrue_whenEmpty() {
+        assertThat(service.canAccessWebsite()).isTrue();
+    }
+
+    @Test
+    void canAccessWebsite_returnsTrue_whenOneSlotRemaining() {
+        Set<String> accepted = acceptedTokens(service);
+        for (int i = 0; i < 99; i++) {
+            accepted.add("token-" + i);
+        }
+        assertThat(service.canAccessWebsite()).isTrue();
+    }
+
+    @Test
+    void canAccessWebsite_returnsFalse_whenAtCapacity() {
+        Set<String> accepted = acceptedTokens(service);
+        for (int i = 0; i < 100; i++) {
+            accepted.add("token-" + i);
+        }
+        assertThat(service.canAccessWebsite()).isFalse();
     }
 
     // =========================================================================
@@ -116,19 +223,139 @@ class QueuesServiceTests {
     }
 
     @Test
-    void getNextUserFromSiteQueue_emptyQueue_throwsEmptyQueueException() {
-        assertThatThrownBy(() -> service.getNextUserFromSiteQueue())
-                .isInstanceOf(EmptyQueueException.class);
+    void validateAndExitQueue_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.validateAndExitQueue(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // =========================================================================
+    // Site queue — concurrency tests
+    // =========================================================================
+
+    @Test
+    void concurrentAddToSiteQueue_sameToken_exactlyOneSucceeds() throws InterruptedException {
+        int threads = 20;
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        AtomicInteger successes = new AtomicInteger();
+        AtomicInteger duplicates = new AtomicInteger();
+
+        for (int i = 0; i < threads; i++) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    service.addUserToSiteQueue("shared-token");
+                    successes.incrementAndGet();
+                } catch (IllegalArgumentException e) {
+                    duplicates.incrementAndGet();
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
+
+        assertThat(successes.get()).isEqualTo(1);
+        assertThat(duplicates.get()).isEqualTo(threads - 1);
+        assertThat(siteQueue(service)).containsExactly("shared-token");
     }
 
     @Test
-    void getNextUserFromSiteQueue_allTokensInvalid_throwsEmptyQueueException() {
-        when(auth.isTokenValid("expired1")).thenReturn(false);
-        when(auth.isTokenValid("expired2")).thenReturn(false);
-        service.addUserToSiteQueue("expired1");
-        service.addUserToSiteQueue("expired2");
-        assertThatThrownBy(() -> service.getNextUserFromSiteQueue())
-                .isInstanceOf(EmptyQueueException.class);
+    void concurrentAddToSiteQueue_distinctTokens_allSucceed() throws InterruptedException {
+        int n = 30;
+        List<String> tokens = generateTokens(n);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(n);
+        AtomicInteger successes = new AtomicInteger();
+
+        for (String token : tokens) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    service.addUserToSiteQueue(token);
+                    successes.incrementAndGet();
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
+
+        assertThat(successes.get()).isEqualTo(n);
+        assertThat(siteQueue(service)).containsExactlyInAnyOrderElementsOf(tokens);
+    }
+
+    @Test
+    void concurrentAddAndAcceptSiteQueue_noTokensLost() throws InterruptedException {
+        int n = 50;
+        List<String> tokens = generateTokens(n);
+        when(auth.isTokenValid(anyString())).thenReturn(true);
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(n + 2);
+        AtomicInteger addSuccesses = new AtomicInteger();
+
+        for (String token : tokens) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    service.addUserToSiteQueue(token);
+                    addSuccesses.incrementAndGet();
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+        for (int i = 0; i < 2; i++) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    invokeAcceptUsers(service);
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
+        invokeAcceptUsers(service); // drain any tokens still in queue
+
+        int totalTracked = acceptedTokens(service).size() + siteQueue(service).size();
+        assertThat(totalTracked).isEqualTo(addSuccesses.get());
+    }
+
+    @Test
+    void concurrentValidateAndExitQueue_allThreadsSeeConsistentAdmittedState() throws InterruptedException {
+        int threads = 30;
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        service.addUserToSiteQueue("token-a");
+        invokeAcceptUsers(service);
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        AtomicInteger trueCount = new AtomicInteger();
+
+        for (int i = 0; i < threads; i++) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    if (service.validateAndExitQueue("token-a")) {
+                        trueCount.incrementAndGet();
+                    }
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
+
+        assertThat(trueCount.get()).isEqualTo(threads);
     }
 
     // =========================================================================
@@ -730,208 +957,6 @@ class QueuesServiceTests {
     }
 
     // =========================================================================
-    // Lottery — positive tests
-    // =========================================================================
-
-    @Test
-    void createEventLottery_callsAddLotteryOnRepository() {
-        service.createEventLottery(EVENT_ID);
-
-        verify(lotteryRepository).addLottery(any(Lottery.class));
-    }
-
-    @Test
-    void deleteEventLottery_callsRemoveLotteryOnRepository() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        service.deleteEventLottery(EVENT_ID);
-
-        verify(lotteryRepository).removeLottery(lottery);
-    }
-
-    @Test
-    void addToEventLottery_addsUserAndUpdatesRepository() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        service.addToEventLottery(EVENT_ID, USER_A);
-
-        assertThat(lottery.pop(USER_A)).isEqualTo(USER_A);
-        verify(lotteryRepository).updateLottery(lottery);
-    }
-
-    @Test
-    void popRandomFromEventLottery_singleEntry_returnsThatEntry() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        lottery.add(USER_A);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        UUID result = service.popRandomFromEventLottery(EVENT_ID);
-
-        assertThat(result).isEqualTo(USER_A);
-        verify(lotteryRepository).updateLottery(lottery);
-    }
-
-    @Test
-    void popRandomFromEventLottery_removesReturnedEntry() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        lottery.add(USER_A);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        service.popRandomFromEventLottery(EVENT_ID);
-
-        assertThat(lottery.pop(USER_A)).isNull();
-    }
-
-    @Test
-    void popRandomFromEventLottery_multipleEntries_returnedValueIsFromLottery() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        lottery.add(USER_A);
-        lottery.add(USER_B);
-        lottery.add(USER_C);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        UUID result = service.popRandomFromEventLottery(EVENT_ID);
-
-        assertThat(Set.of(USER_A, USER_B, USER_C)).contains(result);
-    }
-
-    @Test
-    void popRandomFromEventLottery_withCount_returnsRequestedNumberOfUniqueEntries() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        lottery.add(USER_A);
-        lottery.add(USER_B);
-        lottery.add(USER_C);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        Set<UUID> result = service.popRandomFromEventLottery(EVENT_ID, 2);
-
-        assertThat(result).hasSize(2);
-        assertThat(Set.of(USER_A, USER_B, USER_C)).containsAll(result);
-        verify(lotteryRepository).updateLottery(lottery);
-    }
-
-    @Test
-    void popRandomFromEventLottery_withCountLargerThanLotterySize_returnsAllEntries() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        lottery.add(USER_A);
-        lottery.add(USER_B);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        Set<UUID> result = service.popRandomFromEventLottery(EVENT_ID, 10);
-
-        assertThat(result).containsExactlyInAnyOrder(USER_A, USER_B);
-    }
-
-    // =========================================================================
-    // Lottery — negative tests
-    // =========================================================================
-
-    @Test
-    void createEventLottery_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.createEventLottery(null))
-                .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(lotteryRepository);
-    }
-
-    @Test
-    void deleteEventLottery_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.deleteEventLottery(null))
-                .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(lotteryRepository);
-    }
-
-    @Test
-    void deleteEventLottery_lotteryNotFound_throwsLotteryNotFoundException() {
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
-
-        assertThatThrownBy(() -> service.deleteEventLottery(EVENT_ID))
-                .isInstanceOf(LotteryNotFoundException.class);
-        verify(lotteryRepository, never()).removeLottery(any());
-    }
-
-    @Test
-    void addToEventLottery_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.addToEventLottery(null, USER_A))
-                .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(lotteryRepository);
-    }
-
-    @Test
-    void addToEventLottery_nullUserId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.addToEventLottery(EVENT_ID, null))
-                .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(lotteryRepository);
-    }
-
-    @Test
-    void addToEventLottery_lotteryNotFound_throwsLotteryNotFoundException() {
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
-
-        assertThatThrownBy(() -> service.addToEventLottery(EVENT_ID, USER_A))
-                .isInstanceOf(LotteryNotFoundException.class);
-        verify(lotteryRepository, never()).updateLottery(any());
-    }
-
-    @Test
-    void popRandomFromEventLottery_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.popRandomFromEventLottery(null))
-                .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(lotteryRepository);
-    }
-
-    @Test
-    void popRandomFromEventLottery_lotteryNotFound_throwsLotteryNotFoundException() {
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
-
-        assertThatThrownBy(() -> service.popRandomFromEventLottery(EVENT_ID))
-                .isInstanceOf(LotteryNotFoundException.class);
-    }
-
-    @Test
-    void popRandomFromEventLottery_emptyLottery_throwsEmptyLotteryException() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        assertThatThrownBy(() -> service.popRandomFromEventLottery(EVENT_ID))
-                .isInstanceOf(EmptyLotteryException.class);
-        verify(lotteryRepository, never()).updateLottery(any());
-    }
-
-    @Test
-    void popRandomFromEventLottery_withCount_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.popRandomFromEventLottery(null, 1))
-                .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(lotteryRepository);
-    }
-
-    @Test
-    void popRandomFromEventLottery_withCount_negativeCount_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.popRandomFromEventLottery(EVENT_ID, -1))
-                .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(lotteryRepository);
-    }
-
-    @Test
-    void popRandomFromEventLottery_withCount_lotteryNotFound_throwsLotteryNotFoundException() {
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
-
-        assertThatThrownBy(() -> service.popRandomFromEventLottery(EVENT_ID, 2))
-                .isInstanceOf(LotteryNotFoundException.class);
-    }
-
-    @Test
-    void popRandomFromEventLottery_withCount_emptyLottery_throwsEmptyLotteryException() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        assertThatThrownBy(() -> service.popRandomFromEventLottery(EVENT_ID, 3))
-                .isInstanceOf(EmptyLotteryException.class);
-        verify(lotteryRepository, never()).updateLottery(any());
-    }
-
-    // =========================================================================
     // Concurrency tests
     //
     // These tests use mock VirtualQueue / Lottery objects backed by thread-safe
@@ -1064,86 +1089,9 @@ class QueuesServiceTests {
         assertThat(deque).isEmpty(); // the backing store is fully drained
     }
 
-    @Test
-    void concurrentLotteryAdds_allUniqueUsersRecordedWithNoLostUpdates() throws InterruptedException {
-        int n = 20;
-        List<UUID> users = generateUserIds(n);
-        Set<UUID> capturedAdds = ConcurrentHashMap.newKeySet();
-
-        Lottery mockLottery = mock(Lottery.class);
-        when(mockLottery.add(any())).thenAnswer(inv -> { capturedAdds.add(inv.getArgument(0)); return true; });
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(mockLottery);
-
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(n);
-        AtomicInteger successes = new AtomicInteger();
-
-        for (UUID userId : users) {
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    service.addToEventLottery(EVENT_ID, userId);
-                    successes.incrementAndGet();
-                } catch (Exception ignored) {}
-                return null;
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
-
-        assertThat(successes.get()).isEqualTo(n);
-        assertThat(capturedAdds).containsExactlyInAnyOrderElementsOf(users);
-    }
-
-    @Test
-    void concurrentLotteryPops_allSucceedWithDistinctValues() throws InterruptedException {
-        int items   = 20;
-        int threads = 10;
-        List<UUID> users = generateUserIds(items);
-        ConcurrentLinkedDeque<UUID> deque = new ConcurrentLinkedDeque<>(users);
-
-        Lottery mockLottery = mock(Lottery.class);
-        when(mockLottery.popRandom()).thenAnswer(inv -> deque.poll());
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(mockLottery);
-
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
-        Set<UUID> results = ConcurrentHashMap.newKeySet();
-        AtomicInteger successes = new AtomicInteger();
-
-        for (int i = 0; i < threads; i++) {
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    UUID popped = service.popRandomFromEventLottery(EVENT_ID);
-                    results.add(popped);
-                    successes.incrementAndGet();
-                } catch (Exception ignored) {}
-                return null;
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
-
-        assertThat(successes.get()).isEqualTo(threads);
-        assertThat(results).hasSize(threads);
-    }
-
     // =========================================================================
     // Helpers
     // =========================================================================
-
-    private static List<UUID> generateUserIds(int n) {
-        List<UUID> ids = new ArrayList<>(n);
-        for (int i = 0; i < n; i++) {
-            ids.add(UUID.randomUUID());
-        }
-        return ids;
-    }
 
     private static List<String> generateTokens(int n) {
         List<String> tokens = new ArrayList<>(n);
@@ -1155,8 +1103,25 @@ class QueuesServiceTests {
 
     /** Returns the live eventAccess map from the given service instance via reflection. */
     @SuppressWarnings("unchecked")
-    private static ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>> eventAccessMap(QueuesService svc) {
+    private static ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>> eventAccessMap(QueueService svc) {
         return (ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>>)
                 ReflectionTestUtils.getField(svc, "eventAccess");
+    }
+
+    /** Returns the live siteQueue from the given service instance via reflection. */
+    @SuppressWarnings("unchecked")
+    private static Queue<String> siteQueue(QueueService svc) {
+        return (Queue<String>) ReflectionTestUtils.getField(svc, "siteQueue");
+    }
+
+    /** Returns the live acceptedTokens set from the given service instance via reflection. */
+    @SuppressWarnings("unchecked")
+    private static Set<String> acceptedTokens(QueueService svc) {
+        return (Set<String>) ReflectionTestUtils.getField(svc, "acceptedTokens");
+    }
+
+    /** Invokes the private acceptUsersFromSiteQueue() method directly, bypassing the scheduler. */
+    private static void invokeAcceptUsers(QueueService svc) {
+        ReflectionTestUtils.invokeMethod(svc, "acceptUsersFromSiteQueue");
     }
 }

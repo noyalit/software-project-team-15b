@@ -6,12 +6,12 @@ import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrde
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.*;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
-import com.software_project_team_15b.Ticketmaster.Infrastructure.Auth;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.*;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
@@ -24,6 +24,10 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.Policy
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
+import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
+import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryService;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessView;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,26 +55,36 @@ public class PurchasingService {
     private final IOrderHistoryRepository orderHistoryRepository;
     private final IMemberRepository memberRepository;
     private final EventManagementService eventManagementService;
+    private final QueueService queuesService;
+    private final LotteryService lotteryService;
     private final IPaymentAPI paymentGateway;
     private final ITicketSupplyAPI ticketProvider;
-    private final Auth auth;
+    private final IAuth auth;
 
     public PurchasingService(
             IActiveOrderRepository activeOrderRepository,
             IOrderHistoryRepository orderHistoryRepository,
             IMemberRepository memberRepository,
             EventManagementService eventManagementService,
+            QueueService queuesService,
+            LotteryService lotteryService,
             IPaymentAPI paymentGateway,
             ITicketSupplyAPI ticketProvider,
-            Auth auth
+            IAuth auth
     ) {
         this.activeOrderRepository = Objects.requireNonNull(activeOrderRepository);
         this.orderHistoryRepository = Objects.requireNonNull(orderHistoryRepository);
         this.memberRepository = Objects.requireNonNull(memberRepository);
         this.eventManagementService = Objects.requireNonNull(eventManagementService);
+        this.queuesService = Objects.requireNonNull(queuesService);
+        this.lotteryService = Objects.requireNonNull(lotteryService);
         this.paymentGateway = Objects.requireNonNull(paymentGateway);
         this.ticketProvider = Objects.requireNonNull(ticketProvider);
         this.auth = Objects.requireNonNull(auth);
+    }
+
+    public QueueAccessView requestAccessToCreateActiveOrder(String token, UUID eventId) {
+        return queuesService.requestAccess(token, eventId);
     }
 
     @Transactional
@@ -83,11 +97,13 @@ public class PurchasingService {
 
             requireOrderIsUniqueForUser(userId, eventId);
 
+            requireAccessForActiveOrder(token, userId, eventId);
+
             UUID orderId = UUID.randomUUID();
 
             ActiveOrder activeOrder = new ActiveOrder(orderId, userId, eventId, areaId);
 
-            activeOrderRepository.save(activeOrder);
+            activeOrderRepository.saveAndFlush(activeOrder);
 
             AUDIT.info("op=createActiveOrder order={} user={} event={} area={} result=ok",
                     orderId, userId, eventId, areaId);
@@ -116,7 +132,7 @@ public class PurchasingService {
 
             UUID userId = requireValidUser(token);
 
-            activeOrder = requireOwnedModifiableOrderForUpdate(cmd.orderId(), userId);
+            activeOrder = requireOwnedModifiableOrderForUpdate(token, cmd.orderId(), userId);
 
             Set<UUID> availableSeats = requireSeatsAvailable(
                 activeOrder.getEventId(),
@@ -153,7 +169,7 @@ public class PurchasingService {
             requireRemoveOrAddSeatsFromActiveOrderCommand(cmd);
 
             UUID userId = requireValidUser(token);
-            activeOrder = requireOwnedModifiableOrderForUpdate(cmd.orderId(), userId);
+            activeOrder = requireOwnedModifiableOrderForUpdate(token, cmd.orderId(), userId);
             
             removeSeatsFromActiveOrder(activeOrder, cmd.seatIds());
 
@@ -175,6 +191,7 @@ public class PurchasingService {
             ActiveOrder activeOrder = requireActiveOrderForUpdate(orderId);
             requireOrderOwnership(activeOrder, userId);
             requireOrderIsActive(activeOrder);
+            requireAccessForActiveOrder(token, userId, activeOrder.getEventId());
             syncOrderSeatsAvailability(activeOrder);
 
             ActiveOrderView view = buildActiveOrderView(activeOrder);
@@ -199,7 +216,7 @@ public class PurchasingService {
             throw new IllegalStateException("Only members can use this method");
         }
         LocalDate birthDate = getUserBirthDate(userId);
-        return startCheckoutForUser(userId, orderId, birthDate);
+        return startCheckoutForUser(token, userId, orderId, birthDate);
     }
 
     @Transactional(noRollbackFor = {
@@ -209,20 +226,20 @@ public class PurchasingService {
     })
     public CheckoutStartedView startCheckoutForGuest(String token, UUID orderId, LocalDate guestBirthDate) {
         UUID userId = requireValidUser(token);
-        if (!auth.isGuest(token)) {
+        if (auth.isGuest(token)) {
             throw new IllegalStateException("Only guests can use this method");
         }
-        return startCheckoutForUser(userId, orderId, guestBirthDate);
+        return startCheckoutForUser(token, userId, orderId, guestBirthDate);
     }
 
-    private CheckoutStartedView startCheckoutForUser(UUID userId, UUID orderId, LocalDate birthDate) {
+    private CheckoutStartedView startCheckoutForUser(String token, UUID userId, UUID orderId, LocalDate birthDate) {
         ActiveOrder activeOrder = null;
         HoldReceipt holdCreated = null;
 
         try {
             activeOrder = requireActiveOrderForUpdate(orderId);
             requireOrderOwnership(activeOrder, userId);
-            ensureOrderIsModifiable(activeOrder);
+            ensureOrderIsModifiable(token, activeOrder);
 
             if (syncOrderSeatsAvailability(activeOrder)) {
                 throw new OrderSeatsUnavailableException("Some seats in the order are no longer available");
@@ -578,7 +595,7 @@ public class PurchasingService {
         }
     }
 
-    private void ensureOrderIsModifiable(ActiveOrder activeOrder) {
+    private void ensureOrderIsModifiable(String token, ActiveOrder activeOrder) {
         if (activeOrder == null) {
             throw new IllegalArgumentException("Active order cannot be null");
         }
@@ -589,6 +606,8 @@ public class PurchasingService {
             expireAndSave(activeOrder);
             throw e;
         } 
+
+        requireAccessForActiveOrder(token, activeOrder.getUserId(), activeOrder.getEventId());
     }
 
     private void requireOrderIsActive(ActiveOrder activeOrder) {
@@ -634,6 +653,29 @@ public class PurchasingService {
         return true;
     }
 
+    private void requireAccessForActiveOrder(String token, UUID userId, UUID eventId) {
+        if (token == null || userId == null || eventId == null) {
+            throw new IllegalArgumentException("Token, user ID, and event ID cannot be null");
+        }
+
+        requireUserLotteryEligibilityForEvent(userId, eventId);
+
+        if (!queuesService.hasAccess(token, eventId)) {
+            throw new TimeExpiredException("User does not have access to create or modify orders for this event at the moment");
+        }
+    }
+
+    private void requireUserLotteryEligibilityForEvent(UUID userId, UUID eventId) {
+        if (userId == null || eventId == null) {
+            throw new IllegalArgumentException("User ID and event ID cannot be null");
+        }
+
+        LotteryEligibilityResult eligibilityResult = lotteryService.getLotteryEligibilityForEvent(userId, eventId);
+        if (!eligibilityResult.canCreateActiveOrder()) {
+            throw new IllegalStateException("User is not eligible to create an active order for this event: " + eligibilityResult.status());
+        }
+    }
+
     private void requireEventIsValid(UUID eventId) {
         if (eventId == null) {
             throw new IllegalArgumentException("Event ID cannot be null");
@@ -665,10 +707,10 @@ public class PurchasingService {
         }
     }
 
-    private ActiveOrder requireOwnedModifiableOrderForUpdate(UUID orderId, UUID userId) {
+    private ActiveOrder requireOwnedModifiableOrderForUpdate(String token, UUID orderId, UUID userId) {
         ActiveOrder activeOrder = requireActiveOrderForUpdate(orderId);
         requireOrderOwnership(activeOrder, userId);
-        ensureOrderIsModifiable(activeOrder);
+        ensureOrderIsModifiable(token, activeOrder);
         return activeOrder;
     }
 
