@@ -56,9 +56,6 @@ class OrderHistoryServiceIT {
     IEventRepository eventsRepository;
 
     @MockitoBean
-    ICompanyRepository companyRepository;
-
-    @MockitoBean
     IAuth auth;
 
     @MockitoBean
