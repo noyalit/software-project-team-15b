@@ -56,6 +56,9 @@ class OrderHistoryServiceIT {
     IEventRepository eventsRepository;
 
     @MockitoBean
+    ICompanyRepository companyRepository;
+
+    @MockitoBean
     IAuth auth;
 
     @MockitoBean
@@ -216,6 +219,8 @@ class OrderHistoryServiceIT {
 
         assertThat(report.get("ticketsSold")).isEqualTo(5);
         assertThat(report.get("totalRevenue")).isEqualTo(Money.of("70.00", "USD"));
+        assertThat(report.get("orders")).isInstanceOf(List.class);
+        assertThat((List<?>) report.get("orders")).hasSize(2);
     }
 
     @Test
@@ -234,14 +239,25 @@ class OrderHistoryServiceIT {
 
         assertThat(report.get("ticketsSold")).isEqualTo(2);
         assertThat(report.get("totalRevenue")).isEqualTo(Money.of("30.00", "USD"));
+        assertThat(report.get("orders")).isInstanceOf(List.class);
+        assertThat((List<?>) report.get("orders")).hasSize(1);
     }
 
     @Test
     void generateSalesReport_returns_zero_when_no_events_exist() {
 
+        when(companyRepository.findByFounder(callerId)).thenReturn(List.of());
+        when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
+        
+        Company company = org.mockito.Mockito.mock(Company.class);
+        when(company.getId()).thenReturn(companyId.toString());
+        when(companyRepository.findByFounder(callerId)).thenReturn(List.of(company));
+
         Map<String, Object> report = service.generateSalesReport(token, companyId);
 
         assertThat(report.get("ticketsSold")).isEqualTo(0);
+        assertThat(report.get("orders")).isInstanceOf(List.class);
+        assertThat((List<?>) report.get("orders")).isEmpty();
     }
 
     @Test

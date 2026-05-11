@@ -143,10 +143,6 @@ public class OrderHistoryService implements EventSubscriber{
         if (!isFounderOrOwner(companyId, callerId)) {
             throw new UnauthorizedCompanyActionException("Only the company founder or owner can view sold tickets");
         } 
-        Company company = companyService.getCompany(companyId.toString());
-        if (!company.getFounderId().equals(callerId) && !company.getOwnerIds().contains(callerId)) {
-            throw new UnauthorizedCompanyActionException("Only the company founder or owner can view sold tickets");
-        } 
         List<Event> events = eventsRepository.searchByCompany(companyId, SearchCriteria.empty());
         if (events.isEmpty()) {
             return Map.of("ticketsSold", 0, "totalRevenue", Money.zero("USD"), "orders", List.of());
