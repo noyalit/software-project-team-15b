@@ -538,7 +538,7 @@ public class UserService {
             throw new IllegalArgumentException("Invalid or expired token");
         }
 
-        if (!(auth.isGuest(token) || auth.isTemp(token))) {
+        if (!(auth.isGuest(token))) {
             throw new IllegalArgumentException("Only guest or temporary token can perform this action");
         }
     }
