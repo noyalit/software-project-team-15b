@@ -145,6 +145,36 @@ public class UserService {
         throw new IllegalArgumentException("Unsupported user type");
     }
 
+    public String watchPersonalDetails(String token) {
+        UUID userId = getAuthenticatedMemberId(token);
+        Member member = getMemberOrThrow(userId);
+
+        String activeRole = member.getActiveRole() == null
+                ? "RegularMember"
+                : member.getActiveRole().getRoleName();
+
+        String allRoles = member.getAssignedRoles()
+                .stream()
+                .map(Role::getRoleName)
+                .toList()
+                .toString();
+
+        return """
+                {
+                "username": "%s",
+                "password": "********",
+                "birthDate": "%s",
+                "activeRole": "%s",
+                "availableRoles": "%s"
+                }
+                """.formatted(
+                member.getUsername(),
+                member.getBirthDate(),
+                activeRole,
+                allRoles
+        );
+    }
+
     public Member changeUsername(String token, String newUsername) {
         UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
@@ -161,6 +191,15 @@ public class UserService {
         Member member = getMemberOrThrow(userId);
         validateRawPassword(newPassword);
         member.setPassword(passwordEncoder.encode(newPassword));
+        return memberRepository.save(member);
+    }
+
+    public Member changeBirthDate(String token, LocalDate newBirthDate) {
+        UUID userId = getAuthenticatedMemberId(token);
+        Member member = getMemberOrThrow(userId);
+
+        member.setBirthDate(newBirthDate);
+
         return memberRepository.save(member);
     }
 
