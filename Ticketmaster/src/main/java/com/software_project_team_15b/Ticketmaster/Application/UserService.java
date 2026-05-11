@@ -263,6 +263,16 @@ public class UserService {
         validateNoAppointmentCycle(member, ownerId, companyId);
         validateOwnerAppointer(ownerId, companyId);
 
+        boolean alreadyOwnerInCompany = member.getAssignedRoles()
+                .stream()
+                .anyMatch(role -> role instanceof Owner
+                        && !(role instanceof Founder)
+                        && role.belongsToCompany(companyId));
+
+        if (alreadyOwnerInCompany) {
+            throw new IllegalArgumentException("Member is already an owner in this company");
+        }
+
         Role ownerRole = new Owner(ownerId, companyId);
         member.addRole(ownerRole);
         return memberRepository.save(member);
