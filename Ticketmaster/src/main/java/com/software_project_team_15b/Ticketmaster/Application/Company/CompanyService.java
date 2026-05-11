@@ -64,8 +64,9 @@ public class CompanyService {
         requireNonBlank(name, "Company name");
         UUID founderId = requireAuthenticatedMember(token);
         Company company = new Company(name, founderId);
-        userService.appointFounder(founderId);
-        return companyRepository.save(company);
+        Company saved = companyRepository.save(company);
+        userService.appointFounder(founderId, token, saved.getId());
+        return saved;
     }
 
     /**
@@ -86,7 +87,7 @@ public class CompanyService {
         Company company = getCompany(companyId);
         UUID appointingUserId = requireAuthenticatedMember(token);
         requireOwner(company, appointingUserId);
-        userService.appointOwner(newOwnerId, token);
+        userService.appointOwner(newOwnerId, token, company.getId());
         company.addOwner(newOwnerId);
         companyRepository.save(company);
     }
@@ -112,9 +113,9 @@ public class CompanyService {
         requireOwner(company, calledId);
 
         if (calledId.equals(ownerId)) {
-            userService.ownerResign(token);
+            userService.ownerResign(token, company.getId());
         } else {
-            userService.removeOwnerAppointment(token, ownerId);
+            userService.removeOwnerAppointment(token, ownerId, company.getId());
         }
 
         company.removeOwner(ownerId);
@@ -165,7 +166,7 @@ public class CompanyService {
         Company company = getCompany(companyId);
         UUID calledId = requireAuthenticatedMember(token);
         requireOwner(company, calledId);
-        userService.appointManager(newOwnerId, token, managerPermissions);
+        userService.appointManager(newOwnerId, token, company.getId(), managerPermissions);
     }
 
     /**
@@ -187,7 +188,7 @@ public class CompanyService {
         Company company = getCompany(companyId);
         UUID calledId = requireAuthenticatedMember(token);
         requireOwner(company, calledId);
-        userService.removeManagerAppointment(token, managerId);
+        userService.removeManagerAppointment(token, managerId, company.getId());
     }
 
     /**
@@ -356,7 +357,7 @@ public class CompanyService {
     public void validatePurchaseEligibility(UUID companyId, PurchaseRequest request) {
         requireNonNull(companyId, "Company ID");
         requireNonNull(request, "Purchase request");
-        Optional<Company> company = companyRepository.findById(companyId.toString());
+        Optional<Company> company = companyRepository.findById(companyId);
         if (company.isEmpty()) return;
         // TODO: once Company stores a typed ICompanyPurchasePolicy, invoke its validate(request, null) here.
     }
@@ -377,7 +378,7 @@ public class CompanyService {
         requireNonNull(companyId, "Company ID");
         requireNonNull(subtotal, "Subtotal");
         requireNonNull(request, "Purchase request");
-        Optional<Company> company = companyRepository.findById(companyId.toString());
+        Optional<Company> company = companyRepository.findById(companyId);
         if (company.isEmpty()) return subtotal;
         // TODO: once Company stores a typed ICompanyDiscountPolicy, evaluate it and clamp to subtotal.
         return subtotal;
@@ -407,7 +408,7 @@ public class CompanyService {
         if (companyId == null || companyId.isBlank()) {
             return Optional.empty();
         }
-        return companyRepository.findById(companyId);
+        return companyRepository.findById(parseCompanyId(companyId));
     }
 
     /**
@@ -416,9 +417,17 @@ public class CompanyService {
      * @throws CompanyNotFoundException if no matching company exists
      */
     private Company getCompanyOrThrow(String companyId) {
-        return companyRepository.findById(companyId)
+        return companyRepository.findById(parseCompanyId(companyId))
                 .orElseThrow(() -> new CompanyNotFoundException(
                         "Company not found with id: " + companyId));
+    }
+
+    private static UUID parseCompanyId(String companyId) {
+        try {
+            return UUID.fromString(companyId);
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("Company ID must be a valid UUID");
+        }
     }
 
     /**
