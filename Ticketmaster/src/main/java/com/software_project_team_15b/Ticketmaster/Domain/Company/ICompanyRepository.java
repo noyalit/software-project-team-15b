@@ -35,7 +35,7 @@ public interface ICompanyRepository {
      * @param id the company id to search for; must not be null
      * @return an {@link Optional} containing the company if found, or empty otherwise
      */
-    Optional<Company> findById(String id);
+    Optional<Company> findById(UUID id);
 
     /**
      * Returns all companies founded by the given member.

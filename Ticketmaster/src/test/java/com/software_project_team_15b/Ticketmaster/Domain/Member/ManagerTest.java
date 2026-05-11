@@ -12,13 +12,16 @@ class ManagerTest {
     @Test
     void constructor_shouldCreateManager_whenValidDataGiven() {
         UUID appointedBy = UUID.randomUUID();
+        UUID companyId = UUID.randomUUID();
 
         Manager manager = new Manager(
                 appointedBy,
+                companyId,
                 Set.of(ManagerPermission.MANAGE_EVENTS)
         );
 
         assertEquals(appointedBy, manager.getAppointedBy());
+        assertEquals(companyId, manager.getCompanyId());
         assertEquals("Manager", manager.getRoleName());
         assertTrue(manager.hasPermission(ManagerPermission.MANAGE_EVENTS));
     }
@@ -26,14 +29,16 @@ class ManagerTest {
     @Test
     void constructor_shouldThrowException_whenPermissionsAreNull() {
         UUID appointedBy = UUID.randomUUID();
+        UUID companyId = UUID.randomUUID();
 
         assertThrows(IllegalArgumentException.class,
-                () -> new Manager(appointedBy, null));
+                () -> new Manager(appointedBy, companyId, null));
     }
 
     @Test
     void setPermissions_shouldUpdatePermissions() {
         Manager manager = new Manager(
+                UUID.randomUUID(),
                 UUID.randomUUID(),
                 Set.of(ManagerPermission.MANAGE_EVENTS)
         );
@@ -47,6 +52,7 @@ class ManagerTest {
     @Test
     void getPermissions_shouldReturnUnmodifiableSet() {
         Manager manager = new Manager(
+                UUID.randomUUID(),
                 UUID.randomUUID(),
                 Set.of(ManagerPermission.MANAGE_EVENTS)
         );
