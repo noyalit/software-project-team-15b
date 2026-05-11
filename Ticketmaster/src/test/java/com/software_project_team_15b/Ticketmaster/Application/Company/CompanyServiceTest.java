@@ -4,6 +4,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -37,7 +38,9 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermissio
 
 class CompanyServiceTest {
 
-    private FakeCompanyRepository repo;
+    private final Map<UUID, Company> repoStorage = new ConcurrentHashMap<>();
+
+    private ICompanyRepository repo;
     private IAuth auth;
     private UserService userService;
     private IEventManagementService eventManagementService;
@@ -45,7 +48,34 @@ class CompanyServiceTest {
 
     @BeforeEach
     void setUp() {
-        repo = new FakeCompanyRepository();
+        repoStorage.clear();
+
+        repo = mock(ICompanyRepository.class);
+        when(repo.save(any(Company.class))).thenAnswer(inv -> saveToRepo(inv.getArgument(0)));
+        when(repo.findById(any())).thenAnswer(inv -> {
+            UUID id = inv.getArgument(0);
+            return id == null ? Optional.empty() : Optional.ofNullable(repoStorage.get(id));
+        });
+        when(repo.findByFounder(any())).thenAnswer(inv -> {
+            UUID founderId = inv.getArgument(0);
+            if (founderId == null) return List.of();
+            return repoStorage.values().stream()
+                    .filter(c -> founderId.equals(c.getFounderId()))
+                    .collect(Collectors.toList());
+        });
+        when(repo.findByOwner(any())).thenAnswer(inv -> {
+            UUID ownerId = inv.getArgument(0);
+            if (ownerId == null) return List.of();
+            return repoStorage.values().stream()
+                    .filter(c -> c.getOwnerIds().contains(ownerId))
+                    .collect(Collectors.toList());
+        });
+        doAnswer(inv -> {
+            Company c = inv.getArgument(0);
+            if (c != null && c.getId() != null) repoStorage.remove(c.getId());
+            return null;
+        }).when(repo).remove(any(Company.class));
+
         auth = mock(IAuth.class);
         userService = mock(UserService.class);
         eventManagementService = mock(IEventManagementService.class);
@@ -53,6 +83,24 @@ class CompanyServiceTest {
         when(userService.isActiveFounder(any())).thenReturn(true);
         when(eventManagementService.searchInCompany(any(), any())).thenReturn(List.of());
         service = new CompanyService(repo, userService, eventManagementService, auth);
+    }
+
+    // Assigns a UUID via reflection (Company has no public setId) and stores in the backing map.
+    private Company saveToRepo(Company company) {
+        if (company == null) throw new IllegalArgumentException("company cannot be null");
+        try {
+            Field idField = Company.class.getDeclaredField("id");
+            idField.setAccessible(true);
+            UUID id = (UUID) idField.get(company);
+            if (id == null) {
+                id = UUID.randomUUID();
+                idField.set(company, id);
+            }
+            repoStorage.put(id, company);
+            return company;
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     // ===========================================================================================
@@ -806,7 +854,7 @@ class CompanyServiceTest {
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
         company.changeStatus(CompanyStatus.SUSPENDED);
-        repo.save(company);
+        saveToRepo(company);
 
         assertThatThrownBy(() -> service.updatePurchasePolicy(founderToken, company.getId(), "x"))
                 .isInstanceOf(IllegalStateException.class);
@@ -1471,59 +1519,5 @@ class CompanyServiceTest {
         // Final status must be one of the attempted values
         assertThat(repo.findById(company.getId()).orElseThrow().getStatus())
                 .isIn((Object[]) statuses);
-    }
-
-    // ===========================================================================================
-    // Test fake — repository only; auth/userService/eventManagementService use Mockito mocks
-
-    private static final class FakeCompanyRepository implements ICompanyRepository {
-        private final Map<UUID, Company> storage = new ConcurrentHashMap<>();
-
-        @Override
-        public Company save(Company company) {
-            if (company == null) throw new IllegalArgumentException("company cannot be null");
-            try {
-                Field idField = Company.class.getDeclaredField("id");
-                idField.setAccessible(true);
-                UUID id = (UUID) idField.get(company);
-                if (id == null) {
-                    id = UUID.randomUUID();
-                    idField.set(company, id);
-                }
-                storage.put(id, company);
-                return company;
-            } catch (ReflectiveOperationException e) {
-                throw new RuntimeException(e);
-            }
-        }
-
-        @Override
-        public void remove(Company company) {
-            if (company != null && company.getId() != null) {
-                storage.remove(company.getId());
-            }
-        }
-
-        @Override
-        public Optional<Company> findById(UUID id) {
-            if (id == null) return Optional.empty();
-            return Optional.ofNullable(storage.get(id));
-        }
-
-        @Override
-        public List<Company> findByFounder(UUID founderId) {
-            if (founderId == null) return List.of();
-            return storage.values().stream()
-                    .filter(c -> founderId.equals(c.getFounderId()))
-                    .collect(Collectors.toList());
-        }
-
-        @Override
-        public List<Company> findByOwner(UUID ownerId) {
-            if (ownerId == null) return List.of();
-            return storage.values().stream()
-                    .filter(c -> c.getOwnerIds().contains(ownerId))
-                    .collect(Collectors.toList());
-        }
     }
 }
