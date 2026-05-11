@@ -16,22 +16,22 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.Ticket;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompanyAuthorizationPort;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
+import com.software_project_team_15b.DTOs.OrderHistoryDTO;
+import com.software_project_team_15b.DTOs.TicketDTO;
 
 import org.springframework.transaction.annotation.Transactional;
 
@@ -45,9 +45,8 @@ public class OrderHistoryService implements EventSubscriber{
     private final IPaymentAPI paymentGateway;
     private final ITicketSupplyAPI ticketProvider;
     private final IEventRepository eventsRepository;
-    private final ICompanyAuthorizationPort companyAuthorization;
+    private final ICompanyRepository companyRepository;
     private final IAuth auth;
-    private final CompanyService companyService;
 
 
     public OrderHistoryService(IOrderHistoryRepository orderHistoryRepository,
@@ -55,16 +54,14 @@ public class OrderHistoryService implements EventSubscriber{
                                ITicketSupplyAPI ticketProvider,
                                EventCancelManager eventCancelManager,
                                IEventRepository eventsRepository,
-                               ICompanyAuthorizationPort companyAuthorization,
-                               IAuth auth,
-                               CompanyService companyService) {
+                               ICompanyRepository companyRepository,
+                               IAuth auth) {
         this.orderHistoryRepository = orderHistoryRepository;
         this.paymentGateway = paymentGateway;
         this.ticketProvider = ticketProvider;
         this.eventsRepository = eventsRepository;
-        this.companyAuthorization = companyAuthorization;
+        this.companyRepository = companyRepository;
         this.auth = auth;
-        this.companyService = companyService;
         eventCancelManager.subscribe(this);
     }
 
@@ -82,7 +79,7 @@ public class OrderHistoryService implements EventSubscriber{
 
 
     @Transactional(readOnly = true)
-    public List<OrderHistory> getOrderHistoryByUserId(String token) {
+    public List<OrderHistoryDTO> getOrderHistoryByUserId(String token) {
         if (token == null) {
             throw new IllegalArgumentException("token cannot be null");
         }
@@ -91,7 +88,9 @@ public class OrderHistoryService implements EventSubscriber{
         if (!auth.isMember(token)) {
             throw new IllegalArgumentException("User must be a member to view order history");
         }
-        return Collections.unmodifiableList(orderHistoryRepository.findByUserId(userId));
+        List<OrderHistory> histories = orderHistoryRepository.findByUserId(userId);
+        List<OrderHistoryDTO> dtos = histories.stream().map(this::toOrderHistoryDTO).collect(Collectors.toList());
+        return Collections.unmodifiableList(dtos);
     }
 
 
@@ -106,22 +105,26 @@ public class OrderHistoryService implements EventSubscriber{
 
     //TODO: need to add recursion for managers appointed by caller
     @Transactional(readOnly = true)
-    public Map<UUID, List<Ticket>> getSoldTicketsForCompany(String token, UUID companyId) {
+    public Map<UUID, List<TicketDTO>> getSoldTicketsForCompany(String token, UUID companyId) {
         if (token == null) throw new IllegalArgumentException("token cannot be null");
         if (companyId == null) throw new IllegalArgumentException("companyId cannot be null");
         validateUser(token);
-        Company company = companyService.getCompany(companyId.toString());
         UUID callerId = auth.extractUserId(token);
-        if (!company.getFounderId().equals(callerId) && !company.getOwnerIds().contains(callerId)) {
+        if (!isFounderOrOwner(companyId, callerId)) {
             throw new UnauthorizedCompanyActionException("Only the company founder or owner can view sold tickets");
         }   
-        SearchCriteria criteria = new SearchCriteria();
+        SearchCriteria criteria = SearchCriteria.empty();
         List<Event> events = eventsRepository.searchByCompany(companyId, criteria);
         if (events.isEmpty()) {return Map.of();}
         List<UUID> eventIds = events.stream().map(Event::eventId).toList();
         List<OrderHistory> orders = orderHistoryRepository.findByEventIdIn(eventIds);
-        Map<UUID, List<Ticket>> soldTicketsByEvent = new LinkedHashMap<>();
-        orders.forEach(order -> soldTicketsByEvent.computeIfAbsent(order.getEventId(),ignored -> new ArrayList<>()).addAll(order.getTickets()));
+        Map<UUID, List<TicketDTO>> soldTicketsByEvent = new LinkedHashMap<>();
+        orders.forEach(order -> {
+            List<TicketDTO> ticketDTOs = order.getTickets().stream()
+                    .map(t -> new TicketDTO(t.getSeatId(), t.getBasePrice()))
+                    .collect(Collectors.toList());
+            soldTicketsByEvent.computeIfAbsent(order.getEventId(), ignored -> new ArrayList<>()).addAll(ticketDTOs);
+        });
         soldTicketsByEvent.replaceAll((eventId, tickets) -> List.copyOf(tickets));
         return Collections.unmodifiableMap(soldTicketsByEvent);
     }
@@ -137,21 +140,22 @@ public class OrderHistoryService implements EventSubscriber{
         }
         validateUser(token);
         UUID callerId = auth.extractUserId(token);
-        Company company = companyService.getCompany(companyId.toString());
-        if (!company.getFounderId().equals(callerId) && !company.getOwnerIds().contains(callerId)) {
+        if (!isFounderOrOwner(companyId, callerId)) {
             throw new UnauthorizedCompanyActionException("Only the company founder or owner can view sold tickets");
         } 
         List<Event> events = eventsRepository.searchByCompany(companyId, SearchCriteria.empty());
         if (events.isEmpty()) {
-            return Map.of("ticketsSold", 0,"totalRevenue", 0.0);
+            return Map.of("ticketsSold", 0, "totalRevenue", Money.zero("USD"), "orders", List.of());
         }
         List<UUID> eventIds = events.stream().map(Event::eventId).toList();
         List<OrderHistory> orders = orderHistoryRepository.findByEventIdIn(eventIds);
         int ticketsSold = orders.stream().mapToInt(order -> order.getTickets().size()).sum();
         Money totalRevenue = calculateTotalRevenue(orders);
+        List<OrderHistoryDTO> orderDTOs = orders.stream().map(this::toOrderHistoryDTO).collect(Collectors.toList());
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("ticketsSold", ticketsSold);
         report.put("totalRevenue", totalRevenue);
+        report.put("orders", orderDTOs);
         return Collections.unmodifiableMap(report);
     }
 
@@ -171,6 +175,28 @@ public class OrderHistoryService implements EventSubscriber{
         }
         Money seed = orders.get(0).getTotalPrice();
         return orders.stream().map(OrderHistory::getTotalPrice).reduce(Money.zero(seed.currency()), Money::add);
+    }
+
+    private OrderHistoryDTO toOrderHistoryDTO(OrderHistory order) {
+        List<TicketDTO> tickets = order.getTickets().stream()
+                .map(t -> new TicketDTO(t.getSeatId(), t.getBasePrice()))
+                .collect(Collectors.toList());
+        return new OrderHistoryDTO(
+                order.getOrderId(),
+                order.getUserId(),
+                order.getEventId(),
+                order.getAreaId(),
+                order.getTotalPrice(),
+                tickets,
+                order.isCancelled()
+        );
+    }
+
+    private boolean isFounderOrOwner(UUID companyId, UUID callerId) {
+        return companyRepository.findByFounder(callerId).stream()
+                .anyMatch(company -> companyId.toString().equals(company.getId()))
+                || companyRepository.findByOwner(callerId).stream()
+                .anyMatch(company -> companyId.toString().equals(company.getId()));
     }
     
 }
