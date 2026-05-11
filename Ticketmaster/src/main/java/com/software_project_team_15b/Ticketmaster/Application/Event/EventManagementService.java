@@ -44,6 +44,8 @@ import java.util.UUID;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.CannotAcquireLockException;
 // Correct package path for ObjectOptimisticLockingFailureException
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -87,7 +89,7 @@ public class EventManagementService implements IEventManagementService, EventSub
                                   ICompanyAuthorizationPort authorization,
                                   PlatformTransactionManager txManager,
                                   EventCancelManager cancelManager,
-                                  CompanyService companyService,
+                                  @Lazy CompanyService companyService,
                                   IAuth auth) {
         this.events = events;
         this.locks = locks;
