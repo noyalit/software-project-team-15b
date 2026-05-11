@@ -33,6 +33,13 @@ public class JpaSystemActiveOrderRepositoryAdapter implements IActiveOrderReposi
     }
 
     @Override
+    public ActiveOrder saveAndFlush(ActiveOrder order) {
+        if (order == null) 
+            throw new IllegalArgumentException("order cannot be null");
+        return jpaActiveOrderSpringDataRepository.saveAndFlush(order);
+    }
+
+    @Override
     public Optional<ActiveOrder> findById(UUID orderId) {   
         if (orderId == null)
             throw new IllegalArgumentException("orderId cannot be null");

@@ -2,7 +2,6 @@ package com.software_project_team_15b.Ticketmaster.Domain.Event;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.HoldNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.SeatUnavailableException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.PolicyJsonConverter;
