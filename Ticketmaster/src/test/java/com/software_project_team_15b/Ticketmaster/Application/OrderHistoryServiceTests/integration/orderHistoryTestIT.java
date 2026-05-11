@@ -46,7 +46,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest
-class OrderHistoryServiceIT {
+class OrderHistoryTestIT {
 
     @Autowired
     OrderHistoryService service;
