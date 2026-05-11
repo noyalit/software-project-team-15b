@@ -83,8 +83,8 @@ public class OrderHistoryService implements EventSubscriber{
         if (token == null) {
             throw new IllegalArgumentException("token cannot be null");
         }
-        UUID userId = auth.extractUserId(token);
         validateUser(token);
+        UUID userId = auth.extractUserId(token);
         if (!auth.isMember(token)) {
             throw new IllegalArgumentException("User must be a member to view order history");
         }
@@ -96,7 +96,7 @@ public class OrderHistoryService implements EventSubscriber{
 
     private void validateUser(String token) {
         if (token == null) {
-            throw new IllegalArgumentException("User ID cannot be null");
+            throw new IllegalArgumentException("User token cannot be null");
         }
         if (!auth.isTokenValid(token)) {
             throw new IllegalArgumentException("Invalid token");
@@ -177,18 +177,20 @@ public class OrderHistoryService implements EventSubscriber{
     }
 
     private void cancelOrderHistory(OrderHistory orderHistory) {
-        if (orderHistory == null) {
-            throw new IllegalArgumentException("Order history cannot be null");
-        }
-        paymentGateway.refundPayment(orderHistory.getUserId(), orderHistory.getTotalPrice());
-        Set<UUID> seatIds = orderHistory.getTickets().stream().map(ticket -> ticket.getSeatId()).collect(Collectors.toSet());
-        ticketProvider.cancelTickets(orderHistory.getEventId(), orderHistory.getAreaId(), seatIds);
-        AUDIT.info("Order history with ID {} has been cancelled due to event cancellation", orderHistory.getOrderId());
+    if (orderHistory == null) {
+        throw new IllegalArgumentException("Order history cannot be null");
+    }
+    paymentGateway.refundPayment(orderHistory.getUserId(),orderHistory.getTotalPrice());
+    Set<UUID> seatIds = orderHistory.getTickets().stream().map(ticket -> ticket.getSeatId()).collect(Collectors.toSet());
+    ticketProvider.cancelTickets(orderHistory.getEventId(), orderHistory.getAreaId(), seatIds);
+    orderHistory.cancel();
+    orderHistoryRepository.save(orderHistory);
+    AUDIT.info("Order history with ID {} has been cancelled due to event cancellation", orderHistory.getOrderId());
     }
 
     private Money calculateTotalRevenue(List<OrderHistory> orders) {
         if (orders.isEmpty()) {
-            return null;
+            return Money.zero("USD");
         }
         Money seed = orders.get(0).getTotalPrice();
         return orders.stream().map(OrderHistory::getTotalPrice).reduce(Money.zero(seed.currency()), Money::add);
