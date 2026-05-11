@@ -46,8 +46,10 @@ public class CompanyService {
     private final IAuth auth;
 
     /**
-     * @param companyRepository repository used to load and persist companies; must not be null
-     * @param auth authentication/authorization gateway; must not be null
+     * @param companyRepository      repository used to load and persist companies; must not be null
+     * @param userService            user management gateway; must not be null
+     * @param eventManagementService event management gateway; must not be null
+     * @param auth                   authentication/authorization gateway; must not be null
      * @throws NullPointerException if any argument is null
      */
     public CompanyService(ICompanyRepository companyRepository, UserService userService, IEventManagementService eventManagementService, IAuth auth) {
@@ -426,20 +428,23 @@ public class CompanyService {
      * @param companyId the target company's id; must not be null
      * @param eventId   the event to assign management of; must not be null
      * @param userId    the user to appoint as event manager; must not be null
+     * @param permissions the set of permissions to grant; must not be null
      * @throws IllegalArgumentException           if any argument is null, or if {@code userId}
      *                                            is already a manager for {@code eventId}
      * @throws InvalidTokenException              if the token is null, blank, or not valid
      * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
-    public void addEventManager(String token, UUID companyId, UUID eventId, UUID userId) {
+    public void addEventManager(String token, UUID companyId, UUID eventId, UUID userId, Set<ManagerPermission> permissions) {
         requireNonNull(companyId, "Company ID");
         requireNonNull(eventId, "Event ID");
         requireNonNull(userId, "User ID");
+        requireNonNull(permissions, "Permissions");
         Company company = getCompany(companyId);
         UUID callerId = requireAuthenticatedMember(token);
         requireOwner(company, callerId);
         company.addManager(eventId, userId);
+        userService.appointManager(userId, token, company.getId(), permissions);
         companyRepository.save(company);
     }
 
@@ -465,6 +470,7 @@ public class CompanyService {
         UUID callerId = requireAuthenticatedMember(token);
         requireOwner(company, callerId);
         company.removeManager(eventId, userId);
+        userService.removeManagerAppointment(token, userId, company.getId());
         companyRepository.save(company);
     }
 

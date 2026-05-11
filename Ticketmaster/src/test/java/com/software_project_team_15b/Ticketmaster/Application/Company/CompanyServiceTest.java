@@ -1135,7 +1135,7 @@ class CompanyServiceTest {
         when(eventManagementService.getEvent(eventId))
                 .thenReturn(new EventView(eventId, company.getId(), null, null, null, null, null, null, null));
 
-        service.addEventManager(founderToken, company.getId(), eventId, managerId);
+        service.addEventManager(founderToken, company.getId(), eventId, managerId, Set.of());
 
         assertThat(service.isEventManager(eventId, managerId)).isTrue();
     }
@@ -1161,7 +1161,7 @@ class CompanyServiceTest {
         UUID managerId = UUID.randomUUID();
         when(eventManagementService.getEvent(eventId))
                 .thenReturn(new EventView(eventId, company.getId(), null, null, null, null, null, null, null));
-        service.addEventManager(founderToken, company.getId(), eventId, managerId);
+        service.addEventManager(founderToken, company.getId(), eventId, managerId, Set.of());
 
         service.removeEventManager(founderToken, company.getId(), eventId, managerId);
 
@@ -1195,7 +1195,7 @@ class CompanyServiceTest {
         UUID eventId = UUID.randomUUID();
         UUID managerId = UUID.randomUUID();
 
-        service.addEventManager(founderToken, company.getId(), eventId, managerId);
+        service.addEventManager(founderToken, company.getId(), eventId, managerId, Set.of());
 
         Company saved = repo.findById(company.getId()).orElseThrow();
         assertThat(saved.getEventManagers(eventId)).contains(managerId);
@@ -1210,8 +1210,8 @@ class CompanyServiceTest {
         UUID manager1 = UUID.randomUUID();
         UUID manager2 = UUID.randomUUID();
 
-        service.addEventManager(founderToken, company.getId(), eventId, manager1);
-        service.addEventManager(founderToken, company.getId(), eventId, manager2);
+        service.addEventManager(founderToken, company.getId(), eventId, manager1, Set.of());
+        service.addEventManager(founderToken, company.getId(), eventId, manager2, Set.of());
 
         assertThat(repo.findById(company.getId()).orElseThrow().getEventManagers(eventId))
                 .containsExactlyInAnyOrder(manager1, manager2);
@@ -1226,7 +1226,7 @@ class CompanyServiceTest {
         Company company = service.createCompany(founderToken, "Acme");
         String strangerToken = registerMember(UUID.randomUUID());
 
-        assertThatThrownBy(() -> service.addEventManager(strangerToken, company.getId(), UUID.randomUUID(), UUID.randomUUID()))
+        assertThatThrownBy(() -> service.addEventManager(strangerToken, company.getId(), UUID.randomUUID(), UUID.randomUUID(), Set.of()))
                 .isInstanceOf(UnauthorizedCompanyActionException.class);
     }
 
@@ -1236,14 +1236,14 @@ class CompanyServiceTest {
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
 
-        assertThatThrownBy(() -> service.addEventManager("bad-token", company.getId(), UUID.randomUUID(), UUID.randomUUID()))
+        assertThatThrownBy(() -> service.addEventManager("bad-token", company.getId(), UUID.randomUUID(), UUID.randomUUID(), Set.of()))
                 .isInstanceOf(InvalidTokenException.class);
     }
 
     @Test
     void addEventManager_throws_when_companyId_is_null() {
         String founderToken = registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.addEventManager(founderToken, null, UUID.randomUUID(), UUID.randomUUID()))
+        assertThatThrownBy(() -> service.addEventManager(founderToken, null, UUID.randomUUID(), UUID.randomUUID(), Set.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Company ID");
     }
@@ -1254,7 +1254,7 @@ class CompanyServiceTest {
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
 
-        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), null, UUID.randomUUID()))
+        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), null, UUID.randomUUID(), Set.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Event ID");
     }
@@ -1265,15 +1265,26 @@ class CompanyServiceTest {
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
 
-        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), UUID.randomUUID(), null))
+        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), UUID.randomUUID(), null, Set.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("User ID");
     }
 
     @Test
+    void addEventManager_throws_when_permissions_is_null() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+
+        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), UUID.randomUUID(), UUID.randomUUID(), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Permissions");
+    }
+
+    @Test
     void addEventManager_throws_when_company_not_found() {
         String founderToken = registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.addEventManager(founderToken, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID()))
+        assertThatThrownBy(() -> service.addEventManager(founderToken, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), Set.of()))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
@@ -1284,9 +1295,9 @@ class CompanyServiceTest {
         Company company = service.createCompany(founderToken, "Acme");
         UUID eventId = UUID.randomUUID();
         UUID managerId = UUID.randomUUID();
-        service.addEventManager(founderToken, company.getId(), eventId, managerId);
+        service.addEventManager(founderToken, company.getId(), eventId, managerId, Set.of());
 
-        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), eventId, managerId))
+        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), eventId, managerId, Set.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -1300,7 +1311,7 @@ class CompanyServiceTest {
         Company company = service.createCompany(founderToken, "Acme");
         UUID eventId = UUID.randomUUID();
         UUID managerId = UUID.randomUUID();
-        service.addEventManager(founderToken, company.getId(), eventId, managerId);
+        service.addEventManager(founderToken, company.getId(), eventId, managerId, Set.of());
 
         service.removeEventManager(founderToken, company.getId(), eventId, managerId);
 
@@ -1316,8 +1327,8 @@ class CompanyServiceTest {
         UUID eventId = UUID.randomUUID();
         UUID manager1 = UUID.randomUUID();
         UUID manager2 = UUID.randomUUID();
-        service.addEventManager(founderToken, company.getId(), eventId, manager1);
-        service.addEventManager(founderToken, company.getId(), eventId, manager2);
+        service.addEventManager(founderToken, company.getId(), eventId, manager1, Set.of());
+        service.addEventManager(founderToken, company.getId(), eventId, manager2, Set.of());
 
         service.removeEventManager(founderToken, company.getId(), eventId, manager1);
 
