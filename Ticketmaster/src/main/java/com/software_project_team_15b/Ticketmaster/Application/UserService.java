@@ -16,7 +16,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueuesService;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 
@@ -30,7 +30,7 @@ public class UserService {
     private final IAuth auth;
     private final IPasswordEncoder passwordEncoder;
     private final PurchasingService purchasingService;
-    private final QueueService queueService;
+    private final QueuesService queueService;
 
     public UserService(
             IMemberRepository memberRepository,
@@ -38,7 +38,7 @@ public class UserService {
             IAuth auth,
             IPasswordEncoder passwordEncoder,
             PurchasingService purchasingService,
-            QueueService queueService
+            QueuesService queueService
     ) {
         this.memberRepository = memberRepository;
         this.systemAdminRepository = systemAdminRepository;

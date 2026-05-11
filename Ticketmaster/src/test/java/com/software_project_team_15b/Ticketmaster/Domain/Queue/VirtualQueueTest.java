@@ -9,9 +9,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class VirtualQueueTest {
 
-    private static final UUID ALICE = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    private static final UUID BOB   = UUID.fromString("00000000-0000-0000-0000-000000000002");
-    private static final UUID CAROL = UUID.fromString("00000000-0000-0000-0000-000000000003");
+    private static final String ALICE = "token-alice";
+    private static final String BOB   = "token-bob";
+    private static final String CAROL = "token-carol";
 
     private UUID queueId;
     private VirtualQueue queue;
