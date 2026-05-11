@@ -288,7 +288,7 @@ public class UserService {
     public Member removeOwnerAppointment(String token, UUID memberToRemoveId, UUID companyId) {
         UUID removerOwnerId = getAuthenticatedMemberId(token);
         Member memberToRemove = getMemberOrThrow(memberToRemoveId);
-        validateOwnerAppointer(removerOwnerId, companyId);
+        validateOwnerAppointer(removerOwnerId, companyId);  
         Role ownerRoleToRemove = memberToRemove.getAssignedRoles()
                 .stream()
                 .filter(role -> role instanceof Owner)
@@ -392,6 +392,16 @@ public class UserService {
         if (!auth.isTokenValid(token) || !auth.isSystemAdmin(token)) {
             throw new IllegalArgumentException("Only a system admin can cancel member accounts");
         }
+
+        if (memberIdToCancel == null) {
+            throw new IllegalArgumentException("Member ID cannot be null");
+        }
+
+        memberRepository.findById(memberIdToCancel)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Member not found with id: " + memberIdToCancel
+                ));
+
         return memberRepository.deleteById(memberIdToCancel);
     }
 
