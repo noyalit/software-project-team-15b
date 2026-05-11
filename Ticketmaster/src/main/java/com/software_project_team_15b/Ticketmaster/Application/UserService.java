@@ -7,6 +7,8 @@ import java.util.UUID;
 import java.time.LocalDate;
 
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Founder;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
@@ -20,10 +22,13 @@ import com.software_project_team_15b.Ticketmaster.Application.Queue.QueuesServic
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 
-
-
+/**
+ * UserService provides functionality for managing user accounts and roles.
+ */
 @Service
 public class UserService {
+
+    private static final Logger AUDIT = LoggerFactory.getLogger("audit.user");
 
     private final IMemberRepository memberRepository;
     private final ISystemAdminRepository systemAdminRepository;
@@ -48,17 +53,38 @@ public class UserService {
         this.queueService = queueService;
     }
 
+    /**
+     * Registers a new member with the given username, password, and birth date.
+     * 
+     * @param token      Entrance token (guest/temp token)
+     * @param username   Username to register
+     * @param password   Password to register
+     * @param birthDate  Birth date of the member
+     * @return Registered member
+     */
     public Member registerMember(String token, String username, String password, LocalDate birthDate) {
+        // Entrance token must be a guest/temp token. A member token is not allowed for registration.
         validateEntranceToken(token);
         if (memberRepository.existsByUsername(username)) {
             throw new IllegalArgumentException("Username already exists");
         }
         validateRawPassword(password);
         Member member = new Member(username, passwordEncoder.encode(password), null, birthDate);
-        return memberRepository.save(member);
+        Member saved = memberRepository.save(member);
+        AUDIT.info("op=register-member userId={} username={}", saved.getUserId(), saved.getUsername());
+        return saved;
     }
 
-    public String login(String token,String username, String password) {
+    /**
+     * Logs in a member with the given username and password.
+     * 
+     * @param token    Entrance token (guest/temp token)
+     * @param username Username to log in
+     * @param password Password to log in
+     * @return Member token
+     */
+    public String login(String token, String username, String password) {
+        // Do not log raw passwords or tokens.
         validateEntranceToken(token);
         auth.exitSystem(token);
         Member member = memberRepository.findByUsername(username)
@@ -67,14 +93,26 @@ public class UserService {
         if (!passwordEncoder.matches(password, member.getPasswordHash())) {
             throw new IllegalArgumentException("Invalid username or password");
         }
-    
+
         return auth.generateMemberToken(member);
     }
 
+    /**
+     * Enters the system as a guest.
+     * 
+     * @return Guest token
+     */
     public String enterAsGuest() {
-        return auth.generateGuestToken();
+        String guestToken = auth.generateGuestToken();
+        AUDIT.info("op=enter-as-guest");
+        return guestToken;
     }
 
+    /**
+     * Enters the system, potentially queuing if necessary.
+     * 
+     * @return Entrance token (guest/temp token)
+     */
     public String enterSystem() {
         if (queueService.canAccessToWebsite()) {
             return enterAsGuest();
@@ -83,9 +121,17 @@ public class UserService {
         String tempToken = auth.generateTempToken();
         queueService.addUserToSiteQueue(tempToken);
 
+        AUDIT.info("op=enter-system queued=true");
+
         return tempToken;
     }
 
+    /**
+     * Attempts to exit the queue and enter the system.
+     * 
+     * @param tempToken Temporary token
+     * @return Guest token if successful, or throws an exception
+     */
     public String tryEnterFromQueue(String tempToken) {
         if (!auth.isTokenValid(tempToken)) {
             throw new IllegalArgumentException("Invalid or expired token");
@@ -102,10 +148,20 @@ public class UserService {
         }
 
         auth.exitSystem(tempToken);
+        AUDIT.info("op=exit-queue success=true");
         return enterAsGuest();
     }
 
+    /**
+     * Logs in a system admin with the given username and password.
+     * 
+     * @param token    Entrance token (guest/temp token)
+     * @param username Username to log in
+     * @param password Password to log in
+     * @return System admin token
+     */
     public String loginSystemAdmin(String token, String username, String password) {
+        // System admins authenticate with a pre-existing SystemAdmin record.
         validateEntranceToken(token);
         auth.exitSystem(token);
         SystemAdmin admin = systemAdminRepository.findByUsername(username)
@@ -115,13 +171,27 @@ public class UserService {
             throw new IllegalArgumentException("Invalid username or password");
         }
 
-        return auth.generateSystemAdminToken(admin);
+        String adminToken = auth.generateSystemAdminToken(admin);
+        AUDIT.info("op=login-system-admin username={}", admin.getUsername());
+        return adminToken;
     }
 
+    /**
+     * Exits the system.
+     * 
+     * @param token Entrance token (guest/temp token)
+     */
     public void exitSystem(String token) {
         auth.exitSystem(token);
+        AUDIT.info("op=exit-system");
     }
 
+    /**
+     * Logs out a user.
+     * 
+     * @param token Entrance token (guest/temp token)
+     * @return Entrance token (guest/temp token) if successful, or null if not
+     */
     public String logout(String token) {
         if (!auth.isTokenValid(token)) {
             throw new IllegalArgumentException("Invalid or expired token");
@@ -130,52 +200,91 @@ public class UserService {
         if (auth.isGuest(token)) {
             purchasingService.cancelAllActiveOrdersOfCurrentUser(token);
             auth.exitSystem(token);
+            AUDIT.info("op=logout userType=guest");
             return null;
         }
 
         if (auth.isMember(token)) {
-            return auth.logout(token); 
+            UUID userId = auth.extractUserId(token);
+            String entranceToken = auth.logout(token);
+            AUDIT.info("op=logout userType=member userId={}", userId);
+            return entranceToken;
         }
 
         if (auth.isSystemAdmin(token)) {
             auth.exitSystem(token);
+            AUDIT.info("op=logout userType=system-admin");
             return null;
         }
 
         throw new IllegalArgumentException("Unsupported user type");
     }
 
+    /**
+     * Changes the username of a member.
+     * 
+     * @param token      Entrance token (guest/temp token)
+     * @param newUsername New username
+     * @return Updated member
+     */
     public Member changeUsername(String token, String newUsername) {
         UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
+
         Optional<Member> existing = memberRepository.findByUsername(newUsername);
         if (existing.isPresent() && !existing.get().getUserId().equals(userId)) {
             throw new IllegalArgumentException("Username already exists");
         }
         member.setUsername(newUsername);
-        return memberRepository.save(member);
+        Member saved = memberRepository.save(member);
+        AUDIT.info("op=change-username userId={} username={}", saved.getUserId(), saved.getUsername());
+        return saved;
     }
 
+    /**
+     * Changes the password of a member.
+     * 
+     * @param token      Entrance token (guest/temp token)
+     * @param newPassword New password
+     * @return Updated member
+     */
     public Member changePassword(String token, String newPassword) {
         UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
         validateRawPassword(newPassword);
         member.setPassword(passwordEncoder.encode(newPassword));
-        return memberRepository.save(member);
+        Member saved = memberRepository.save(member);
+        AUDIT.info("op=change-password userId={}", saved.getUserId());
+        return saved;
     }
 
+    /**
+     * Switches the role of a member to Manager.
+     * 
+     * @param token Entrance token (guest/temp token)
+     * @return Updated member
+     */
     public Member changeRoleToManager(String token) {
         UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
+
         Role managerRole = member.getAssignedRoles()
                 .stream()
                 .filter(role -> role instanceof Manager)
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Member does not have an assigned Manager role"));
         member.switchActiveRole(managerRole);
-        return memberRepository.save(member);
+        Member saved = memberRepository.save(member);
+        AUDIT.info("op=switch-role userId={} role=Manager", saved.getUserId());
+        return saved;
     }
 
+    /**
+     * Switches the role of a member to Owner.
+     * 
+     * @param token Entrance token (guest/temp token)
+     * @return Updated member
+     */
     public Member changeRoleToOwner(String token) {
         UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
@@ -185,9 +294,17 @@ public class UserService {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Member does not have an assigned Owner role"));
         member.switchActiveRole(ownerRole);
-        return memberRepository.save(member);
+        Member saved = memberRepository.save(member);
+        AUDIT.info("op=switch-role userId={} role=Owner", saved.getUserId());
+        return saved;
     }
 
+    /**
+     * Switches the role of a member to Founder.
+     * 
+     * @param token Entrance token (guest/temp token)
+     * @return Updated member
+     */
     public Member changeRoleToFounder(String token) {
         UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
@@ -197,50 +314,103 @@ public class UserService {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Member does not have a Founder role"));
         member.switchActiveRole(founderRole);
-        return memberRepository.save(member);
+        Member saved = memberRepository.save(member);
+        AUDIT.info("op=switch-role userId={} role=Founder", saved.getUserId());
+        return saved;
     }
 
+    /**
+     * Switches the role of a member to RegularMember.
+     * 
+     * @param token Entrance token (guest/temp token)
+     * @return Updated member
+     */
     public Member changeRoleToRegularMember(String token) {
         UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
         member.switchActiveRole(null);
-        return memberRepository.save(member);
+        Member saved = memberRepository.save(member);
+        AUDIT.info("op=switch-role userId={} role=RegularMember", saved.getUserId());
+        return saved;
     }
 
+    /**
+     * Appoints a manager to a member.
+     * 
+     * @param memberId    Member ID to appoint
+     * @param token       Entrance token (guest/temp token)
+     * @param companyId   Company ID
+     * @param permissions Permissions to grant
+     * @return Updated member
+     */
     public Member appointManager(UUID memberId, String token, UUID companyId, Set<ManagerPermission> permissions) {
         UUID ownerId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(memberId);
+
         validateNoAppointmentCycle(member, ownerId, companyId);
         validateOwnerAppointer(ownerId, companyId);
 
         Role managerRole = new Manager(ownerId, companyId, permissions);
         member.addRole(managerRole);
-        return memberRepository.save(member);
+        Member saved = memberRepository.save(member);
+        AUDIT.info("op=appoint-manager appointerId={} memberId={} companyId={} permissions={}",
+                ownerId, memberId, companyId, permissions);
+        return saved;
     }
 
+    /**
+     * Appoints an owner to a member.
+     * 
+     * @param memberId Member ID to appoint
+     * @param token    Entrance token (guest/temp token)
+     * @param companyId Company ID
+     * @return Updated member
+     */
     public Member appointOwner(UUID memberId, String token, UUID companyId) {
         UUID ownerId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(memberId);
+
         validateNoAppointmentCycle(member, ownerId, companyId);
         validateOwnerAppointer(ownerId, companyId);
 
         Role ownerRole = new Owner(ownerId, companyId);
         member.addRole(ownerRole);
-        return memberRepository.save(member);
+        Member saved = memberRepository.save(member);
+        AUDIT.info("op=appoint-owner appointerId={} memberId={} companyId={}", ownerId, memberId, companyId);
+        return saved;
     }
 
+    /**
+     * Appoints a founder to a member.
+     * 
+     * @param memberId Member ID to appoint
+     * @param token    Entrance token (guest/temp token)
+     * @param companyId Company ID
+     * @return Updated member
+     */
     public Member appointFounder(UUID memberId, String token, UUID companyId) {
         getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(memberId);
         Role founderRole = new Founder(null, companyId);
         member.addRole(founderRole);
-        return memberRepository.save(member);
+        Member saved = memberRepository.save(member);
+        AUDIT.info("op=appoint-founder memberId={} companyId={}", memberId, companyId);
+        return saved;
     }
 
+    /**
+     * Removes an owner appointment from a member.
+     * 
+     * @param token       Entrance token (guest/temp token)
+     * @param memberToRemoveId Member ID to remove appointment from
+     * @param companyId   Company ID
+     * @return Updated member
+     */
     public Member removeOwnerAppointment(String token, UUID memberToRemoveId, UUID companyId) {
         UUID removerOwnerId = getAuthenticatedMemberId(token);
         Member memberToRemove = getMemberOrThrow(memberToRemoveId);
         validateOwnerAppointer(removerOwnerId, companyId);
+
         Role ownerRoleToRemove = memberToRemove.getAssignedRoles()
                 .stream()
                 .filter(role -> role instanceof Owner)
@@ -252,9 +422,20 @@ public class UserService {
                         "No owner appointment by this owner was found"
                 ));
         memberToRemove.removeRole(ownerRoleToRemove);
-        return memberRepository.save(memberToRemove);
+        Member saved = memberRepository.save(memberToRemove);
+        AUDIT.info("op=remove-owner-appointment removerOwnerId={} memberId={} companyId={}",
+                removerOwnerId, memberToRemoveId, companyId);
+        return saved;
     }
 
+    /**
+     * Removes a manager appointment from a member.
+     * 
+     * @param token       Entrance token (guest/temp token)
+     * @param memberToRemoveId Member ID to remove appointment from
+     * @param companyId   Company ID
+     * @return Updated member
+     */
     public Member removeManagerAppointment(String token, UUID memberToRemoveId, UUID companyId) {
         UUID removerOwnerId = getAuthenticatedMemberId(token);
         Member memberToRemove = getMemberOrThrow(memberToRemoveId);
@@ -272,9 +453,19 @@ public class UserService {
                 ));
 
         memberToRemove.removeRole(managerRoleToRemove);
-        return memberRepository.save(memberToRemove);
+        Member saved = memberRepository.save(memberToRemove);
+        AUDIT.info("op=remove-manager-appointment removerOwnerId={} memberId={} companyId={}",
+                removerOwnerId, memberToRemoveId, companyId);
+        return saved;
     }
 
+    /**
+     * Resigns an owner from a company.
+     * 
+     * @param token    Entrance token (guest/temp token)
+     * @param companyId Company ID
+     * @return Updated member
+     */
     public Member ownerResign(String token, UUID companyId) {
         UUID ownerId = getAuthenticatedMemberId(token);
         Member owner = getMemberOrThrow(ownerId);
@@ -287,6 +478,7 @@ public class UserService {
                 .stream()
                 .filter(role -> role instanceof Owner)
                 .filter(role -> !(role instanceof Founder))
+                .filter(role -> role.isAppointmentApproved())
                 .filter(role -> role.belongsToCompany(companyId))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -294,9 +486,19 @@ public class UserService {
                 ));
 
         owner.removeRole(ownerRole);
-        return memberRepository.save(owner);
+        Member saved = memberRepository.save(owner);
+        AUDIT.info("op=owner-resign ownerId={} companyId={}", ownerId, companyId);
+        return saved;
     }
 
+    /**
+     * Changes the permissions of a manager.
+     * 
+     * @param token      Entrance token (guest/temp token)
+     * @param managerId  Manager ID
+     * @param newPermissions New permissions
+     * @return Updated member
+     */
     public Member changeManagerPermissions(String token, UUID managerId, Set<ManagerPermission> newPermissions) {
         UUID ownerId = getAuthenticatedMemberId(token);
         Member manager = getMemberOrThrow(managerId);
@@ -311,9 +513,19 @@ public class UserService {
                         "No manager appointment by this owner was found"
                 ));
         managerRole.setPermissions(newPermissions);
-        return memberRepository.save(manager);
+        Member saved = memberRepository.save(manager);
+        AUDIT.info("op=change-manager-permissions ownerId={} managerId={} permissions={}",
+                ownerId, managerId, newPermissions);
+        return saved;
     }
 
+    /**
+     * Gets the permissions of a manager.
+     * 
+     * @param token     Entrance token (guest/temp token)
+     * @param managerId Manager ID
+     * @return Permissions
+     */
     public Set<ManagerPermission> getManagerPermissions(String token, UUID managerId) {
         UUID ownerId = getAuthenticatedMemberId(token);
         Member manager = getMemberOrThrow(managerId);
@@ -330,23 +542,49 @@ public class UserService {
         return managerRole.getPermissions();
     }
 
+    /**
+     * Approves an appointment.
+     * 
+     * @param token Entrance token (guest/temp token)
+     * @return Updated member
+     */
     public Member approveAppointment(String token) {
         UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
+
         if (member.getActiveRole() == null) {
             throw new IllegalStateException("Regular member has no appointment to approve");
         }
         member.getActiveRole().approveAppointment();
-        return memberRepository.save(member);
+        Member saved = memberRepository.save(member);
+        AUDIT.info("op=approve-appointment userId={} role={}",
+                userId,
+                saved.getActiveRole() == null ? null : saved.getActiveRole().getRoleName());
+        return saved;
     }
 
+    /**
+     * Cancels a member account by a system admin.
+     * 
+     * @param token         Entrance token (guest/temp token)
+     * @param memberIdToCancel Member ID to cancel
+     * @return True if successful, false otherwise
+     */
     public boolean cancelMemberAccountBySystemAdmin(String token, UUID memberIdToCancel) {
         if (!auth.isTokenValid(token) || !auth.isSystemAdmin(token)) {
             throw new IllegalArgumentException("Only a system admin can cancel member accounts");
         }
-        return memberRepository.deleteById(memberIdToCancel);
+        boolean deleted = memberRepository.deleteById(memberIdToCancel);
+        AUDIT.info("op=cancel-member-account-by-system-admin memberId={} deleted={}", memberIdToCancel, deleted);
+        return deleted;
     }
 
+    /**
+     * Checks if a member is an active owner.
+     * 
+     * @param userId Member ID
+     * @return True if active owner, false otherwise
+     */
     public boolean isActiveOwner(UUID userId) {
         Member member = getMemberOrThrow(userId);
         return member.getAssignedRoles()
