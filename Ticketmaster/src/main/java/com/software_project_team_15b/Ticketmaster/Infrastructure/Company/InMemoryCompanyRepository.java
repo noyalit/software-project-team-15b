@@ -18,7 +18,7 @@ import org.springframework.stereotype.Repository;
 @ConditionalOnProperty(name = "app.storage.mode", havingValue = "memory", matchIfMissing = true)
 public class InMemoryCompanyRepository implements ICompanyRepository {
 
-    private final Map<String, Company> store = new ConcurrentHashMap<>();
+    private final Map<UUID, Company> store = new ConcurrentHashMap<>();
 
     /**
      * Persists a company. If the company has no id yet (i.e. it has not been
@@ -35,9 +35,9 @@ public class InMemoryCompanyRepository implements ICompanyRepository {
         if (company == null) {
             throw new IllegalArgumentException("company cannot be null");
         }
-        String id = company.getId();
+        UUID id = company.getId();
         if (id == null) {
-            id = UUID.randomUUID().toString();
+            id = UUID.randomUUID();
             setId(company, id);
         }
         store.put(id, company);
@@ -52,7 +52,7 @@ public class InMemoryCompanyRepository implements ICompanyRepository {
     }
 
     @Override
-    public Optional<Company> findById(String id) {
+    public Optional<Company> findById(UUID id) {
         if (id == null) {
             return Optional.empty();
         }
@@ -85,7 +85,7 @@ public class InMemoryCompanyRepository implements ICompanyRepository {
      * only needed because the domain entity intentionally exposes no public
      * setter for its id.
      */
-    private static void setId(Company company, String id) {
+    private static void setId(Company company, UUID id) {
         try {
             Field idField = Company.class.getDeclaredField("id");
             idField.setAccessible(true);

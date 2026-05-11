@@ -16,6 +16,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueuesService;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 
@@ -29,22 +30,26 @@ public class UserService {
     private final IAuth auth;
     private final IPasswordEncoder passwordEncoder;
     private final PurchasingService purchasingService;
+    private final QueuesService queueService;
 
     public UserService(
             IMemberRepository memberRepository,
             ISystemAdminRepository systemAdminRepository,
             IAuth auth,
             IPasswordEncoder passwordEncoder,
-            PurchasingService purchasingService
+            PurchasingService purchasingService,
+            QueuesService queueService
     ) {
         this.memberRepository = memberRepository;
         this.systemAdminRepository = systemAdminRepository;
         this.auth = auth;
         this.passwordEncoder = passwordEncoder;
         this.purchasingService = purchasingService;
+        this.queueService = queueService;
     }
 
-    public Member registerMember(String username, String password, LocalDate birthDate) {
+    public Member registerMember(String token, String username, String password, LocalDate birthDate) {
+        validateEntranceToken(token);
         if (memberRepository.existsByUsername(username)) {
             throw new IllegalArgumentException("Username already exists");
         }
@@ -53,7 +58,9 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    public String login(String username, String password) {
+    public String login(String token,String username, String password) {
+        validateEntranceToken(token);
+        auth.exitSystem(token);
         Member member = memberRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid username or password"));
 
@@ -68,7 +75,39 @@ public class UserService {
         return auth.generateGuestToken();
     }
 
-    public String loginSystemAdmin(String username, String password) {
+    public String enterSystem() {
+        if (queueService.canAccessToWebsite()) {
+            return enterAsGuest();
+        }
+
+        String tempToken = auth.generateTempToken();
+        queueService.addUserToSiteQueue(tempToken);
+
+        return tempToken;
+    }
+
+    public String tryEnterFromQueue(String tempToken) {
+        if (!auth.isTokenValid(tempToken)) {
+            throw new IllegalArgumentException("Invalid or expired token");
+        }
+
+        if (!auth.isTemp(tempToken)) {
+            throw new IllegalArgumentException("Token is not a temporary queue token");
+        }
+
+        boolean canExitQueue = queueService.validateAndExitQueue(tempToken);
+
+        if (!canExitQueue) {
+            throw new IllegalStateException("User is still waiting in the queue");
+        }
+
+        auth.exitSystem(tempToken);
+        return enterAsGuest();
+    }
+
+    public String loginSystemAdmin(String token, String username, String password) {
+        validateEntranceToken(token);
+        auth.exitSystem(token);
         SystemAdmin admin = systemAdminRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid username or password"));
 
@@ -104,18 +143,6 @@ public class UserService {
         }
 
         throw new IllegalArgumentException("Unsupported user type");
-    }
-
-    public Optional<Member> findById(UUID userId) {
-        return memberRepository.findById(userId);
-    }
-
-    public Optional<Member> findByUsername(String username) {
-        return memberRepository.findByUsername(username);
-    }
-
-    public List<Member> getAllMembers() {
-        return memberRepository.findAll();
     }
 
     public Member changeUsername(String token, String newUsername) {
@@ -202,7 +229,8 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    public Member appointFounder(UUID memberId, UUID companyId) {
+    public Member appointFounder(UUID memberId, String token, UUID companyId) {
+        getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(memberId);
         Role founderRole = new Founder(null, companyId);
         member.addRole(founderRole);
@@ -502,6 +530,16 @@ public class UserService {
                 result.add(candidate.getUserId());
                 collectAppointedMembers(candidate.getUserId(), companyId, result, visited);
             }
+        }
+    }
+
+    private void validateEntranceToken(String token) {
+        if (!auth.isTokenValid(token)) {
+            throw new IllegalArgumentException("Invalid or expired token");
+        }
+
+        if (!(auth.isGuest(token) || auth.isTemp(token))) {
+            throw new IllegalArgumentException("Only guest or temporary token can perform this action");
         }
     }
 

@@ -25,7 +25,7 @@ public class VirtualQueue {
     )
     @Column(name = "entry", nullable = false)
     @OrderColumn(name = "position")
-    protected List<UUID> queue = new ArrayList<>();
+    protected List<String> queue = new ArrayList<>();
 
     @Column(name = "capacity", nullable = false)
     protected int capacity;
@@ -80,13 +80,13 @@ public class VirtualQueue {
     }
 
     /**
-     * Adds an ID to the back of the queue.
+     * Adds a token to the back of the queue.
      *
-     * @param item the ID to enqueue; must not be null or already present
+     * @param item the token to enqueue; must not be null or already present
      * @throws IllegalArgumentException if item is null or already in the queue
      * @throws IllegalStateException if the queue is full
      */
-    public void push(UUID item) {
+    public void push(String item) {
         if (item == null) {
             throw new IllegalArgumentException("item cannot be null");
         }
@@ -103,20 +103,20 @@ public class VirtualQueue {
     }
 
     /**
-     * Removes and returns the ID at the front of the queue.
+     * Removes and returns the token at the front of the queue.
      *
-     * @return the next ID, or {@code null} if the queue is empty
+     * @return the next token, or {@code null} if the queue is empty
      */
-    public UUID pop() {
+    public String pop() {
         return queue.isEmpty() ? null : queue.remove(0);
     }
 
     /**
-     * Returns the ID at the front of the queue without removing it.
+     * Returns the token at the front of the queue without removing it.
      *
-     * @return the next ID, or {@code null} if the queue is empty
+     * @return the next token, or {@code null} if the queue is empty
      */
-    public UUID peek() {
+    public String peek() {
         return queue.isEmpty() ? null : queue.get(0);
     }
 
@@ -142,14 +142,25 @@ public class VirtualQueue {
     }
 
     /**
-     * @param item the ID to look up; must not be null
-     * @return {@code true} if the given ID is currently in the queue
+     * @param item the token to look up; must not be null
+     * @return {@code true} if the given token is currently in the queue
      * @throws IllegalArgumentException if item is null
      */
-    public boolean contains(UUID item) {
+    public boolean contains(String item) {
         if  (item == null) {
             throw new IllegalArgumentException("item cannot be null");
         }
         return queue.contains(item);
+    }
+
+    public int getPosition(String item) {
+        if (item == null) {
+            throw new IllegalArgumentException("item cannot be null");
+        }
+        if (queue.contains(item)) {
+            return queue.indexOf(item);
+        } else {
+            throw new IllegalArgumentException("item is not in the queue");
+        }
     }
 }
