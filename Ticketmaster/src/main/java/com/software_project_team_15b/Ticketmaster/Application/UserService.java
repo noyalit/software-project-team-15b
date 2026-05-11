@@ -15,8 +15,10 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermissio
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
+import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
+
 
 
 @Service
@@ -26,17 +28,20 @@ public class UserService {
     private final ISystemAdminRepository systemAdminRepository;
     private final IAuth auth;
     private final IPasswordEncoder passwordEncoder;
+    private final PurchasingService purchasingService;
 
     public UserService(
             IMemberRepository memberRepository,
             ISystemAdminRepository systemAdminRepository,
             IAuth auth,
-            IPasswordEncoder passwordEncoder
+            IPasswordEncoder passwordEncoder,
+            PurchasingService purchasingService
     ) {
         this.memberRepository = memberRepository;
         this.systemAdminRepository = systemAdminRepository;
         this.auth = auth;
         this.passwordEncoder = passwordEncoder;
+        this.purchasingService = purchasingService;
     }
 
     public Member registerMember(String username, String password, LocalDate birthDate) {
@@ -59,6 +64,10 @@ public class UserService {
         return auth.generateMemberToken(member);
     }
 
+    public String enterAsGuest() {
+        return auth.generateGuestToken();
+    }
+
     public String loginSystemAdmin(String username, String password) {
         SystemAdmin admin = systemAdminRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid username or password"));
@@ -74,8 +83,27 @@ public class UserService {
         auth.exitSystem(token);
     }
 
-    public void logout(String token) {
-        auth.logout(token);
+    public String logout(String token) {
+        if (!auth.isTokenValid(token)) {
+            throw new IllegalArgumentException("Invalid or expired token");
+        }
+
+        if (auth.isGuest(token)) {
+            purchasingService.cancelAllActiveOrdersOfCurrentUser(token);
+            auth.exitSystem(token);
+            return null;
+        }
+
+        if (auth.isMember(token)) {
+            return auth.logout(token); 
+        }
+
+        if (auth.isSystemAdmin(token)) {
+            auth.exitSystem(token);
+            return null;
+        }
+
+        throw new IllegalArgumentException("Unsupported user type");
     }
 
     public Optional<Member> findById(UUID userId) {
