@@ -288,6 +288,72 @@ class OrderHistoryServiceIT {
                 .isInstanceOf(UnauthorizedCompanyActionException.class);
     }
 
+    @Test
+    void generateSalesReport_does_not_include_events_managed_by_outside_manager() {
+
+    Company company = org.mockito.Mockito.mock(Company.class);
+    when(company.getId()).thenReturn(companyId);
+    when(companyRepository.findByFounder(callerId)).thenReturn(List.of(company));
+    when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
+    when(companyRepository.findById(companyId)).thenReturn(java.util.Optional.of(company));
+    
+    UUID appointedManager = UUID.randomUUID();
+    UUID outsideManager = UUID.randomUUID();
+
+    when(userService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of(appointedManager));
+
+    Event visibleEvent = createEvent(companyId);
+    Event hiddenEvent = createEvent(companyId);
+
+    eventsRepository.save(visibleEvent);
+    eventsRepository.save(hiddenEvent);
+
+    when(company.getEventManagers(visibleEvent.eventId())).thenReturn(Set.of(appointedManager));
+    when(company.getEventManagers(hiddenEvent.eventId())).thenReturn(Set.of(outsideManager));
+
+    orderHistoryRepository.save(createOrder(userId, visibleEvent.eventId(), 2, "10.00"));
+    orderHistoryRepository.save(createOrder(userId, hiddenEvent.eventId(), 5, "50.00"));
+
+    Map<String, Object> report = service.generateSalesReport(token, companyId);
+
+    assertThat(report.get("ticketsSold")).isEqualTo(2);
+    assertThat(report.get("totalRevenue")).isEqualTo(Money.of("20.00", "USD"));
+
+    List<?> orders = (List<?>) report.get("orders");
+    assertThat(orders).hasSize(1);
+    }
+
+    @Test
+    void generateSalesReport_includes_events_managed_by_appointed_members() {
+
+    Company company = org.mockito.Mockito.mock(Company.class);
+
+    when(company.getId()).thenReturn(companyId);
+    when(companyRepository.findByFounder(callerId)).thenReturn(List.of(company));
+    when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
+    when(companyRepository.findById(companyId)).thenReturn(java.util.Optional.of(company));
+
+    UUID appointedManager = UUID.randomUUID();
+    when(userService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of(appointedManager));
+
+    Event appointedManagerEvent = createEvent(companyId);
+
+    eventsRepository.save(appointedManagerEvent);
+
+    when(company.getEventManagers(appointedManagerEvent.eventId())).thenReturn(Set.of(appointedManager));
+
+    orderHistoryRepository.save(createOrder(userId,appointedManagerEvent.eventId(), 4, "25.00"));
+
+    Map<String, Object> report = service.generateSalesReport(token, companyId);
+
+    assertThat(report.get("ticketsSold")).isEqualTo(4);
+    assertThat(report.get("totalRevenue")).isEqualTo(Money.of("100.00", "USD"));
+
+    List<?> orders = (List<?>) report.get("orders");
+
+    assertThat(orders).hasSize(1);
+    }
+
     // =========================================================
     // notifyEventIsCancelled
     // =========================================================
