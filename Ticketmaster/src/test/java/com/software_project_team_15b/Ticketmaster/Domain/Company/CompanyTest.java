@@ -12,6 +12,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import org.junit.jupiter.api.Test;
 
 class CompanyTest {
@@ -73,23 +75,29 @@ class CompanyTest {
     @Test
     void updatePurchasePolicy_updates_when_active() {
         Company c = new Company("Acme", UUID.randomUUID());
-        c.updatePurchasePolicy("policy-1");
-        assertEquals("policy-1", c.getPurchasePolicy());
+        ICompanyPurchasePolicy policy = (request, company) -> {};
+        c.updatePurchasePolicy(policy);
+        assertEquals(1, c.getPurchasePolicies().size());
+        assertTrue(c.getPurchasePolicies().contains(policy));
     }
 
     @Test
     void updatePurchasePolicy_replaces_previous_value() {
         Company c = new Company("Acme", UUID.randomUUID());
-        c.updatePurchasePolicy("old");
-        c.updatePurchasePolicy("new");
-        assertEquals("new", c.getPurchasePolicy());
+        ICompanyPurchasePolicy first = (request, company) -> {};
+        ICompanyPurchasePolicy second = (request, company) -> {};
+        c.updatePurchasePolicy(first);
+        c.updatePurchasePolicy(second);
+        assertEquals(1, c.getPurchasePolicies().size());
+        assertTrue(c.getPurchasePolicies().contains(second));
+        assertFalse(c.getPurchasePolicies().contains(first));
     }
 
     @Test
     void updatePurchasePolicy_throws_when_company_not_active() {
         Company c = new Company("Acme", UUID.randomUUID());
         c.changeStatus(CompanyStatus.SUSPENDED);
-        assertThrows(IllegalStateException.class, () -> c.updatePurchasePolicy("p"));
+        assertThrows(IllegalStateException.class, () -> c.updatePurchasePolicy((request, company) -> {}));
     }
 
     // ==============================================================================================================
@@ -98,15 +106,17 @@ class CompanyTest {
     @Test
     void updateDiscountPolicy_updates_when_active() {
         Company c = new Company("Acme", UUID.randomUUID());
-        c.updateDiscountPolicy("discount-1");
-        assertEquals("discount-1", c.getDiscountPolicy());
+        ICompanyDiscountPolicy policy = (subtotal, request) -> subtotal;
+        c.updateDiscountPolicy(policy);
+        assertEquals(1, c.getDiscountPolicies().size());
+        assertTrue(c.getDiscountPolicies().contains(policy));
     }
 
     @Test
     void updateDiscountPolicy_throws_when_company_not_active() {
         Company c = new Company("Acme", UUID.randomUUID());
         c.changeStatus(CompanyStatus.SUSPENDED);
-        assertThrows(IllegalStateException.class, () -> c.updateDiscountPolicy("d"));
+        assertThrows(IllegalStateException.class, () -> c.updateDiscountPolicy((subtotal, request) -> subtotal));
     }
 
     // ==============================================================================================================
@@ -124,7 +134,7 @@ class CompanyTest {
         Company c = new Company("Acme", UUID.randomUUID());
         c.changeStatus(CompanyStatus.SUSPENDED);
         c.changeStatus(CompanyStatus.ACTIVE);
-        assertDoesNotThrow(() -> c.updatePurchasePolicy("p"));
+        assertDoesNotThrow(() -> c.updatePurchasePolicy((request, company) -> {}));
     }
 
     @Test

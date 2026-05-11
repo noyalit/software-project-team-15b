@@ -1,5 +1,8 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Company;
 
+import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.CompanyPolicyJsonConverter;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -51,13 +54,13 @@ public class Company {
     @Column(nullable = false)
     private CompanyStatus status;
 
-    // STILL NEED TO INTEGRATE WITH REAL POLICY OBJECT INSTEAD OF STRING
-    @Column(columnDefinition = "TEXT")
-    private String purchasePolicy;
+    @Convert(converter = CompanyPolicyJsonConverter.PurchasePolicyListConverter.class)
+    @Column(name = "purchase_policy", columnDefinition = "TEXT")
+    private List<ICompanyPurchasePolicy> purchasePolicies = new ArrayList<>();
 
-    // STILL NEED TO INTEGRATE WITH REAL POLICY OBJECT INSTEAD OF STRING
-    @Column(columnDefinition = "TEXT")
-    private String discountPolicy;
+    @Convert(converter = CompanyPolicyJsonConverter.DiscountPolicyListConverter.class)
+    @Column(name = "discount_policy", columnDefinition = "TEXT")
+    private List<ICompanyDiscountPolicy> discountPolicies = new ArrayList<>();
 
     protected Company() {
     }
@@ -110,14 +113,14 @@ public class Company {
         return status;
     }
 
-    /** @return the current purchase policy, or {@code null} if none has been set */
-    public String getPurchasePolicy() {
-        return purchasePolicy;
+    /** @return an unmodifiable view of the current purchase policies */
+    public List<ICompanyPurchasePolicy> getPurchasePolicies() {
+        return Collections.unmodifiableList(purchasePolicies);
     }
 
-    /** @return the current discount policy, or {@code null} if none has been set */
-    public String getDiscountPolicy() {
-        return discountPolicy;
+    /** @return an unmodifiable view of the current discount policies */
+    public List<ICompanyDiscountPolicy> getDiscountPolicies() {
+        return Collections.unmodifiableList(discountPolicies);
     }
 
     // =============================================================================================================
@@ -148,11 +151,13 @@ public class Company {
      * Replaces the purchase policy. The company must be {@link CompanyStatus#ACTIVE}.
      *
      * @param policy the new purchase policy; must not be null
+     * @throws NullPointerException  if {@code policy} is null
      * @throws IllegalStateException if the company is not active
      */
-    public void updatePurchasePolicy(String policy) {
+    public void updatePurchasePolicy(ICompanyPurchasePolicy policy) {
         verifyActive();
-        this.purchasePolicy = policy;
+        Objects.requireNonNull(policy, "policy");
+        this.purchasePolicies = new ArrayList<>(List.of(policy));
         touch();
     }
 
@@ -160,11 +165,13 @@ public class Company {
      * Replaces the discount policy. The company must be {@link CompanyStatus#ACTIVE}.
      *
      * @param policy the new discount policy; must not be null
+     * @throws NullPointerException  if {@code policy} is null
      * @throws IllegalStateException if the company is not active
      */
-    public void updateDiscountPolicy(String policy) {
+    public void updateDiscountPolicy(ICompanyDiscountPolicy policy) {
         verifyActive();
-        this.discountPolicy = policy;
+        Objects.requireNonNull(policy, "policy");
+        this.discountPolicies = new ArrayList<>(List.of(policy));
         touch();
     }
 
