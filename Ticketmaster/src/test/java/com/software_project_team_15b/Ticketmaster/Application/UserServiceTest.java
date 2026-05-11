@@ -263,7 +263,6 @@ class UserServiceTest {
         Member appointerOfAppointer = memberWithId(appointerOfAppointerId, null);
 
         when(memberRepository.findById(appointerId)).thenReturn(Optional.of(appointer));
-        when(memberRepository.findById(appointerOfAppointerId)).thenReturn(Optional.of(appointerOfAppointer));
         when(memberRepository.findById(targetId)).thenReturn(Optional.of(target));
 
         assertThatThrownBy(() -> service.appointManager(targetId, token, companyId, Set.of()))
