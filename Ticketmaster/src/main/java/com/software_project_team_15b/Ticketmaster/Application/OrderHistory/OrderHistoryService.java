@@ -5,8 +5,6 @@ import java.util.stream.Collectors;
 import java.util.Set;
 import java.util.List;
 import java.util.Collections;
-import java.util.Comparator;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -21,14 +19,13 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaym
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
+import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
-import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.Ticket;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.DTOs.OrderHistoryDTO;
 import com.software_project_team_15b.DTOs.TicketDTO;
@@ -47,6 +44,7 @@ public class OrderHistoryService implements EventSubscriber{
     private final IEventRepository eventsRepository;
     private final ICompanyRepository companyRepository;
     private final IAuth auth;
+    private final UserService userService;
 
 
     public OrderHistoryService(IOrderHistoryRepository orderHistoryRepository,
@@ -55,13 +53,15 @@ public class OrderHistoryService implements EventSubscriber{
                                EventCancelManager eventCancelManager,
                                IEventRepository eventsRepository,
                                ICompanyRepository companyRepository,
-                               IAuth auth) {
+                               IAuth auth,
+                               UserService userService) {
         this.orderHistoryRepository = orderHistoryRepository;
         this.paymentGateway = paymentGateway;
         this.ticketProvider = ticketProvider;
         this.eventsRepository = eventsRepository;
         this.companyRepository = companyRepository;
         this.auth = auth;
+        this.userService = userService;
         eventCancelManager.subscribe(this);
     }
 
@@ -103,7 +103,6 @@ public class OrderHistoryService implements EventSubscriber{
         }
     }
 
-    //TODO: need to add recursion for managers appointed by caller
     @Transactional(readOnly = true)
     public Map<UUID, List<TicketDTO>> getSoldTicketsForCompany(String token, UUID companyId) {
         if (token == null) throw new IllegalArgumentException("token cannot be null");
@@ -142,12 +141,30 @@ public class OrderHistoryService implements EventSubscriber{
         UUID callerId = auth.extractUserId(token);
         if (!isFounderOrOwner(companyId, callerId)) {
             throw new UnauthorizedCompanyActionException("Only the company founder or owner can view sold tickets");
-        } 
+        }
+        
+        List<UUID> appointedMembers = userService.getAppointedMembersTree(callerId, companyId);
+        List<UUID> visibleManagers = appointedMembers.contains(callerId)
+                ? appointedMembers
+                : new ArrayList<>(appointedMembers);
+        if (!visibleManagers.contains(callerId)) {
+            visibleManagers.add(callerId);
+        }
+        
         List<Event> events = eventsRepository.searchByCompany(companyId, SearchCriteria.empty());
         if (events.isEmpty()) {
             return Map.of("ticketsSold", 0, "totalRevenue", Money.zero("USD"), "orders", List.of());
         }
-        List<UUID> eventIds = events.stream().map(Event::eventId).toList();
+        
+        List<Event> filteredEvents = events.stream()
+            .filter(event -> isEventManagedByAppointedMembers(event, visibleManagers))
+                .toList();
+        
+        if (filteredEvents.isEmpty()) {
+            return Map.of("ticketsSold", 0, "totalRevenue", Money.zero("USD"), "orders", List.of());
+        }
+        
+        List<UUID> eventIds = filteredEvents.stream().map(Event::eventId).toList();
         List<OrderHistory> orders = orderHistoryRepository.findByEventIdIn(eventIds);
         int ticketsSold = orders.stream().mapToInt(order -> order.getTickets().size()).sum();
         Money totalRevenue = calculateTotalRevenue(orders);
@@ -194,9 +211,18 @@ public class OrderHistoryService implements EventSubscriber{
 
     private boolean isFounderOrOwner(UUID companyId, UUID callerId) {
         return companyRepository.findByFounder(callerId).stream()
-                .anyMatch(company -> companyId.toString().equals(company.getId()))
+                .anyMatch(company -> companyId.equals(company.getId()))
                 || companyRepository.findByOwner(callerId).stream()
-                .anyMatch(company -> companyId.toString().equals(company.getId()));
+                .anyMatch(company -> companyId.equals(company.getId()));
+    }
+    
+    private boolean isEventManagedByAppointedMembers(Event event, List<UUID> appointedMembers) {
+        var company = companyRepository.findById(event.companyId());
+        if (company.isEmpty()) {
+            return false;
+        }
+        return company.get().getEventManagers(event.eventId()).stream()
+                .anyMatch(appointedMembers::contains);
     }
     
 }

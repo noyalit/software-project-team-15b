@@ -7,18 +7,18 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.*;
 import java.util.concurrent.*;
-
-import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
 
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.OrderHistory.OrderHistoryService;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
+import com.software_project_team_15b.Ticketmaster.Application.UserService;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.*;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompanyAuthorizationPort;
 
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.*;
 
@@ -46,13 +46,13 @@ class ConcurrentSalesReportGenerationTest {
     IEventRepository eventsRepository;
 
     @Mock
-    CompanyService companyService;
+    ICompanyRepository companyRepository;
+
+    @Mock
+    UserService userService;
 
     @Mock
     EventCancelManager eventCancelManager;
-
-    @Mock
-    ICompanyAuthorizationPort companyAuthorization;
 
     private final String token = "token";
 
@@ -66,14 +66,19 @@ class ConcurrentSalesReportGenerationTest {
         when(auth.extractUserId(token)).thenReturn(callerId);
 
         Company company = org.mockito.Mockito.mock(Company.class);
-        when(company.getFounderId()).thenReturn(callerId);
-        when(companyService.getCompany(companyId.toString())).thenReturn(company);
+        when(company.getId()).thenReturn(companyId);
+        when(companyRepository.findByFounder(callerId)).thenReturn(List.of(company));
+        when(companyRepository.findById(companyId)).thenReturn(Optional.of(company));
+        when(userService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of());
 
         UUID eventId1 = UUID.randomUUID();
         UUID eventId2 = UUID.randomUUID();
 
         Event e1 = createEvent(eventId1);
         Event e2 = createEvent(eventId2);
+
+        when(company.getEventManagers(eventId1)).thenReturn(Set.of(callerId));
+        when(company.getEventManagers(eventId2)).thenReturn(Set.of(callerId));
 
         List<Event> events = List.of(e1, e2);
 
@@ -111,12 +116,14 @@ class ConcurrentSalesReportGenerationTest {
         }
         pool.shutdown();
         Map<String, Object> first = results.get(0);
-        for (Map<String, Object> result : results) 
-            {
-                assertThat(result).isEqualTo(first);
-            }
+        for (Map<String, Object> result : results) {
+            assertThat(result.get("ticketsSold")).isEqualTo(10);
+            assertThat(result.get("totalRevenue")).isEqualTo(Money.of("150.00", "USD"));
+            assertThat((List<?>) result.get("orders")).hasSize(3);
+        }
         assertThat(first.get("ticketsSold")).isEqualTo(10);
         assertThat(first.get("totalRevenue")).isEqualTo(Money.of("150.00", "USD"));
+        assertThat((List<?>) first.get("orders")).hasSize(3);
     }
 
     // ---------------- helpers ----------------

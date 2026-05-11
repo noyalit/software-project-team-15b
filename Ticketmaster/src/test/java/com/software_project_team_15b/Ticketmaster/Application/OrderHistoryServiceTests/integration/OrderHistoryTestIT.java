@@ -21,6 +21,8 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITick
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.OrderHistory.OrderHistoryService;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
+import com.software_project_team_15b.Ticketmaster.Application.UserService;
+import com.software_project_team_15b.Ticketmaster.Infrastructure.Auth;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
@@ -58,7 +60,10 @@ class OrderHistoryServiceIT {
     @MockitoBean
     ICompanyRepository companyRepository;
 
-    @MockitoBean
+    @MockitoBean(name = "auth")    
+    Auth authBean;
+
+    @Autowired
     IAuth auth;
 
     @MockitoBean
@@ -69,6 +74,9 @@ class OrderHistoryServiceIT {
 
     @MockitoBean
     EventCancelManager eventCancelManager;
+
+    @MockitoBean
+    UserService userService;
 
     private final String token = "token";
 
@@ -134,7 +142,7 @@ class OrderHistoryServiceIT {
     void getSoldTicketsForCompany_returns_tickets_grouped_by_event_when_user_is_founder() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
-        when(company.getId()).thenReturn(companyId.toString());
+        when(company.getId()).thenReturn(companyId);
         when(companyRepository.findByFounder(callerId)).thenReturn(List.of(company));
         when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
 
@@ -166,7 +174,7 @@ class OrderHistoryServiceIT {
     void getSoldTicketsForCompany_returns_tickets_grouped_by_event_when_user_is_owner() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
-        when(company.getId()).thenReturn(companyId.toString());
+        when(company.getId()).thenReturn(companyId);
         when(companyRepository.findByFounder(callerId)).thenReturn(List.of());
         when(companyRepository.findByOwner(callerId)).thenReturn(List.of(company));
 
@@ -201,15 +209,22 @@ class OrderHistoryServiceIT {
     void generateSalesReport_returns_correct_totals_when_user_is_founder() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
-        when(company.getId()).thenReturn(companyId.toString());
+        when(company.getId()).thenReturn(companyId);
         when(companyRepository.findByFounder(callerId)).thenReturn(List.of(company));
         when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
+        when(companyRepository.findById(companyId)).thenReturn(java.util.Optional.of(company));
+
+        UUID appointedMemberId = UUID.randomUUID();
+        when(userService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of(appointedMemberId));
 
         Event e1 = createEvent(companyId);
         Event e2 = createEvent(companyId);
 
         eventsRepository.save(e1);
         eventsRepository.save(e2);
+
+        when(company.getEventManagers(e1.eventId())).thenReturn(Set.of(callerId));
+        when(company.getEventManagers(e2.eventId())).thenReturn(Set.of(appointedMemberId));
 
         orderHistoryRepository.save(createOrder(userId, e1.eventId(), 3, "10.00"));
 
@@ -225,12 +240,15 @@ class OrderHistoryServiceIT {
     void generateSalesReport_returns_correct_totals_when_user_is_owner() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
-        when(company.getId()).thenReturn(companyId.toString());
+        when(company.getId()).thenReturn(companyId);
         when(companyRepository.findByFounder(callerId)).thenReturn(List.of());
         when(companyRepository.findByOwner(callerId)).thenReturn(List.of(company));
+        when(companyRepository.findById(companyId)).thenReturn(java.util.Optional.of(company));
+        when(userService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of());
 
         Event event = createEvent(companyId);
         eventsRepository.save(event);
+        when(company.getEventManagers(event.eventId())).thenReturn(Set.of(callerId));
         orderHistoryRepository.save(createOrder(userId, event.eventId(), 2, "15.00"));
 
         Map<String, Object> report = service.generateSalesReport(token, companyId);
@@ -241,6 +259,12 @@ class OrderHistoryServiceIT {
 
     @Test
     void generateSalesReport_returns_zero_when_no_events_exist() {
+
+        Company company = org.mockito.Mockito.mock(Company.class);
+        when(company.getId()).thenReturn(companyId);
+        when(companyRepository.findByFounder(callerId)).thenReturn(List.of(company));
+        when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
+        when(userService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of(callerId));
 
         Map<String, Object> report = service.generateSalesReport(token, companyId);
 
