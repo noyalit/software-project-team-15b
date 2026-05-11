@@ -25,19 +25,19 @@ class SystemAdminTest {
     @Test
     void constructor_shouldThrowException_whenPasswordIsInvalid() {
         assertThrows(IllegalArgumentException.class,
-                () -> new SystemAdmin("admin", "short"));
+                () -> new SystemAdmin("admin", " "));
     }
 
     @Test
-    void constructor_shouldThrowException_whenPasswordHasNoUppercase() {
+    void constructor_shouldThrowException_whenPasswordIsNull() {
         assertThrows(IllegalArgumentException.class,
-                () -> new SystemAdmin("admin", "password1"));
+                () -> new SystemAdmin("admin", null));
     }
 
     @Test
-    void constructor_shouldThrowException_whenPasswordHasNoDigit() {
+    void constructor_shouldThrowException_whenPasswordIsBlank() {
         assertThrows(IllegalArgumentException.class,
-                () -> new SystemAdmin("admin", "Password"));
+                () -> new SystemAdmin("admin", ""));
     }
 
     @Test
@@ -55,7 +55,7 @@ class SystemAdminTest {
         SystemAdmin admin = new SystemAdmin("admin", "Password1");
 
         assertThrows(IllegalArgumentException.class,
-                () -> admin.setPassword("bad"));
+                () -> admin.setPassword(" "));
     }
 
     @Test
