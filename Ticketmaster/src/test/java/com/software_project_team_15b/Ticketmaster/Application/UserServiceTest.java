@@ -670,7 +670,7 @@ class UserServiceTest {
                 targetId,
                 token,
                 companyId,
-                Set.of(ManagerPermission.INVENTORY)
+                Set.of(ManagerPermission.MANAGE_EVENTS)
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("approved owner");
@@ -969,7 +969,7 @@ class UserServiceTest {
         Manager managerRole = new Manager(
                 ownerId,
                 companyId,
-                Set.of(ManagerPermission.INVENTORY)
+                Set.of(ManagerPermission.MANAGE_EVENTS)
         );
         managerRole.approveAppointment();
         Member manager = memberWithId(managerId, managerRole);
@@ -981,7 +981,7 @@ class UserServiceTest {
         Member saved = service.changeManagerPermissions(
                 token,
                 managerId,
-                Set.of(ManagerPermission.INVENTORY, ManagerPermission.EVENTS)
+                Set.of(ManagerPermission.MANAGE_EVENTS, ManagerPermission.UPDATE_EVENT_MAP)
         );
 
         Manager updatedRole = saved.getAssignedRoles()
@@ -991,8 +991,8 @@ class UserServiceTest {
                 .findFirst()
                 .orElseThrow();
 
-        assertThat(updatedRole.hasPermission(ManagerPermission.INVENTORY)).isTrue();
-        assertThat(updatedRole.hasPermission(ManagerPermission.EVENTS)).isTrue();
+        assertThat(updatedRole.hasPermission(ManagerPermission.MANAGE_EVENTS)).isTrue();
+        assertThat(updatedRole.hasPermission(ManagerPermission.UPDATE_EVENT_MAP)).isTrue();
 
         verify(memberRepository).save(manager);
     }
@@ -1017,7 +1017,7 @@ class UserServiceTest {
         Manager managerRole = new Manager(
                 owner1Id,
                 companyId,
-                Set.of(ManagerPermission.INVENTORY)
+                Set.of(ManagerPermission.MANAGE_EVENTS)
         );
         managerRole.approveAppointment();
         Member manager = memberWithId(managerId, managerRole);
@@ -1028,7 +1028,7 @@ class UserServiceTest {
         assertThatThrownBy(() -> service.changeManagerPermissions(
                 token,
                 managerId,
-                Set.of(ManagerPermission.INVENTORY, ManagerPermission.EVENTS)
+                Set.of(ManagerPermission.MANAGE_EVENTS, ManagerPermission.UPDATE_EVENT_MAP)
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("No manager appointment by this owner was found");
@@ -1056,7 +1056,7 @@ class UserServiceTest {
         ownerRole.approveAppointment();
         Member owner = memberWithId(ownerId, ownerRole);
 
-        Manager managerRole = new Manager(ownerId, companyId, Set.of(ManagerPermission.INVENTORY));
+        Manager managerRole = new Manager(ownerId, companyId, Set.of(ManagerPermission.MANAGE_EVENTS));
         managerRole.approveAppointment();
         Member manager = memberWithId(managerId, managerRole);
 
@@ -1090,7 +1090,7 @@ class UserServiceTest {
         owner2Role.approveAppointment();
         Member owner2 = memberWithId(owner2Id, owner2Role);
 
-        Manager managerRole = new Manager(owner1Id, companyId, Set.of(ManagerPermission.INVENTORY));
+        Manager managerRole = new Manager(owner1Id, companyId, Set.of(ManagerPermission.MANAGE_EVENTS));
         managerRole.approveAppointment();
         Member manager = memberWithId(managerId, managerRole);
 
