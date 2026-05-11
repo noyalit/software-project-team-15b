@@ -6,6 +6,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Queue.VirtualQueue;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -49,5 +50,10 @@ public class InMemoryQueueRepository implements IQueueRepository {
             throw new IllegalArgumentException("queue cannot be null");
         }
         store.put(queue.getId(), queue);
+    }
+
+    @Override
+    public List<VirtualQueue> getAllQueues() {
+        return store.values().stream().toList();
     }
 }

@@ -10,7 +10,7 @@ class FounderTest {
 
     @Test
     void constructor_shouldCreateFounderWithoutAppointer() {
-        Founder founder = new Founder(null);
+        Founder founder = new Founder(null, UUID.randomUUID());
 
         assertNull(founder.getAppointedBy());
         assertEquals("Founder", founder.getRoleName());
@@ -18,14 +18,14 @@ class FounderTest {
 
     @Test
     void constructor_shouldApproveAppointmentAutomatically() {
-        Founder founder = new Founder(null);
+        Founder founder = new Founder(null, UUID.randomUUID());
 
         assertTrue(founder.isAppointmentApproved());
     }
 
     @Test
     void setAppointedBy_shouldThrowException() {
-        Founder founder = new Founder(null);
+        Founder founder = new Founder(null, UUID.randomUUID());
 
         assertThrows(IllegalStateException.class,
                 () -> founder.setAppointedBy(UUID.randomUUID()));

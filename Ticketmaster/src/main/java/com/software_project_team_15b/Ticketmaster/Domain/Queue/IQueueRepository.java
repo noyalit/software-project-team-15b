@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Queue;
 
+import java.util.List;
 import java.util.UUID;
 
 public interface IQueueRepository {
@@ -7,4 +8,5 @@ public interface IQueueRepository {
     public void removeQueue(VirtualQueue queue);
     public VirtualQueue getQueue(UUID queueId);
     public void updateQueue(VirtualQueue queue);
+    public List<VirtualQueue> getAllQueues();
 }
