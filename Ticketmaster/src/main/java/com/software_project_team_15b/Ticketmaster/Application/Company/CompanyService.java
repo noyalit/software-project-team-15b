@@ -149,7 +149,7 @@ public class CompanyService {
         Company company = getCompany(companyId);
         company.removeOwner(userId);
         companyRepository.save(company);
-        userService.ownerResign(token);
+        userService.ownerResign(token, company.getId());
     }
 
     /**
