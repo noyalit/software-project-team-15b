@@ -7,10 +7,14 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.Collections;
 import java.time.LocalDate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Entity
 @Table(name = "members")
 public class Member {
+    private static final Logger AUDIT = LoggerFactory.getLogger("audit.member");
+
     @Id
     @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
@@ -37,6 +41,7 @@ public class Member {
     }
 
     public Member(String username, String passwordHash, Role initialRole, LocalDate birthDate) {
+        // Invariants: username is non-blank; passwordHash is already-encoded; birthDate is not in the future.
         validateUsername(username);
         validatePasswordHash(passwordHash);
         validateBirthDate(birthDate);
@@ -49,6 +54,12 @@ public class Member {
             this.assignedRoles.add(initialRole);
         }
         this.activeRole = initialRole; 
+
+        AUDIT.info("op=create-member userId={} username={} role={} birthDate={}",
+                this.userId,
+                this.username,
+                this.activeRole == null ? null : this.activeRole.getRoleName(),
+                this.birthDate);
     }
 
     @PrePersist
@@ -69,6 +80,8 @@ public class Member {
     public void setUsername(String username) {
         validateUsername(username);
         this.username = username.trim();
+
+        AUDIT.info("op=set-username userId={} username={}", this.userId, this.username);
     }
 
     public String getPasswordHash() {
@@ -76,8 +89,11 @@ public class Member {
     }
 
     public void setPassword(String passwordHash) {
+        // Note: passwordHash is expected to be already encoded by the application layer.
         validatePasswordHash(passwordHash);
         this.passwordHash = passwordHash;
+
+        AUDIT.info("op=set-password-hash userId={}", this.userId);
     }
 
     public LocalDate getBirthDate() {
@@ -87,6 +103,8 @@ public class Member {
     public void setBirthDate(LocalDate birthDate) {
         validateBirthDate(birthDate);
         this.birthDate = birthDate;
+
+        AUDIT.info("op=set-birth-date userId={} birthDate={}", this.userId, this.birthDate);
     }
 
     public Role getActiveRole() {
@@ -111,6 +129,11 @@ public class Member {
         if (activeRole == null) {
             activeRole = role;
         }
+
+        AUDIT.info("op=add-role userId={} role={} activeRole={}",
+                this.userId,
+                role.getRoleName(),
+                this.activeRole == null ? null : this.activeRole.getRoleName());
     }
 
     public void removeRole(Role role) {
@@ -121,11 +144,19 @@ public class Member {
         if (role.equals(activeRole)) {
             activeRole = null;
         }
+
+        AUDIT.info("op=remove-role userId={} role={} activeRole={}",
+                this.userId,
+                role.getRoleName(),
+                this.activeRole == null ? null : this.activeRole.getRoleName());
     }
 
     public void switchActiveRole(Role role) {
+        // Only roles already assigned to this member can become active.
         if (role == null) {
             activeRole = null;
+
+            AUDIT.info("op=switch-active-role userId={} activeRole=null", this.userId);
             return;
         }
 
@@ -133,21 +164,30 @@ public class Member {
             throw new IllegalArgumentException("Cannot switch to a role that was not assigned to this member");
         }
         activeRole = role;
+
+        AUDIT.info("op=switch-active-role userId={} activeRole={}", this.userId, role.getRoleName());
     }
 
     public void setRole(Role role) {
+        // Convenience API: assigns the role (if not already assigned) and makes it active.
         if (role == null) {
             activeRole = null;
+
+            AUDIT.info("op=set-role userId={} activeRole=null", this.userId);
             return;
         }
 
         assignedRoles.add(role);
         activeRole = role;
+
+        AUDIT.info("op=set-role userId={} activeRole={}", this.userId, role.getRoleName());
     }
 
     public void clearRoles() {
         assignedRoles.clear();
         activeRole = null;
+
+        AUDIT.info("op=clear-roles userId={}", this.userId);
     }
 
     private static void validateUsername(String username) {

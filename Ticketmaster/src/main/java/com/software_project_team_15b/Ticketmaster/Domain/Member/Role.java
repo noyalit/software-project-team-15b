@@ -17,6 +17,8 @@ import jakarta.persistence.FetchType;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.Collections;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Entity
 @Table(name = "roles")
@@ -24,6 +26,8 @@ import java.util.Collections;
 @DiscriminatorColumn(name = "role_type")
 
 public abstract class Role {
+
+    private static final Logger AUDIT = LoggerFactory.getLogger("audit.role");
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -43,11 +47,17 @@ public abstract class Role {
     }
 
     public Role(UUID appointedBy, UUID companyId) {
+        // appointedBy may be null only for special roles (e.g., Founder) that cannot have an appointer.
         if (companyId == null) {
             throw new IllegalArgumentException("Company ID cannot be null");
         }
         this.appointedBy = appointedBy;
         this.companyId = companyId;
+
+        AUDIT.info("op=create-role roleType={} appointedBy={} companyId={}",
+                getClass().getSimpleName(),
+                this.appointedBy,
+                this.companyId);
     }
 
     public Long getId() {
@@ -64,6 +74,11 @@ public abstract class Role {
 
     public void setAppointedBy(UUID appointedBy) {
         this.appointedBy = appointedBy;
+
+        AUDIT.info("op=set-appointed-by roleType={} roleId={} appointedBy={}",
+                getClass().getSimpleName(),
+                this.id,
+                this.appointedBy);
     }
 
     public void setCompanyId(UUID companyId) {
@@ -71,6 +86,11 @@ public abstract class Role {
             throw new IllegalArgumentException("Company ID cannot be null");
         }
         this.companyId = companyId;
+
+        AUDIT.info("op=set-company-id roleType={} roleId={} companyId={}",
+                getClass().getSimpleName(),
+                this.id,
+                this.companyId);
     }
 
     public boolean isAppointmentApproved() {
@@ -79,6 +99,11 @@ public abstract class Role {
 
     public void approveAppointment() {
         this.appointmentApproved = true;
+
+        AUDIT.info("op=approve-appointment roleType={} roleId={} companyId={}",
+                getClass().getSimpleName(),
+                this.id,
+                this.companyId);
     }
 
     public boolean belongsToCompany(UUID companyId) {

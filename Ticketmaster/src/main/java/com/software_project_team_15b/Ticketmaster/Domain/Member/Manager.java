@@ -4,6 +4,9 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.DiscriminatorValue;
@@ -15,10 +18,11 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import java.util.UUID;
 
-
 @Entity
 @DiscriminatorValue("MANAGER")
 public class Manager extends Role {
+
+    private static final Logger AUDIT = LoggerFactory.getLogger("audit.manager");
 
     @ElementCollection(fetch = FetchType.EAGER)
     @Enumerated(EnumType.STRING)
@@ -35,6 +39,7 @@ public class Manager extends Role {
 
     public Manager(UUID appointedBy, UUID companyId, Set<ManagerPermission> permissions) {
         super(appointedBy, companyId);
+        // A manager must always have at least one permission.
         setPermissions(permissions);
     }
 
@@ -47,12 +52,18 @@ public class Manager extends Role {
     }
 
     public void setPermissions(Set<ManagerPermission> permissions) {
+        // Permissions are stored defensively to avoid shared mutable state.
         if (permissions == null || permissions.isEmpty()) {
             throw new IllegalArgumentException("Manager must have at least one permission");
         }
 
         this.permissions.clear();
         this.permissions.addAll(permissions);
+
+        AUDIT.info("op=set-manager-permissions roleId={} companyId={} permissions={}",
+                getId(),
+                getCompanyId(),
+                this.permissions);
     }
 
     @Override
