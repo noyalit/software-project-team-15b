@@ -9,7 +9,7 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaym
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
 import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueuesService;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrderRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
@@ -47,7 +47,7 @@ abstract class PurchasingServiceTestBase {
     protected EventManagementService eventManagementService;
 
     @Mock
-    protected QueuesService queueService;
+    protected QueueService queueService;
 
     @Mock
     protected LotteryService lotteryService;

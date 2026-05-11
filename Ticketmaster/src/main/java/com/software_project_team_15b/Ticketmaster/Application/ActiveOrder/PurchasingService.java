@@ -27,7 +27,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
 import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
 import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryService;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessView;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueuesService;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,7 +55,7 @@ public class PurchasingService {
     private final IOrderHistoryRepository orderHistoryRepository;
     private final IMemberRepository memberRepository;
     private final EventManagementService eventManagementService;
-    private final QueuesService queuesService;
+    private final QueueService queuesService;
     private final LotteryService lotteryService;
     private final IPaymentAPI paymentGateway;
     private final ITicketSupplyAPI ticketProvider;
@@ -66,7 +66,7 @@ public class PurchasingService {
             IOrderHistoryRepository orderHistoryRepository,
             IMemberRepository memberRepository,
             EventManagementService eventManagementService,
-            QueuesService queuesService,
+            QueueService queuesService,
             LotteryService lotteryService,
             IPaymentAPI paymentGateway,
             ITicketSupplyAPI ticketProvider,

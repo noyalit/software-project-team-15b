@@ -7,7 +7,7 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaym
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueuesService;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrderRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
@@ -38,7 +38,7 @@ public abstract class ConcurrencyTestSupport {
     protected EventManagementService eventManagementService;
 
     @MockitoBean
-    protected QueuesService queueService;
+    protected QueueService queueService;
 
     @MockitoBean
     protected LotteryService lotteryService;

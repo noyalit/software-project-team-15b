@@ -8,7 +8,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNo
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessView;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueuesService;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.VirtualQueue;
 
@@ -36,7 +36,7 @@ class QueuesServiceTests {
 
     @Mock private IQueueRepository queueRepository;
     @Mock private IAuth auth;
-    @InjectMocks private QueuesService service;
+    @InjectMocks private QueueService service;
 
     @BeforeEach
     void injectSelf() {
@@ -62,7 +62,7 @@ class QueuesServiceTests {
      * Promotes clearEventAccess from protected to public so tests can invoke it directly
      * without waiting 100 seconds for the scheduler.
      */
-    private static class ExposedQueuesService extends QueuesService {
+    private static class ExposedQueuesService extends QueueService {
         ExposedQueuesService(IQueueRepository r, IAuth a) {
             super(r, a);
         }
@@ -1103,25 +1103,25 @@ class QueuesServiceTests {
 
     /** Returns the live eventAccess map from the given service instance via reflection. */
     @SuppressWarnings("unchecked")
-    private static ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>> eventAccessMap(QueuesService svc) {
+    private static ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>> eventAccessMap(QueueService svc) {
         return (ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>>)
                 ReflectionTestUtils.getField(svc, "eventAccess");
     }
 
     /** Returns the live siteQueue from the given service instance via reflection. */
     @SuppressWarnings("unchecked")
-    private static Queue<String> siteQueue(QueuesService svc) {
+    private static Queue<String> siteQueue(QueueService svc) {
         return (Queue<String>) ReflectionTestUtils.getField(svc, "siteQueue");
     }
 
     /** Returns the live acceptedTokens set from the given service instance via reflection. */
     @SuppressWarnings("unchecked")
-    private static Set<String> acceptedTokens(QueuesService svc) {
+    private static Set<String> acceptedTokens(QueueService svc) {
         return (Set<String>) ReflectionTestUtils.getField(svc, "acceptedTokens");
     }
 
     /** Invokes the private acceptUsersFromSiteQueue() method directly, bypassing the scheduler. */
-    private static void invokeAcceptUsers(QueuesService svc) {
+    private static void invokeAcceptUsers(QueueService svc) {
         ReflectionTestUtils.invokeMethod(svc, "acceptUsersFromSiteQueue");
     }
 }

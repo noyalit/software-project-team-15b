@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit;
  * aggregate concurrently) are transparently retried before propagating an error to the caller.
  */
 @Service
-public class QueuesService {
+public class QueueService {
     private final int ACCESS_TIME = 100;
     private final int MAX_VISITORS = 100;
     private final int SITE_QUEUE_INTERVAL = 10;
@@ -40,13 +40,13 @@ public class QueuesService {
     private final IAuth auth;
     // Self-reference through the Spring proxy so that @Retryable and @Transactional
     // on popFromEventQueue take effect when called from advanceEventQueue.
-    @Autowired @Lazy private QueuesService self;
+    @Autowired @Lazy private QueueService self;
     private final Queue<String> siteQueue = new LinkedList<>();
     private final Set<String> acceptedTokens = new HashSet<>();
     private final ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>> eventAccess = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
-    public QueuesService(IQueueRepository queueRepository, IAuth auth) {
+    public QueueService(IQueueRepository queueRepository, IAuth auth) {
         this.queueRepository = queueRepository;
         this.auth = auth;
     }
