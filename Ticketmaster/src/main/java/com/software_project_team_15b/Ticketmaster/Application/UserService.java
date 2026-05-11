@@ -249,7 +249,6 @@ public class UserService {
     public Member appointManager(UUID memberId, String token, UUID companyId, Set<ManagerPermission> permissions) {
         UUID ownerId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(memberId);
-        validateNoAppointmentCycle(member, ownerId, companyId);
         validateOwnerAppointer(ownerId, companyId);
 
         Role managerRole = new Manager(ownerId, companyId, permissions);
