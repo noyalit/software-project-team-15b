@@ -34,9 +34,12 @@ class UserServiceTest {
 
     @Test
     void registerMember_throws_when_username_exists() {
+        String entranceToken = "entrance";
+        when(auth.isTokenValid(entranceToken)).thenReturn(true);
+        when(auth.isGuest(entranceToken)).thenReturn(true);
         when(memberRepository.existsByUsername("john")).thenReturn(true);
 
-        assertThatThrownBy(() -> service.registerMember("john", "Password1", LocalDate.of(2000, 1, 1)))
+        assertThatThrownBy(() -> service.registerMember(entranceToken, "john", "Password1", LocalDate.of(2000, 1, 1)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Username already exists");
 
@@ -46,11 +49,14 @@ class UserServiceTest {
 
     @Test
     void registerMember_encodes_password_and_saves_member() {
+        String entranceToken = "entrance";
+        when(auth.isTokenValid(entranceToken)).thenReturn(true);
+        when(auth.isGuest(entranceToken)).thenReturn(true);
         when(memberRepository.existsByUsername("john")).thenReturn(false);
         when(passwordEncoder.encode("Password1")).thenReturn("hashed");
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Member saved = service.registerMember("john", "Password1", LocalDate.of(2000, 1, 1));
+        Member saved = service.registerMember(entranceToken, "john", "Password1", LocalDate.of(2000, 1, 1));
 
         assertThat(saved.getUsername()).isEqualTo("john");
         assertThat(saved.getPasswordHash()).isEqualTo("hashed");
@@ -62,52 +68,67 @@ class UserServiceTest {
 
     @Test
     void login_throws_when_username_not_found() {
+        String entranceToken = "entrance";
+        when(auth.isTokenValid(entranceToken)).thenReturn(true);
+        when(auth.isGuest(entranceToken)).thenReturn(true);
         when(memberRepository.findByUsername("john")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.login("john", "Password1"))
+        assertThatThrownBy(() -> service.login(entranceToken, "john", "Password1"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Invalid username or password");
 
         verifyNoInteractions(passwordEncoder);
-        verifyNoInteractions(auth);
+        verify(auth).exitSystem(entranceToken);
     }
 
     @Test
     void login_throws_when_password_mismatch() {
+        String entranceToken = "entrance";
+        when(auth.isTokenValid(entranceToken)).thenReturn(true);
+        when(auth.isGuest(entranceToken)).thenReturn(true);
         Member member = new Member("john", "hash", null, LocalDate.of(2000, 1, 1));
         when(memberRepository.findByUsername("john")).thenReturn(Optional.of(member));
         when(passwordEncoder.matches("Password1", "hash")).thenReturn(false);
 
-        assertThatThrownBy(() -> service.login("john", "Password1"))
+        assertThatThrownBy(() -> service.login(entranceToken, "john", "Password1"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Invalid username or password");
 
         verify(auth, never()).generateMemberToken(any());
+        verify(auth).exitSystem(entranceToken);
     }
 
     @Test
     void login_returns_token_when_credentials_valid() {
+        String entranceToken = "entrance";
+        when(auth.isTokenValid(entranceToken)).thenReturn(true);
+        when(auth.isGuest(entranceToken)).thenReturn(true);
         Member member = new Member("john", "hash", null, LocalDate.of(2000, 1, 1));
         when(memberRepository.findByUsername("john")).thenReturn(Optional.of(member));
         when(passwordEncoder.matches("Password1", "hash")).thenReturn(true);
         when(auth.generateMemberToken(member)).thenReturn("token");
 
-        String token = service.login("john", "Password1");
+        String token = service.login(entranceToken, "john", "Password1");
 
         assertThat(token).isEqualTo("token");
+        verify(auth).exitSystem(entranceToken);
         verify(auth).generateMemberToken(member);
     }
 
     @Test
     void loginSystemAdmin_returns_token_when_credentials_valid() {
+        String entranceToken = "entrance";
+        when(auth.isTokenValid(entranceToken)).thenReturn(true);
+        when(auth.isGuest(entranceToken)).thenReturn(true);
         SystemAdmin admin = new SystemAdmin("admin", "PasswordHash1");
         when(systemAdminRepository.findByUsername("admin")).thenReturn(Optional.of(admin));
         when(passwordEncoder.matches("Password1", "PasswordHash1")).thenReturn(true);
         when(auth.generateSystemAdminToken(admin)).thenReturn("admin-token");
 
-        String token = service.loginSystemAdmin("admin", "Password1");
+        String token = service.loginSystemAdmin(entranceToken, "admin", "Password1");
 
         assertThat(token).isEqualTo("admin-token");
+        verify(auth).exitSystem(entranceToken);
         verify(auth).generateSystemAdminToken(admin);
     }
 
