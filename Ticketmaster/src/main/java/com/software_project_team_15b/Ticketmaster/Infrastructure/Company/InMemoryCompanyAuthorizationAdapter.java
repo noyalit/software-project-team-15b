@@ -55,7 +55,7 @@ public class InMemoryCompanyAuthorizationAdapter implements ICompanyAuthorizatio
             throw new PolicyViolationException("companyId, callerId and action are required");
         }
 
-        Optional<Company> companyOpt = companyRepository.findById(companyId.toString());
+        Optional<Company> companyOpt = companyRepository.findById(companyId);
         if (companyOpt.isEmpty()) {
             // Pre-Company-domain callers: permit. Production adapter must enforce.
             return;

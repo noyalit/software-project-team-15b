@@ -11,10 +11,12 @@ class OwnerTest {
     @Test
     void constructor_shouldCreateOwner_whenValidAppointerGiven() {
         UUID appointedBy = UUID.randomUUID();
+        UUID companyId = UUID.randomUUID();
 
-        Owner owner = new Owner(appointedBy);
+        Owner owner = new Owner(appointedBy, companyId);
 
         assertEquals(appointedBy, owner.getAppointedBy());
+        assertEquals(companyId, owner.getCompanyId());
         assertEquals("Owner", owner.getRoleName());
         assertFalse(owner.isAppointmentApproved());
     }
@@ -22,12 +24,12 @@ class OwnerTest {
     @Test
     void constructor_shouldThrowException_whenAppointerIsNull() {
         assertThrows(IllegalArgumentException.class,
-                () -> new Owner(null));
+                () -> new Owner(null, UUID.randomUUID()));
     }
 
     @Test
     void approveAppointment_shouldApproveOwnerAppointment() {
-        Owner owner = new Owner(UUID.randomUUID());
+        Owner owner = new Owner(UUID.randomUUID(), UUID.randomUUID());
 
         owner.approveAppointment();
 

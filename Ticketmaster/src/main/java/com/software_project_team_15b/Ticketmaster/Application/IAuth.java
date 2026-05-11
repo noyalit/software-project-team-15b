@@ -10,6 +10,7 @@ public interface IAuth {
     String generateMemberToken(Member member);
     String generateGuestToken();
     String generateSystemAdminToken(SystemAdmin admin);
+    String generateTempToken();
 
     void exitSystem(String token);
     String logout(String token);
@@ -18,6 +19,7 @@ public interface IAuth {
     boolean isGuest(String token);
     boolean isMember(String token);
     boolean isSystemAdmin(String token);
+    boolean isTemp(String token);
 
     String getSessionUserId(String token);
     UUID extractUserId(String token);

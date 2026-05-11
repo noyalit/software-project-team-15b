@@ -183,7 +183,7 @@ public class PurchasingService {
         }
     }
 
-    @Transactional(noRollbackFor = TimeExpiredException.class)
+    @Transactional
     public ActiveOrderView getActiveOrder(String token, UUID orderId) {
         try {
             UUID userId = requireValidUser(token);
