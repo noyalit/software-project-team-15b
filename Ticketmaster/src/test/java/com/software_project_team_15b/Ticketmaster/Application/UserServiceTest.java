@@ -246,25 +246,8 @@ class UserServiceTest {
     @Test
     void appointManager_throws_when_permissions_empty() {
         UUID companyId = UUID.randomUUID();
-        UUID appointerId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         String token = "t";
-
-        when(auth.isTokenValid(token)).thenReturn(true);
-        when(auth.isMember(token)).thenReturn(true);
-        when(auth.extractUserId(token)).thenReturn(appointerId);
-
-        UUID appointerOfAppointerId = UUID.randomUUID();
-        Role appointerOwnerRole = new Owner(appointerOfAppointerId, companyId);
-        appointerOwnerRole.approveAppointment();
-        Member appointer = memberWithId(appointerId, appointerOwnerRole);
-        Member target = memberWithId(targetId, null);
-
-        Member appointerOfAppointer = memberWithId(appointerOfAppointerId, null);
-
-        when(memberRepository.findById(appointerId)).thenReturn(Optional.of(appointer));
-        when(memberRepository.findById(appointerOfAppointerId)).thenReturn(Optional.of(appointerOfAppointer));
-        when(memberRepository.findById(targetId)).thenReturn(Optional.of(target));
 
         assertThatThrownBy(() -> service.appointManager(targetId, token, companyId, Set.of()))
                 .isInstanceOf(IllegalArgumentException.class)
