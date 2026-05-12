@@ -336,6 +336,9 @@ public class UserService {
     }
 
     public Member appointManager(UUID memberId, String token, UUID companyId, Set<ManagerPermission> permissions) {
+        if (permissions == null || permissions.isEmpty()) {
+            throw new IllegalArgumentException("Manager must have at least one permission");
+        }
         UUID ownerId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(memberId);
         validateNoAppointmentCycle(member, ownerId, companyId);
