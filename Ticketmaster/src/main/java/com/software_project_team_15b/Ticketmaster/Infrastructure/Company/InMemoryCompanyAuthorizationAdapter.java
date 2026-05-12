@@ -100,8 +100,8 @@ public class InMemoryCompanyAuthorizationAdapter implements ICompanyAuthorizatio
                 .filter(r -> r instanceof Manager)
                 .map(r -> (Manager) r)
                 .filter(Role::isAppointmentApproved)
+                .filter(m -> m.belongsToCompany(company.getId()))
                 .filter(m -> m.getAppointedBy() != null
-                        // TODO: Add A Validation to Comp Mgr
                         && company.getOwnerIds().contains(m.getAppointedBy()))
                 .anyMatch(m -> m.hasPermission(required));
     }
