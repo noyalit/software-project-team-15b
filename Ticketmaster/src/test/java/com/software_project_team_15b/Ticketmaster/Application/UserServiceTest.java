@@ -749,6 +749,19 @@ class UserServiceTest {
         verify(memberRepository, never()).save(any());
     }
 
+    @Test
+    void appointManager_throws_when_permissions_empty() {
+        UUID companyId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        String token = "t";
+
+        assertThatThrownBy(() -> service.appointManager(targetId, token, companyId, Set.of()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("at least one permission");
+
+        verify(memberRepository, never()).save(any());
+    }
+
     private static Member memberWithId(UUID id, Role initialRole) {
         Member m = new Member("user-" + id, "hash", initialRole, LocalDate.of(2000, 1, 1));
         ReflectionTestUtils.setField(m, "userId", id);
