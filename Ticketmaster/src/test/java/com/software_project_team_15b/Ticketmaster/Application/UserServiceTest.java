@@ -762,6 +762,7 @@ class UserServiceTest {
         verify(memberRepository, never()).save(any());
     }
 
+
     private static Member memberWithId(UUID id, Role initialRole) {
         Member m = new Member("user-" + id, "hash", initialRole, LocalDate.of(2000, 1, 1));
         ReflectionTestUtils.setField(m, "userId", id);
