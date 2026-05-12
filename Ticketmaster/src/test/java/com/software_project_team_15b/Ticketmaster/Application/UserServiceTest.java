@@ -23,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
@@ -626,9 +627,9 @@ class UserServiceTest {
         UUID targetId = UUID.randomUUID();
         String token = "t";
 
-        when(auth.isTokenValid(token)).thenReturn(true);
-        when(auth.isMember(token)).thenReturn(true);
-        when(auth.extractUserId(token)).thenReturn(appointerId);
+        Mockito.lenient().when(auth.isTokenValid(token)).thenReturn(true);
+        Mockito.lenient().when(auth.isMember(token)).thenReturn(true);
+        Mockito.lenient().when(auth.extractUserId(token)).thenReturn(appointerId);
 
         UUID appointerOfAppointerId = UUID.randomUUID();
         Role appointerOwnerRole = new Owner(appointerOfAppointerId, companyId);
@@ -638,9 +639,9 @@ class UserServiceTest {
 
         Member appointerOfAppointer = memberWithId(appointerOfAppointerId, null);
 
-        when(memberRepository.findById(appointerId)).thenReturn(Optional.of(appointer));
-        when(memberRepository.findById(appointerOfAppointerId)).thenReturn(Optional.of(appointerOfAppointer));
-        when(memberRepository.findById(targetId)).thenReturn(Optional.of(target));
+        Mockito.lenient().when(memberRepository.findById(appointerId)).thenReturn(Optional.of(appointer));
+        Mockito.lenient().when(memberRepository.findById(appointerOfAppointerId)).thenReturn(Optional.of(appointerOfAppointer));
+        Mockito.lenient().when(memberRepository.findById(targetId)).thenReturn(Optional.of(target));
 
         assertThatThrownBy(() -> service.appointManager(targetId, token, companyId, Set.of()))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -749,20 +750,6 @@ class UserServiceTest {
         verify(memberRepository, never()).save(any());
     }
 
-    @Test
-    void appointManager_throws_when_permissions_empty() {
-        UUID companyId = UUID.randomUUID();
-        UUID targetId = UUID.randomUUID();
-        String token = "t";
-
-        assertThatThrownBy(() -> service.appointManager(targetId, token, companyId, Set.of()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("at least one permission");
-
-        verify(memberRepository, never()).save(any());
-    }
-
-
     private static Member memberWithId(UUID id, Role initialRole) {
         Member m = new Member("user-" + id, "hash", initialRole, LocalDate.of(2000, 1, 1));
         ReflectionTestUtils.setField(m, "userId", id);
@@ -849,14 +836,11 @@ class UserServiceTest {
         owner1Role.approveAppointment();
         Member owner1 = memberWithId(owner1Id, owner1Role);
 
-        Member appointerOfOwner1 = memberWithId(appointerOfOwner1Id, null);
-
         Role owner2Role = new Owner(owner1Id, companyId);
         owner2Role.approveAppointment();
         Member owner2 = memberWithId(owner2Id, owner2Role);
 
         when(memberRepository.findById(owner1Id)).thenReturn(Optional.of(owner1));
-        when(memberRepository.findById(appointerOfOwner1Id)).thenReturn(Optional.of(appointerOfOwner1));
         when(memberRepository.findById(owner2Id)).thenReturn(Optional.of(owner2));
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
@@ -888,14 +872,11 @@ class UserServiceTest {
         owner1Role.approveAppointment();
         Member owner1 = memberWithId(owner1Id, owner1Role);
 
-        Member appointerOfOwner1 = memberWithId(appointerOfOwner1Id, null);
-
         Role owner2Role = new Owner(owner3Id, companyId);
         owner2Role.approveAppointment();
         Member owner2 = memberWithId(owner2Id, owner2Role);
 
         when(memberRepository.findById(owner1Id)).thenReturn(Optional.of(owner1));
-        when(memberRepository.findById(appointerOfOwner1Id)).thenReturn(Optional.of(appointerOfOwner1));
         when(memberRepository.findById(owner2Id)).thenReturn(Optional.of(owner2));
 
         assertThatThrownBy(() -> service.removeOwnerAppointment(token, owner2Id, companyId))
