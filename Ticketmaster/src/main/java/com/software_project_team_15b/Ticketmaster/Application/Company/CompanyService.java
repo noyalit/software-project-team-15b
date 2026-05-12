@@ -14,6 +14,8 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Unautho
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 
@@ -44,8 +46,10 @@ public class CompanyService {
     private final IAuth auth;
 
     /**
-     * @param companyRepository repository used to load and persist companies; must not be null
-     * @param auth authentication/authorization gateway; must not be null
+     * @param companyRepository      repository used to load and persist companies; must not be null
+     * @param userService            user management gateway; must not be null
+     * @param eventManagementService event management gateway; must not be null
+     * @param auth                   authentication/authorization gateway; must not be null
      * @throws NullPointerException if any argument is null
      */
     public CompanyService(ICompanyRepository companyRepository, UserService userService, IEventManagementService eventManagementService, IAuth auth) {
@@ -294,7 +298,7 @@ public class CompanyService {
      * @throws CompanyNotFoundException if no company with {@code companyId} exists
      * @throws IllegalStateException if the company is not active
      */
-    public Company updatePurchasePolicy(String token, UUID companyId, String policy) {
+    public Company updatePurchasePolicy(String token, UUID companyId, ICompanyPurchasePolicy policy) {
         requireNonNull(companyId, "Company ID");
         requireNonNull(policy, "Purchase policy");
         UUID callerId = requireAuthenticatedMember(token);
@@ -318,7 +322,7 @@ public class CompanyService {
      * @throws CompanyNotFoundException if no company with {@code companyId} exists
      * @throws IllegalStateException if the company is not active
      */
-    public Company updateDiscountPolicy(String token, UUID companyId, String policy) {
+    public Company updateDiscountPolicy(String token, UUID companyId, ICompanyDiscountPolicy policy) {
         requireNonNull(companyId, "Company ID");
         requireNonNull(policy, "Discount policy");
         UUID callerId = requireAuthenticatedMember(token);
@@ -366,9 +370,12 @@ public class CompanyService {
     public void validatePurchaseEligibility(UUID companyId, PurchaseRequest request) {
         requireNonNull(companyId, "Company ID");
         requireNonNull(request, "Purchase request");
-        Optional<Company> company = companyRepository.findById(companyId);
-        if (company.isEmpty()) return;
-        // TODO: once Company stores a typed ICompanyPurchasePolicy, invoke its validate(request, null) here.
+        Optional<Company> opt = companyRepository.findById(companyId);
+        if (opt.isEmpty()) return;
+        Company company = opt.get();
+        for (ICompanyPurchasePolicy policy : company.getPurchasePolicies()) {
+            policy.validate(request, company);
+        }
     }
 
     /**
@@ -421,20 +428,23 @@ public class CompanyService {
      * @param companyId the target company's id; must not be null
      * @param eventId   the event to assign management of; must not be null
      * @param userId    the user to appoint as event manager; must not be null
+     * @param permissions the set of permissions to grant; must not be null
      * @throws IllegalArgumentException           if any argument is null, or if {@code userId}
      *                                            is already a manager for {@code eventId}
      * @throws InvalidTokenException              if the token is null, blank, or not valid
      * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
-    public void addEventManager(String token, UUID companyId, UUID eventId, UUID userId) {
+    public void addEventManager(String token, UUID companyId, UUID eventId, UUID userId, Set<ManagerPermission> permissions) {
         requireNonNull(companyId, "Company ID");
         requireNonNull(eventId, "Event ID");
         requireNonNull(userId, "User ID");
+        requireNonNull(permissions, "Permissions");
         Company company = getCompany(companyId);
         UUID callerId = requireAuthenticatedMember(token);
         requireOwner(company, callerId);
         company.addManager(eventId, userId);
+        userService.appointManager(userId, token, company.getId(), permissions);
         companyRepository.save(company);
     }
 
@@ -460,6 +470,7 @@ public class CompanyService {
         UUID callerId = requireAuthenticatedMember(token);
         requireOwner(company, callerId);
         company.removeManager(eventId, userId);
+        userService.removeManagerAppointment(token, userId, company.getId());
         companyRepository.save(company);
     }
 
@@ -479,10 +490,17 @@ public class CompanyService {
         requireNonNull(companyId, "Company ID");
         requireNonNull(subtotal, "Subtotal");
         requireNonNull(request, "Purchase request");
-        Optional<Company> company = companyRepository.findById(companyId);
-        if (company.isEmpty()) return subtotal;
-        // TODO: once Company stores a typed ICompanyDiscountPolicy, evaluate it and clamp to subtotal.
-        return subtotal;
+        Optional<Company> opt = companyRepository.findById(companyId);
+        if (opt.isEmpty()) return subtotal;
+        Company company = opt.get();
+        Money best = subtotal;
+        for (ICompanyDiscountPolicy policy : company.getDiscountPolicies()) {
+            Money candidate = policy.apply(subtotal, request);
+            if (candidate != null && candidate.amount().compareTo(best.amount()) < 0) {
+                best = candidate;
+            }
+        }
+        return best;
     }
 
     /**

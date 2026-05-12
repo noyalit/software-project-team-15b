@@ -34,6 +34,8 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Unautho
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 
 class CompanyServiceTest {
@@ -801,12 +803,13 @@ class CompanyServiceTest {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
+        ICompanyPurchasePolicy policy = (request, c) -> {};
 
-        Company updated = service.updatePurchasePolicy(founderToken, company.getId(), "policy-1");
+        Company updated = service.updatePurchasePolicy(founderToken, company.getId(), policy);
 
-        assertThat(updated.getPurchasePolicy()).isEqualTo("policy-1");
-        assertThat(repo.findById(company.getId()).orElseThrow().getPurchasePolicy())
-                .isEqualTo("policy-1");
+        assertThat(updated.getPurchasePolicies()).containsExactly(policy);
+        assertThat(repo.findById(company.getId()).orElseThrow().getPurchasePolicies())
+                .containsExactly(policy);
     }
 
     @Test
@@ -816,8 +819,9 @@ class CompanyServiceTest {
         Company company = service.createCompany(founderToken, "Acme");
 
         String strangerToken = registerMember(UUID.randomUUID());
+        ICompanyPurchasePolicy policy = (request, c) -> {};
 
-        assertThatThrownBy(() -> service.updatePurchasePolicy(strangerToken, company.getId(), "x"))
+        assertThatThrownBy(() -> service.updatePurchasePolicy(strangerToken, company.getId(), policy))
                 .isInstanceOf(UnauthorizedCompanyActionException.class)
                 .hasMessageContaining("owner");
     }
@@ -825,14 +829,16 @@ class CompanyServiceTest {
     @Test
     void updatePurchasePolicy_throws_when_company_not_found() {
         String token = registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.updatePurchasePolicy(token, UUID.randomUUID(), "x"))
+        ICompanyPurchasePolicy policy = (request, c) -> {};
+        assertThatThrownBy(() -> service.updatePurchasePolicy(token, UUID.randomUUID(), policy))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
     @Test
     void updatePurchasePolicy_throws_when_companyId_is_null() {
         String token = registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.updatePurchasePolicy(token, null, "x"))
+        ICompanyPurchasePolicy policy = (request, c) -> {};
+        assertThatThrownBy(() -> service.updatePurchasePolicy(token, null, policy))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Company ID");
     }
@@ -843,7 +849,7 @@ class CompanyServiceTest {
         String token = registerMember(founderId);
         Company company = service.createCompany(token, "Acme");
 
-        assertThatThrownBy(() -> service.updatePurchasePolicy(token, company.getId(), null))
+        assertThatThrownBy(() -> service.updatePurchasePolicy(token, company.getId(), (ICompanyPurchasePolicy) null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Purchase policy");
     }
@@ -855,8 +861,9 @@ class CompanyServiceTest {
         Company company = service.createCompany(founderToken, "Acme");
         company.changeStatus(CompanyStatus.SUSPENDED);
         saveToRepo(company);
+        ICompanyPurchasePolicy policy = (request, c) -> {};
 
-        assertThatThrownBy(() -> service.updatePurchasePolicy(founderToken, company.getId(), "x"))
+        assertThatThrownBy(() -> service.updatePurchasePolicy(founderToken, company.getId(), policy))
                 .isInstanceOf(IllegalStateException.class);
     }
 
@@ -865,8 +872,9 @@ class CompanyServiceTest {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
+        ICompanyPurchasePolicy policy = (request, c) -> {};
 
-        assertThatThrownBy(() -> service.updatePurchasePolicy("bad", company.getId(), "x"))
+        assertThatThrownBy(() -> service.updatePurchasePolicy("bad", company.getId(), policy))
                 .isInstanceOf(InvalidTokenException.class);
     }
 
@@ -878,10 +886,11 @@ class CompanyServiceTest {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
+        ICompanyDiscountPolicy policy = (subtotal, request) -> subtotal;
 
-        Company updated = service.updateDiscountPolicy(founderToken, company.getId(), "discount-1");
+        Company updated = service.updateDiscountPolicy(founderToken, company.getId(), policy);
 
-        assertThat(updated.getDiscountPolicy()).isEqualTo("discount-1");
+        assertThat(updated.getDiscountPolicies()).containsExactly(policy);
     }
 
     @Test
@@ -892,10 +901,11 @@ class CompanyServiceTest {
         String coOwnerToken = registerMember(coOwnerId);
         Company company = service.createCompany(founderToken, "Acme");
         service.addOwner(founderToken, company.getId(), coOwnerId);
+        ICompanyDiscountPolicy policy = (subtotal, request) -> subtotal;
 
-        Company updated = service.updateDiscountPolicy(coOwnerToken, company.getId(), "discount-2");
+        Company updated = service.updateDiscountPolicy(coOwnerToken, company.getId(), policy);
 
-        assertThat(updated.getDiscountPolicy()).isEqualTo("discount-2");
+        assertThat(updated.getDiscountPolicies()).containsExactly(policy);
     }
 
     @Test
@@ -905,8 +915,9 @@ class CompanyServiceTest {
         Company company = service.createCompany(founderToken, "Acme");
 
         String strangerToken = registerMember(UUID.randomUUID());
+        ICompanyDiscountPolicy policy = (subtotal, request) -> subtotal;
 
-        assertThatThrownBy(() -> service.updateDiscountPolicy(strangerToken, company.getId(), "x"))
+        assertThatThrownBy(() -> service.updateDiscountPolicy(strangerToken, company.getId(), policy))
                 .isInstanceOf(UnauthorizedCompanyActionException.class);
     }
 
@@ -916,7 +927,7 @@ class CompanyServiceTest {
         String token = registerMember(founderId);
         Company company = service.createCompany(token, "Acme");
 
-        assertThatThrownBy(() -> service.updateDiscountPolicy(token, company.getId(), null))
+        assertThatThrownBy(() -> service.updateDiscountPolicy(token, company.getId(), (ICompanyDiscountPolicy) null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Discount policy");
     }
@@ -1124,7 +1135,7 @@ class CompanyServiceTest {
         when(eventManagementService.getEvent(eventId))
                 .thenReturn(new EventView(eventId, company.getId(), null, null, null, null, null, null, null));
 
-        service.addEventManager(founderToken, company.getId(), eventId, managerId);
+        service.addEventManager(founderToken, company.getId(), eventId, managerId, Set.of());
 
         assertThat(service.isEventManager(eventId, managerId)).isTrue();
     }
@@ -1150,7 +1161,7 @@ class CompanyServiceTest {
         UUID managerId = UUID.randomUUID();
         when(eventManagementService.getEvent(eventId))
                 .thenReturn(new EventView(eventId, company.getId(), null, null, null, null, null, null, null));
-        service.addEventManager(founderToken, company.getId(), eventId, managerId);
+        service.addEventManager(founderToken, company.getId(), eventId, managerId, Set.of());
 
         service.removeEventManager(founderToken, company.getId(), eventId, managerId);
 
@@ -1184,7 +1195,7 @@ class CompanyServiceTest {
         UUID eventId = UUID.randomUUID();
         UUID managerId = UUID.randomUUID();
 
-        service.addEventManager(founderToken, company.getId(), eventId, managerId);
+        service.addEventManager(founderToken, company.getId(), eventId, managerId, Set.of());
 
         Company saved = repo.findById(company.getId()).orElseThrow();
         assertThat(saved.getEventManagers(eventId)).contains(managerId);
@@ -1199,8 +1210,8 @@ class CompanyServiceTest {
         UUID manager1 = UUID.randomUUID();
         UUID manager2 = UUID.randomUUID();
 
-        service.addEventManager(founderToken, company.getId(), eventId, manager1);
-        service.addEventManager(founderToken, company.getId(), eventId, manager2);
+        service.addEventManager(founderToken, company.getId(), eventId, manager1, Set.of());
+        service.addEventManager(founderToken, company.getId(), eventId, manager2, Set.of());
 
         assertThat(repo.findById(company.getId()).orElseThrow().getEventManagers(eventId))
                 .containsExactlyInAnyOrder(manager1, manager2);
@@ -1215,7 +1226,7 @@ class CompanyServiceTest {
         Company company = service.createCompany(founderToken, "Acme");
         String strangerToken = registerMember(UUID.randomUUID());
 
-        assertThatThrownBy(() -> service.addEventManager(strangerToken, company.getId(), UUID.randomUUID(), UUID.randomUUID()))
+        assertThatThrownBy(() -> service.addEventManager(strangerToken, company.getId(), UUID.randomUUID(), UUID.randomUUID(), Set.of()))
                 .isInstanceOf(UnauthorizedCompanyActionException.class);
     }
 
@@ -1225,14 +1236,14 @@ class CompanyServiceTest {
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
 
-        assertThatThrownBy(() -> service.addEventManager("bad-token", company.getId(), UUID.randomUUID(), UUID.randomUUID()))
+        assertThatThrownBy(() -> service.addEventManager("bad-token", company.getId(), UUID.randomUUID(), UUID.randomUUID(), Set.of()))
                 .isInstanceOf(InvalidTokenException.class);
     }
 
     @Test
     void addEventManager_throws_when_companyId_is_null() {
         String founderToken = registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.addEventManager(founderToken, null, UUID.randomUUID(), UUID.randomUUID()))
+        assertThatThrownBy(() -> service.addEventManager(founderToken, null, UUID.randomUUID(), UUID.randomUUID(), Set.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Company ID");
     }
@@ -1243,7 +1254,7 @@ class CompanyServiceTest {
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
 
-        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), null, UUID.randomUUID()))
+        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), null, UUID.randomUUID(), Set.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Event ID");
     }
@@ -1254,15 +1265,26 @@ class CompanyServiceTest {
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
 
-        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), UUID.randomUUID(), null))
+        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), UUID.randomUUID(), null, Set.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("User ID");
     }
 
     @Test
+    void addEventManager_throws_when_permissions_is_null() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+
+        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), UUID.randomUUID(), UUID.randomUUID(), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Permissions");
+    }
+
+    @Test
     void addEventManager_throws_when_company_not_found() {
         String founderToken = registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.addEventManager(founderToken, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID()))
+        assertThatThrownBy(() -> service.addEventManager(founderToken, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), Set.of()))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
@@ -1273,9 +1295,9 @@ class CompanyServiceTest {
         Company company = service.createCompany(founderToken, "Acme");
         UUID eventId = UUID.randomUUID();
         UUID managerId = UUID.randomUUID();
-        service.addEventManager(founderToken, company.getId(), eventId, managerId);
+        service.addEventManager(founderToken, company.getId(), eventId, managerId, Set.of());
 
-        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), eventId, managerId))
+        assertThatThrownBy(() -> service.addEventManager(founderToken, company.getId(), eventId, managerId, Set.of()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -1289,7 +1311,7 @@ class CompanyServiceTest {
         Company company = service.createCompany(founderToken, "Acme");
         UUID eventId = UUID.randomUUID();
         UUID managerId = UUID.randomUUID();
-        service.addEventManager(founderToken, company.getId(), eventId, managerId);
+        service.addEventManager(founderToken, company.getId(), eventId, managerId, Set.of());
 
         service.removeEventManager(founderToken, company.getId(), eventId, managerId);
 
@@ -1305,8 +1327,8 @@ class CompanyServiceTest {
         UUID eventId = UUID.randomUUID();
         UUID manager1 = UUID.randomUUID();
         UUID manager2 = UUID.randomUUID();
-        service.addEventManager(founderToken, company.getId(), eventId, manager1);
-        service.addEventManager(founderToken, company.getId(), eventId, manager2);
+        service.addEventManager(founderToken, company.getId(), eventId, manager1, Set.of());
+        service.addEventManager(founderToken, company.getId(), eventId, manager2, Set.of());
 
         service.removeEventManager(founderToken, company.getId(), eventId, manager1);
 
@@ -1421,6 +1443,11 @@ class CompanyServiceTest {
         assertThat(ids).hasSize(N);
     }
 
+    private record NamedPurchasePolicy(String name) implements ICompanyPurchasePolicy {
+        public void validate(com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest request,
+                             Company company) {}
+    }
+
     @Test
     void concurrent_updatePurchasePolicy_results_in_one_of_the_attempted_values() throws Exception {
         UUID founderId = UUID.randomUUID();
@@ -1430,11 +1457,11 @@ class CompanyServiceTest {
         int N = 50;
         ExecutorService pool = Executors.newFixedThreadPool(16);
         CountDownLatch start = new CountDownLatch(1);
-        Set<String> attempted = ConcurrentHashMap.newKeySet();
+        Set<ICompanyPurchasePolicy> attempted = ConcurrentHashMap.newKeySet();
         AtomicInteger failures = new AtomicInteger();
 
         for (int i = 0; i < N; i++) {
-            final String policy = "policy-" + i;
+            final ICompanyPurchasePolicy policy = new NamedPurchasePolicy("policy-" + i);
             attempted.add(policy);
             pool.submit(() -> {
                 try {
@@ -1451,7 +1478,8 @@ class CompanyServiceTest {
         assertThat(pool.awaitTermination(30, SECONDS)).isTrue();
         assertThat(failures.get()).isZero();
         Company finalState = repo.findById(company.getId()).orElseThrow();
-        assertThat(attempted).contains(finalState.getPurchasePolicy());
+        assertThat(finalState.getPurchasePolicies()).hasSize(1);
+        assertThat(attempted).contains(finalState.getPurchasePolicies().get(0));
     }
 
     @Test
