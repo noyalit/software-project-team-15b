@@ -144,32 +144,6 @@ public class InMemoryActiveOrderRepository implements IActiveOrderRepository {
     }
 
     @Override
-    public boolean existsByUserIdAndEventIdAndStatus(
-            UUID userId,
-            UUID eventId,
-            ActiveOrderStatus status
-    ) {
-        if (userId == null) {
-            throw new IllegalArgumentException("userId cannot be null");
-        }
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
-        }
-        if (status == null) {
-            throw new IllegalArgumentException("status cannot be null");
-        }
-
-        synchronized (lock) {
-            return storage.values().stream()
-                    .anyMatch(order ->
-                            userId.equals(order.getUserId())
-                                    && eventId.equals(order.getEventId())
-                                    && order.getStatus() == status
-                    );
-        }
-    }
-
-    @Override
     public List<ActiveOrder> findByUserIdAndStatusForUpdate(
             UUID userId,
             ActiveOrderStatus status
