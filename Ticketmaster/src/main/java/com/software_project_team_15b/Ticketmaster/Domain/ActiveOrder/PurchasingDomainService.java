@@ -3,7 +3,7 @@ package com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
-import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
@@ -62,14 +62,14 @@ public class PurchasingDomainService {
     public void requirePurchaseAccess(
             UUID userId,
             UUID eventId,
-            LotteryEligibilityResult lotteryEligibilityResult,
+            LotteryEligibilityDTO lotteryEligibilityDTO,
             boolean queueAccess
     ) {
-        if (userId == null || eventId == null || lotteryEligibilityResult == null) {
+        if (userId == null || eventId == null || lotteryEligibilityDTO == null) {
             throw new IllegalArgumentException("User ID, event ID, and lottery eligibility result cannot be null");
         }
-        if (!lotteryEligibilityResult.canCreateActiveOrder()) {
-            throw new IllegalStateException("User is not eligible to create an active order for this event: " + lotteryEligibilityResult.status());
+        if (!lotteryEligibilityDTO.canCreateActiveOrder()) {
+            throw new IllegalStateException("User is not eligible to create an active order for this event: " + lotteryEligibilityDTO.status());
         }
         if (!queueAccess) {
             throw new TimeExpiredException("User does not have access to create or modify orders for this event at the moment");

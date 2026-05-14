@@ -1,12 +1,9 @@
 package com.software_project_team_15b.Ticketmaster.black.Application.ActiveOrder;
 
-import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.ActiveOrderView;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
@@ -17,6 +14,9 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
+import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -114,15 +114,15 @@ class GetActiveOrderBlackTest {
         when(purchasingDomainService.syncOrderSeatsAvailability(order, availability))
                 .thenReturn(false);
 
-        EventView eventView = eventView();
+        EventDTO EventDTO = EventDTO();
 
         when(eventDomainService.getEvent(eventId))
-                .thenReturn(eventView);
+                .thenReturn(EventDTO);
 
         when(eventDomainService.getPrice(eventId, areaId, 2, userId, null, null))
                 .thenReturn(priceBreakdown("200.00"));
 
-        ActiveOrderView view = service.getActiveOrder(token, orderId);
+        ActiveOrderDTO view = service.getActiveOrder(token, orderId);
 
         assertEquals(orderId, view.orderId());
         assertEquals(eventId, view.eventId());
@@ -155,7 +155,7 @@ class GetActiveOrderBlackTest {
     void getActiveOrderShouldFailWhenUserDoesNotHavePurchaseAccess() {
         ActiveOrder order = activeOrderWithSeats(seatId1);
 
-        LotteryEligibilityResult eligibility = mockValidUserAndAccessObjects(false);
+        LotteryEligibilityDTO eligibility = mockValidUserAndAccessObjects(false);
 
         when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
                 .thenReturn(order);
@@ -215,15 +215,15 @@ class GetActiveOrderBlackTest {
         when(purchasingDomainService.syncOrderSeatsAvailability(order, availability))
                 .thenReturn(true);
 
-        EventView eventView = eventView();
+        EventDTO EventDTO = EventDTO();
 
         when(eventDomainService.getEvent(eventId))
-                .thenReturn(eventView);
+                .thenReturn(EventDTO);
 
         when(eventDomainService.getPrice(eventId, areaId, 2, userId, null, null))
                 .thenReturn(priceBreakdown("200.00"));
 
-        ActiveOrderView view = service.getActiveOrder(token, orderId);
+        ActiveOrderDTO view = service.getActiveOrder(token, orderId);
 
         assertEquals(orderId, view.orderId());
         assertEquals(eventId, view.eventId());
@@ -235,7 +235,7 @@ class GetActiveOrderBlackTest {
     }
 
     private void mockPurchaseAccess(boolean hasQueueAccess) {
-        LotteryEligibilityResult eligibility = mock(LotteryEligibilityResult.class);
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
 
         when(lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId))
                 .thenReturn(eligibility);
@@ -244,10 +244,10 @@ class GetActiveOrderBlackTest {
                 .thenReturn(hasQueueAccess);
     }
 
-    private LotteryEligibilityResult mockValidUserAndAccessObjects(boolean hasQueueAccess) {
+    private LotteryEligibilityDTO mockValidUserAndAccessObjects(boolean hasQueueAccess) {
         mockValidUser();
 
-        LotteryEligibilityResult eligibility = mock(LotteryEligibilityResult.class);
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
 
         when(lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId))
                 .thenReturn(eligibility);
@@ -264,21 +264,21 @@ class GetActiveOrderBlackTest {
         return order;
     }
 
-    private EventView eventView() {
-        EventView.AreaView areaView = new EventView.AreaView(
+    private EventDTO EventDTO() {
+        EventDTO.AreaView areaView = new EventDTO.AreaView(
                 areaId,
                 "Main Area",
                 money("100.00"),
                 "SEATING",
                 2,
                 List.of(
-                        new EventView.SeatView(
+                        new EventDTO.SeatView(
                                 seatId1,
                                 "R1",
                                 "1",
                                 "AVAILABLE"
                         ),
-                        new EventView.SeatView(
+                        new EventDTO.SeatView(
                                 seatId2,
                                 "R1",
                                 "2",
@@ -287,16 +287,16 @@ class GetActiveOrderBlackTest {
                 )
         );
 
-        EventView eventView = mock(EventView.class);
+        EventDTO EventDTO = mock(EventDTO.class);
 
-        when(eventView.areas()).thenReturn(List.of(areaView));
-        when(eventView.name()).thenReturn("Test Event");
-        when(eventView.artist()).thenReturn("Test Artist");
-        when(eventView.startsAt()).thenReturn(Instant.now().plusSeconds(3600));
-        when(eventView.location()).thenReturn("Test Location");
-        when(eventView.status()).thenReturn(EventStatus.PUBLISHED);
+        when(EventDTO.areas()).thenReturn(List.of(areaView));
+        when(EventDTO.name()).thenReturn("Test Event");
+        when(EventDTO.artist()).thenReturn("Test Artist");
+        when(EventDTO.startsAt()).thenReturn(Instant.now().plusSeconds(3600));
+        when(EventDTO.location()).thenReturn("Test Location");
+        when(EventDTO.status()).thenReturn(EventStatus.PUBLISHED);
 
-        return eventView;
+        return EventDTO;
     }
 
     private Money money(String amount) {

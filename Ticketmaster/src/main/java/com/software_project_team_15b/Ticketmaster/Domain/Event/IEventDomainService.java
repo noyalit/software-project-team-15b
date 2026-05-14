@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 
 public interface IEventDomainService {
     EventAvailability getEventAvailability(UUID eventId);
@@ -25,5 +25,5 @@ public interface IEventDomainService {
 
     void validatePurchaseEligibility(UUID eventId, PurchaseRequest request);
 
-    EventView getEvent(UUID eventId);
+    EventDTO getEvent(UUID eventId);
 }

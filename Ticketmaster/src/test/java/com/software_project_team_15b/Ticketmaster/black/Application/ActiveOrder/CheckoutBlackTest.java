@@ -1,12 +1,12 @@
 package com.software_project_team_15b.Ticketmaster.black.Application.ActiveOrder;
 
-import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.CheckoutStartedView;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
+import com.software_project_team_15b.Ticketmaster.DTO.CheckoutStartedDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedPaymentException;
@@ -131,7 +131,7 @@ class CheckoutBlackTest {
         when(purchasingDomainService.startCheckout(order))
                 .thenReturn(expiresAt);
 
-        CheckoutStartedView result = service.startCheckoutForGuest(token, orderId, birthDate);
+        CheckoutStartedDTO result = service.startCheckoutForGuest(token, orderId, birthDate);
 
         assertEquals(orderId, result.orderId());
         assertEquals(eventId, result.eventId());
@@ -311,7 +311,7 @@ class CheckoutBlackTest {
     }
 
     private void mockPurchaseAccess(boolean hasQueueAccess) {
-        LotteryEligibilityResult eligibility = mock(LotteryEligibilityResult.class);
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
 
         when(lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId))
                 .thenReturn(eligibility);

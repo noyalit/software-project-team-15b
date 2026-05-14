@@ -1,6 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.white.Application.ActiveOrder;
 
-import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 
 import org.junit.jupiter.api.Test;
@@ -25,7 +25,7 @@ class CreateActiveOrderWhiteTest extends PurchasingServiceWhiteTestBase {
         when(eventDomainService.getAreaAvailability(eventId, areaId))
                 .thenReturn(true);
 
-        LotteryEligibilityResult eligibility = mock(LotteryEligibilityResult.class);
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
         when(lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId))
                 .thenReturn(eligibility);
 
@@ -143,7 +143,7 @@ class CreateActiveOrderWhiteTest extends PurchasingServiceWhiteTestBase {
         when(eventDomainService.getAreaAvailability(eventId, areaId))
                 .thenReturn(true);
 
-        LotteryEligibilityResult eligibility = mock(LotteryEligibilityResult.class);
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
 
         when(lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId))
                 .thenReturn(eligibility);
@@ -176,7 +176,7 @@ class CreateActiveOrderWhiteTest extends PurchasingServiceWhiteTestBase {
         when(eventDomainService.getAreaAvailability(eventId, areaId))
                 .thenReturn(true);
 
-        LotteryEligibilityResult eligibility = mock(LotteryEligibilityResult.class);
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
 
         when(lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId))
                 .thenReturn(eligibility);

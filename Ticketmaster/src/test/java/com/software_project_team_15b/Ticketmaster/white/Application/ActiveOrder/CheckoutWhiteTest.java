@@ -1,7 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.white.Application.ActiveOrder;
 
-import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.CheckoutStartedView;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
+import com.software_project_team_15b.Ticketmaster.DTO.CheckoutStartedDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedPaymentException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedToIssueTicketsException;
@@ -71,7 +71,7 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
         when(purchasingDomainService.startCheckout(order))
                 .thenReturn(expiresAt);
 
-        CheckoutStartedView view = service.startCheckoutForGuest(token, orderId, birthDate);
+        CheckoutStartedDTO view = service.startCheckoutForGuest(token, orderId, birthDate);
 
         assertEquals(orderId, view.orderId());
         assertEquals(eventId, view.eventId());

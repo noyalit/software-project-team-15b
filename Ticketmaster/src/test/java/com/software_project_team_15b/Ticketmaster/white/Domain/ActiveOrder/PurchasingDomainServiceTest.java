@@ -1,7 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.white.Domain.ActiveOrder;
 
-import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
-import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityStatus;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrderRepository;
@@ -129,7 +129,7 @@ class PurchasingDomainServiceTest {
 
     @Test
     void requirePurchaseAccessShouldPassWhenLotteryAllowedAndQueueAccessExists() {
-        LotteryEligibilityResult eligibility = mock(LotteryEligibilityResult.class);
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
         when(eligibility.canCreateActiveOrder()).thenReturn(true);
 
         assertDoesNotThrow(() ->
@@ -139,7 +139,7 @@ class PurchasingDomainServiceTest {
 
     @Test
     void requirePurchaseAccessShouldThrowWhenLotteryDenied() {
-        LotteryEligibilityResult eligibility = mock(LotteryEligibilityResult.class);
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
         when(eligibility.canCreateActiveOrder()).thenReturn(false);
         when(eligibility.status()).thenReturn(LotteryEligibilityStatus.NOT_SELECTED);
 
@@ -150,7 +150,7 @@ class PurchasingDomainServiceTest {
 
     @Test
     void requirePurchaseAccessShouldThrowWhenQueueAccessMissing() {
-        LotteryEligibilityResult eligibility = mock(LotteryEligibilityResult.class);
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
         when(eligibility.canCreateActiveOrder()).thenReturn(true);
 
         assertThrows(TimeExpiredException.class, () ->

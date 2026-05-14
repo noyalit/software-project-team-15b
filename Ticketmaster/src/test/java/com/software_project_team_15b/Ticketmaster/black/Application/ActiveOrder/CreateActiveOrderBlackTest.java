@@ -3,8 +3,8 @@ package com.software_project_team_15b.Ticketmaster.black.Application.ActiveOrder
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
@@ -150,7 +150,7 @@ class CreateActiveOrderBlackTest {
         mockEventAvailable();
         mockAreaAvailable();
 
-        LotteryEligibilityResult eligibility = mockPurchaseAccess(false);
+        LotteryEligibilityDTO eligibility = mockPurchaseAccess(false);
 
         doThrow(new com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException(
                 "User does not have access"
@@ -171,7 +171,7 @@ class CreateActiveOrderBlackTest {
         mockEventAvailable();
         mockAreaAvailable();
 
-        LotteryEligibilityResult eligibility = mockPurchaseAccess(true);
+        LotteryEligibilityDTO eligibility = mockPurchaseAccess(true);
 
         doThrow(new IllegalStateException("User is not eligible"))
                 .when(purchasingDomainService)
@@ -216,8 +216,8 @@ class CreateActiveOrderBlackTest {
                 .thenReturn(true);
     }
 
-    private LotteryEligibilityResult mockPurchaseAccess(boolean hasQueueAccess) {
-        LotteryEligibilityResult eligibility = mock(LotteryEligibilityResult.class);
+    private LotteryEligibilityDTO mockPurchaseAccess(boolean hasQueueAccess) {
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
 
         when(lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId))
                 .thenReturn(eligibility);

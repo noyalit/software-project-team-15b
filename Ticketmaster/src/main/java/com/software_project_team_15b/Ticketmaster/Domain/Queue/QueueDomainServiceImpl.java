@@ -1,7 +1,8 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Queue;
 
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessView;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
+
 import org.springframework.stereotype.Service;
 
 import java.util.Objects;
@@ -17,7 +18,7 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
     }
 
     @Override
-    public QueueAccessView requestAccess(String accessToken, UUID eventId) {
+    public QueueAccessDTO requestAccess(String accessToken, UUID eventId) {
         return queueService.requestAccess(accessToken, eventId);
     }
 

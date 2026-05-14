@@ -4,8 +4,8 @@ import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Comman
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
@@ -153,7 +153,7 @@ class AddRemoveSeatsBlackTest {
         ActiveOrder order = activeOrder();
         Set<UUID> requestedSeats = Set.of(seatId1);
 
-        LotteryEligibilityResult eligibility = mockValidUserAndAccessObjects(false);
+        LotteryEligibilityDTO eligibility = mockValidUserAndAccessObjects(false);
 
         when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
                 .thenReturn(order);
@@ -196,7 +196,7 @@ class AddRemoveSeatsBlackTest {
         ActiveOrder order = activeOrderWithSeats(seatId1, seatId2);
         Set<UUID> seatsToRemove = Set.of(seatId1);
 
-        LotteryEligibilityResult eligibility = mockValidUserAndAccessObjects(false);
+        LotteryEligibilityDTO eligibility = mockValidUserAndAccessObjects(false);
 
         when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
                 .thenReturn(order);
@@ -221,7 +221,7 @@ class AddRemoveSeatsBlackTest {
     }
 
     private void mockPurchaseAccess(boolean hasQueueAccess) {
-        LotteryEligibilityResult eligibility = mock(LotteryEligibilityResult.class);
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
 
         when(lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId))
                 .thenReturn(eligibility);
@@ -230,10 +230,10 @@ class AddRemoveSeatsBlackTest {
                 .thenReturn(hasQueueAccess);
     }
 
-    private LotteryEligibilityResult mockValidUserAndAccessObjects(boolean hasQueueAccess) {
+    private LotteryEligibilityDTO mockValidUserAndAccessObjects(boolean hasQueueAccess) {
         mockValidUser();
 
-        LotteryEligibilityResult eligibility = mock(LotteryEligibilityResult.class);
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
 
         when(lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId))
                 .thenReturn(eligibility);

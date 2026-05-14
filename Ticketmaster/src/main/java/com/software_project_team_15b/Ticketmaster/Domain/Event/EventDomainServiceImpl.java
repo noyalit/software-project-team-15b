@@ -1,9 +1,10 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Event;
 
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
+
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -94,7 +95,7 @@ public class EventDomainServiceImpl implements IEventDomainService {
     }
 
     @Override
-    public EventView getEvent(UUID eventId) {
+    public EventDTO getEvent(UUID eventId) {
         return eventManagementService.getEvent(eventId);
     }
 }

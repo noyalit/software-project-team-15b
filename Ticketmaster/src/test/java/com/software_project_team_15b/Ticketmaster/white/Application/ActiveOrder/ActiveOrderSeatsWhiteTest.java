@@ -1,7 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.white.Application.ActiveOrder;
 
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.RemoveOrAddSeatsFromActiveOrderCommand;
-import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
 
@@ -13,7 +13,6 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class ActiveOrderSeatsWhiteTest extends PurchasingServiceWhiteTestBase {
@@ -29,7 +28,7 @@ class ActiveOrderSeatsWhiteTest extends PurchasingServiceWhiteTestBase {
         when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
                 .thenReturn(order);
 
-        LotteryEligibilityResult eligibility = mockPurchaseAccessAllowed();
+        LotteryEligibilityDTO eligibility = mockPurchaseAccessAllowed();
 
 
         Map<Boolean, Set<UUID>> seatsAvailability = Map.of(
@@ -170,7 +169,7 @@ class ActiveOrderSeatsWhiteTest extends PurchasingServiceWhiteTestBase {
         when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
                 .thenReturn(order);
 
-        LotteryEligibilityResult eligibility = mockPurchaseAccessDeniedByQueue();
+        LotteryEligibilityDTO eligibility = mockPurchaseAccessDeniedByQueue();
 
         doThrow(new TimeExpiredException("User does not have access"))
                 .when(purchasingDomainService)
@@ -203,7 +202,7 @@ class ActiveOrderSeatsWhiteTest extends PurchasingServiceWhiteTestBase {
         when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
                 .thenReturn(order);
 
-        LotteryEligibilityResult eligibility = mockPurchaseAccessAllowed();
+        LotteryEligibilityDTO eligibility = mockPurchaseAccessAllowed();
 
         Map<Boolean, Set<UUID>> seatsAvailability = Map.of(
                 true, Set.of(seatId1),
@@ -242,7 +241,7 @@ class ActiveOrderSeatsWhiteTest extends PurchasingServiceWhiteTestBase {
         when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
                 .thenReturn(order);
 
-        LotteryEligibilityResult eligibility = mockPurchaseAccessAllowed();
+        LotteryEligibilityDTO eligibility = mockPurchaseAccessAllowed();
 
         RemoveOrAddSeatsFromActiveOrderCommand cmd =
                 new RemoveOrAddSeatsFromActiveOrderCommand(orderId, seatsToRemove);
@@ -304,7 +303,7 @@ void removeSeatsFromExistingOrderShouldStopWhenPurchaseAccessIsRejected() {
     when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
             .thenReturn(order);
 
-    LotteryEligibilityResult eligibility = mockPurchaseAccessDeniedByQueue();
+    LotteryEligibilityDTO eligibility = mockPurchaseAccessDeniedByQueue();
 
     doThrow(new TimeExpiredException("User does not have access"))
             .when(purchasingDomainService)

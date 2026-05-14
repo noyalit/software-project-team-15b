@@ -1,6 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.white.Application.ActiveOrder;
 
-import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.ActiveOrderView;
+import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
 import org.junit.jupiter.api.Test;
@@ -35,7 +35,7 @@ class GetActiveOrderWhiteTest extends PurchasingServiceWhiteTestBase {
                 any()
         )).thenReturn(false);
 
-        mockEventViewWithCurrentArea();
+        mockEventDTOWithCurrentArea();
 
         when(eventDomainService.getPrice(
                 eq(eventId),
@@ -46,7 +46,7 @@ class GetActiveOrderWhiteTest extends PurchasingServiceWhiteTestBase {
                 isNull()
         )).thenReturn(priceBreakdown("0.00"));
 
-        ActiveOrderView view = service.getActiveOrder(token, orderId);
+        ActiveOrderDTO view = service.getActiveOrder(token, orderId);
 
         assertEquals(orderId, view.orderId());
         assertEquals(eventId, view.eventId());
