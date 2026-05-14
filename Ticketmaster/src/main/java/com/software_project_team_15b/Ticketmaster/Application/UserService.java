@@ -438,7 +438,7 @@ public class UserService {
         return saved;
     }
 
-    public Member removeManagerAppointment(String token, UUID memberToRemoveId, UUID companyId) {
+    public Member removeManagerAppointment(String token, UUID memberToRemoveId, UUID companyId, UUID eventId) {
         UUID removerOwnerId = getAuthenticatedMemberId(token);
         Member memberToRemove = getMemberOrThrow(memberToRemoveId);
 
@@ -449,6 +449,7 @@ public class UserService {
                 .filter(role -> role instanceof Manager)
                 .filter(role -> removerOwnerId.equals(role.getAppointedBy()))
                 .filter(role -> role.belongsToCompany(companyId))
+                .filter(role -> ((Manager) role).getEventId().equals(eventId))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No manager appointment by this owner was found"
@@ -456,8 +457,8 @@ public class UserService {
 
         memberToRemove.removeRole(managerRoleToRemove);
         Member saved = memberRepository.save(memberToRemove);
-        AUDIT.info("op=remove-manager-appointment removerOwnerId={} memberId={} companyId={}",
-                removerOwnerId, memberToRemoveId, companyId);
+        AUDIT.info("op=remove-manager-appointment removerOwnerId={} memberId={} companyId={}, eventId={}",
+                removerOwnerId, memberToRemoveId, companyId, eventId);
         return saved;
     }
 
@@ -486,7 +487,7 @@ public class UserService {
         return saved;
     }
 
-    public Member changeManagerPermissions(String token, UUID managerId, Set<ManagerPermission> newPermissions) {
+    public Member changeManagerPermissions(String token, UUID managerId, UUID eventId, Set<ManagerPermission> newPermissions) {
         UUID ownerId = getAuthenticatedMemberId(token);
         Member manager = getMemberOrThrow(managerId);
         validateOwnerAppointer(ownerId);
@@ -495,18 +496,19 @@ public class UserService {
                 .filter(role -> role instanceof Manager)
                 .map(role -> (Manager) role)
                 .filter(role -> ownerId.equals(role.getAppointedBy()))
+                .filter(role -> role.getEventId().equals(eventId))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No manager appointment by this owner was found"
                 ));
         managerRole.setPermissions(newPermissions);
         Member saved = memberRepository.save(manager);
-        AUDIT.info("op=change-manager-permissions ownerId={} managerId={} permissions={}",
-                ownerId, managerId, newPermissions);
+        AUDIT.info("op=change-manager-permissions ownerId={} managerId={} eventId={} permissions={}",
+                ownerId, managerId, eventId, newPermissions);
         return saved;
     }
 
-    public Set<ManagerPermission> getManagerPermissions(String token, UUID managerId) {
+    public Set<ManagerPermission> getManagerPermissions(String token, UUID managerId, UUID eventId) {
         UUID ownerId = getAuthenticatedMemberId(token);
         Member manager = getMemberOrThrow(managerId);
         validateOwnerAppointer(ownerId);
@@ -515,6 +517,7 @@ public class UserService {
                 .filter(role -> role instanceof Manager)
                 .map(role -> (Manager) role)
                 .filter(role -> ownerId.equals(role.getAppointedBy()))
+                .filter(role -> role.getEventId().equals(eventId))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No manager appointment by this owner was found"

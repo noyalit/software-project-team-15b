@@ -578,6 +578,7 @@ class UserServiceTest {
     @Test
     void appointManager_adds_manager_role_with_inventory_permission_when_owner_logged_in() {
         UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         String token = "owner-token";
@@ -604,6 +605,7 @@ class UserServiceTest {
                 targetId,
                 token,
                 companyId,
+                eventId,
                 Set.of(ManagerPermission.MANAGE_EVENTS)
         );
 
@@ -613,6 +615,7 @@ class UserServiceTest {
                     Manager managerRole = (Manager) role;
                     assertThat(managerRole.getAppointedBy()).isEqualTo(ownerId);
                     assertThat(managerRole.getCompanyId()).isEqualTo(companyId);
+                    assertThat(managerRole.getEventId()).isEqualTo(eventId);
                     assertThat(managerRole.hasPermission(ManagerPermission.MANAGE_EVENTS)).isTrue();
                 });
 
@@ -622,6 +625,7 @@ class UserServiceTest {
     @Test
     void appointManager_throws_when_permissions_empty() {
         UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
         UUID appointerId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         String token = "t";
@@ -642,7 +646,7 @@ class UserServiceTest {
         Mockito.lenient().when(memberRepository.findById(appointerOfAppointerId)).thenReturn(Optional.of(appointerOfAppointer));
         Mockito.lenient().when(memberRepository.findById(targetId)).thenReturn(Optional.of(target));
 
-        assertThatThrownBy(() -> service.appointManager(targetId, token, companyId, Set.of()))
+        assertThatThrownBy(() -> service.appointManager(targetId, token, companyId, eventId, Set.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("at least one permission");
 
@@ -652,6 +656,7 @@ class UserServiceTest {
     @Test
     void appointManager_throws_when_token_member_is_not_owner() {
         UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
         UUID notOwnerId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         String token = "member-token";
@@ -670,6 +675,7 @@ class UserServiceTest {
                 targetId,
                 token,
                 companyId,
+                eventId,
                 Set.of(ManagerPermission.MANAGE_EVENTS)
         ))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -947,6 +953,7 @@ class UserServiceTest {
     @Test
     void changeManagerPermissions_updates_permissions_when_owner_was_appointer() {
         UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         UUID managerId = UUID.randomUUID();
         UUID appointerOfOwnerId = UUID.randomUUID();
@@ -963,6 +970,7 @@ class UserServiceTest {
         Manager managerRole = new Manager(
                 ownerId,
                 companyId,
+                eventId,
                 Set.of(ManagerPermission.MANAGE_EVENTS)
         );
         managerRole.approveAppointment();
@@ -975,6 +983,7 @@ class UserServiceTest {
         Member saved = service.changeManagerPermissions(
                 token,
                 managerId,
+                eventId,
                 Set.of(ManagerPermission.MANAGE_EVENTS, ManagerPermission.UPDATE_EVENT_MAP)
         );
 
@@ -982,6 +991,8 @@ class UserServiceTest {
                 .stream()
                 .filter(role -> role instanceof Manager)
                 .map(role -> (Manager) role)
+                .filter(role -> role.belongsToCompany(companyId))
+                .filter(role -> eventId.equals(role.getEventId()))
                 .findFirst()
                 .orElseThrow();
 
@@ -994,6 +1005,7 @@ class UserServiceTest {
     @Test
     void changeManagerPermissions_throws_when_owner_was_not_appointer() {
         UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
         UUID owner2Id = UUID.randomUUID();
         UUID owner1Id = UUID.randomUUID();
         UUID managerId = UUID.randomUUID();
@@ -1011,9 +1023,11 @@ class UserServiceTest {
         Manager managerRole = new Manager(
                 owner1Id,
                 companyId,
+                eventId,
                 Set.of(ManagerPermission.MANAGE_EVENTS)
         );
         managerRole.approveAppointment();
+
         Member manager = memberWithId(managerId, managerRole);
 
         when(memberRepository.findById(owner2Id)).thenReturn(Optional.of(owner2));
@@ -1022,6 +1036,7 @@ class UserServiceTest {
         assertThatThrownBy(() -> service.changeManagerPermissions(
                 token,
                 managerId,
+                eventId,
                 Set.of(ManagerPermission.MANAGE_EVENTS, ManagerPermission.UPDATE_EVENT_MAP)
         ))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -1031,12 +1046,12 @@ class UserServiceTest {
     }
 
 
-
     ///------------------------------ II.4.12: Remove Manager Appointment ---------------------------------
     
     @Test
     void removeManagerAppointment_removes_manager_role_when_owner_was_appointer() {
         UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         UUID managerId = UUID.randomUUID();
         UUID appointerOfOwnerId = UUID.randomUUID();
@@ -1050,7 +1065,7 @@ class UserServiceTest {
         ownerRole.approveAppointment();
         Member owner = memberWithId(ownerId, ownerRole);
 
-        Manager managerRole = new Manager(ownerId, companyId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        Manager managerRole = new Manager(ownerId, companyId, eventId, Set.of(ManagerPermission.MANAGE_EVENTS));
         managerRole.approveAppointment();
         Member manager = memberWithId(managerId, managerRole);
 
@@ -1058,7 +1073,7 @@ class UserServiceTest {
         when(memberRepository.findById(managerId)).thenReturn(Optional.of(manager));
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Member saved = service.removeManagerAppointment(token, managerId, companyId);
+        Member saved = service.removeManagerAppointment(token, managerId, companyId, eventId);
 
         assertThat(saved.getAssignedRoles())
                 .noneMatch(role -> role instanceof Manager
@@ -1070,6 +1085,7 @@ class UserServiceTest {
     @Test
     void removeManagerAppointment_throws_when_owner_was_not_appointer() {
         UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
         UUID owner2Id = UUID.randomUUID();
         UUID owner1Id = UUID.randomUUID();
         UUID managerId = UUID.randomUUID();
@@ -1084,14 +1100,14 @@ class UserServiceTest {
         owner2Role.approveAppointment();
         Member owner2 = memberWithId(owner2Id, owner2Role);
 
-        Manager managerRole = new Manager(owner1Id, companyId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        Manager managerRole = new Manager(owner1Id, companyId, eventId, Set.of(ManagerPermission.MANAGE_EVENTS));
         managerRole.approveAppointment();
         Member manager = memberWithId(managerId, managerRole);
 
         when(memberRepository.findById(owner2Id)).thenReturn(Optional.of(owner2));
         when(memberRepository.findById(managerId)).thenReturn(Optional.of(manager));
 
-        assertThatThrownBy(() -> service.removeManagerAppointment(token, managerId, companyId))
+        assertThatThrownBy(() -> service.removeManagerAppointment(token, managerId, companyId, eventId))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("No manager appointment by this owner was found");
 
