@@ -4,9 +4,7 @@ import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Comman
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
-import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessView;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedPaymentException;
@@ -24,6 +22,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainS
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
+import com.software_project_team_15b.Ticketmaster.DTO.*;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,7 +73,7 @@ public class PurchasingService {
         this.auth = Objects.requireNonNull(auth);
     }
 
-    public QueueAccessView requestAccessToCreateActiveOrder(String token, UUID eventId) {
+    public QueueAccessDTO requestAccessToCreateActiveOrder(String token, UUID eventId) {
         return queueDomainService.requestAccess(token, eventId);
     }
 
@@ -165,14 +164,15 @@ public class PurchasingService {
     }
 
     @Transactional
-    public ActiveOrderView getActiveOrder(String token, UUID orderId) {
+    public ActiveOrderDTO getActiveOrder(String token, UUID orderId) {
         try {
             UUID userId = requireValidUser(token);
             ActiveOrder activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
             ensureOrderIsActive(activeOrder);
             requireAccessForPurchase(token, userId, activeOrder.getEventId());
             syncOrderSeatsAvailability(activeOrder);
-            ActiveOrderView view = buildActiveOrderView(activeOrder);
+
+            ActiveOrderDTO view = buildActiveOrderView(activeOrder);
 
             AUDIT.info("op=getActiveOrder order={} user={} result=ok", orderId, userId);
             return view;
@@ -188,7 +188,7 @@ public class PurchasingService {
             OrderSeatsUnavailableException.class,
             PolicyViolationException.class
     })
-    public CheckoutStartedView startCheckoutForMember(String token, UUID orderId) {
+    public CheckoutStartedDTO startCheckoutForMember(String token, UUID orderId) {
         UUID userId = requireValidUser(token);
         if (!auth.isMember(token)) {
             throw new IllegalStateException("Only members can use this method");
@@ -202,7 +202,7 @@ public class PurchasingService {
             OrderSeatsUnavailableException.class,
             PolicyViolationException.class
     })
-    public CheckoutStartedView startCheckoutForGuest(String token, UUID orderId, LocalDate guestBirthDate) {
+    public CheckoutStartedDTO startCheckoutForGuest(String token, UUID orderId, LocalDate guestBirthDate) {
         UUID userId = requireValidUser(token);
         if (auth.isGuest(token)) {
             throw new IllegalStateException("Only guests can use this method");
@@ -210,7 +210,7 @@ public class PurchasingService {
         return startCheckoutForUser(token, userId, orderId, guestBirthDate);
     }
 
-    private CheckoutStartedView startCheckoutForUser(String token, UUID userId, UUID orderId, LocalDate birthDate) {
+    private CheckoutStartedDTO startCheckoutForUser(String token, UUID userId, UUID orderId, LocalDate birthDate) {
         ActiveOrder activeOrder = null;
         boolean holdCreated = false;
 
@@ -238,7 +238,7 @@ public class PurchasingService {
                     expiresAt
             );
 
-            return new CheckoutStartedView(
+            return new CheckoutStartedDTO(
                     activeOrder.getOrderId(),
                     activeOrder.getEventId(),
                     activeOrder.getAreaId(),
@@ -428,9 +428,9 @@ public class PurchasingService {
         }
     }
 
-    private ActiveOrderView buildActiveOrderView(ActiveOrder activeOrder) {
+    private ActiveOrderDTO buildActiveOrderView(ActiveOrder activeOrder) {
         PriceBreakdown pricing = getPriceBreakdown(activeOrder, null, null);
-        return ActiveOrderView.from(activeOrder, eventDomainService.getEvent(activeOrder.getEventId()), pricing);
+        return ActiveOrderDTO.from(activeOrder, eventDomainService.getEvent(activeOrder.getEventId()), pricing);
     }
 
     private void releaseHold(ActiveOrder activeOrder) {
@@ -547,7 +547,7 @@ public class PurchasingService {
             throw new IllegalArgumentException("Token, user ID, and event ID cannot be null");
         }
 
-        LotteryEligibilityResult eligibility = lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId);
+        LotteryEligibilityDTO eligibility = lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId);
         boolean queueAccess = queueDomainService.hasAccess(token, eventId);
         purchasingDomainService.requirePurchaseAccess(
                 userId,

@@ -5,12 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
@@ -127,7 +127,7 @@ class EventCatalogManagementE2ETest {
                 companyId, "Full Fields Show", "Artist Y", Category.THEATER,
                 startsAt, "Opera House", null, null), founderId);
 
-        EventView view = events.getEvent(eventId);
+        EventDTO view = events.getEvent(eventId);
         assertThat(view.name()).isEqualTo("Full Fields Show");
         assertThat(view.artist()).isEqualTo("Artist Y");
         assertThat(view.category()).isEqualTo(Category.THEATER);
@@ -170,7 +170,7 @@ class EventCatalogManagementE2ETest {
                         new AddAreaCommand.SeatSpec("A", "2"),
                         new AddAreaCommand.SeatSpec("B", "1"))), founderId);
 
-        EventView.AreaView area = events.getEvent(eventId).areas().stream()
+        EventDTO.AreaView area = events.getEvent(eventId).areas().stream()
                 .filter(a -> a.areaId().equals(areaId)).findFirst().orElseThrow();
         assertThat(area.name()).isEqualTo("VIP");
         assertThat(area.type()).isEqualToIgnoringCase("SEATING");
@@ -186,7 +186,7 @@ class EventCatalogManagementE2ETest {
                 "Pit", Money.of("30.00", "USD"),
                 AddAreaCommand.AreaType.STANDING, 200, null), mgrConfigHallId);
 
-        EventView.AreaView area = events.getEvent(eventId).areas().stream()
+        EventDTO.AreaView area = events.getEvent(eventId).areas().stream()
                 .filter(a -> a.areaId().equals(areaId)).findFirst().orElseThrow();
         assertThat(area.name()).isEqualTo("Pit");
         assertThat(area.availableCapacity()).isEqualTo(200);
@@ -309,7 +309,7 @@ class EventCatalogManagementE2ETest {
         events.updateEvent(eventId,
                 new UpdateEventCommand("New Name", null, null, null, "New Venue"), founderId);
 
-        EventView view = events.getEvent(eventId);
+        EventDTO view = events.getEvent(eventId);
         assertThat(view.name()).isEqualTo("New Name");
         assertThat(view.location()).isEqualTo("New Venue");
         assertThat(view.artist()).isEqualTo("Old Artist"); // untouched field preserved
@@ -337,7 +337,7 @@ class EventCatalogManagementE2ETest {
         events.updateEvent(eventId,
                 new UpdateEventCommand(null, "New Band", Category.FESTIVAL, null, null), founderId);
 
-        EventView view = events.getEvent(eventId);
+        EventDTO view = events.getEvent(eventId);
         assertThat(view.artist()).isEqualTo("New Band");
         assertThat(view.category()).isEqualTo(Category.FESTIVAL);
     }
@@ -388,7 +388,7 @@ class EventCatalogManagementE2ETest {
         events.updateArea(eventId, areaId,
                 new UpdateAreaCommand("New Name", Money.of("35.00", "USD"), null), founderId);
 
-        EventView.AreaView area = events.getEvent(eventId).areas().stream()
+        EventDTO.AreaView area = events.getEvent(eventId).areas().stream()
                 .filter(a -> a.areaId().equals(areaId)).findFirst().orElseThrow();
         assertThat(area.name()).isEqualTo("New Name");
         assertThat(area.basePrice().amount()).isEqualByComparingTo("35.00");
@@ -476,7 +476,7 @@ class EventCatalogManagementE2ETest {
         events.removeArea(eventId, areaA, founderId);
 
         assertThat(events.getEvent(eventId).areas())
-                .extracting(EventView.AreaView::areaId).containsOnly(areaB);
+                .extracting(EventDTO.AreaView::areaId).containsOnly(areaB);
     }
 
     @Test
@@ -585,7 +585,7 @@ class EventCatalogManagementE2ETest {
                 AddAreaCommand.AreaType.STANDING, 500, null), founderId);
         events.publish(eventId, founderId);
 
-        EventView view = events.getEvent(eventId);
+        EventDTO view = events.getEvent(eventId);
         assertThat(view.areas()).hasSize(2);
         assertThat(view.areas().stream().filter(a -> a.areaId().equals(seatingId))
                 .findFirst().orElseThrow().availableCapacity()).isEqualTo(2);
@@ -605,11 +605,11 @@ class EventCatalogManagementE2ETest {
 
         List<UUID> seatIds = events.getEvent(eventId).areas().stream()
                 .filter(a -> a.areaId().equals(areaId)).findFirst().orElseThrow()
-                .seats().stream().map(EventView.SeatView::seatId).toList();
+                .seats().stream().map(EventDTO.SeatView::seatId).toList();
 
         events.hold(eventId, new HoldCommand(areaId, List.of(seatIds.get(0)), null, UUID.randomUUID()));
 
-        EventView.AreaView area = events.getEvent(eventId).areas().stream()
+        EventDTO.AreaView area = events.getEvent(eventId).areas().stream()
                 .filter(a -> a.areaId().equals(areaId)).findFirst().orElseThrow();
         assertThat(area.seats().stream().filter(s -> "HELD".equals(s.status())).count()).isEqualTo(1);
         assertThat(area.seats().stream().filter(s -> "AVAILABLE".equals(s.status())).count()).isEqualTo(1);

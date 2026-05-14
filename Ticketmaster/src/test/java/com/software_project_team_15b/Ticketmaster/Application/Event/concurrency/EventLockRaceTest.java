@@ -4,10 +4,10 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventStatus;
@@ -311,7 +311,7 @@ class EventLockRaceTest {
                 .filter(a -> a.areaId().equals(areaId))
                 .findFirst().orElseThrow()
                 .seats().stream()
-                .map(EventView.SeatView::seatId)
+                .map(EventDTO.SeatView::seatId)
                 .toList();
         return new SeatingSetup(eventId, areaId, seatIds);
     }
@@ -329,13 +329,13 @@ class EventLockRaceTest {
                 List.of(new AddAreaCommand.SeatSpec("B", "1"))), caller);
         service.publish(eventId, caller);
 
-        EventView view = service.getEvent(eventId);
+        EventDTO view = service.getEvent(eventId);
         UUID seatA = seatIn(view, areaA);
         UUID seatB = seatIn(view, areaB);
         return new DualAreaSetup(eventId, areaA, seatA, areaB, seatB);
     }
 
-    private static UUID seatIn(EventView view, UUID areaId) {
+    private static UUID seatIn(EventDTO view, UUID areaId) {
         return view.areas().stream()
                 .filter(a -> a.areaId().equals(areaId))
                 .findFirst().orElseThrow()

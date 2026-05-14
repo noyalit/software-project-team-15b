@@ -1,14 +1,14 @@
 package com.software_project_team_15b.Ticketmaster.white.Application.ActiveOrder;
 
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
-import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessView;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessStatus;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
@@ -100,8 +100,8 @@ abstract class PurchasingServiceWhiteTestBase {
         when(auth.isTokenValid(token)).thenReturn(false);
     }
 
-    protected LotteryEligibilityResult mockLotteryEligibilityResult() {
-        LotteryEligibilityResult eligibility = mock(LotteryEligibilityResult.class);
+    protected LotteryEligibilityDTO mockLotteryEligibilityDTO() {
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
 
         when(lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId))
                 .thenReturn(eligibility);
@@ -109,8 +109,8 @@ abstract class PurchasingServiceWhiteTestBase {
         return eligibility;
     }
 
-    protected LotteryEligibilityResult mockPurchaseAccessAllowed() {
-        LotteryEligibilityResult eligibility = mockLotteryEligibilityResult();
+    protected LotteryEligibilityDTO mockPurchaseAccessAllowed() {
+        LotteryEligibilityDTO eligibility = mockLotteryEligibilityDTO();
 
         when(queueDomainService.hasAccess(token, eventId))
                 .thenReturn(true);
@@ -118,8 +118,8 @@ abstract class PurchasingServiceWhiteTestBase {
         return eligibility;
     }
 
-    protected LotteryEligibilityResult mockPurchaseAccessDeniedByQueue() {
-        LotteryEligibilityResult eligibility = mockLotteryEligibilityResult();
+    protected LotteryEligibilityDTO mockPurchaseAccessDeniedByQueue() {
+        LotteryEligibilityDTO eligibility = mockLotteryEligibilityDTO();
 
         when(queueDomainService.hasAccess(token, eventId))
                 .thenReturn(false);
@@ -156,15 +156,15 @@ abstract class PurchasingServiceWhiteTestBase {
         return new PriceBreakdown(basePrice, subtotal, discount, totalPrice);
     }
 
-    protected void mockEventViewWithCurrentArea() {
-        EventView.AreaView areaView = new EventView.AreaView(
+    protected void mockEventDTOWithCurrentArea() {
+        EventDTO.AreaView areaView = new EventDTO.AreaView(
                 areaId,
                 "area",
                 money("0.00"),
                 "SEATING",
                 1,
                 List.of(
-                        new EventView.SeatView(
+                        new EventDTO.SeatView(
                                 seatId1,
                                 "R1",
                                 "1",
@@ -173,20 +173,20 @@ abstract class PurchasingServiceWhiteTestBase {
                 )
         );
 
-        EventView eventView = mock(EventView.class);
+        EventDTO EventDTO = mock(EventDTO.class);
 
-        when(eventView.areas()).thenReturn(List.of(areaView));
-        when(eventView.name()).thenReturn("evt");
-        when(eventView.artist()).thenReturn("artist");
-        when(eventView.startsAt()).thenReturn(Instant.now());
-        when(eventView.location()).thenReturn("loc");
-        when(eventView.status()).thenReturn(EventStatus.PUBLISHED);
+        when(EventDTO.areas()).thenReturn(List.of(areaView));
+        when(EventDTO.name()).thenReturn("evt");
+        when(EventDTO.artist()).thenReturn("artist");
+        when(EventDTO.startsAt()).thenReturn(Instant.now());
+        when(EventDTO.location()).thenReturn("loc");
+        when(EventDTO.status()).thenReturn(EventStatus.PUBLISHED);
 
-        when(eventDomainService.getEvent(eventId)).thenReturn(eventView);
+        when(eventDomainService.getEvent(eventId)).thenReturn(EventDTO);
     }
 
-    protected QueueAccessView admittedQueueAccessView() {
-        return new QueueAccessView(
+    protected QueueAccessDTO admittedQueueAccessView() {
+        return new QueueAccessDTO(
                 eventId,
                 QueueAccessStatus.ADMITTED,
                 null,

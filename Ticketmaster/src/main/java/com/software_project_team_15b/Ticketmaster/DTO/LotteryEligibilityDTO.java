@@ -1,6 +1,6 @@
-package com.software_project_team_15b.Ticketmaster.Application.Lottery;
+package com.software_project_team_15b.Ticketmaster.DTO;
 
-public record LotteryEligibilityResult(
+public record LotteryEligibilityDTO(
         LotteryEligibilityStatus status
 ) {
     public boolean canCreateActiveOrder() {

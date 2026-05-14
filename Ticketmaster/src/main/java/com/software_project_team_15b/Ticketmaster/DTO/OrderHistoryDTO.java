@@ -1,8 +1,4 @@
-<<<<<<<< HEAD:Ticketmaster/src/main/java/com/software_project_team_15b/Ticketmaster/DTOs/OrderHistoryDTO.java
-package com.software_project_team_15b.Ticketmaster.DTOs;
-========
 package com.software_project_team_15b.Ticketmaster.DTO;
->>>>>>>> 7a26bdcf700b4413704b93848066a42d44c01c3f:Ticketmaster/src/main/java/com/software_project_team_15b/Ticketmaster/DTO/OrderHistoryDTO.java
 
 import java.util.List;
 import java.util.UUID;

@@ -19,8 +19,8 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaym
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
-import com.software_project_team_15b.Ticketmaster.DTOs.OrderHistoryDTO;
-import com.software_project_team_15b.Ticketmaster.DTOs.TicketDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.OrderHistoryDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.TicketDTO;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;

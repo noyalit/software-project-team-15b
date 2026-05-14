@@ -24,13 +24,13 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
 import com.software_project_team_15b.Ticketmaster.Application.Event.IEventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
@@ -1133,7 +1133,7 @@ class CompanyServiceTest {
         UUID eventId = UUID.randomUUID();
         UUID managerId = UUID.randomUUID();
         when(eventManagementService.getEvent(eventId))
-                .thenReturn(new EventView(eventId, company.getId(), null, null, null, null, null, null, null));
+                .thenReturn(new EventDTO(eventId, company.getId(), null, null, null, null, null, null, null));
 
         service.addEventManager(founderToken, company.getId(), eventId, managerId, Set.of());
 
@@ -1147,7 +1147,7 @@ class CompanyServiceTest {
         Company company = service.createCompany(founderToken, "Acme");
         UUID eventId = UUID.randomUUID();
         when(eventManagementService.getEvent(eventId))
-                .thenReturn(new EventView(eventId, company.getId(), null, null, null, null, null, null, null));
+                .thenReturn(new EventDTO(eventId, company.getId(), null, null, null, null, null, null, null));
 
         assertThat(service.isEventManager(eventId, UUID.randomUUID())).isFalse();
     }
@@ -1160,7 +1160,7 @@ class CompanyServiceTest {
         UUID eventId = UUID.randomUUID();
         UUID managerId = UUID.randomUUID();
         when(eventManagementService.getEvent(eventId))
-                .thenReturn(new EventView(eventId, company.getId(), null, null, null, null, null, null, null));
+                .thenReturn(new EventDTO(eventId, company.getId(), null, null, null, null, null, null, null));
         service.addEventManager(founderToken, company.getId(), eventId, managerId, Set.of());
 
         service.removeEventManager(founderToken, company.getId(), eventId, managerId);
