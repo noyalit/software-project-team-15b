@@ -24,37 +24,50 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class UserServiceConcurrencyTest {
 
-    @Test
-    void appointOwner_two_owners_concurrently_appoint_same_member_one_succeeds_one_fails() throws Exception {
-        UUID companyId = UUID.randomUUID();
+    private UUID companyId;
+    private UUID founderId;
+    private UUID owner1Id;
+    private UUID owner2Id;
+    private UUID targetId;
 
-        UUID founderId = UUID.randomUUID();
+    private InMemoryMemberRepository memberRepository;
+    private InMemoryAuth auth;
+    private String owner1Token;
+    private String owner2Token;
+    private UserService service;
+
+    @BeforeEach
+    void setUp() {
+        companyId = UUID.randomUUID();
+
+        founderId = UUID.randomUUID();
         Member founder = memberWithId(founderId, new Founder(null, companyId));
 
-        UUID owner1Id = UUID.randomUUID();
-        UUID owner2Id = UUID.randomUUID();
-        UUID targetId = UUID.randomUUID();
+        owner1Id = UUID.randomUUID();
+        owner2Id = UUID.randomUUID();
+        targetId = UUID.randomUUID();
 
         Member owner1 = memberWithId(owner1Id, approvedOwnerRole(founderId, companyId));
         Member owner2 = memberWithId(owner2Id, approvedOwnerRole(founderId, companyId));
         Member target = memberWithId(targetId, null);
 
-        InMemoryMemberRepository memberRepository = new InMemoryMemberRepository();
+        memberRepository = new InMemoryMemberRepository();
         memberRepository.save(founder);
         memberRepository.save(owner1);
         memberRepository.save(owner2);
         memberRepository.save(target);
 
-        InMemoryAuth auth = new InMemoryAuth();
-        String owner1Token = auth.registerMemberToken(owner1Id);
-        String owner2Token = auth.registerMemberToken(owner2Id);
+        auth = new InMemoryAuth();
+        owner1Token = auth.registerMemberToken(owner1Id);
+        owner2Token = auth.registerMemberToken(owner2Id);
 
-        UserService service = new UserService(
+        service = new UserService(
                 memberRepository,
                 new NoopSystemAdminRepository(),
                 auth,
@@ -62,7 +75,10 @@ class UserServiceConcurrencyTest {
                 null,
                 null
         );
+    }
 
+    @Test
+    void appointOwner_two_owners_concurrently_appoint_same_member_one_succeeds_one_fails() throws Exception {
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
 
