@@ -18,6 +18,7 @@ import java.time.LocalDate;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -30,6 +31,11 @@ import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
 
+    private static final String DEFAULT_ENTRANCE_TOKEN = "entrance";
+    private static final String DEFAULT_USERNAME = "john";
+    private static final String DEFAULT_PASSWORD = "Password1";
+    private static final LocalDate DEFAULT_BIRTH_DATE = LocalDate.of(2000, 1, 1);
+
     @Mock private IMemberRepository memberRepository;
     @Mock private ISystemAdminRepository systemAdminRepository;
     @Mock private IAuth auth;
@@ -38,6 +44,19 @@ class UserServiceTest {
     @Mock private QueueService queueService;
 
     @InjectMocks private UserService service;
+
+    private String entranceToken;
+    private String username;
+    private String password;
+    private LocalDate birthDate;
+
+    @BeforeEach
+    void setUp() {
+        entranceToken = DEFAULT_ENTRANCE_TOKEN;
+        username = DEFAULT_USERNAME;
+        password = DEFAULT_PASSWORD;
+        birthDate = DEFAULT_BIRTH_DATE;
+    }
 
     ///------------------------------ II.1.3: Register ---------------------------------
     @Test

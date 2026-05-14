@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Domain.AdminSystem;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -8,12 +9,21 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class SystemAdminTest {
 
+    private static final String USERNAME = "admin";
+    private static final String PASSWORD = "Password1";
+    private SystemAdmin admin;
+
+    @BeforeEach
+    void setUp() {
+        admin = new SystemAdmin(USERNAME, PASSWORD);
+    }
+
     @Test
     void constructor_shouldCreateAdmin_whenValidDataGiven() {
-        SystemAdmin admin = new SystemAdmin("admin", "Password1");
+        SystemAdmin newAdmin = new SystemAdmin(USERNAME, PASSWORD);
 
-        assertEquals("admin", admin.getUsername());
-        assertNotNull(admin);
+        assertEquals(USERNAME, newAdmin.getUsername());
+        assertNotNull(newAdmin);
     }
 
     @Test
@@ -42,39 +52,28 @@ class SystemAdminTest {
 
     @Test
     void changePassword_shouldUpdatePassword_whenValid() {
-        SystemAdmin admin = new SystemAdmin("admin", "Password1");
-
-        admin.setPassword("NewPass1");
-
         // no getter → just verify no exception
-        assertDoesNotThrow(() -> admin.setPassword("AnotherPass1"));
+        assertDoesNotThrow(() -> admin.setPassword("NewPass1"));
     }
 
     @Test
     void changePassword_shouldThrowException_whenInvalid() {
-        SystemAdmin admin = new SystemAdmin("admin", "Password1");
-
         assertThrows(IllegalArgumentException.class,
                 () -> admin.setPassword(" "));
     }
 
     @Test
     void setPassword_shouldThrowException_whenPasswordIsNull() {
-        SystemAdmin admin = new SystemAdmin("admin", "Password1");
-
         assertThrows(IllegalArgumentException.class, () -> admin.setPassword(null));
     }
 
     @Test
     void setPassword_shouldThrowException_whenPasswordIsBlank() {
-        SystemAdmin admin = new SystemAdmin("admin", "Password1");
-
         assertThrows(IllegalArgumentException.class, () -> admin.setPassword(" "));
     }
 
     @Test
     void assignAdminId_shouldAssignId_whenNotSet() {
-        SystemAdmin admin = new SystemAdmin("admin", "Password1");
         UUID id = UUID.randomUUID();
 
         admin.assignAdminId(id);
@@ -84,8 +83,6 @@ class SystemAdminTest {
 
     @Test
     void assignAdminId_shouldNotOverrideExistingId() {
-        SystemAdmin admin = new SystemAdmin("admin", "Password1");
-
         UUID first = UUID.randomUUID();
         UUID second = UUID.randomUUID();
 
@@ -97,8 +94,6 @@ class SystemAdminTest {
 
     @Test
     void assignAdminId_shouldThrowException_whenNull() {
-        SystemAdmin admin = new SystemAdmin("admin", "Password1");
-
         assertThrows(IllegalArgumentException.class,
                 () -> admin.assignAdminId(null));
     }
