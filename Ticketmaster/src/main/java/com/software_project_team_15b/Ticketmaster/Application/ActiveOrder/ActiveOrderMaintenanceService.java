@@ -1,9 +1,9 @@
 package com.software_project_team_15b.Ticketmaster.Application.ActiveOrder;
 
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrderRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,18 +22,18 @@ public class ActiveOrderMaintenanceService {
             LoggerFactory.getLogger("audit.active-order-maintenance");
 
     private final IActiveOrderRepository activeOrderRepository;
-    private final EventManagementService eventManagementService;
+    private final IEventDomainService eventDomainService;
 
     public ActiveOrderMaintenanceService(
             IActiveOrderRepository activeOrderRepository,
-            EventManagementService eventManagementService
+            IEventDomainService eventDomainService
     ) {
-        if (activeOrderRepository == null || eventManagementService == null) {
+        if (activeOrderRepository == null || eventDomainService == null) {
             throw new IllegalArgumentException("Dependencies cannot be null");
         }
 
         this.activeOrderRepository = activeOrderRepository;
-        this.eventManagementService = eventManagementService;
+        this.eventDomainService = eventDomainService;
     }
 
     @Transactional
@@ -87,7 +87,7 @@ public class ActiveOrderMaintenanceService {
             return;
         }
 
-        eventManagementService.release(
+        eventDomainService.release(
                 activeOrder.getEventId(),
                 activeOrder.getOrderId()
         );

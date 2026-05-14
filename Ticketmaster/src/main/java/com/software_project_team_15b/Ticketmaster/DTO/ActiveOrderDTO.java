@@ -42,20 +42,20 @@ public record ActiveOrderDTO(
 
     public static ActiveOrderDTO from(
             ActiveOrder activeOrder,
-            EventDTO eventView,
+            EventDTO EventDTO,
             PriceBreakdown pricing
     ) {
         if (activeOrder == null) {
             throw new IllegalArgumentException("ActiveOrder cannot be null");
         }
-        if (eventView == null) {
-            throw new IllegalArgumentException("EventView cannot be null");
+        if (EventDTO == null) {
+            throw new IllegalArgumentException("EventDTO cannot be null");
         }
         if (pricing == null) {
             throw new IllegalArgumentException("PriceBreakdown cannot be null");
         }
 
-        EventDTO.AreaView area = eventView.areas().stream()
+        EventDTO.AreaView area = EventDTO.areas().stream()
                 .filter(a -> a.areaId().equals(activeOrder.getAreaId()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -89,11 +89,11 @@ public record ActiveOrderDTO(
                 activeOrder.getEventId(),
                 activeOrder.getAreaId(),
                 area.name(),
-                eventView.name(),
-                eventView.artist(),
-                eventView.startsAt(),
-                eventView.location(),
-                eventView.status(),
+                EventDTO.name(),
+                EventDTO.artist(),
+                EventDTO.startsAt(),
+                EventDTO.location(),
+                EventDTO.status(),
                 activeOrder.getStatus(),
                 activeOrder.getCreatedAt(),
                 activeOrder.getExpiresAt(),

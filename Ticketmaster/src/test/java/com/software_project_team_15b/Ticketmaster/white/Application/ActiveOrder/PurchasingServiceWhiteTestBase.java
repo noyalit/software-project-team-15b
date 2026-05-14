@@ -1,56 +1,54 @@
-package com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.acceptance;
+package com.software_project_team_15b.Ticketmaster.white.Application.ActiveOrder;
 
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryService;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
-import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrderRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventStatus;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
+import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-abstract class PurchasingServiceTestBase {
+abstract class PurchasingServiceWhiteTestBase {
 
     @Mock
-    protected IActiveOrderRepository activeOrderRepository;
-
-    @Mock
-    protected IOrderHistoryRepository orderHistoryRepository;
+    protected PurchasingDomainService purchasingDomainService;
 
     @Mock
     protected IMemberRepository memberRepository;
 
     @Mock
-    protected EventManagementService eventManagementService;
+    protected IEventDomainService eventDomainService;
 
     @Mock
-    protected QueueService queueService;
+    protected IQueueDomainService queueDomainService;
 
     @Mock
-    protected LotteryService lotteryService;
+    protected ILotteryDomainService lotteryDomainService;
 
     @Mock
     protected IPaymentAPI paymentGateway;
@@ -74,12 +72,11 @@ abstract class PurchasingServiceTestBase {
     @BeforeEach
     void setUpBase() {
         service = new PurchasingService(
-                activeOrderRepository,
-                orderHistoryRepository,
+                purchasingDomainService,
                 memberRepository,
-                eventManagementService,
-                queueService,
-                lotteryService,
+                eventDomainService,
+                queueDomainService,
+                lotteryDomainService,
                 paymentGateway,
                 ticketProvider,
                 auth
@@ -103,37 +100,31 @@ abstract class PurchasingServiceTestBase {
         when(auth.isTokenValid(token)).thenReturn(false);
     }
 
-    protected void mockLotteryAllowed() {
-        LotteryEligibilityDTO result = mock(LotteryEligibilityDTO.class);
+    protected LotteryEligibilityDTO mockLotteryEligibilityDTO() {
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
 
-        when(lotteryService.getLotteryEligibilityForEvent(userId, eventId))
-                .thenReturn(result);
+        when(lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId))
+                .thenReturn(eligibility);
 
-        when(result.canCreateActiveOrder())
+        return eligibility;
+    }
+
+    protected LotteryEligibilityDTO mockPurchaseAccessAllowed() {
+        LotteryEligibilityDTO eligibility = mockLotteryEligibilityDTO();
+
+        when(queueDomainService.hasAccess(token, eventId))
                 .thenReturn(true);
+
+        return eligibility;
     }
 
-    protected void mockLotteryDenied() {
-        LotteryEligibilityDTO result = mock(LotteryEligibilityDTO.class);
+    protected LotteryEligibilityDTO mockPurchaseAccessDeniedByQueue() {
+        LotteryEligibilityDTO eligibility = mockLotteryEligibilityDTO();
 
-        when(lotteryService.getLotteryEligibilityForEvent(userId, eventId))
-                .thenReturn(result);
-
-        when(result.canCreateActiveOrder())
+        when(queueDomainService.hasAccess(token, eventId))
                 .thenReturn(false);
-    }
 
-    protected void mockQueueAccessAllowed() {
-        when(queueService.hasAccess(token, eventId)).thenReturn(true);
-    }
-
-    protected void mockQueueAccessDenied() {
-        when(queueService.hasAccess(token, eventId)).thenReturn(false);
-    }
-
-    protected void mockOrderFoundForUpdate(ActiveOrder order) {
-        when(activeOrderRepository.findByIdForUpdate(orderId))
-                .thenReturn(Optional.of(order));
+        return eligibility;
     }
 
     protected ActiveOrder activeOrder() {
@@ -143,6 +134,12 @@ abstract class PurchasingServiceTestBase {
     protected ActiveOrder activeOrderWithSeats(UUID... seats) {
         ActiveOrder order = activeOrder();
         order.addSeats(Set.of(seats));
+        return order;
+    }
+
+    protected ActiveOrder activeOrderInCheckoutWithSeats(UUID... seats) {
+        ActiveOrder order = activeOrderWithSeats(seats);
+        order.startCheckout(LocalDateTime.now().plusMinutes(10));
         return order;
     }
 
@@ -159,7 +156,7 @@ abstract class PurchasingServiceTestBase {
         return new PriceBreakdown(basePrice, subtotal, discount, totalPrice);
     }
 
-    protected void mockEventViewWithCurrentArea() {
+    protected void mockEventDTOWithCurrentArea() {
         EventDTO.AreaView areaView = new EventDTO.AreaView(
                 areaId,
                 "area",
@@ -176,51 +173,68 @@ abstract class PurchasingServiceTestBase {
                 )
         );
 
-        EventDTO eventView = mock(EventDTO.class);
+        EventDTO EventDTO = mock(EventDTO.class);
 
-        when(eventView.areas()).thenReturn(List.of(areaView));
-        when(eventView.name()).thenReturn("evt");
-        when(eventView.artist()).thenReturn("artist");
-        when(eventView.startsAt()).thenReturn(Instant.now());
-        when(eventView.location()).thenReturn("loc");
-        when(eventView.status()).thenReturn(EventStatus.PUBLISHED);
+        when(EventDTO.areas()).thenReturn(List.of(areaView));
+        when(EventDTO.name()).thenReturn("evt");
+        when(EventDTO.artist()).thenReturn("artist");
+        when(EventDTO.startsAt()).thenReturn(Instant.now());
+        when(EventDTO.location()).thenReturn("loc");
+        when(EventDTO.status()).thenReturn(EventStatus.PUBLISHED);
 
-        when(eventManagementService.getEvent(eventId))
-                .thenReturn(eventView);
+        when(eventDomainService.getEvent(eventId)).thenReturn(EventDTO);
     }
 
-    protected ActiveOrder mockExpiredActiveOrder() {
+    protected QueueAccessDTO admittedQueueAccessView() {
+        return new QueueAccessDTO(
+                eventId,
+                QueueAccessStatus.ADMITTED,
+                null,
+                LocalDateTime.now().plusMinutes(10)
+        );
+    }
+
+    protected ActiveOrder expiredActiveOrderMock() {
         ActiveOrder order = mock(ActiveOrder.class);
 
-        when(activeOrderRepository.findByIdForUpdate(orderId))
-                .thenReturn(Optional.of(order));
-
         when(order.getUserId()).thenReturn(userId);
-        when(order.getOrderSeats()).thenReturn(Set.of(seatId1));
         when(order.getEventId()).thenReturn(eventId);
         when(order.getOrderId()).thenReturn(orderId);
+        when(order.getOrderSeats()).thenReturn(Set.of(seatId1));
 
         doThrow(new TimeExpiredException("expired"))
-                .when(order)
-                .ensureOrderIsActive();
+                .when(purchasingDomainService)
+                .validateOrderIsActive(order);
 
         return order;
     }
 
-    protected ActiveOrder mockExpiredCheckoutOrder() {
+    protected ActiveOrder expiredModifiableOrderMock() {
         ActiveOrder order = mock(ActiveOrder.class);
 
-        when(activeOrderRepository.findByIdForUpdate(orderId))
-                .thenReturn(Optional.of(order));
-
         when(order.getUserId()).thenReturn(userId);
-        when(order.getOrderSeats()).thenReturn(Set.of(seatId1));
         when(order.getEventId()).thenReturn(eventId);
         when(order.getOrderId()).thenReturn(orderId);
+        when(order.getOrderSeats()).thenReturn(Set.of(seatId1));
 
         doThrow(new TimeExpiredException("expired"))
-                .when(order)
-                .ensureOrderIsInCheckout();
+                .when(purchasingDomainService)
+                .validateOrderIsModifiable(order);
+
+        return order;
+    }
+
+    protected ActiveOrder expiredCheckoutOrderMock() {
+        ActiveOrder order = mock(ActiveOrder.class);
+
+        when(order.getUserId()).thenReturn(userId);
+        when(order.getEventId()).thenReturn(eventId);
+        when(order.getOrderId()).thenReturn(orderId);
+        when(order.getOrderSeats()).thenReturn(Set.of(seatId1));
+
+        doThrow(new TimeExpiredException("expired"))
+                .when(purchasingDomainService)
+                .validateOrderIsInCheckout(order);
 
         return order;
     }

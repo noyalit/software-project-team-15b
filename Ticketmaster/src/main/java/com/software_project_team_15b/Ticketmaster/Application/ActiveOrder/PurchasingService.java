@@ -1,119 +1,107 @@
 package com.software_project_team_15b.Ticketmaster.Application.ActiveOrder;
 
-import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
-import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
-import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrderRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.*;
-import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
-import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
-import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.*;
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
-import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
+import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.RemoveOrAddSeatsFromActiveOrderCommand;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedPaymentException;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedToIssueTicketsException;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.OrderSeatsUnavailableException;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
+import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
-import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryService;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
+import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 import com.software_project_team_15b.Ticketmaster.DTO.*;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import org.springframework.dao.DataIntegrityViolationException;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 
 @Service
 public class PurchasingService {
 
     private static final Logger AUDIT = LoggerFactory.getLogger("audit.purchasing");
 
-    private final IActiveOrderRepository activeOrderRepository;
-    private final IOrderHistoryRepository orderHistoryRepository;
+    private final PurchasingDomainService purchasingDomainService;
     private final IMemberRepository memberRepository;
-    private final EventManagementService eventManagementService;
-    private final QueueService queuesService;
-    private final LotteryService lotteryService;
+    private final IEventDomainService eventDomainService;
+    private final IQueueDomainService queueDomainService;
+    private final ILotteryDomainService lotteryDomainService;
     private final IPaymentAPI paymentGateway;
     private final ITicketSupplyAPI ticketProvider;
     private final IAuth auth;
 
     public PurchasingService(
-            IActiveOrderRepository activeOrderRepository,
-            IOrderHistoryRepository orderHistoryRepository,
+            PurchasingDomainService purchasingDomainService,
             IMemberRepository memberRepository,
-            EventManagementService eventManagementService,
-            QueueService queuesService,
-            LotteryService lotteryService,
+            IEventDomainService eventDomainService,
+            IQueueDomainService queueDomainService,
+            ILotteryDomainService lotteryDomainService,
             IPaymentAPI paymentGateway,
             ITicketSupplyAPI ticketProvider,
             IAuth auth
     ) {
-        this.activeOrderRepository = Objects.requireNonNull(activeOrderRepository);
-        this.orderHistoryRepository = Objects.requireNonNull(orderHistoryRepository);
+        this.purchasingDomainService = Objects.requireNonNull(purchasingDomainService);
         this.memberRepository = Objects.requireNonNull(memberRepository);
-        this.eventManagementService = Objects.requireNonNull(eventManagementService);
-        this.queuesService = Objects.requireNonNull(queuesService);
-        this.lotteryService = Objects.requireNonNull(lotteryService);
+        this.eventDomainService = Objects.requireNonNull(eventDomainService);
+        this.queueDomainService = Objects.requireNonNull(queueDomainService);
+        this.lotteryDomainService = Objects.requireNonNull(lotteryDomainService);
         this.paymentGateway = Objects.requireNonNull(paymentGateway);
         this.ticketProvider = Objects.requireNonNull(ticketProvider);
         this.auth = Objects.requireNonNull(auth);
     }
 
     public QueueAccessDTO requestAccessToCreateActiveOrder(String token, UUID eventId) {
-        return queuesService.requestAccess(token, eventId);
+        return queueDomainService.requestAccess(token, eventId);
     }
 
     @Transactional
     public UUID createActiveOrder(String token, UUID eventId, UUID areaId) {
         try {
             UUID userId = requireValidUser(token);
+            purchasingDomainService.requireEventCanBeBooked(
+                    eventId,
+                    eventId == null ? null : eventDomainService.getEventAvailability(eventId)
+            );
+            purchasingDomainService.requireAreaCanBeBooked(
+                    areaId,
+                    eventId == null || areaId == null ? false : eventDomainService.getAreaAvailability(eventId, areaId)
+            );
+            requireAccessForPurchase(token, userId, eventId);
 
-            requireEventIsValid(eventId);
-            requireAreaIsValid(eventId, areaId);
-
-            requireOrderIsUniqueForUser(userId, eventId);
-
-            requireAccessForActiveOrder(token, userId, eventId);
-
-            UUID orderId = UUID.randomUUID();
-
-            ActiveOrder activeOrder = new ActiveOrder(orderId, userId, eventId, areaId);
-
-            activeOrderRepository.saveAndFlush(activeOrder);
+            UUID orderId = purchasingDomainService.createActiveOrder(userId, eventId, areaId);
 
             AUDIT.info("op=createActiveOrder order={} user={} event={} area={} result=ok",
                     orderId, userId, eventId, areaId);
 
             return orderId;
 
-        } 
-        catch (DataIntegrityViolationException e) {
+        } catch (DataIntegrityViolationException e) {
             AUDIT.warn("op=createActiveOrder event={} result=rejected reason=concurrent_order", eventId);
             throw new IllegalStateException("User already has an active order for this event", e);
-        }
-        catch (RuntimeException e) {
+        } catch (RuntimeException e) {
             AUDIT.warn("op=createActiveOrder event={} result=rejected reason={}",
                     eventId,
                     e.getMessage());
@@ -123,22 +111,18 @@ public class PurchasingService {
 
     @Transactional(noRollbackFor = TimeExpiredException.class)
     public void addSeatsToExistingOrder(String token, RemoveOrAddSeatsFromActiveOrderCommand cmd) {
-        ActiveOrder activeOrder = null;
-
         try {
             requireRemoveOrAddSeatsFromActiveOrderCommand(cmd);
-
             UUID userId = requireValidUser(token);
-
-            activeOrder = requireOwnedModifiableOrderForUpdate(token, cmd.orderId(), userId);
-
+            ActiveOrder activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, cmd.orderId());
+            ensureOrderIsModifiable(activeOrder);
+            requireAccessForPurchase(token, userId, activeOrder.getEventId());
             Set<UUID> availableSeats = requireSeatsAvailable(
-                activeOrder.getEventId(),
-                activeOrder.getAreaId(),
-                cmd.seatIds()
+                    activeOrder.getEventId(),
+                    activeOrder.getAreaId(),
+                    cmd.seatIds()
             );
-
-            addSeatsToActiveOrder(activeOrder, availableSeats);
+            purchasingDomainService.addSeatsToOrder(activeOrder, availableSeats);
 
             AUDIT.info(
                     "op=addSeatsToExistingOrder order={} user={} event={} area={} seatsAdded={} result=ok",
@@ -161,15 +145,13 @@ public class PurchasingService {
 
     @Transactional(noRollbackFor = TimeExpiredException.class)
     public void removeSeatsFromExistingOrder(String token, RemoveOrAddSeatsFromActiveOrderCommand cmd) {
-        ActiveOrder activeOrder = null;
-
         try {
             requireRemoveOrAddSeatsFromActiveOrderCommand(cmd);
-
             UUID userId = requireValidUser(token);
-            activeOrder = requireOwnedModifiableOrderForUpdate(token, cmd.orderId(), userId);
-            
-            removeSeatsFromActiveOrder(activeOrder, cmd.seatIds());
+            ActiveOrder activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, cmd.orderId());
+            ensureOrderIsModifiable(activeOrder);
+            requireAccessForPurchase(token, userId, activeOrder.getEventId());
+            purchasingDomainService.removeSeatsFromOrder(activeOrder, cmd.seatIds());
 
             AUDIT.info("op=removeSeatsFromExistingOrder order={} user={} event={} seatsRemoved={} result=ok",
                     cmd.orderId(), userId, activeOrder.getEventId(), cmd.seatIds().size());
@@ -185,11 +167,9 @@ public class PurchasingService {
     public ActiveOrderDTO getActiveOrder(String token, UUID orderId) {
         try {
             UUID userId = requireValidUser(token);
-
-            ActiveOrder activeOrder = requireActiveOrderForUpdate(orderId);
-            requireOrderOwnership(activeOrder, userId);
-            requireOrderIsActive(activeOrder);
-            requireAccessForActiveOrder(token, userId, activeOrder.getEventId());
+            ActiveOrder activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
+            ensureOrderIsActive(activeOrder);
+            requireAccessForPurchase(token, userId, activeOrder.getEventId());
             syncOrderSeatsAvailability(activeOrder);
 
             ActiveOrderDTO view = buildActiveOrderView(activeOrder);
@@ -204,9 +184,9 @@ public class PurchasingService {
     }
 
     @Transactional(noRollbackFor = {
-        TimeExpiredException.class,
-        OrderSeatsUnavailableException.class,
-        PolicyViolationException.class
+            TimeExpiredException.class,
+            OrderSeatsUnavailableException.class,
+            PolicyViolationException.class
     })
     public CheckoutStartedDTO startCheckoutForMember(String token, UUID orderId) {
         UUID userId = requireValidUser(token);
@@ -218,9 +198,9 @@ public class PurchasingService {
     }
 
     @Transactional(noRollbackFor = {
-        TimeExpiredException.class,
-        OrderSeatsUnavailableException.class,
-        PolicyViolationException.class
+            TimeExpiredException.class,
+            OrderSeatsUnavailableException.class,
+            PolicyViolationException.class
     })
     public CheckoutStartedDTO startCheckoutForGuest(String token, UUID orderId, LocalDate guestBirthDate) {
         UUID userId = requireValidUser(token);
@@ -232,25 +212,22 @@ public class PurchasingService {
 
     private CheckoutStartedDTO startCheckoutForUser(String token, UUID userId, UUID orderId, LocalDate birthDate) {
         ActiveOrder activeOrder = null;
-        HoldReceipt holdCreated = null;
+        boolean holdCreated = false;
 
         try {
-            activeOrder = requireActiveOrderForUpdate(orderId);
-            requireOrderOwnership(activeOrder, userId);
-            ensureOrderIsModifiable(token, activeOrder);
+            activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
+            ensureOrderIsModifiable(activeOrder);
+            requireAccessForPurchase(token, userId, activeOrder.getEventId());
 
             if (syncOrderSeatsAvailability(activeOrder)) {
                 throw new OrderSeatsUnavailableException("Some seats in the order are no longer available");
             }
 
             requirePurchaseEligibility(activeOrder, birthDate);
+            HoldReceipt holdReceipt = holdSeatsForActiveOrder(activeOrder);
+            holdCreated = holdReceipt != null;
 
-            holdCreated = holdSeatsForActiveOrder(activeOrder);
-
-            LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(10);
-
-            activeOrder.startCheckout(expiresAt);
-            activeOrderRepository.save(activeOrder);
+            LocalDateTime expiresAt = purchasingDomainService.startCheckout(activeOrder);
 
             AUDIT.info(
                     "op=startCheckout order={} user={} event={} area={} expiresAt={} result=ok",
@@ -269,11 +246,8 @@ public class PurchasingService {
             );
 
         } catch (RuntimeException e) {
-            if (holdCreated != null && activeOrder != null) {
-                eventManagementService.release(
-                        activeOrder.getEventId(),
-                        activeOrder.getOrderId()
-                );
+            if (holdCreated && activeOrder != null) {
+                releaseHold(activeOrder);
             }
 
             AUDIT.warn(
@@ -287,9 +261,9 @@ public class PurchasingService {
     }
 
     @Transactional(noRollbackFor = {
-        TimeExpiredException.class,
-        FailedPaymentException.class,
-        FailedToIssueTicketsException.class
+            TimeExpiredException.class,
+            FailedPaymentException.class,
+            FailedToIssueTicketsException.class
     })
     public void completeCheckoutForMember(String token, UUID orderId, String couponCode) {
         UUID userId = requireValidUser(token);
@@ -324,11 +298,8 @@ public class PurchasingService {
         boolean finalizeDone = false;
 
         try {
-            activeOrder = requireActiveOrderForUpdate(orderId);
-            requireOrderOwnership(activeOrder, userId);
-
+            activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
             ensureOrderIsInCheckout(activeOrder);
-
             priceBreakdown = getPriceBreakdown(activeOrder, couponCode, birthDate);
 
             pay(activeOrder, token, priceBreakdown.total());
@@ -337,13 +308,10 @@ public class PurchasingService {
             issueTickets(activeOrder);
             ticketsIssued = true;
 
-            finalizeSuccessfulCheckout(activeOrder, priceBreakdown);
+            purchasingDomainService.finalizeCheckout(activeOrder, priceBreakdown);
             finalizeDone = true;
 
-            ConfirmationReceipt receipt = eventManagementService.confirm(
-                    activeOrder.getEventId(),
-                    activeOrder.getOrderId()
-            );
+            ConfirmationReceipt receipt = confirmCheckout(activeOrder);
             confirmed = true;
 
             AUDIT.info(
@@ -379,19 +347,15 @@ public class PurchasingService {
     public void cancelAllActiveOrdersOfCurrentUser(String token) {
         try {
             UUID userId = requireValidUser(token);
-
-            List<ActiveOrder> activeOrders =
-                    activeOrderRepository.findByUserIdAndStatusForUpdate(
-                            userId,
-                            ActiveOrderStatus.ACTIVE
-                    );
-
+            List<ActiveOrder> activeOrders = purchasingDomainService.getActiveOrdersOfUserForUpdate(userId);
             for (ActiveOrder activeOrder : activeOrders) {
-                cancelSingleActiveOrder(activeOrder);
+                releaseHoldIfNeeded(activeOrder);
+                purchasingDomainService.cancelOrder(activeOrder);
             }
+            int canceledCount = activeOrders.size();
 
             AUDIT.info("op=cancelAllActiveOrdersOfCurrentUser user={} count={} result=ok",
-                    userId, activeOrders.size());
+                    userId, canceledCount);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=cancelAllActiveOrdersOfCurrentUser result=rejected reason={}",
@@ -406,28 +370,28 @@ public class PurchasingService {
             PriceBreakdown priceBreakdown,
             boolean paymentSucceeded,
             boolean ticketsIssued,
-            boolean finalizeDone, 
+            boolean finalizeDone,
             boolean confirmed) {
-        if (activeOrder != null) {
-            if (paymentSucceeded) {
-                paymentGateway.refundPayment(token, priceBreakdown.total());
-                AUDIT.info("op=refundPayment order={} user={} event={} result=ok",
-                        activeOrder.getOrderId(), activeOrder.getUserId(), activeOrder.getEventId());
-            }
+        if (activeOrder == null) {
+            return;
+        }
 
-            if (ticketsIssued) {
-                ticketProvider.cancelTickets(activeOrder.getEventId(), activeOrder.getAreaId(), activeOrder.getOrderSeats());
-                AUDIT.info("op=revokeTickets order={} user={} event={} result=ok",
-                        activeOrder.getOrderId(), activeOrder.getUserId(), activeOrder.getEventId());
-            }
+        if (paymentSucceeded) {
+            paymentGateway.refundPayment(token, priceBreakdown.total());
+            AUDIT.info("op=refundPayment order={} user={} event={} result=ok",
+                    activeOrder.getOrderId(), activeOrder.getUserId(), activeOrder.getEventId());
+        }
 
-            if (finalizeDone && paymentSucceeded && ticketsIssued && !confirmed) {
-                eventManagementService.release(
-                        activeOrder.getEventId(),
-                        activeOrder.getOrderId());
-                AUDIT.info("op=releaseSeats order={} user={} event={} result=ok",
-                        activeOrder.getOrderId(), activeOrder.getUserId(), activeOrder.getEventId());
-            }
+        if (ticketsIssued) {
+            ticketProvider.cancelTickets(activeOrder.getEventId(), activeOrder.getAreaId(), activeOrder.getOrderSeats());
+            AUDIT.info("op=revokeTickets order={} user={} event={} result=ok",
+                    activeOrder.getOrderId(), activeOrder.getUserId(), activeOrder.getEventId());
+        }
+
+        if (finalizeDone && paymentSucceeded && ticketsIssued && !confirmed) {
+            releaseHold(activeOrder);
+            AUDIT.info("op=releaseSeats order={} user={} event={} result=ok",
+                    activeOrder.getOrderId(), activeOrder.getUserId(), activeOrder.getEventId());
         }
     }
 
@@ -438,21 +402,16 @@ public class PurchasingService {
         return auth.extractUserId(token);
     }
 
-    private void requireOrderIsUniqueForUser(UUID userId, UUID eventId) {
-        if (userId == null || eventId == null) {
-            throw new IllegalArgumentException("User ID and event ID cannot be null");
-        }
-        if (activeOrderRepository.existsByUserIdAndEventIdAndStatus(userId, eventId, ActiveOrderStatus.ACTIVE)) {
-            throw new IllegalStateException("User already has an active order for this event");
-        }
-    }
-
     private void issueTickets(ActiveOrder activeOrder) {
         if (activeOrder == null) {
             throw new IllegalArgumentException("Active order cannot be null");
         }
-        
-        Response<Boolean> allIssued = ticketProvider.issueTickets(activeOrder.getEventId(), activeOrder.getAreaId(), activeOrder.getOrderSeats());
+
+        Response<Boolean> allIssued = ticketProvider.issueTickets(
+                activeOrder.getEventId(),
+                activeOrder.getAreaId(),
+                activeOrder.getOrderSeats()
+        );
         if (!allIssued.isSuccessful()) {
             throw new FailedToIssueTicketsException("Failed to issue all tickets: " + allIssued.getErrorMessage());
         }
@@ -469,60 +428,62 @@ public class PurchasingService {
         }
     }
 
-    private void addSeatsToActiveOrder(ActiveOrder activeOrder, Set<UUID> seatIds) {
-        if (activeOrder == null || seatIds == null) {
-            throw new IllegalArgumentException("Active order and seat IDs cannot be null");
-        }
-        if (seatIds.isEmpty()) {
-            return;
-        }
-        activeOrder.addSeats(seatIds);
-        activeOrderRepository.save(activeOrder);
-    }
-
-    private void removeSeatsFromActiveOrder(ActiveOrder activeOrder, Set<UUID> seatIds) {
-        if (activeOrder == null || seatIds == null) {
-            throw new IllegalArgumentException("Active order and seat IDs cannot be null");
-        }
-        if (seatIds.isEmpty()) {
-            return;
-        }
-        activeOrder.removeSeats(seatIds);
-        activeOrderRepository.save(activeOrder);
-    }
-
-    private void finalizeSuccessfulCheckout(ActiveOrder activeOrder, PriceBreakdown pricing) {
-        if (activeOrder == null) {
-            throw new IllegalArgumentException("Active order cannot be null");
-        }
-
-        activeOrder.complete();
-        activeOrderRepository.save(activeOrder);
-
-        OrderHistory orderHistory = OrderHistory.fromActiveOrder(activeOrder, pricing.total(), pricing.basePrice());
-        orderHistoryRepository.save(orderHistory);
-    }
-
-    private void cancelSingleActiveOrder(ActiveOrder activeOrder) {
-        if (activeOrder == null) {
-            throw new IllegalArgumentException("Active order cannot be null");
-        }
-
-        if (activeOrder.getExpiresAt() != null && !activeOrder.getOrderSeats().isEmpty()) {
-            eventManagementService.release(
-                    activeOrder.getEventId(),
-                    activeOrder.getOrderId()
-            );
-        }
-
-        activeOrder.cancel();
-        activeOrderRepository.save(activeOrder);
-    }
-
     private ActiveOrderDTO buildActiveOrderView(ActiveOrder activeOrder) {
-        EventDTO eventView = eventManagementService.getEvent(activeOrder.getEventId());
         PriceBreakdown pricing = getPriceBreakdown(activeOrder, null, null);
-        return ActiveOrderDTO.from(activeOrder, eventView, pricing);
+        return ActiveOrderDTO.from(activeOrder, eventDomainService.getEvent(activeOrder.getEventId()), pricing);
+    }
+
+    private void releaseHold(ActiveOrder activeOrder) {
+        if (activeOrder == null) {
+            return;
+        }
+        eventDomainService.release(activeOrder.getEventId(), activeOrder.getOrderId());
+    }
+
+    private void releaseHoldIfNeeded(ActiveOrder activeOrder) {
+        if (purchasingDomainService.shouldReleaseHoldBeforeCancel(activeOrder)) {
+            releaseHold(activeOrder);
+        }
+    }
+
+    private void releaseSeatsIfExpiredAndStillActive(ActiveOrder activeOrder) {
+        if (activeOrder != null && purchasingDomainService.shouldReleaseSeatsForExpiredActiveOrder(activeOrder)) {
+            releaseHold(activeOrder);
+        }
+    }
+
+    private void ensureOrderIsActive(ActiveOrder activeOrder) {
+        try {
+            purchasingDomainService.validateOrderIsActive(activeOrder);
+        } catch (TimeExpiredException e) {
+            releaseSeatsIfExpiredAndStillActive(activeOrder);
+            purchasingDomainService.expireOrder(activeOrder);
+            throw e;
+        }
+    }
+
+    private void ensureOrderIsModifiable(ActiveOrder activeOrder) {
+        try {
+            purchasingDomainService.validateOrderIsModifiable(activeOrder);
+        } catch (TimeExpiredException e) {
+            releaseSeatsIfExpiredAndStillActive(activeOrder);
+            purchasingDomainService.expireOrder(activeOrder);
+            throw e;
+        }
+    }
+
+    private void ensureOrderIsInCheckout(ActiveOrder activeOrder) {
+        try {
+            purchasingDomainService.validateOrderIsInCheckout(activeOrder);
+        } catch (TimeExpiredException e) {
+            releaseSeatsIfExpiredAndStillActive(activeOrder);
+            purchasingDomainService.expireOrder(activeOrder);
+            throw e;
+        }
+    }
+
+    private ConfirmationReceipt confirmCheckout(ActiveOrder activeOrder) {
+        return eventDomainService.confirm(activeOrder.getEventId(), activeOrder.getOrderId());
     }
 
     private LocalDate getUserBirthDate(UUID userId) {
@@ -540,13 +501,14 @@ public class PurchasingService {
         if (activeOrder == null) {
             throw new IllegalArgumentException("Active order cannot be null");
         }
-        return eventManagementService.getPrice(activeOrder.getEventId(), new PriceQuery(
+        return eventDomainService.getPrice(
+                activeOrder.getEventId(),
                 activeOrder.getAreaId(),
                 activeOrder.getOrderSeats().size(),
                 activeOrder.getUserId(),
                 birthDate, 
                 couponCode
-        ));
+        );
     }
 
     private HoldReceipt holdSeatsForActiveOrder(ActiveOrder activeOrder) {
@@ -554,71 +516,12 @@ public class PurchasingService {
             throw new IllegalArgumentException("Active order cannot be null and must have seats");
         }
 
-        HoldCommand holdCmd = new HoldCommand(
+        return eventDomainService.holdSeats(
+                activeOrder.getEventId(),
                 activeOrder.getAreaId(),
-                new ArrayList<>(activeOrder.getOrderSeats()),
-                null,
+                List.copyOf(activeOrder.getOrderSeats()),
                 activeOrder.getOrderId()
         );
-
-        return eventManagementService.hold(activeOrder.getEventId(), holdCmd);
-    }
-
-    private void expireAndSave(ActiveOrder activeOrder) {
-        if (activeOrder == null) {
-            throw new IllegalArgumentException("Active order cannot be null");
-        }
-
-        if (!activeOrder.getOrderSeats().isEmpty()) {
-            eventManagementService.release(
-                    activeOrder.getEventId(),
-                    activeOrder.getOrderId()
-            );
-        }
-
-        activeOrder.expire();
-        activeOrderRepository.save(activeOrder);
-    }
-
-    private void ensureOrderIsInCheckout(ActiveOrder activeOrder) {
-        if (activeOrder == null) {
-            throw new IllegalArgumentException("Active order cannot be null");
-        }
-
-        try {
-            activeOrder.ensureOrderIsInCheckout();
-        } catch (TimeExpiredException e) {
-            expireAndSave(activeOrder);
-            throw e;
-        }
-    }
-
-    private void ensureOrderIsModifiable(String token, ActiveOrder activeOrder) {
-        if (activeOrder == null) {
-            throw new IllegalArgumentException("Active order cannot be null");
-        }
-
-        try {
-            activeOrder.ensureOrderIsModifiable();
-        } catch (TimeExpiredException e) {
-            expireAndSave(activeOrder);
-            throw e;
-        } 
-
-        requireAccessForActiveOrder(token, activeOrder.getUserId(), activeOrder.getEventId());
-    }
-
-    private void requireOrderIsActive(ActiveOrder activeOrder) {
-        if (activeOrder == null) {
-            throw new IllegalArgumentException("Active order cannot be null");
-        }
-
-        try {
-            activeOrder.ensureOrderIsActive();
-        } catch (TimeExpiredException e) {
-            expireAndSave(activeOrder);
-            throw e;
-        } 
     }
 
     private boolean syncOrderSeatsAvailability(ActiveOrder activeOrder) {
@@ -630,119 +533,49 @@ public class PurchasingService {
         }
 
         Map<Boolean, Set<UUID>> seatsAvailability =
-                    eventManagementService.getSeatsAvailability(
-                            activeOrder.getEventId(),
-                            activeOrder.getAreaId(),
-                            activeOrder.getOrderSeats()
-                    );
+                eventDomainService.getSeatsAvailability(
+                        activeOrder.getEventId(),
+                        activeOrder.getAreaId(),
+                        activeOrder.getOrderSeats()
+                );
 
-        Set<UUID> unavailableSeats = seatsAvailability.getOrDefault(false, Set.of());
-        if (unavailableSeats.isEmpty()) {
-            return false;
-        }
-        removeSeatsFromActiveOrder(activeOrder, unavailableSeats);
-        AUDIT.warn("op=syncOrderSeatsAvailability order={} user={} event={} area={} unavailableSeats={}",
-                activeOrder.getOrderId(),
-                activeOrder.getUserId(),
-                activeOrder.getEventId(),
-                activeOrder.getAreaId(),
-                unavailableSeats
-        );
-        return true;
+        return purchasingDomainService.syncOrderSeatsAvailability(activeOrder, seatsAvailability);
     }
 
-    private void requireAccessForActiveOrder(String token, UUID userId, UUID eventId) {
+    private void requireAccessForPurchase(String token, UUID userId, UUID eventId) {
         if (token == null || userId == null || eventId == null) {
             throw new IllegalArgumentException("Token, user ID, and event ID cannot be null");
         }
 
-        requireUserLotteryEligibilityForEvent(userId, eventId);
-
-        if (!queuesService.hasAccess(token, eventId)) {
-            throw new TimeExpiredException("User does not have access to create or modify orders for this event at the moment");
-        }
-    }
-
-    private void requireUserLotteryEligibilityForEvent(UUID userId, UUID eventId) {
-        if (userId == null || eventId == null) {
-            throw new IllegalArgumentException("User ID and event ID cannot be null");
-        }
-
-        LotteryEligibilityDTO eligibilityResult = lotteryService.getLotteryEligibilityForEvent(userId, eventId);
-        if (!eligibilityResult.canCreateActiveOrder()) {
-            throw new IllegalStateException("User is not eligible to create an active order for this event: " + eligibilityResult.status());
-        }
-    }
-
-    private void requireEventIsValid(UUID eventId) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("Event ID cannot be null");
-        }
-        if (eventManagementService.getEventAvailability(eventId) != EventAvailability.AVAILABLE) {
-            throw new IllegalStateException("Event is not available for booking");
-        }
-    }
-
-    private void requireAreaIsValid(UUID eventId, UUID areaId) {
-        if (areaId == null) {
-            throw new IllegalArgumentException("Area ID cannot be null");
-        }
-        if (!eventManagementService.getAreaAvailability(eventId, areaId)) {
-            throw new IllegalStateException("Area is not available for booking");
-        }
+        LotteryEligibilityDTO eligibility = lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId);
+        boolean queueAccess = queueDomainService.hasAccess(token, eventId);
+        purchasingDomainService.requirePurchaseAccess(
+                userId,
+                eventId,
+                eligibility,
+                queueAccess
+        );
     }
 
     private void requirePurchaseEligibility(ActiveOrder activeOrder, LocalDate birthDate) {
-         if (activeOrder == null) {
+        if (activeOrder == null) {
             throw new IllegalArgumentException("Active order cannot be null");
         }
-        PurchaseRequest request = new PurchaseRequest(activeOrder.getEventId(), activeOrder.getAreaId(), activeOrder.getUserId(), birthDate, activeOrder.getOrderSeats().size(), new ArrayList<>(activeOrder.getOrderSeats()), null);
+        PurchaseRequest request = purchasingDomainService.buildPurchaseRequest(activeOrder, birthDate);
         try {
-            eventManagementService.validatePurchaseEligibility(activeOrder.getEventId(), request);
+            eventDomainService.validatePurchaseEligibility(activeOrder.getEventId(), request);
         } catch (PolicyViolationException e) {
-            cancelSingleActiveOrder(activeOrder);
+            releaseHoldIfNeeded(activeOrder);
+            purchasingDomainService.cancelOrder(activeOrder);
             throw e;
         }
     }
 
-    private ActiveOrder requireOwnedModifiableOrderForUpdate(String token, UUID orderId, UUID userId) {
-        ActiveOrder activeOrder = requireActiveOrderForUpdate(orderId);
-        requireOrderOwnership(activeOrder, userId);
-        ensureOrderIsModifiable(token, activeOrder);
-        return activeOrder;
-    }
-
-    private ActiveOrder requireActiveOrderForUpdate(UUID orderId) {
-        return activeOrderRepository.findByIdForUpdate(orderId)
-                .orElseThrow(() -> new IllegalArgumentException("Active order not found: " + orderId));
-    }
-
-    private void requireOrderOwnership(ActiveOrder activeOrder, UUID userId) {
-        if (!activeOrder.getUserId().equals(userId)) {
-            throw new IllegalStateException("User is not allowed to access this order");
-        }
-    }
-
-    private Set<UUID> requireSeatsAvailable(
-            UUID eventId,
-            UUID areaId,
-            Set<UUID> requestedSeatIds
-    ) {
+    private Set<UUID> requireSeatsAvailable(UUID eventId, UUID areaId, Set<UUID> requestedSeatIds) {
         Map<Boolean, Set<UUID>> seatsAvailability =
-                eventManagementService.getSeatsAvailability(eventId, areaId, requestedSeatIds);
+                eventDomainService.getSeatsAvailability(eventId, areaId, requestedSeatIds);
 
-        Set<UUID> unavailableSeats = seatsAvailability.getOrDefault(false, Set.of());
-        Set<UUID> availableSeats = seatsAvailability.getOrDefault(true, Set.of());
-
-        if (!unavailableSeats.isEmpty()) {
-            throw new IllegalStateException("Some seats are not available: " + unavailableSeats);
-        }
-
-        if (availableSeats.size() != requestedSeatIds.size()) {
-            throw new IllegalStateException("Seat availability response is inconsistent");
-        }
-
-        return availableSeats;
+        return purchasingDomainService.requireRequestedSeatsAvailable(seatsAvailability, requestedSeatIds);
     }
 
     private void requireRemoveOrAddSeatsFromActiveOrderCommand(RemoveOrAddSeatsFromActiveOrderCommand cmd) {

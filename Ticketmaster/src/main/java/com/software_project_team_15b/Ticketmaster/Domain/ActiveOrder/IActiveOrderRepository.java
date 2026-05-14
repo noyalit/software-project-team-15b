@@ -38,8 +38,6 @@ public interface IActiveOrderRepository {
 
     List<ActiveOrder> findByUserIdAndStatus(UUID userId, ActiveOrderStatus status);
 
-    boolean existsByUserIdAndEventIdAndStatus(UUID userId, UUID eventId, ActiveOrderStatus status);
-
     List<ActiveOrder> findByUserIdAndStatusForUpdate(UUID userId, ActiveOrderStatus status);
 
     List<ActiveOrder> findByStatusNotForUpdate(ActiveOrderStatus status);

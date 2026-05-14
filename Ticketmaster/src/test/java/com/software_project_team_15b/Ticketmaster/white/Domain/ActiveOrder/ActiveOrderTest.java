@@ -1,5 +1,7 @@
-package com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder;
+package com.software_project_team_15b.Ticketmaster.white.Domain.ActiveOrder;
 
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.AlreadyDoneException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.UnactiveOrderException;
