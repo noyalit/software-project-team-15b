@@ -21,6 +21,7 @@ import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Purcha
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
 /**
  * UserService provides functionality for managing user accounts and roles.
@@ -29,28 +30,15 @@ import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin
 public class UserService {
 
     private static final Logger AUDIT = LoggerFactory.getLogger("audit.user");
-
-    private final IMemberRepository memberRepository;
-    private final ISystemAdminRepository systemAdminRepository;
+    UserDomainService userDomainService;
     private final IAuth auth;
     private final IPasswordEncoder passwordEncoder;
-    private final PurchasingService purchasingService;
-    private final QueueService queueService;
 
-    public UserService(
-            IMemberRepository memberRepository,
-            ISystemAdminRepository systemAdminRepository,
-            IAuth auth,
-            IPasswordEncoder passwordEncoder,
-            PurchasingService purchasingService,
-            QueueService queueService
-    ) {
-        this.memberRepository = memberRepository;
-        this.systemAdminRepository = systemAdminRepository;
+    public UserService(UserDomainService userDomainService,IAuth auth, IPasswordEncoder passwordEncoder) {
+        this.userDomainService = userDomainService;
         this.auth = auth;
         this.passwordEncoder = passwordEncoder;
-        this.purchasingService = purchasingService;
-        this.queueService = queueService;
+
     }
 
     /**
@@ -63,16 +51,23 @@ public class UserService {
      * @return Registered member
      */
     public Member registerMember(String token, String username, String password, LocalDate birthDate) {
-        // Entrance token must be a guest/temp token. A member token is not allowed for registration.
-        validateEntranceToken(token);
-        if (memberRepository.existsByUsername(username)) {
-            throw new IllegalArgumentException("Username already exists");
+        try {
+            validateEntranceToken(token);
+            validateRawPassword(password);
+
+            Member saved = userDomainService.registerMember(
+                    username,
+                    passwordEncoder.encode(password),
+                    birthDate
+            );
+
+            AUDIT.info("op=register-member userId={} username={}",saved.getUserId(),saved.getUsername());
+            return saved;
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=register-member username={} result=rejected reason={}",username,e.getMessage());
+            throw e;
         }
-        validateRawPassword(password);
-        Member member = new Member(username, passwordEncoder.encode(password), null, birthDate);
-        Member saved = memberRepository.save(member);
-        AUDIT.info("op=register-member userId={} username={}", saved.getUserId(), saved.getUsername());
-        return saved;
     }
 
     /**
@@ -84,17 +79,25 @@ public class UserService {
      * @return Member token
      */
     public String login(String token, String username, String password) {
-        // Do not log raw passwords or tokens.
-        validateEntranceToken(token);
-        auth.exitSystem(token);
-        Member member = memberRepository.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid username or password"));
+        try {
+            validateEntranceToken(token);
+            auth.exitSystem(token);
+            Member member = userDomainService.getMemberByUsername(username);
 
-        if (!passwordEncoder.matches(password, member.getPasswordHash())) {
-            throw new IllegalArgumentException("Invalid username or password");
+            if (!passwordEncoder.matches(password, member.getPasswordHash())) {
+                throw new IllegalArgumentException("Invalid username or password");
+            }
+
+            String memberToken = auth.generateMemberToken(member);
+
+            AUDIT.info("op=login userId={} username={}",member.getUserId(),username);
+            return memberToken;
+
+        } catch (RuntimeException e) {
+
+            AUDIT.warn("op=login username={} result=rejected reason={}",username,e.getMessage());
+            throw e;
         }
-
-        return auth.generateMemberToken(member);
     }
 
     /**
@@ -221,449 +224,280 @@ public class UserService {
     }
 
     public String watchPersonalDetails(String token) {
-        UUID userId = getAuthenticatedMemberId(token);
-        Member member = getMemberOrThrow(userId);
+        try {
+            UUID userId = getAuthenticatedMemberId(token);
+            String details = userDomainService.watchPersonalDetails(userId);
+            AUDIT.info("op=watch-personal-details userId={}",userId);
+            return details;
 
-        String activeRole = member.getActiveRole() == null
-                ? "RegularMember"
-                : member.getActiveRole().getRoleName();
-
-        String allRoles = member.getAssignedRoles()
-                .stream()
-                .map(Role::getRoleName)
-                .toList()
-                .toString();
-
-        return """
-                {
-                "username": "%s",
-                "password": "********",
-                "birthDate": "%s",
-                "activeRole": "%s",
-                "availableRoles": "%s"
-                }
-                """.formatted(
-                member.getUsername(),
-                member.getBirthDate(),
-                activeRole,
-                allRoles
-        );
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=watch-personal-details result=rejected reason={}",e.getMessage());
+            throw e;
+        }
     }
 
     public Member changeUsername(String token, String newUsername) {
-        UUID userId = getAuthenticatedMemberId(token);
-        Member member = getMemberOrThrow(userId);
+        try {
+            UUID userId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.changeUsername(userId,newUsername);
+            AUDIT.info("op=change-username userId={} newUsername={}",userId,newUsername);
+            return saved;
 
-        Optional<Member> existing = memberRepository.findByUsername(newUsername);
-        if (existing.isPresent() && !existing.get().getUserId().equals(userId)) {
-            throw new IllegalArgumentException("Username already exists");
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=change-username username={} result=rejected reason={}",newUsername,e.getMessage());
+            throw e;
         }
-        member.setUsername(newUsername);
-        Member saved = memberRepository.save(member);
-        AUDIT.info("op=change-username userId={} username={}", saved.getUserId(), saved.getUsername());
-        return saved;
     }
 
     public Member changePassword(String token, String newPassword) {
-        UUID userId = getAuthenticatedMemberId(token);
-        Member member = getMemberOrThrow(userId);
-        validateRawPassword(newPassword);
-        member.setPassword(passwordEncoder.encode(newPassword));
-        Member saved = memberRepository.save(member);
-        AUDIT.info("op=change-password userId={}", saved.getUserId());
-        return saved;
+        try {
+            UUID userId = getAuthenticatedMemberId(token);
+            validateRawPassword(newPassword);
+            Member saved = userDomainService.changePassword(userId,passwordEncoder.encode(newPassword));
+
+            AUDIT.info("op=change-password userId={}",userId);
+            return saved;
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=change-password result=rejected reason={}",e.getMessage());
+            throw e;
+        }
     }
 
     public Member changeBirthDate(String token, LocalDate newBirthDate) {
-        UUID userId = getAuthenticatedMemberId(token);
-        Member member = getMemberOrThrow(userId);
+        try {
+            UUID userId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.changeBirthDate(userId,newBirthDate);
 
-        member.setBirthDate(newBirthDate);
+            AUDIT.info("op=change-birth-date userId={} newBirthDate={}",userId,newBirthDate);
+            return saved;
 
-        return memberRepository.save(member);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=change-birth-date newBirthDate={} result=rejected reason={}",newBirthDate,e.getMessage());
+            throw e;
+        }
     }
 
     public Member changeRoleToManager(String token, UUID eventId) {
-        UUID userId = getAuthenticatedMemberId(token);
-        Member member = getMemberOrThrow(userId);
+        try {
+            UUID userId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.changeRoleToManager(userId,eventId);
 
-        if (eventId == null) {
-            throw new IllegalArgumentException("Event ID cannot be null");
+            AUDIT.info("op=switch-role userId={} role=Manager eventId={}",userId,eventId);
+            return saved;
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=switch-role userId={} role=Manager eventId={} result=rejected reason={}",
+                    auth.extractUserId(token), eventId, e.getMessage());
+            throw e;
         }
-
-        Role managerRole = member.getAssignedRoles()
-                .stream()
-                .filter(role -> role instanceof Manager)
-                .map(role -> (Manager) role)
-                .filter(manager -> eventId.equals(manager.getEventId()))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Member does not have an assigned Manager role for this event"
-                ));
-
-        member.switchActiveRole(managerRole);
-
-        Member saved = memberRepository.save(member);
-        AUDIT.info("op=switch-role userId={} role=Manager eventId={}", saved.getUserId(), eventId);
-        return saved;
     }
 
     public Member changeRoleToOwner(String token, UUID companyId) {
-        UUID userId = getAuthenticatedMemberId(token);
-        Member member = getMemberOrThrow(userId);
+        try {
+            UUID userId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.changeRoleToOwner(userId,companyId);
 
-        if (companyId == null) {
-            throw new IllegalArgumentException("Company ID cannot be null");
+            AUDIT.info("op=switch-role userId={} role=Owner companyId={}",userId,companyId);
+            return saved;
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=switch-role userId={} role=Owner companyId={} result=rejected reason={}",
+                    auth.extractUserId(token), companyId, e.getMessage());
+            throw e;
         }
-
-        Role ownerRole = member.getAssignedRoles()
-                .stream()
-                .filter(role -> role instanceof Owner)
-                .filter(role -> !(role instanceof Founder))
-                .filter(role -> role.belongsToCompany(companyId))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Member does not have an assigned Owner role for this company"
-                ));
-
-        member.switchActiveRole(ownerRole);
-
-        Member saved = memberRepository.save(member);
-        AUDIT.info("op=switch-role userId={} role=Owner companyId={}", saved.getUserId(), companyId);
-        return saved;
     }
 
     public Member changeRoleToFounder(String token, UUID companyId) {
-        UUID userId = getAuthenticatedMemberId(token);
-        Member member = getMemberOrThrow(userId);
+        try {
+            UUID userId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.changeRoleToFounder(userId,companyId);
 
-        if (companyId == null) {
-            throw new IllegalArgumentException("Company ID cannot be null");
+            AUDIT.info("op=switch-role userId={} role=Founder companyId={}",userId,companyId);
+            return saved;
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=switch-role userId={} role=Founder companyId={} result=rejected reason={}",
+                    auth.extractUserId(token), companyId, e.getMessage());
+            throw e;
         }
-
-        Role founderRole = member.getAssignedRoles()
-                .stream()
-                .filter(role -> role instanceof Founder)
-                .filter(role -> role.belongsToCompany(companyId))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Member does not have a Founder role for this company"
-                ));
-
-        member.switchActiveRole(founderRole);
-
-        Member saved = memberRepository.save(member);
-        AUDIT.info("op=switch-role userId={} role=Founder companyId={}", saved.getUserId(), companyId);
-        return saved;
     }
 
     public Member changeRoleToRegularMember(String token) {
-        UUID userId = getAuthenticatedMemberId(token);
-        Member member = getMemberOrThrow(userId);
-        member.switchActiveRole(null);
-        Member saved = memberRepository.save(member);
-        AUDIT.info("op=switch-role userId={} role=RegularMember", saved.getUserId());
-        return saved;
+        try {
+            UUID userId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.changeRoleToRegularMember(userId);
+
+            AUDIT.info("op=switch-role userId={} role=RegularMember",userId);
+            return saved;
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=switch-role userId={} role=RegularMember result=rejected reason={}",
+                    auth.extractUserId(token), e.getMessage());
+            throw e;
+        }
     }
 
     public Member appointManager(UUID memberId, String token, UUID companyId, UUID eventId, Set<ManagerPermission> permissions) {
-        if (permissions == null || permissions.isEmpty()) {
-            throw new IllegalArgumentException("Manager must have at least one permission");
-        }
-        UUID ownerId = getAuthenticatedMemberId(token);
-        Member member = getMemberOrThrow(memberId);
-        validateNoAppointmentCycle(member, ownerId, companyId);
-        validateOwnerAppointer(ownerId, companyId);
+        try {
+            UUID ownerId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.appointManager(memberId, ownerId, companyId, eventId, permissions);
 
-        Role managerRole = new Manager(ownerId, companyId,eventId, permissions);
-        member.addRole(managerRole);
-        Member saved = memberRepository.save(member);
-        AUDIT.info("op=appoint-manager appointerId={} memberId={} companyId={} permissions={}",
-                ownerId, memberId, companyId, permissions);
-        return saved;
+            AUDIT.info("op=appoint-manager appointerId={} memberId={} companyId={} eventId={} permissions={}",
+                    ownerId, memberId, companyId, eventId, permissions);
+            return saved;
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=appoint-manager memberId={} companyId={} eventId={} result=rejected reason={}",
+                    memberId, companyId, eventId, e.getMessage());
+            throw e;
+        }
     }
 
     public Member appointOwner(UUID memberId, String token, UUID companyId) {
-        UUID ownerId = getAuthenticatedMemberId(token);
-        Member member = getMemberOrThrow(memberId);
+        try {
+            UUID ownerId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.appointOwner(memberId, ownerId, companyId);
 
-        validateNoAppointmentCycle(member, ownerId, companyId);
-        validateOwnerAppointer(ownerId, companyId);
+            AUDIT.info("op=appoint-owner appointerId={} memberId={} companyId={}",
+                    ownerId, memberId, companyId);
+            return saved;
 
-        boolean alreadyOwnerInCompany = member.getAssignedRoles()
-                .stream()
-                .anyMatch(role -> role instanceof Owner
-                        && !(role instanceof Founder)
-                        && role.belongsToCompany(companyId));
-
-        if (alreadyOwnerInCompany) {
-            throw new IllegalArgumentException("Member is already an owner in this company");
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=appoint-owner memberId={} companyId={} result=rejected reason={}",
+                    memberId, companyId, e.getMessage());
+            throw e;
         }
-
-        Role ownerRole = new Owner(ownerId, companyId);
-        member.addRole(ownerRole);
-        Member saved = memberRepository.save(member);
-        AUDIT.info("op=appoint-owner appointerId={} memberId={} companyId={}", ownerId, memberId, companyId);
-        return saved;
     }
 
     public Member appointFounder(UUID memberId, String token, UUID companyId) {
-        getAuthenticatedMemberId(token);
-        Member member = getMemberOrThrow(memberId);
-        Role founderRole = new Founder(null, companyId);
-        member.addRole(founderRole);
-        Member saved = memberRepository.save(member);
-        AUDIT.info("op=appoint-founder memberId={} companyId={}", memberId, companyId);
-        return saved;
+        try {
+            UUID founderId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.appointFounder(memberId, founderId, companyId);
+
+            AUDIT.info("op=appoint-founder appointerId={} memberId={} companyId={}",
+                    founderId, memberId, companyId);
+            return saved;
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=appoint-founder memberId={} companyId={} result=rejected reason={}",
+                    memberId, companyId, e.getMessage());
+            throw e;
+        }
     }
 
     public Member removeOwnerAppointment(String token, UUID memberToRemoveId, UUID companyId) {
-        UUID removerOwnerId = getAuthenticatedMemberId(token);
-        Member memberToRemove = getMemberOrThrow(memberToRemoveId);
-        validateOwnerAppointer(removerOwnerId, companyId);
-        Role ownerRoleToRemove = memberToRemove.getAssignedRoles()
-                .stream()
-                .filter(role -> role instanceof Owner)
-                .filter(role -> !(role instanceof Founder))
-                .filter(role -> removerOwnerId.equals(role.getAppointedBy()))
-                .filter(role -> role.belongsToCompany(companyId))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "No owner appointment by this owner was found"
-                ));
-        memberToRemove.removeRole(ownerRoleToRemove);
-        Member saved = memberRepository.save(memberToRemove);
-        AUDIT.info("op=remove-owner-appointment removerOwnerId={} memberId={} companyId={}",
-                removerOwnerId, memberToRemoveId, companyId);
-        return saved;
+        try {
+            UUID removerOwnerId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.removeOwnerAppointment(removerOwnerId, memberToRemoveId, companyId);
+
+            AUDIT.info("op=remove-owner-appointment removerOwnerId={} memberId={} companyId={}",
+                    removerOwnerId, memberToRemoveId, companyId);
+            return saved;
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=remove-owner-appointment memberId={} companyId={} result=rejected reason={}",
+                    memberToRemoveId, companyId, e.getMessage());
+            throw e;
+        }
     }
 
     public Member removeManagerAppointment(String token, UUID memberToRemoveId, UUID companyId, UUID eventId) {
-        UUID removerOwnerId = getAuthenticatedMemberId(token);
-        Member memberToRemove = getMemberOrThrow(memberToRemoveId);
+        try {
+            UUID removerOwnerId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.removeManagerAppointment(removerOwnerId, memberToRemoveId, companyId, eventId);
 
-        validateOwnerAppointer(removerOwnerId, companyId);
+            AUDIT.info("op=remove-manager-appointment removerOwnerId={} memberId={} companyId={} eventId={}",
+                    removerOwnerId, memberToRemoveId, companyId, eventId);
+            return saved;
 
-        Role managerRoleToRemove = memberToRemove.getAssignedRoles()
-                .stream()
-                .filter(role -> role instanceof Manager)
-                .filter(role -> removerOwnerId.equals(role.getAppointedBy()))
-                .filter(role -> role.belongsToCompany(companyId))
-                .filter(role -> ((Manager) role).getEventId().equals(eventId))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "No manager appointment by this owner was found"
-                ));
-
-        memberToRemove.removeRole(managerRoleToRemove);
-        Member saved = memberRepository.save(memberToRemove);
-        AUDIT.info("op=remove-manager-appointment removerOwnerId={} memberId={} companyId={}, eventId={}",
-                removerOwnerId, memberToRemoveId, companyId, eventId);
-        return saved;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=remove-manager-appointment memberId={} companyId={} eventId={} result=rejected reason={}",
+                    memberToRemoveId, companyId, eventId, e.getMessage());
+            throw e;
+        }
     }
 
     public Member ownerResign(String token, UUID companyId) {
-        UUID ownerId = getAuthenticatedMemberId(token);
-        Member owner = getMemberOrThrow(ownerId);
+        try {
+            UUID ownerId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.ownerResign(ownerId, companyId);
 
-        if (companyId == null) {
-            throw new IllegalArgumentException("Company ID cannot be null");
+            AUDIT.info("op=owner-resign ownerId={} companyId={}", ownerId, companyId);
+            return saved;
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=owner-resign ownerId={} companyId={} result=rejected reason={}",
+                    auth.extractUserId(token), companyId, e.getMessage());
+            throw e;
         }
-
-        Role ownerRole = owner.getAssignedRoles()
-                .stream()
-                .filter(role -> role instanceof Owner)
-                .filter(role -> !(role instanceof Founder))
-                .filter(role -> role.isAppointmentApproved())
-                .filter(role -> role.belongsToCompany(companyId))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Member is not an owner in this company"
-                ));
-
-        owner.removeRole(ownerRole);
-        Member saved = memberRepository.save(owner);
-        AUDIT.info("op=owner-resign ownerId={} companyId={}", ownerId, companyId);
-        return saved;
     }
 
     public Member changeManagerPermissions(String token, UUID managerId, UUID eventId, Set<ManagerPermission> newPermissions) {
-        UUID ownerId = getAuthenticatedMemberId(token);
-        Member manager = getMemberOrThrow(managerId);
-        validateOwnerAppointer(ownerId);
-        Manager managerRole = manager.getAssignedRoles()
-                .stream()
-                .filter(role -> role instanceof Manager)
-                .map(role -> (Manager) role)
-                .filter(role -> ownerId.equals(role.getAppointedBy()))
-                .filter(role -> role.getEventId().equals(eventId))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "No manager appointment by this owner was found"
-                ));
-        managerRole.setPermissions(newPermissions);
-        Member saved = memberRepository.save(manager);
-        AUDIT.info("op=change-manager-permissions ownerId={} managerId={} eventId={} permissions={}",
-                ownerId, managerId, eventId, newPermissions);
-        return saved;
+        try {
+            UUID ownerId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.changeManagerPermissions(ownerId, managerId, eventId, newPermissions);
+
+            AUDIT.info("op=change-manager-permissions ownerId={} managerId={} eventId={} newPermissions={}",
+                    ownerId, managerId, eventId, newPermissions);
+            return saved;
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=change-manager-permissions managerId={} eventId={} result=rejected reason={}",
+                    managerId, eventId, e.getMessage());
+            throw e;
+        }
     }
 
     public Set<ManagerPermission> getManagerPermissions(String token, UUID managerId, UUID eventId) {
-        UUID ownerId = getAuthenticatedMemberId(token);
-        Member manager = getMemberOrThrow(managerId);
-        validateOwnerAppointer(ownerId);
-        Manager managerRole = manager.getAssignedRoles()
-                .stream()
-                .filter(role -> role instanceof Manager)
-                .map(role -> (Manager) role)
-                .filter(role -> ownerId.equals(role.getAppointedBy()))
-                .filter(role -> role.getEventId().equals(eventId))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "No manager appointment by this owner was found"
-                ));
-        return managerRole.getPermissions();
+        try {
+            UUID requesterId = getAuthenticatedMemberId(token);
+            Set<ManagerPermission> permissions = userDomainService.getManagerPermissions(requesterId, managerId, eventId);
+
+            AUDIT.info("op=get-manager-permissions requesterId={} managerId={} eventId={}",
+                    requesterId, managerId, eventId);
+            return permissions;
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=get-manager-permissions managerId={} eventId={} result=rejected reason={}",
+                    managerId, eventId, e.getMessage());
+            throw e;
+        }
     }
 
     public Member approveAppointment(String token) {
-        UUID userId = getAuthenticatedMemberId(token);
-        Member member = getMemberOrThrow(userId);
+        try {
+            UUID approverId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.approveAppointment(approverId);
 
-        if (member.getActiveRole() == null) {
-            throw new IllegalStateException("Regular member has no appointment to approve");
-        }
-        member.getActiveRole().approveAppointment();
-        Member saved = memberRepository.save(member);
-        AUDIT.info("op=approve-appointment userId={} role={}",
-                userId,
+            AUDIT.info("op=approve-appointment userId={} role={}",
+                approverId,
                 saved.getActiveRole() == null ? null : saved.getActiveRole().getRoleName());
-        return saved;
+            return saved;
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=approve-appointment approverId={} result=rejected reason={}",
+                    auth.extractUserId(token), e.getMessage());
+            throw e;
+        }
     }
 
     public boolean cancelMemberAccountBySystemAdmin(String token, UUID memberIdToCancel) {
-        if (!auth.isTokenValid(token) || !auth.isSystemAdmin(token)) {
-            throw new IllegalArgumentException("Only a system admin can cancel member accounts");
-        }
-
-        if (memberIdToCancel == null) {
-            throw new IllegalArgumentException("Member ID cannot be null");
-        }
-
-        memberRepository.findById(memberIdToCancel)
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Member not found with id: " + memberIdToCancel
-                ));
-
-        boolean deleted = memberRepository.deleteById(memberIdToCancel);
-        AUDIT.info("op=cancel-member-account-by-system-admin memberId={} deleted={}", memberIdToCancel, deleted);
-        return deleted;
-    }
-
-    /**
-     * @return True if active owner, false otherwise
-     */
-    public boolean isActiveOwner(UUID userId) {
-        Member member = getMemberOrThrow(userId);
-        return member.getAssignedRoles()
-                .stream()
-                .anyMatch(role -> role instanceof Owner
-                        && !(role instanceof Founder)
-                        && role.isAppointmentApproved());
-    }
-    public boolean isActiveManager(UUID userId) {
-        Member member = getMemberOrThrow(userId);
-        return member.getAssignedRoles()
-                .stream()
-                .anyMatch(role -> role instanceof Manager
-                        && role.isAppointmentApproved());
-    }
-
-    public boolean isActiveFounder(UUID userId) {
-        Member member = getMemberOrThrow(userId);
-        return member.getAssignedRoles()
-                .stream()
-                .anyMatch(role -> role instanceof Founder
-                        && role.isAppointmentApproved());
-    }
-
-    public boolean isAppointmentApproved(UUID userId) {
-        Member member = getMemberOrThrow(userId);
-        if (member.getActiveRole() == null) {
-            return false;
-        }
-        return member.getActiveRole().isAppointmentApproved();
-    }
-
-   private Member getMemberOrThrow(UUID userId) {
-        if (userId == null) {
-            throw new IllegalArgumentException("User ID cannot be null");
-        }
-        return memberRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("Member not found with id: " + userId));
-    }
-
-    private void validateOwnerAppointer(UUID appointedByUserId) {
-        Member appointedBy = getMemberOrThrow(appointedByUserId);
-        boolean isApprovedOwner = appointedBy.getAssignedRoles()
-                .stream()
-                .anyMatch(role -> role instanceof Owner
-                        && role.isAppointmentApproved());
-
-        if (!isApprovedOwner) {
-            throw new IllegalArgumentException("Only an approved owner can perform this action");
-        }
-    }
-
-    private void validateOwnerAppointer(UUID appointedByUserId, UUID companyId) {
-        Member appointedBy = getMemberOrThrow(appointedByUserId);
-
-        boolean isApprovedOwnerInCompany = appointedBy.getAssignedRoles()
-                .stream()
-                .anyMatch(role -> role instanceof Owner
-                        && role.isAppointmentApproved()
-                        && role.belongsToCompany(companyId));
-
-        if (!isApprovedOwnerInCompany) {
-            throw new IllegalArgumentException("Only an approved owner of this company can perform this action");
-        }
-    }
-
-    private void validateNoAppointmentCycle(Member member, UUID appointedById, UUID companyId) {
-        if (member == null) {
-            throw new IllegalArgumentException("Member cannot be null");
-        }
-        if (appointedById == null) {
-            throw new IllegalArgumentException("Appointer ID cannot be null");
-        }
-        if (companyId == null) {
-            throw new IllegalArgumentException("Company ID cannot be null");
-        }
-        if (member.getUserId().equals(appointedById)) {
-            throw new IllegalArgumentException("Member cannot be appointed by themselves");
-        }
-        UUID currentId = appointedById;
-
-        while (currentId != null) {
-            Member current = getMemberOrThrow(currentId);
-
-            UUID nextAppointerId = current.getAssignedRoles()
-                    .stream()
-                    .filter(role -> role.belongsToCompany(companyId))
-                    .filter(role -> role instanceof Owner || role instanceof Manager || role instanceof Founder)
-                    .map(Role::getAppointedBy)
-                    .filter(appointerId -> appointerId != null)
-                    .findFirst()
-                    .orElse(null);
-
-            if (nextAppointerId == null) {
-                return;
+        try{
+            if (!auth.isTokenValid(token) || !auth.isSystemAdmin(token)) {
+                throw new IllegalArgumentException("Only a system admin can cancel member accounts");
             }
+            UUID systemAdminId = getAuthenticatedMemberId(token);
+            boolean result = userDomainService.cancelMemberAccount(memberIdToCancel);
 
-            if (nextAppointerId.equals(member.getUserId())) {
-                throw new IllegalArgumentException("Appointment cycle detected");
-            }
+            AUDIT.info("op=cancel-member-account-by-admin systemAdminId={} memberIdToCancel={}",
+                    systemAdminId, memberIdToCancel);
+            return result;
 
-            currentId = nextAppointerId;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=cancel-member-account-by-admin memberIdToCancel={} result=rejected reason={}",
+                    memberIdToCancel, e.getMessage());
+            throw e;
         }
     }
 
@@ -696,55 +530,6 @@ public class UserService {
         return auth.extractUserId(token);
     }
 
-    public List<UUID> getAppointedMembersTree(UUID memberId, UUID companyId) {
-        if (companyId == null) {
-            throw new IllegalArgumentException("Company ID cannot be null");
-        }
-
-        Member root = getMemberOrThrow(memberId);
-
-        boolean hasRoleInCompany = root.getAssignedRoles()
-                .stream()
-                .anyMatch(role ->
-                        (role instanceof Manager || role instanceof Owner || role instanceof Founder)
-                                && role.isAppointmentApproved()
-                                && role.belongsToCompany(companyId)
-                );
-
-        if (!hasRoleInCompany) {
-            throw new IllegalArgumentException("Member does not have an approved role in this company");
-        }
-
-        List<UUID> result = new java.util.ArrayList<>();
-        Set<UUID> visited = new java.util.HashSet<>();
-        result.add(memberId);
-
-        collectAppointedMembers(memberId, companyId, result, visited);
-
-        return result;
-    }
-
-    private void collectAppointedMembers(UUID appointerId, UUID companyId, List<UUID> result, Set<UUID> visited) {
-        if (appointerId == null || visited.contains(appointerId)) {
-            return;
-        }
-
-        visited.add(appointerId);
-
-        for (Member candidate : memberRepository.findAll()) {
-            boolean wasAppointedByCurrentMemberInCompany = candidate.getAssignedRoles()
-                    .stream()
-                    .anyMatch(role ->
-                            appointerId.equals(role.getAppointedBy())
-                                    && role.belongsToCompany(companyId)
-                    );
-
-            if (wasAppointedByCurrentMemberInCompany && !visited.contains(candidate.getUserId())) {
-                result.add(candidate.getUserId());
-                collectAppointedMembers(candidate.getUserId(), companyId, result, visited);
-            }
-        }
-    }
 
     private void validateEntranceToken(String token) {
         if (!auth.isTokenValid(token)) {
