@@ -4,11 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
@@ -49,7 +49,7 @@ class EventServiceFeaturesIT {
         boolean released = service.releaseSeats(setup.eventId(), token, List.of(setup.seatIds().get(0)));
 
         assertThat(released).isTrue();
-        EventView view = service.getEvent(setup.eventId());
+        EventDTO view = service.getEvent(setup.eventId());
         long available = seatCount(view, setup.areaId(), "AVAILABLE");
         long held = seatCount(view, setup.areaId(), "HELD");
         assertThat(available).isEqualTo(1);
@@ -67,7 +67,7 @@ class EventServiceFeaturesIT {
                 setup.eventId(), UUID.randomUUID(), List.of(setup.seatIds().get(0)));
 
         assertThat(released).isFalse();
-        EventView view = service.getEvent(setup.eventId());
+        EventDTO view = service.getEvent(setup.eventId());
         assertThat(seatCount(view, setup.areaId(), "HELD")).isEqualTo(2);
     }
 
@@ -117,7 +117,7 @@ class EventServiceFeaturesIT {
 
         service.releaseSeats(setup.eventId(), token, List.of());
 
-        EventView view = service.getEvent(setup.eventId());
+        EventDTO view = service.getEvent(setup.eventId());
         assertThat(seatCount(view, setup.areaId(), "HELD")).isEqualTo(2);
     }
 
@@ -328,16 +328,16 @@ class EventServiceFeaturesIT {
         service.hold(setup.eventId(),
                 new HoldCommand(setup.areaId(), List.of(heldSeat), null, UUID.randomUUID()));
 
-        List<EventView.SeatView> seats = service.areaSeats(setup.eventId(), setup.areaId());
+        List<EventDTO.SeatView> seats = service.areaSeats(setup.eventId(), setup.areaId());
 
         assertThat(seats).hasSize(3);
-        assertThat(seats).extracting(EventView.SeatView::seatId)
+        assertThat(seats).extracting(EventDTO.SeatView::seatId)
                 .containsExactlyInAnyOrderElementsOf(setup.seatIds());
         assertThat(seats).filteredOn(s -> s.seatId().equals(heldSeat))
-                .extracting(EventView.SeatView::status)
+                .extracting(EventDTO.SeatView::status)
                 .containsExactly("HELD");
         assertThat(seats).filteredOn(s -> !s.seatId().equals(heldSeat))
-                .extracting(EventView.SeatView::status)
+                .extracting(EventDTO.SeatView::status)
                 .containsOnly("AVAILABLE");
     }
 
@@ -345,11 +345,11 @@ class EventServiceFeaturesIT {
     void areaSeats_returns_synthetic_seats_for_a_standing_area() {
         StandingSetup setup = createStandingEvent(4, "10.00");
 
-        List<EventView.SeatView> seats = service.areaSeats(setup.eventId(), setup.areaId());
+        List<EventDTO.SeatView> seats = service.areaSeats(setup.eventId(), setup.areaId());
 
         assertThat(seats).hasSize(4);
-        assertThat(seats).extracting(EventView.SeatView::status).containsOnly("AVAILABLE");
-        assertThat(seats).extracting(EventView.SeatView::row).containsOnly("GA");
+        assertThat(seats).extracting(EventDTO.SeatView::status).containsOnly("AVAILABLE");
+        assertThat(seats).extracting(EventDTO.SeatView::row).containsOnly("GA");
     }
 
     @Test
@@ -415,12 +415,12 @@ class EventServiceFeaturesIT {
                 .findFirst()
                 .orElseThrow()
                 .seats().stream()
-                .map(EventView.SeatView::seatId)
+                .map(EventDTO.SeatView::seatId)
                 .toList();
         return new SeatingSetup(eventId, areaId, seatIds, caller);
     }
 
-    private long seatCount(EventView view, UUID areaId, String status) {
+    private long seatCount(EventDTO view, UUID areaId, String status) {
         return view.areas().stream()
                 .filter(a -> a.areaId().equals(areaId))
                 .findFirst()

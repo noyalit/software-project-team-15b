@@ -6,12 +6,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
+import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.CheckoutStartedDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
-import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.ActiveOrderView;
-import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.CheckoutStartedView;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.RemoveOrAddSeatsFromActiveOrderCommand;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
@@ -126,7 +126,7 @@ class EventOrderFlowE2ETest {
 
         List<UUID> seatIds = events.getEvent(eventId).areas().stream()
                 .filter(a -> a.areaId().equals(areaId)).findFirst().orElseThrow()
-                .seats().stream().map(EventView.SeatView::seatId).toList();
+                .seats().stream().map(EventDTO.SeatView::seatId).toList();
 
         return new PublishedSeating(eventId, areaId, seatIds);
     }
@@ -171,7 +171,7 @@ class EventOrderFlowE2ETest {
     void get_event_shows_all_seats_available() {
         PublishedSeating p = publishedSeatingEvent(3);
 
-        EventView.AreaView area = events.getEvent(p.eventId()).areas().stream()
+        EventDTO.AreaView area = events.getEvent(p.eventId()).areas().stream()
                 .filter(a -> a.areaId().equals(p.areaId())).findFirst().orElseThrow();
 
         assertThat(area.seats()).hasSize(3);
@@ -290,7 +290,7 @@ class EventOrderFlowE2ETest {
         purchasing.addSeatsToExistingOrder(token, new RemoveOrAddSeatsFromActiveOrderCommand(
                 orderId, Set.of(p.seatIds().get(0))));
 
-        ActiveOrderView view = purchasing.getActiveOrder(token, orderId);
+        ActiveOrderDTO view = purchasing.getActiveOrder(token, orderId);
 
         assertThat(view.orderId()).isEqualTo(orderId);
         assertThat(view.eventId()).isEqualTo(p.eventId());
@@ -312,7 +312,7 @@ class EventOrderFlowE2ETest {
         purchasing.addSeatsToExistingOrder(token, new RemoveOrAddSeatsFromActiveOrderCommand(
                 orderId, Set.of(p.seatIds().get(0))));
 
-        CheckoutStartedView checkoutView = purchasing.startCheckoutForMember(token, orderId);
+        CheckoutStartedDTO checkoutView = purchasing.startCheckoutForMember(token, orderId);
 
         assertThat(checkoutView.expiresAt()).isNotNull();
         assertThat(checkoutView.expiresAt()).isAfter(java.time.LocalDateTime.now());
@@ -365,7 +365,7 @@ class EventOrderFlowE2ETest {
 
         List<UUID> seatIds = events.getEvent(eventId).areas().stream()
                 .filter(a -> a.areaId().equals(areaId)).findFirst().orElseThrow()
-                .seats().stream().map(EventView.SeatView::seatId).toList();
+                .seats().stream().map(EventDTO.SeatView::seatId).toList();
 
         String token = registerAndLogin();
         grantQueueAccess(token, eventId);
@@ -394,7 +394,7 @@ class EventOrderFlowE2ETest {
 
         List<UUID> seatIds = events.getEvent(eventId).areas().stream()
                 .filter(a -> a.areaId().equals(areaId)).findFirst().orElseThrow()
-                .seats().stream().map(EventView.SeatView::seatId).toList();
+                .seats().stream().map(EventDTO.SeatView::seatId).toList();
 
         String token = registerAndLogin();
         grantQueueAccess(token, eventId);

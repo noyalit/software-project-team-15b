@@ -1,6 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.concurrency;
 
-import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
@@ -37,7 +37,7 @@ class CreateActiveOrderConcurrencyTest extends ConcurrencyTestSupport {
         when(queueService.hasAccess(token, eventId))
                 .thenReturn(true);
         
-        LotteryEligibilityResult lotteryEligibilityResult = mock(LotteryEligibilityResult.class);
+        LotteryEligibilityDTO lotteryEligibilityResult = mock(LotteryEligibilityDTO.class);
 
         when(lotteryService.getLotteryEligibilityForEvent(userId, eventId))
                 .thenReturn(lotteryEligibilityResult);

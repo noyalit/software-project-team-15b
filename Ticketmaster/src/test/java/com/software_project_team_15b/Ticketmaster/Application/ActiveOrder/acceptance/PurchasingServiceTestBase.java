@@ -4,12 +4,12 @@ import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryService;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
-import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrderRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
@@ -104,7 +104,7 @@ abstract class PurchasingServiceTestBase {
     }
 
     protected void mockLotteryAllowed() {
-        LotteryEligibilityResult result = mock(LotteryEligibilityResult.class);
+        LotteryEligibilityDTO result = mock(LotteryEligibilityDTO.class);
 
         when(lotteryService.getLotteryEligibilityForEvent(userId, eventId))
                 .thenReturn(result);
@@ -114,7 +114,7 @@ abstract class PurchasingServiceTestBase {
     }
 
     protected void mockLotteryDenied() {
-        LotteryEligibilityResult result = mock(LotteryEligibilityResult.class);
+        LotteryEligibilityDTO result = mock(LotteryEligibilityDTO.class);
 
         when(lotteryService.getLotteryEligibilityForEvent(userId, eventId))
                 .thenReturn(result);
@@ -160,14 +160,14 @@ abstract class PurchasingServiceTestBase {
     }
 
     protected void mockEventViewWithCurrentArea() {
-        EventView.AreaView areaView = new EventView.AreaView(
+        EventDTO.AreaView areaView = new EventDTO.AreaView(
                 areaId,
                 "area",
                 money("0.00"),
                 "SEATING",
                 1,
                 List.of(
-                        new EventView.SeatView(
+                        new EventDTO.SeatView(
                                 seatId1,
                                 "R1",
                                 "1",
@@ -176,7 +176,7 @@ abstract class PurchasingServiceTestBase {
                 )
         );
 
-        EventView eventView = mock(EventView.class);
+        EventDTO eventView = mock(EventDTO.class);
 
         when(eventView.areas()).thenReturn(List.of(areaView));
         when(eventView.name()).thenReturn("evt");

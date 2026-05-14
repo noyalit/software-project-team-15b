@@ -1,15 +1,15 @@
-package com.software_project_team_15b.Ticketmaster.Application.Queue;
+package com.software_project_team_15b.Ticketmaster.DTO;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
 
-public record QueueAccessView(
+public record QueueAccessDTO(
         UUID eventId,
         QueueAccessStatus status,
         Integer position,
         LocalDateTime accessExpiresAt
 ) {
-    public QueueAccessView {
+    public QueueAccessDTO {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }

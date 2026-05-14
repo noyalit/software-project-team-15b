@@ -12,6 +12,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Upd
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventArea;
@@ -44,7 +45,6 @@ import java.util.UUID;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.CannotAcquireLockException;
 // Correct package path for ObjectOptimisticLockingFailureException
@@ -197,19 +197,19 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     @Transactional(readOnly = true)
-    public EventView getEvent(UUID eventId) {
+    public EventDTO getEvent(UUID eventId) {
         Event event = requireEvent(eventId);
-        return EventView.from(event);
+        return EventDTO.from(event);
     }
 
     @Transactional(readOnly = true)
-    public List<EventView> search(SearchCriteria criteria) {
-        return events.search(criteria).stream().map(EventView::from).toList();
+    public List<EventDTO> search(SearchCriteria criteria) {
+        return events.search(criteria).stream().map(EventDTO::from).toList();
     }
 
     @Transactional(readOnly = true)
-    public List<EventView> searchInCompany(UUID companyId, SearchCriteria criteria) {
-        return events.searchByCompany(companyId, criteria).stream().map(EventView::from).toList();
+    public List<EventDTO> searchInCompany(UUID companyId, SearchCriteria criteria) {
+        return events.searchByCompany(companyId, criteria).stream().map(EventDTO::from).toList();
     }
 
     @Retryable(retryFor = {
@@ -427,7 +427,7 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     @Transactional(readOnly = true)
-    public List<EventView.SeatView> areaSeats(UUID eventId, UUID areaId) {
+    public List<EventDTO.SeatView> areaSeats(UUID eventId, UUID areaId) {
         Objects.requireNonNull(areaId, "areaId");
         Event event = requireEvent(eventId);
         EventArea area = event.areas().stream()
@@ -435,7 +435,7 @@ public class EventManagementService implements IEventManagementService, EventSub
                 .findFirst()
                 .orElseThrow(() -> new InvalidEventStateException("area not found: " + areaId));
         return seatsOf(area).values().stream()
-                .map(seat -> new EventView.SeatView(
+                .map(seat -> new EventDTO.SeatView(
                         seat.seatId(), seat.row(), seat.number(), seat.status().name()))
                 .toList();
     }

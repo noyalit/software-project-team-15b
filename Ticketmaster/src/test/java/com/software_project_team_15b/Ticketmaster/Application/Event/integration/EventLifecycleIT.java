@@ -4,10 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
@@ -55,7 +55,7 @@ class EventLifecycleIT {
 
         ConfirmationReceipt confirm = service.confirm(eventId, token);
         assertThat(confirm.quantity()).isEqualTo(2);
-        EventView after = service.getEvent(eventId);
+        EventDTO after = service.getEvent(eventId);
         assertThat(areaOf(after, areaId).availableCapacity()).isEqualTo(1);
     }
 
@@ -90,10 +90,10 @@ class EventLifecycleIT {
                 companyId, "Taylor Swift Eras Tour", "Taylor", Category.CONCERT,
                 Instant.now().plusSeconds(86400), "Stadium", null, null), caller);
 
-        List<EventView> results = service.search(new SearchCriteria(
+        List<EventDTO> results = service.search(new SearchCriteria(
                 "eras", null, null, null, null, null, null, null));
 
-        assertThat(results).extracting(EventView::name).anyMatch(n -> n.toLowerCase().contains("eras"));
+        assertThat(results).extracting(EventDTO::name).anyMatch(n -> n.toLowerCase().contains("eras"));
     }
 
     @Test
@@ -108,8 +108,8 @@ class EventLifecycleIT {
                 company2, "Company 2 Show", "B", Category.OTHER,
                 Instant.now().plusSeconds(86400), "L", null, null), caller);
 
-        List<EventView> c1 = service.searchInCompany(company1, SearchCriteria.empty());
-        assertThat(c1).extracting(EventView::companyId).containsOnly(company1);
+        List<EventDTO> c1 = service.searchInCompany(company1, SearchCriteria.empty());
+        assertThat(c1).extracting(EventDTO::companyId).containsOnly(company1);
     }
 
     @Test
@@ -124,19 +124,19 @@ class EventLifecycleIT {
                 companyId, "Search Sports", "SS", Category.SPORTS,
                 target, "Venue", null, null), caller);
 
-        List<EventView> results = service.search(new SearchCriteria(
+        List<EventDTO> results = service.search(new SearchCriteria(
                 null, null, Category.CONCERT,
                 target.minusSeconds(60), target.plusSeconds(60),
                 null, null, null));
-        assertThat(results).extracting(EventView::category).contains(Category.CONCERT);
-        assertThat(results).extracting(EventView::category).doesNotContain(Category.SPORTS);
+        assertThat(results).extracting(EventDTO::category).contains(Category.CONCERT);
+        assertThat(results).extracting(EventDTO::category).doesNotContain(Category.SPORTS);
     }
 
-    private static List<UUID> seatIdsIn(EventView view, UUID areaId) {
-        return areaOf(view, areaId).seats().stream().map(EventView.SeatView::seatId).toList();
+    private static List<UUID> seatIdsIn(EventDTO view, UUID areaId) {
+        return areaOf(view, areaId).seats().stream().map(EventDTO.SeatView::seatId).toList();
     }
 
-    private static EventView.AreaView areaOf(EventView view, UUID areaId) {
+    private static EventDTO.AreaView areaOf(EventDTO view, UUID areaId) {
         return view.areas().stream()
                 .filter(a -> a.areaId().equals(areaId))
                 .findFirst()

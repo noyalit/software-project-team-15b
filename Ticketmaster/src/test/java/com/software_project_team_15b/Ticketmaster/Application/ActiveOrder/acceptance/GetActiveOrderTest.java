@@ -1,6 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.acceptance;
 
-import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.ActiveOrderView;
+import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
 import org.junit.jupiter.api.Test;
@@ -35,7 +35,7 @@ class GetActiveOrderTest extends PurchasingServiceTestBase {
         when(eventManagementService.getPrice(eq(eventId), any()))
                 .thenReturn(priceBreakdown("0.00"));
 
-        ActiveOrderView view = service.getActiveOrder(token, orderId);
+        ActiveOrderDTO view = service.getActiveOrder(token, orderId);
 
         assertEquals(orderId, view.orderId());
         assertEquals(eventId, view.eventId());

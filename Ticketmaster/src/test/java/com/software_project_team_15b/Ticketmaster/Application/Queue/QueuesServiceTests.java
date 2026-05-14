@@ -5,10 +5,9 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyQu
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIsFullException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessStatus;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueAccessView;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.VirtualQueue;
 
@@ -720,7 +719,7 @@ class QueuesServiceTests {
         when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
-        QueueAccessView view = service.getQueueAccessView("token-a", EVENT_ID);
+        QueueAccessDTO view = service.getQueueAccessView("token-a", EVENT_ID);
 
         assertThat(view.status()).isEqualTo(QueueAccessStatus.NO_QUEUE);
         assertThat(view.position()).isNull();
@@ -738,7 +737,7 @@ class QueuesServiceTests {
 
         service.createEventQueue(EVENT_ID); // USER_A promoted into eventAccess
 
-        QueueAccessView view = service.getQueueAccessView("token-a", EVENT_ID);
+        QueueAccessDTO view = service.getQueueAccessView("token-a", EVENT_ID);
 
         assertThat(view.status()).isEqualTo(QueueAccessStatus.ADMITTED);
         assertThat(view.position()).isNull();
@@ -763,7 +762,7 @@ class QueuesServiceTests {
 
         service.createEventQueue(EVENT_ID); // advanceEventQueue finds empty queue → no promotions
 
-        QueueAccessView view = service.getQueueAccessView("token-a", EVENT_ID);
+        QueueAccessDTO view = service.getQueueAccessView("token-a", EVENT_ID);
 
         assertThat(view.status()).isEqualTo(QueueAccessStatus.WAITING);
         assertThat(view.position()).isEqualTo(0);
@@ -783,7 +782,7 @@ class QueuesServiceTests {
         service.createEventQueue(EVENT_ID);
         LocalDateTime after = LocalDateTime.now();
 
-        QueueAccessView view = service.getQueueAccessView("token-a", EVENT_ID);
+        QueueAccessDTO view = service.getQueueAccessView("token-a", EVENT_ID);
 
         // accessExpiresAt should be ~100 s after admission, bounded by test wall-clock
         assertThat(view.accessExpiresAt()).isAfterOrEqualTo(before.plusSeconds(100));
@@ -843,7 +842,7 @@ class QueuesServiceTests {
 
         service.createEventQueue(EVENT_ID); // empty queue, slots available
 
-        QueueAccessView view = service.requestAccess("token-a", EVENT_ID);
+        QueueAccessDTO view = service.requestAccess("token-a", EVENT_ID);
 
         // USER_A is pushed to queue then immediately promoted by advanceEventQueue
         assertThat(view.status()).isEqualTo(QueueAccessStatus.ADMITTED);
@@ -862,7 +861,7 @@ class QueuesServiceTests {
         when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
-        QueueAccessView view = service.requestAccess("token-a", EVENT_ID);
+        QueueAccessDTO view = service.requestAccess("token-a", EVENT_ID);
 
         assertThat(view.status()).isEqualTo(QueueAccessStatus.ADMITTED);
         assertThat(view.accessExpiresAt()).isEqualTo(expiresAt);
@@ -883,7 +882,7 @@ class QueuesServiceTests {
         when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
-        QueueAccessView view = service.requestAccess("token-a", EVENT_ID);
+        QueueAccessDTO view = service.requestAccess("token-a", EVENT_ID);
 
         assertThat(view.status()).isEqualTo(QueueAccessStatus.WAITING);
         assertThat(view.position()).isEqualTo(0);
