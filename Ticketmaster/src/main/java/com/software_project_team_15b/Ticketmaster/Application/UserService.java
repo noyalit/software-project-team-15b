@@ -283,46 +283,77 @@ public class UserService {
         return memberRepository.save(member);
     }
 
-    public Member changeRoleToManager(String token) {
+    public Member changeRoleToManager(String token, UUID eventId) {
         UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
+
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID cannot be null");
+        }
 
         Role managerRole = member.getAssignedRoles()
                 .stream()
                 .filter(role -> role instanceof Manager)
+                .map(role -> (Manager) role)
+                .filter(manager -> eventId.equals(manager.getEventId()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Member does not have an assigned Manager role"));
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Member does not have an assigned Manager role for this event"
+                ));
+
         member.switchActiveRole(managerRole);
+
         Member saved = memberRepository.save(member);
-        AUDIT.info("op=switch-role userId={} role=Manager", saved.getUserId());
+        AUDIT.info("op=switch-role userId={} role=Manager eventId={}", saved.getUserId(), eventId);
         return saved;
     }
 
-    public Member changeRoleToOwner(String token) {
+    public Member changeRoleToOwner(String token, UUID companyId) {
         UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
+
+        if (companyId == null) {
+            throw new IllegalArgumentException("Company ID cannot be null");
+        }
+
         Role ownerRole = member.getAssignedRoles()
                 .stream()
                 .filter(role -> role instanceof Owner)
+                .filter(role -> !(role instanceof Founder))
+                .filter(role -> role.belongsToCompany(companyId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Member does not have an assigned Owner role"));
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Member does not have an assigned Owner role for this company"
+                ));
+
         member.switchActiveRole(ownerRole);
+
         Member saved = memberRepository.save(member);
-        AUDIT.info("op=switch-role userId={} role=Owner", saved.getUserId());
+        AUDIT.info("op=switch-role userId={} role=Owner companyId={}", saved.getUserId(), companyId);
         return saved;
     }
 
-    public Member changeRoleToFounder(String token) {
+    public Member changeRoleToFounder(String token, UUID companyId) {
         UUID userId = getAuthenticatedMemberId(token);
         Member member = getMemberOrThrow(userId);
+
+        if (companyId == null) {
+            throw new IllegalArgumentException("Company ID cannot be null");
+        }
+
         Role founderRole = member.getAssignedRoles()
                 .stream()
                 .filter(role -> role instanceof Founder)
+                .filter(role -> role.belongsToCompany(companyId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Member does not have a Founder role"));
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Member does not have a Founder role for this company"
+                ));
+
         member.switchActiveRole(founderRole);
+
         Member saved = memberRepository.save(member);
-        AUDIT.info("op=switch-role userId={} role=Founder", saved.getUserId());
+        AUDIT.info("op=switch-role userId={} role=Founder companyId={}", saved.getUserId(), companyId);
         return saved;
     }
 
@@ -335,7 +366,7 @@ public class UserService {
         return saved;
     }
 
-    public Member appointManager(UUID memberId, String token, UUID companyId, Set<ManagerPermission> permissions) {
+    public Member appointManager(UUID memberId, String token, UUID companyId, UUID eventId, Set<ManagerPermission> permissions) {
         if (permissions == null || permissions.isEmpty()) {
             throw new IllegalArgumentException("Manager must have at least one permission");
         }
@@ -344,7 +375,7 @@ public class UserService {
         validateNoAppointmentCycle(member, ownerId, companyId);
         validateOwnerAppointer(ownerId, companyId);
 
-        Role managerRole = new Manager(ownerId, companyId, permissions);
+        Role managerRole = new Manager(ownerId, companyId,eventId, permissions);
         member.addRole(managerRole);
         Member saved = memberRepository.save(member);
         AUDIT.info("op=appoint-manager appointerId={} memberId={} companyId={} permissions={}",
