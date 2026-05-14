@@ -488,6 +488,12 @@ public class UserDomainService {
         }
     }
 
+    public Member getMemberByUsername(String username) {
+        return memberRepository.findByUsername(username)
+                .orElseThrow(() ->
+                        new IllegalArgumentException("Invalid username or password"));
+    }
+
 }
 
 
