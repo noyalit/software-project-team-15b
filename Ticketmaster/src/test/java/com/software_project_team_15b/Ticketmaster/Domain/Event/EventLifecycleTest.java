@@ -3,9 +3,7 @@ package com.software_project_team_15b.Ticketmaster.Domain.Event;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.HoldNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.SeatUnavailableException;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

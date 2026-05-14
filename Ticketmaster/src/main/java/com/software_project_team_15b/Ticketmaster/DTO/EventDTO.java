@@ -1,4 +1,4 @@
-package com.software_project_team_15b.Ticketmaster.Application.Event;
+package com.software_project_team_15b.Ticketmaster.DTO;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
@@ -11,7 +11,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-public record EventView(
+public record EventDTO(
         UUID eventId,
         UUID companyId,
         String name,
@@ -33,9 +33,9 @@ public record EventView(
 
     public record SeatView(UUID seatId, String row, String number, String status) {}
 
-    public static EventView from(Event e) {
-        List<AreaView> areas = e.areas().stream().map(EventView::toAreaView).toList();
-        return new EventView(
+    public static EventDTO from(Event e) {
+        List<AreaView> areas = e.areas().stream().map(EventDTO::toAreaView).toList();
+        return new EventDTO(
                 e.eventId(), e.companyId(), e.name(), e.artist(), e.category(),
                 e.startsAt(), e.location(), e.status(), areas
         );

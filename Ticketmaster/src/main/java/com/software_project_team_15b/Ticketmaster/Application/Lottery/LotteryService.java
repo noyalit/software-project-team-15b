@@ -4,6 +4,8 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyLo
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.Lottery;
@@ -348,10 +350,10 @@ public class LotteryService {
      *
      * @param userId  the unique identifier of the user; must not be null
      * @param eventId the unique identifier of the event; must not be null
-     * @return a {@link LotteryEligibilityResult} describing the user's eligibility
+     * @return a {@link LotteryEligibilityDTO} describing the user's eligibility
      * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
      */
-    public LotteryEligibilityResult getLotteryEligibilityForEvent(UUID userId, UUID eventId) {
+    public LotteryEligibilityDTO getLotteryEligibilityForEvent(UUID userId, UUID eventId) {
         if (userId == null) {
             throw new IllegalArgumentException("userId cannot be null");
         }
@@ -365,19 +367,19 @@ public class LotteryService {
             // Lottery has not been drawn yet — check whether one even exists.
             Lottery lottery = lotteryRepository.getLottery(eventId);
             if (lottery == null) {
-                return new LotteryEligibilityResult(LotteryEligibilityStatus.NO_LOTTERY_REQUIRED);
+                return new LotteryEligibilityDTO(LotteryEligibilityStatus.NO_LOTTERY_REQUIRED);
             }
-            return new LotteryEligibilityResult(LotteryEligibilityStatus.NOT_SELECTED);
+            return new LotteryEligibilityDTO(LotteryEligibilityStatus.NOT_SELECTED);
         }
 
         // Lottery was drawn — check whether this user won and whether their window is still open.
         LocalDateTime expiresAt = eventWinners.get(userId);
         if (expiresAt == null) {
-            return new LotteryEligibilityResult(LotteryEligibilityStatus.NOT_SELECTED);
+            return new LotteryEligibilityDTO(LotteryEligibilityStatus.NOT_SELECTED);
         }
         if (LocalDateTime.now().isBefore(expiresAt)) {
-            return new LotteryEligibilityResult(LotteryEligibilityStatus.WON_AND_ACCESS_VALID);
+            return new LotteryEligibilityDTO(LotteryEligibilityStatus.WON_AND_ACCESS_VALID);
         }
-        return new LotteryEligibilityResult(LotteryEligibilityStatus.ACCESS_EXPIRED);
+        return new LotteryEligibilityDTO(LotteryEligibilityStatus.ACCESS_EXPIRED);
     }
 }

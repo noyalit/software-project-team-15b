@@ -4,6 +4,8 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyLo
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.Lottery;
@@ -282,7 +284,7 @@ class LotteryServiceTests {
 
         service.runEventLottery(EVENT_ID, 1);
 
-        LotteryEligibilityResult result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
+        LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
         assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.WON_AND_ACCESS_VALID);
         assertThat(result.canCreateActiveOrder()).isTrue();
     }
@@ -300,7 +302,7 @@ class LotteryServiceTests {
                 .filter(u -> !winners.contains(u))
                 .findFirst().orElseThrow();
 
-        LotteryEligibilityResult result = service.getLotteryEligibilityForEvent(loser, EVENT_ID);
+        LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(loser, EVENT_ID);
         assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.NOT_SELECTED);
         assertThat(result.canCreateActiveOrder()).isFalse();
     }
@@ -314,7 +316,7 @@ class LotteryServiceTests {
 
         assertThat(result).isEmpty();
         // Lottery is marked as drawn — any user who didn't win is NOT_SELECTED
-        LotteryEligibilityResult view = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
+        LotteryEligibilityDTO view = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
         assertThat(view.status()).isEqualTo(LotteryEligibilityStatus.NOT_SELECTED);
     }
 
@@ -383,7 +385,7 @@ class LotteryServiceTests {
         service.runEventLottery(EVENT_ID, 1);         // USER_A admitted
         service.clearWinnerAccess(USER_A, EVENT_ID);  // access revoked
 
-        LotteryEligibilityResult result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
+        LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
         assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.NOT_SELECTED);
     }
 
@@ -401,7 +403,7 @@ class LotteryServiceTests {
         service.clearWinnerAccess(winner, EVENT_ID);
 
         // Clearing the winner's access must not promote the loser
-        LotteryEligibilityResult result = service.getLotteryEligibilityForEvent(loser, EVENT_ID);
+        LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(loser, EVENT_ID);
         assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.NOT_SELECTED);
     }
 
@@ -439,7 +441,7 @@ class LotteryServiceTests {
     void getLotteryEligibilityForEvent_noLottery_returnsNoLotteryStatus() {
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
 
-        LotteryEligibilityResult result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
+        LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
 
         assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.NO_LOTTERY_REQUIRED);
         assertThat(result.canCreateActiveOrder()).isTrue();
@@ -449,7 +451,7 @@ class LotteryServiceTests {
     void getLotteryEligibilityForEvent_lotteryExistsButNotDrawn_returnsNotSelectedStatus() {
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(new Lottery(EVENT_ID));
 
-        LotteryEligibilityResult result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
+        LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
 
         assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.NOT_SELECTED);
         assertThat(result.canCreateActiveOrder()).isFalse();
@@ -463,7 +465,7 @@ class LotteryServiceTests {
 
         service.runEventLottery(EVENT_ID, 1);
 
-        LotteryEligibilityResult result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
+        LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
 
         assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.WON_AND_ACCESS_VALID);
         assertThat(result.canCreateActiveOrder()).isTrue();
@@ -476,7 +478,7 @@ class LotteryServiceTests {
         eventWinners.put(USER_A, LocalDateTime.now().minusSeconds(1));
         winnersMap(service).put(EVENT_ID, eventWinners);
 
-        LotteryEligibilityResult result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
+        LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
 
         assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.ACCESS_EXPIRED);
         assertThat(result.canCreateActiveOrder()).isFalse();

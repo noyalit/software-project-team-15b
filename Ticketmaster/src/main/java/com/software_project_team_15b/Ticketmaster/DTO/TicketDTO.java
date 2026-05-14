@@ -1,4 +1,4 @@
-package com.software_project_team_15b.DTOs;
+package com.software_project_team_15b.Ticketmaster.DTO;
 
 import java.util.UUID;
 

@@ -6,6 +6,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Hol
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
@@ -65,7 +66,7 @@ public interface IEventManagementService {
     Map<Boolean, Set<UUID>> getSeatsAvailability(UUID eventId, UUID areaId, Set<UUID> seatIds);
 
     /**
-     * Returns every seat in an area as a flat list of {@link EventView.SeatView}.
+     * Returns every seat in an area as a flat list of {@link EventDTO.SeatView}.
      * <p>
      * Works for seating and standing areas (the latter via synthetic GA seats).
      * <p>
@@ -76,7 +77,7 @@ public interface IEventManagementService {
      * @return seats with id, row, number, status
      * @throws InvalidEventStateException if the event or area is not found
      */
-    List<EventView.SeatView> areaSeats(UUID eventId, UUID areaId);
+    List<EventDTO.SeatView> areaSeats(UUID eventId, UUID areaId);
 
     /**
      * Returns whether an area has at least one available slot.
@@ -257,7 +258,7 @@ public interface IEventManagementService {
      * @return event view
      * @throws InvalidEventStateException if the event is not found
      */
-    EventView getEvent(UUID eventId);
+    EventDTO getEvent(UUID eventId);
 
     /**
      * Searches the catalog globally.
@@ -267,7 +268,7 @@ public interface IEventManagementService {
      * @param criteria filters; use {@link SearchCriteria#empty()} to match all
      * @return matching events
      */
-    List<EventView> search(SearchCriteria criteria);
+    List<EventDTO> search(SearchCriteria criteria);
 
     /**
      * Searches inside a single company's catalog.
@@ -278,7 +279,7 @@ public interface IEventManagementService {
      * @param criteria  filters
      * @return matching events
      */
-    List<EventView> searchInCompany(UUID companyId, SearchCriteria criteria);
+    List<EventDTO> searchInCompany(UUID companyId, SearchCriteria criteria);
 
     /**
      * Validates the request against every purchase policy of the event;

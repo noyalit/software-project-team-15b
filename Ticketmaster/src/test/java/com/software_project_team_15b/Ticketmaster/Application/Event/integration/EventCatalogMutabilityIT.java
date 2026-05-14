@@ -5,13 +5,13 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
@@ -49,7 +49,7 @@ class EventCatalogMutabilityIT {
                 new UpdateEventCommand("Renamed", "New Artist", Category.SPORTS, newStart, "New Hall"),
                 s.callerId());
 
-        EventView view = service.getEvent(s.eventId());
+        EventDTO view = service.getEvent(s.eventId());
         assertThat(view.name()).isEqualTo("Renamed");
         assertThat(view.artist()).isEqualTo("New Artist");
         assertThat(view.category()).isEqualTo(Category.SPORTS);
@@ -60,12 +60,12 @@ class EventCatalogMutabilityIT {
     @Test
     void updateEvent_with_only_some_fields_leaves_others_unchanged() {
         Setup s = createDraftSeatingEvent(1, "10.00");
-        EventView before = service.getEvent(s.eventId());
+        EventDTO before = service.getEvent(s.eventId());
 
         service.updateEvent(s.eventId(),
                 new UpdateEventCommand(null, null, null, null, "Different Hall"), s.callerId());
 
-        EventView after = service.getEvent(s.eventId());
+        EventDTO after = service.getEvent(s.eventId());
         assertThat(after.name()).isEqualTo(before.name());
         assertThat(after.artist()).isEqualTo(before.artist());
         assertThat(after.location()).isEqualTo("Different Hall");
@@ -143,7 +143,7 @@ class EventCatalogMutabilityIT {
         service.updateArea(s.eventId(), s.areaId(),
                 new UpdateAreaCommand(null, null, 5), s.callerId());
 
-        EventView view = service.getEvent(s.eventId());
+        EventDTO view = service.getEvent(s.eventId());
         assertThat(areaOf(view, s.areaId()).availableCapacity()).isEqualTo(2);
     }
 
@@ -345,7 +345,7 @@ class EventCatalogMutabilityIT {
         return new Setup(eventId, areaId, caller);
     }
 
-    private static EventView.AreaView areaOf(EventView view, UUID areaId) {
+    private static EventDTO.AreaView areaOf(EventDTO view, UUID areaId) {
         return view.areas().stream()
                 .filter(a -> a.areaId().equals(areaId))
                 .findFirst()

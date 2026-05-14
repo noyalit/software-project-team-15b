@@ -1,6 +1,8 @@
 package com.software_project_team_15b.Ticketmaster.Application.Queue;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.*;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.VirtualQueue;
@@ -222,7 +224,7 @@ public class QueueService {
      * this method may return {@code true} even though the access has technically expired.
      * Callers that need strict expiry enforcement should use
      * {@link #getQueueAccessView(String, UUID)} and check
-     * {@link QueueAccessView#canCreateActiveOrder()} instead.
+     * {@link QueueAccessDTO#canCreateActiveOrder()} instead.
      *
      * @param token   the user's auth token; must not be null
      * @param eventId the unique identifier of the event; must not be null
@@ -259,13 +261,13 @@ public class QueueService {
      *
      * @param token   the user's auth token; must not be null
      * @param eventId the unique identifier of the event; must not be null
-     * @return a {@link QueueAccessView} describing the user's current state
+     * @return a {@link QueueAccessDTO} describing the user's current state
      * @throws IllegalArgumentException if {@code token} or {@code eventId} is null,
      *                                  or if the user is not present in the queue (when WAITING)
      * @throws InvalidTokenException    if the token is invalid
      * @throws QueueNotFoundException   if a queue exists for the event but cannot be read
      */
-    public QueueAccessView getQueueAccessView(String token, UUID eventId) {
+    public QueueAccessDTO getQueueAccessView(String token, UUID eventId) {
         if (token == null) {
             throw new IllegalArgumentException("token cannot be null");
         }
@@ -278,14 +280,14 @@ public class QueueService {
         UUID userId = auth.extractUserId(token);
         ConcurrentHashMap<UUID, LocalDateTime> admittedUsers = eventAccess.get(eventId);
         if (admittedUsers == null) {
-            return new QueueAccessView(eventId, QueueAccessStatus.NO_QUEUE, null, null);
+            return new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null);
         }
         LocalDateTime expiresAt = admittedUsers.get(userId);
         if (expiresAt != null) {
-            return new QueueAccessView(eventId, QueueAccessStatus.ADMITTED, null, expiresAt);
+            return new QueueAccessDTO(eventId, QueueAccessStatus.ADMITTED, null, expiresAt);
         }
         int position = getPositionInEventQueue(token, eventId);
-        return new QueueAccessView(eventId, QueueAccessStatus.WAITING, position, null);
+        return new QueueAccessDTO(eventId, QueueAccessStatus.WAITING, position, null);
     }
 
     /**
@@ -293,7 +295,7 @@ public class QueueService {
      * of their current access state.
      *
      * <p>If the user is already admitted (promoted from the queue and their window has not
-     * yet expired), this method returns their current {@link QueueAccessView} immediately
+     * yet expired), this method returns their current {@link QueueAccessDTO} immediately
      * without re-queuing them. Re-queuing an admitted user would corrupt state: because
      * the user was already popped from the persistent queue, {@code pushToEventQueue}
      * would not detect the duplicate and would silently add them a second time.
@@ -305,14 +307,14 @@ public class QueueService {
      *
      * @param token   the user's auth token; must not be null
      * @param eventId the unique identifier of the event; must not be null
-     * @return a {@link QueueAccessView} describing the user's current access state
+     * @return a {@link QueueAccessDTO} describing the user's current access state
      * @throws IllegalArgumentException if {@code token} or {@code eventId} is null
      * @throws InvalidTokenException    if the token is invalid
      * @throws QueueNotFoundException   if no queue exists for the given event
      * @throws QueueIsFullException     if the persistent queue has reached its capacity
      * @throws AlreadyInQueueException  if the user is already waiting in the queue
      */
-    public QueueAccessView requestAccess(String token, UUID eventId) {
+    public QueueAccessDTO requestAccess(String token, UUID eventId) {
         if (token == null) {
             throw new IllegalArgumentException("token cannot be null");
         }

@@ -1,6 +1,5 @@
-package com.software_project_team_15b.Ticketmaster.Application.ActiveOrder;
+package com.software_project_team_15b.Ticketmaster.DTO;
 
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventStatus;
@@ -12,7 +11,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
-public record ActiveOrderView(
+public record ActiveOrderDTO(
         UUID orderId,
         UUID userId,
         UUID eventId,
@@ -41,9 +40,9 @@ public record ActiveOrderView(
     ) {
     }
 
-    public static ActiveOrderView from(
+    public static ActiveOrderDTO from(
             ActiveOrder activeOrder,
-            EventView eventView,
+            EventDTO eventView,
             PriceBreakdown pricing
     ) {
         if (activeOrder == null) {
@@ -56,7 +55,7 @@ public record ActiveOrderView(
             throw new IllegalArgumentException("PriceBreakdown cannot be null");
         }
 
-        EventView.AreaView area = eventView.areas().stream()
+        EventDTO.AreaView area = eventView.areas().stream()
                 .filter(a -> a.areaId().equals(activeOrder.getAreaId()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -65,7 +64,7 @@ public record ActiveOrderView(
 
         List<SeatInOrderView> seats = activeOrder.getOrderSeats().stream()
                 .map(seatId -> {
-                    EventView.SeatView seatView = area.seats().stream()
+                    EventDTO.SeatView seatView = area.seats().stream()
                             .filter(s -> s.seatId().equals(seatId))
                             .findFirst()
                             .orElseThrow(() -> new IllegalArgumentException(
@@ -84,7 +83,7 @@ public record ActiveOrderView(
 
         int quantity = activeOrder.getOrderSeats().size();
 
-        return new ActiveOrderView(
+        return new ActiveOrderDTO(
                 activeOrder.getOrderId(),
                 activeOrder.getUserId(),
                 activeOrder.getEventId(),

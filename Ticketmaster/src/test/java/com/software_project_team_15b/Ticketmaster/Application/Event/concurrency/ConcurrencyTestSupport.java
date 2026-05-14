@@ -1,9 +1,9 @@
 package com.software_project_team_15b.Ticketmaster.Application.Event.concurrency;
 
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
-import com.software_project_team_15b.Ticketmaster.Application.Event.EventView;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import java.time.Instant;
@@ -33,13 +33,13 @@ public final class ConcurrencyTestSupport {
                 AddAreaCommand.AreaType.SEATING, null, specs), caller);
         service.publish(eventId, caller);
 
-        EventView view = service.getEvent(eventId);
+        EventDTO view = service.getEvent(eventId);
         List<UUID> seats = view.areas().stream()
                 .filter(a -> a.areaId().equals(areaId))
                 .findFirst()
                 .orElseThrow()
                 .seats().stream()
-                .map(EventView.SeatView::seatId)
+                .map(EventDTO.SeatView::seatId)
                 .toList();
         return new SeatingSetup(eventId, areaId, seats);
     }

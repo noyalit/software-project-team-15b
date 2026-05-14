@@ -1,7 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.acceptance;
 
-import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.CheckoutStartedView;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
+import com.software_project_team_15b.Ticketmaster.DTO.CheckoutStartedDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedPaymentException;
@@ -52,7 +52,7 @@ class CheckoutTest extends PurchasingServiceTestBase {
         when(eventManagementService.hold(eq(eventId), any()))
                 .thenReturn(holdReceipt);
 
-        CheckoutStartedView view = service.startCheckoutForGuest(
+        CheckoutStartedDTO view = service.startCheckoutForGuest(
                 token,
                 orderId,
                 LocalDate.of(2000, 1, 1)

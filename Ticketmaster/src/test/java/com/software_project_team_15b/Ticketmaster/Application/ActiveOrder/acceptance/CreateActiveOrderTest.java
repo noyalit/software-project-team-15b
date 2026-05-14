@@ -1,6 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.acceptance;
 
-import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryEligibilityResult;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
@@ -194,7 +194,7 @@ class CreateActiveOrderTest extends PurchasingServiceTestBase {
                 ActiveOrderStatus.ACTIVE
         )).thenReturn(false);
 
-        LotteryEligibilityResult lotteryEligibilityResult = mock(LotteryEligibilityResult.class);
+        LotteryEligibilityDTO lotteryEligibilityResult = mock(LotteryEligibilityDTO.class);
         when(lotteryEligibilityResult.canCreateActiveOrder()).thenReturn(false);
 
         when(lotteryService.getLotteryEligibilityForEvent(userId, eventId))
