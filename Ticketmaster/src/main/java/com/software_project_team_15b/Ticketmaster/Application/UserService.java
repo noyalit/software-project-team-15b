@@ -10,19 +10,17 @@ import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.software_project_team_15b.Ticketmaster.Domain.Member.Founder;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.Manager;
+
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
-import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
-import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
+
+
+
 
 /**
  * UserService provides functionality for managing user accounts and roles.
@@ -31,14 +29,25 @@ import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 public class UserService {
 
     private static final Logger AUDIT = LoggerFactory.getLogger("audit.user");
-    UserDomainService userDomainService;
+    private final UserDomainService userDomainService;
     private final IAuth auth;
     private final IPasswordEncoder passwordEncoder;
+    private final QueueDomainService queueDomainService;
+    private final ISystemAdminRepository systemAdminRepository;
 
-    public UserService(UserDomainService userDomainService,IAuth auth, IPasswordEncoder passwordEncoder) {
+
+    public UserService(
+            UserDomainService userDomainService,
+            IAuth auth, 
+            IPasswordEncoder passwordEncoder, 
+            QueueDomainService queueDomainService,
+            ISystemAdminRepository systemAdminRepository
+            ) {
         this.userDomainService = userDomainService;
         this.auth = auth;
         this.passwordEncoder = passwordEncoder;
+        this.queueDomainService = queueDomainService;
+        this.systemAdminRepository = systemAdminRepository;
 
     }
 
@@ -118,12 +127,12 @@ public class UserService {
      * @return Entrance token (guest/temp token)
      */
     public String enterSystem() {
-        if (queueService.canAccessWebsite()) {
+        if (queueDomainService.canAccessWebsite()) {
             return enterAsGuest();
         }
 
         String tempToken = auth.generateTempToken();
-        queueService.addUserToSiteQueue(tempToken);
+        queueDomainService.addUserToSiteQueue(tempToken);
 
         AUDIT.info("op=enter-system queued=true");
 
@@ -145,7 +154,7 @@ public class UserService {
             throw new IllegalArgumentException("Token is not a temporary queue token");
         }
 
-        boolean canExitQueue = queueService.validateAndExitQueue(tempToken);
+        boolean canExitQueue = queueDomainService.validateAndExitQueue(tempToken);
 
         if (!canExitQueue) {
             throw new IllegalStateException("User is still waiting in the queue");
@@ -201,8 +210,9 @@ public class UserService {
             throw new IllegalArgumentException("Invalid or expired token");
         }
 
+
         if (auth.isGuest(token)) {
-            purchasingService.cancelAllActiveOrdersOfCurrentUser(token);
+            //TO DO: add listener to PurchasingService 
             auth.exitSystem(token);
             AUDIT.info("op=logout userType=guest");
             return null;
