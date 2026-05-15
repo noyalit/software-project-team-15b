@@ -389,40 +389,5 @@ public interface IEventManagementService {
     /** Token-authenticated variant of {@link #replaceDiscountPolicies(UUID, List, UUID)}. */
     void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies, String token);
 
-    /*
-     * =========================================================================
-     * STILL-MISSING REQUIREMENTS — out of scope for the Event aggregate.
-     * Listed here for traceability; they belong to other aggregates / services
-     * (Lottery, Queue, OrderHistory, Notification, Company, ExternalAPIs).
-     * =========================================================================
-     *
-     *  II.3.6           — Lottery registration / win-permit issuance.
-     *                     Belongs to the Lottery aggregate.
-     *  II.2.6 / I.7     — Virtual queue gating and queue-state visibility.
-     *                     Belongs to the Queue aggregate.
-     *  II.2.8           — End-to-end "all-or-nothing" checkout orchestration
-     *                     across payment + ticketing externals. Belongs to
-     *                     an Order / Checkout coordinator.
-     *  I.5              — Outbound notification fan-out (sold-out, cancelled,
-     *                     rescheduled, role changes). Belongs to a
-     *                     Notification port + Application-level publisher.
-     *  I.3 / INTEG      — Automatic refund cascade on cancel. Belongs to the
-     *                     Payment / Refund external integration layer.
-     *  II.4.5           — Per-event purchase / order history query. Belongs
-     *                     to the OrderHistory aggregate.
-     *  II.4.6           — Sales reports. Belongs to the Reporting / Company
-     *                     aggregate, aggregating OrderHistory data.
-     *  II.4.13          — Hide events of inactive companies from search.
-     *                     Belongs to the Company aggregate (the repository
-     *                     specification already enforces this filter).
-     *  II.6.5           — System analytics primitives. Belongs to a dedicated
-     *                     Admin / Analytics service, not the Event aggregate.
-     *  II.3.5 / II.4.5  — Immutable historical purchase snapshots. Belongs to
-     *                     the OrderHistory aggregate.
-     *  Concept §3.b     — "Buy N get M free" shape at the price-query
-     *                     boundary requires multi-line PriceQuery; deferred
-     *                     to a future PriceQuery DTO change.
-     *  SLR.7            — Persistency / recovery hooks. Cross-cutting
-     *                     infrastructure concern, not a service method.
-     */
+
 }
