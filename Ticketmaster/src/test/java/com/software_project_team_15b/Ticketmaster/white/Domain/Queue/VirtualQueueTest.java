@@ -1,5 +1,6 @@
-package com.software_project_team_15b.Ticketmaster.Domain.Queue;
+package com.software_project_team_15b.Ticketmaster.white.Domain.Queue;
 
+import com.software_project_team_15b.Ticketmaster.Domain.Queue.VirtualQueue;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
