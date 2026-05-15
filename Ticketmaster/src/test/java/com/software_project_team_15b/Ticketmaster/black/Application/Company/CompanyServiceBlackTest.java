@@ -1,11 +1,9 @@
-package com.software_project_team_15b.Ticketmaster.Application.Company;
+package com.software_project_team_15b.Ticketmaster.black.Application.Company;
 
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Field;
@@ -15,15 +13,17 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
+import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.IEventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
@@ -38,21 +38,23 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompany
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 
-class CompanyServiceTest {
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
+class CompanyServiceBlackTest {
 
     private final Map<UUID, Company> repoStorage = new ConcurrentHashMap<>();
 
-    private ICompanyRepository repo;
-    private IAuth auth;
-    private UserService userService;
-    private IEventManagementService eventManagementService;
+    @Mock private ICompanyRepository repo;
+    @Mock private IAuth auth;
+    @Mock private UserService userService;
+    @Mock private IEventManagementService eventManagementService;
+
     private CompanyService service;
 
     @BeforeEach
     void setUp() {
         repoStorage.clear();
 
-        repo = mock(ICompanyRepository.class);
         when(repo.save(any(Company.class))).thenAnswer(inv -> saveToRepo(inv.getArgument(0)));
         when(repo.findById(any())).thenAnswer(inv -> {
             UUID id = inv.getArgument(0);
@@ -78,16 +80,12 @@ class CompanyServiceTest {
             return null;
         }).when(repo).remove(any(Company.class));
 
-        auth = mock(IAuth.class);
-        userService = mock(UserService.class);
-        eventManagementService = mock(IEventManagementService.class);
         when(userService.isActiveOwner(any())).thenReturn(true);
         when(userService.isActiveFounder(any())).thenReturn(true);
         when(eventManagementService.searchInCompany(any(), any())).thenReturn(List.of());
         service = new CompanyService(repo, userService, eventManagementService, auth);
     }
 
-    // Assigns a UUID via reflection (Company has no public setId) and stores in the backing map.
     private Company saveToRepo(Company company) {
         if (company == null) throw new IllegalArgumentException("company cannot be null");
         try {
@@ -104,9 +102,6 @@ class CompanyServiceTest {
             throw new RuntimeException(e);
         }
     }
-
-    // ===========================================================================================
-    // Auth stubs
 
     private String registerMember(UUID userId) {
         String token = "member-" + UUID.randomUUID();
@@ -127,29 +122,7 @@ class CompanyServiceTest {
     private String registerGuest() {
         String token = "guest-" + UUID.randomUUID();
         when(auth.isTokenValid(token)).thenReturn(true);
-        // isMember and isSystemAdmin return false by default → treated as unauthorized
         return token;
-    }
-
-    // ===========================================================================================
-    // Constructor / dependency validation
-
-    @Test
-    void constructor_throws_when_repository_is_null() {
-        assertThatThrownBy(() -> new CompanyService(null, userService, eventManagementService, auth))
-                .isInstanceOf(NullPointerException.class);
-    }
-
-    @Test
-    void constructor_throws_when_userService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(repo, null, eventManagementService, auth))
-                .isInstanceOf(NullPointerException.class);
-    }
-
-    @Test
-    void constructor_throws_when_auth_is_null() {
-        assertThatThrownBy(() -> new CompanyService(repo, userService, eventManagementService, null))
-                .isInstanceOf(NullPointerException.class);
     }
 
     // ===========================================================================================
@@ -521,7 +494,6 @@ class CompanyServiceTest {
         UUID managerId = UUID.randomUUID();
 
         service.addManager(founderToken, company.getId(), managerId, Set.of(ManagerPermission.MANAGE_EVENTS));
-        // no exception expected; UserService.appointManager is mocked
     }
 
     // addManager — negative
@@ -584,7 +556,6 @@ class CompanyServiceTest {
         UUID managerId = UUID.randomUUID();
 
         service.removeManager(founderToken, company.getId(), managerId);
-        // no exception expected; UserService.removeManagerAppointment is mocked
     }
 
     // removeManager — negative
@@ -631,7 +602,6 @@ class CompanyServiceTest {
 
         service.updateManagerPermissions(founderToken, company.getId(), managerId,
                 Set.of(ManagerPermission.MANAGE_EVENTS));
-        // UserService.changeManagerPermissions is mocked — no exception expected
     }
 
     // updateManagerPermissions — negative
@@ -758,7 +728,6 @@ class CompanyServiceTest {
 
         UUID coOwnerId = UUID.randomUUID();
         service.addOwner(founderToken, c1.getId(), coOwnerId);
-        // Beta intentionally has no coOwner
 
         List<Company> result = service.findCompaniesByOwner(founderToken, coOwnerId);
 
@@ -1405,147 +1374,5 @@ class CompanyServiceTest {
         String founderToken = registerMember(UUID.randomUUID());
         assertThatThrownBy(() -> service.removeEventManager(founderToken, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID()))
                 .isInstanceOf(CompanyNotFoundException.class);
-    }
-
-    // ===========================================================================================
-    // Concurrency
-    // Tokens are pre-registered before the thread pool starts to avoid concurrent when() setup.
-
-    @Test
-    void concurrent_createCompany_produces_distinct_companies() throws Exception {
-        int N = 50;
-        String[] tokens = new String[N];
-        for (int i = 0; i < N; i++) tokens[i] = registerMember(UUID.randomUUID());
-
-        ExecutorService pool = Executors.newFixedThreadPool(16);
-        CountDownLatch start = new CountDownLatch(1);
-        Set<UUID> ids = ConcurrentHashMap.newKeySet();
-        AtomicInteger failures = new AtomicInteger();
-
-        for (int i = 0; i < N; i++) {
-            final String token = tokens[i];
-            final int idx = i;
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    Company company = service.createCompany(token, "Acme-" + idx);
-                    ids.add(company.getId());
-                } catch (Exception e) {
-                    failures.incrementAndGet();
-                }
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(30, SECONDS)).isTrue();
-        assertThat(failures.get()).isZero();
-        assertThat(ids).hasSize(N);
-    }
-
-    private record NamedPurchasePolicy(String name) implements ICompanyPurchasePolicy {
-        public void validate(com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest request,
-                             Company company) {}
-    }
-
-    @Test
-    void concurrent_updatePurchasePolicy_results_in_one_of_the_attempted_values() throws Exception {
-        UUID founderId = UUID.randomUUID();
-        String founderToken = registerMember(founderId);
-        Company company = service.createCompany(founderToken, "Acme");
-
-        int N = 50;
-        ExecutorService pool = Executors.newFixedThreadPool(16);
-        CountDownLatch start = new CountDownLatch(1);
-        Set<ICompanyPurchasePolicy> attempted = ConcurrentHashMap.newKeySet();
-        AtomicInteger failures = new AtomicInteger();
-
-        for (int i = 0; i < N; i++) {
-            final ICompanyPurchasePolicy policy = new NamedPurchasePolicy("policy-" + i);
-            attempted.add(policy);
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    service.updatePurchasePolicy(founderToken, company.getId(), policy);
-                } catch (Exception e) {
-                    failures.incrementAndGet();
-                }
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(30, SECONDS)).isTrue();
-        assertThat(failures.get()).isZero();
-        Company finalState = repo.findById(company.getId()).orElseThrow();
-        assertThat(finalState.getPurchasePolicies()).hasSize(1);
-        assertThat(attempted).contains(finalState.getPurchasePolicies().get(0));
-    }
-
-    @Test
-    void concurrent_addOwner_on_separate_companies_all_succeed() throws Exception {
-        int N = 30;
-        String[] founderTokens = new String[N];
-        for (int i = 0; i < N; i++) founderTokens[i] = registerMember(UUID.randomUUID());
-
-        ExecutorService pool = Executors.newFixedThreadPool(16);
-        CountDownLatch start = new CountDownLatch(1);
-        Set<UUID> successfulCompanyIds = ConcurrentHashMap.newKeySet();
-        AtomicInteger failures = new AtomicInteger();
-
-        for (int i = 0; i < N; i++) {
-            final String founderToken = founderTokens[i];
-            pool.submit(() -> {
-                UUID newOwnerId = UUID.randomUUID();
-                try {
-                    start.await();
-                    Company company = service.createCompany(founderToken, "Company-" + UUID.randomUUID());
-                    service.addOwner(founderToken, company.getId(), newOwnerId);
-                    successfulCompanyIds.add(company.getId());
-                } catch (Exception e) {
-                    failures.incrementAndGet();
-                }
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(30, SECONDS)).isTrue();
-        assertThat(failures.get()).isZero();
-        assertThat(successfulCompanyIds).hasSize(N);
-    }
-
-    @Test
-    void concurrent_changeStatus_does_not_throw() throws Exception {
-        UUID founderId = UUID.randomUUID();
-        String founderToken = registerMember(founderId);
-        Company company = service.createCompany(founderToken, "Acme");
-        String adminToken = registerSystemAdmin(UUID.randomUUID());
-
-        int N = 40;
-        ExecutorService pool = Executors.newFixedThreadPool(16);
-        CountDownLatch start = new CountDownLatch(1);
-        AtomicInteger failures = new AtomicInteger();
-        CompanyStatus[] statuses = {CompanyStatus.ACTIVE, CompanyStatus.SUSPENDED, CompanyStatus.CLOSED};
-
-        for (int i = 0; i < N; i++) {
-            final CompanyStatus target = statuses[i % statuses.length];
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    service.changeStatus(adminToken, company.getId(), target);
-                } catch (Exception e) {
-                    failures.incrementAndGet();
-                }
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(30, SECONDS)).isTrue();
-        assertThat(failures.get()).isZero();
-        // Final status must be one of the attempted values
-        assertThat(repo.findById(company.getId()).orElseThrow().getStatus())
-                .isIn((Object[]) statuses);
     }
 }

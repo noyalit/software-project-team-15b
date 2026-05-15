@@ -1,4 +1,4 @@
-package com.software_project_team_15b.Ticketmaster.Domain.Company;
+package com.software_project_team_15b.Ticketmaster.white.Domain.Company;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -12,6 +12,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import org.junit.jupiter.api.Test;
