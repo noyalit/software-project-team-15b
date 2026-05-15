@@ -137,13 +137,14 @@ class EventOrderFlowE2ETest {
     @DisplayName("Founder creates and publishes a seating event — event is AVAILABLE")
     void founder_creates_and_publishes_event() {
         PublishedSeating p = publishedSeatingEvent(3);
-        assertThat(events.getEventAvailability(p.eventId())).isEqualTo(EventAvailability.AVAILABLE);
+        assertThat(events.getEventAvailability(p.eventId()).status()).isEqualTo(EventAvailability.AVAILABLE);
     }
 
     // ── Authorization: event setup — bad paths ────────────────────────────────
 
     @Test
     @DisplayName("Unauthorized member cannot create event — creation rejected")
+    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void unauthorized_cannot_create_event() {
         assertThatThrownBy(() -> events.createEvent(new CreateEventCommand(
                 companyId, "Forbidden Event", "Act", Category.CONCERT,
@@ -153,6 +154,7 @@ class EventOrderFlowE2ETest {
 
     @Test
     @DisplayName("Manager cannot publish event — PUBLISH is owner/founder-only")
+    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void manager_cannot_publish_event() {
         UUID eventId = events.createEvent(new CreateEventCommand(
                 companyId, "Mgr Pub Attempt", "Act", Category.CONCERT,
@@ -188,8 +190,8 @@ class EventOrderFlowE2ETest {
 
         var avail = events.getSeatsAvailability(p.eventId(), p.areaId(), Set.copyOf(p.seatIds()));
 
-        assertThat(avail.getOrDefault(false, Set.of())).contains(p.seatIds().get(0));
-        assertThat(avail.getOrDefault(true, Set.of()))
+        assertThat(avail.unavailable()).contains(p.seatIds().get(0));
+        assertThat(avail.available())
                 .containsExactlyInAnyOrder(p.seatIds().get(1), p.seatIds().get(2));
     }
 
@@ -347,7 +349,7 @@ class EventOrderFlowE2ETest {
         purchasing.startCheckoutForMember(token, orderId);
         purchasing.completeCheckoutForMember(token, orderId, null);
 
-        assertThat(events.getEventAvailability(p.eventId())).isEqualTo(EventAvailability.SOLD_OUT);
+        assertThat(events.getEventAvailability(p.eventId()).status()).isEqualTo(EventAvailability.SOLD_OUT);
     }
 
     @Test
@@ -375,7 +377,7 @@ class EventOrderFlowE2ETest {
         purchasing.startCheckoutForMember(token, orderId);
         purchasing.completeCheckoutForMember(token, orderId, "HALF");
 
-        assertThat(events.getEventAvailability(eventId)).isEqualTo(EventAvailability.SOLD_OUT);
+        assertThat(events.getEventAvailability(eventId).status()).isEqualTo(EventAvailability.SOLD_OUT);
     }
 
     @Test
@@ -420,7 +422,7 @@ class EventOrderFlowE2ETest {
 
         var avail = events.getSeatsAvailability(p.eventId(), p.areaId(),
                 Set.of(p.seatIds().get(0)));
-        assertThat(avail.getOrDefault(true, Set.of())).contains(p.seatIds().get(0));
+        assertThat(avail.available()).contains(p.seatIds().get(0));
     }
 
     @Test

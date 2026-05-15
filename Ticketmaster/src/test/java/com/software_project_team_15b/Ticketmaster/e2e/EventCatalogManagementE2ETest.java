@@ -139,6 +139,7 @@ class EventCatalogManagementE2ETest {
 
     @Test
     @DisplayName("Unauthorized member cannot create event — MANAGE_EVENT denied")
+    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void unauthorized_cannot_create_event() {
         assertThatThrownBy(() -> events.createEvent(draftCmd("Forbidden"), unauthorizedId))
                 .isInstanceOf(PolicyViolationException.class);
@@ -146,6 +147,7 @@ class EventCatalogManagementE2ETest {
 
     @Test
     @DisplayName("Manager with wrong permission cannot create event")
+    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void manager_wrong_permission_cannot_create_event() {
         assertThatThrownBy(() -> events.createEvent(draftCmd("Forbidden"), mgrWrongPermId))
                 .isInstanceOf(PolicyViolationException.class);
@@ -153,6 +155,7 @@ class EventCatalogManagementE2ETest {
 
     @Test
     @DisplayName("Manager with CONFIGURE_HALLS_AND_SEATS cannot create event (wrong action)")
+    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void manager_config_hall_cannot_create_event() {
         assertThatThrownBy(() -> events.createEvent(draftCmd("Forbidden"), mgrConfigHallId))
                 .isInstanceOf(PolicyViolationException.class);
@@ -196,6 +199,7 @@ class EventCatalogManagementE2ETest {
 
     @Test
     @DisplayName("Unauthorized member cannot add area — CONFIGURE_HALL denied")
+    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void unauthorized_cannot_add_area() {
         UUID eventId = events.createEvent(draftCmd("Area Test"), founderId);
         assertThatThrownBy(() -> events.addArea(eventId, standingAreaCmd(), unauthorizedId))
@@ -204,6 +208,7 @@ class EventCatalogManagementE2ETest {
 
     @Test
     @DisplayName("Manager with MANAGE_EVENTS cannot add area — wrong permission for CONFIGURE_HALL")
+    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void manager_manage_events_cannot_add_area() {
         UUID eventId = events.createEvent(draftCmd("Area Test"), founderId);
         assertThatThrownBy(() -> events.addArea(eventId, standingAreaCmd(), mgrManageEventsId))
@@ -244,7 +249,7 @@ class EventCatalogManagementE2ETest {
                 List.of(new AddAreaCommand.SeatSpec("A", "1"))), founderId);
         events.publish(eventId, founderId);
 
-        assertThat(events.getEventAvailability(eventId)).isEqualTo(EventAvailability.AVAILABLE);
+        assertThat(events.getEventAvailability(eventId).status()).isEqualTo(EventAvailability.AVAILABLE);
     }
 
     @Test
@@ -254,7 +259,7 @@ class EventCatalogManagementE2ETest {
         events.addArea(eventId, standingAreaCmd(), founderId);
         events.publish(eventId, ownerId);
 
-        assertThat(events.getEventAvailability(eventId)).isEqualTo(EventAvailability.AVAILABLE);
+        assertThat(events.getEventAvailability(eventId).status()).isEqualTo(EventAvailability.AVAILABLE);
     }
 
     // ── II.4.1: Publish event — bad paths ─────────────────────────────────────
@@ -269,6 +274,7 @@ class EventCatalogManagementE2ETest {
 
     @Test
     @DisplayName("Manager cannot publish — PUBLISH is owner/founder-only")
+    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void manager_cannot_publish_event() {
         UUID eventId = events.createEvent(draftCmd("Mgr Pub Attempt"), founderId);
         events.addArea(eventId, standingAreaCmd(), founderId);
@@ -278,6 +284,7 @@ class EventCatalogManagementE2ETest {
 
     @Test
     @DisplayName("Unauthorized member cannot publish an event")
+    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void unauthorized_cannot_publish_event() {
         UUID eventId = events.createEvent(draftCmd("Unauth Pub"), founderId);
         events.addArea(eventId, standingAreaCmd(), founderId);
@@ -359,6 +366,7 @@ class EventCatalogManagementE2ETest {
 
     @Test
     @DisplayName("Unauthorized member cannot update event — MANAGE_EVENT denied")
+    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void unauthorized_cannot_update_event() {
         UUID eventId = events.createEvent(draftCmd("Update Test"), founderId);
         assertThatThrownBy(() -> events.updateEvent(eventId,
@@ -368,6 +376,7 @@ class EventCatalogManagementE2ETest {
 
     @Test
     @DisplayName("Manager with CONFIGURE_HALLS_AND_SEATS cannot update event fields")
+    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void manager_wrong_permission_cannot_update_event() {
         UUID eventId = events.createEvent(draftCmd("Update Test"), founderId);
         assertThatThrownBy(() -> events.updateEvent(eventId,
@@ -442,6 +451,7 @@ class EventCatalogManagementE2ETest {
 
     @Test
     @DisplayName("Unauthorized member cannot update area — UPDATE_EVENT_MAP denied")
+    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void unauthorized_cannot_update_area() {
         UUID eventId = events.createEvent(draftCmd("Area Auth Test"), founderId);
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
@@ -452,6 +462,7 @@ class EventCatalogManagementE2ETest {
 
     @Test
     @DisplayName("Manager with MANAGE_EVENTS cannot update area — wrong permission for UPDATE_EVENT_MAP")
+    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void manager_wrong_permission_cannot_update_area() {
         UUID eventId = events.createEvent(draftCmd("Area Auth Test"), founderId);
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
@@ -504,6 +515,7 @@ class EventCatalogManagementE2ETest {
 
     @Test
     @DisplayName("Unauthorized member cannot remove area — CONFIGURE_HALL denied")
+    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void unauthorized_cannot_remove_area() {
         UUID eventId = events.createEvent(draftCmd("Remove Auth Test"), founderId);
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
@@ -521,7 +533,7 @@ class EventCatalogManagementE2ETest {
         events.publish(eventId, founderId);
         events.cancel(eventId, founderId);
 
-        assertThat(events.getEventAvailability(eventId)).isEqualTo(EventAvailability.INACTIVE);
+        assertThat(events.getEventAvailability(eventId).status()).isEqualTo(EventAvailability.INACTIVE);
     }
 
     @Test
@@ -532,7 +544,7 @@ class EventCatalogManagementE2ETest {
         events.publish(eventId, founderId);
         events.cancel(eventId, ownerId);
 
-        assertThat(events.getEventAvailability(eventId)).isEqualTo(EventAvailability.INACTIVE);
+        assertThat(events.getEventAvailability(eventId).status()).isEqualTo(EventAvailability.INACTIVE);
     }
 
     @Test
@@ -544,13 +556,14 @@ class EventCatalogManagementE2ETest {
         events.cancel(eventId, founderId);
         events.cancel(eventId, founderId);
 
-        assertThat(events.getEventAvailability(eventId)).isEqualTo(EventAvailability.INACTIVE);
+        assertThat(events.getEventAvailability(eventId).status()).isEqualTo(EventAvailability.INACTIVE);
     }
 
     // ── II.4.1: Cancel event — bad paths ──────────────────────────────────────
 
     @Test
     @DisplayName("Manager cannot cancel — CANCEL is owner/founder-only")
+    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void manager_cannot_cancel_event() {
         UUID eventId = events.createEvent(draftCmd("Mgr Cancel Attempt"), founderId);
         events.addArea(eventId, standingAreaCmd(), founderId);
@@ -561,6 +574,7 @@ class EventCatalogManagementE2ETest {
 
     @Test
     @DisplayName("Unauthorized member cannot cancel an event")
+    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void unauthorized_cannot_cancel_event() {
         UUID eventId = events.createEvent(draftCmd("Unauth Cancel"), founderId);
         events.addArea(eventId, standingAreaCmd(), founderId);

@@ -8,13 +8,15 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Add
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
+import com.software_project_team_15b.Ticketmaster.DTO.EventAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.HoldReceiptDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.SeatsAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.StandingEventArea;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
@@ -42,7 +44,7 @@ class EventServiceFeaturesIT {
     void releaseSeats_frees_only_specified_seats() {
         SeatingSetup setup = createSeatingEvent(3, "50.00");
         UUID token = UUID.randomUUID();
-        HoldReceipt hold = service.hold(setup.eventId(),
+        HoldReceiptDTO hold = service.hold(setup.eventId(),
                 new HoldCommand(setup.areaId(), setup.seatIds(), null, token));
         assertThat(hold.quantity()).isEqualTo(3);
 
@@ -85,11 +87,11 @@ class EventServiceFeaturesIT {
 
         assertThat(released).isTrue();
         assertThat(service.getAreaAvailability(setup.eventId(), setup.areaId())).isTrue();
-        Map<Boolean, Set<UUID>> avail = service.getSeatsAvailability(
+        SeatsAvailabilityDTO avail = service.getSeatsAvailability(
                 setup.eventId(), setup.areaId(), new java.util.HashSet<>(heldSeatIds));
-        assertThat(avail.get(Boolean.TRUE))
+        assertThat(avail.available())
                 .containsExactlyInAnyOrder(heldSeatIds.get(0), heldSeatIds.get(1));
-        assertThat(avail.get(Boolean.FALSE))
+        assertThat(avail.unavailable())
                 .containsExactlyInAnyOrder(heldSeatIds.get(2), heldSeatIds.get(3));
     }
 
@@ -103,7 +105,7 @@ class EventServiceFeaturesIT {
         service.releaseSeats(setup.eventId(), tokenA, List.of(setup.seatIds().get(0)));
 
         UUID tokenB = UUID.randomUUID();
-        HoldReceipt second = service.hold(setup.eventId(),
+        HoldReceiptDTO second = service.hold(setup.eventId(),
                 new HoldCommand(setup.areaId(), List.of(setup.seatIds().get(0)), null, tokenB));
         assertThat(second.quantity()).isEqualTo(1);
     }
@@ -128,7 +130,7 @@ class EventServiceFeaturesIT {
         SeatingSetup setup = createSeatingEvent(5, "30.00");
         PriceQuery query = new PriceQuery(setup.areaId(), 3, UUID.randomUUID(), null, null);
 
-        PriceBreakdown breakdown = service.getPrice(setup.eventId(), query);
+        PriceBreakdownDTO breakdown = service.getPrice(setup.eventId(), query);
 
         assertThat(breakdown.basePrice()).isEqualTo(Money.of("30.00", "USD"));
         assertThat(breakdown.subtotal()).isEqualTo(Money.of("90.00", "USD"));
@@ -141,7 +143,7 @@ class EventServiceFeaturesIT {
         SeatingSetup setup = createSeatingEvent(1, "45.00");
         PriceQuery query = new PriceQuery(setup.areaId(), 1, UUID.randomUUID(), null, null);
 
-        PriceBreakdown breakdown = service.getPrice(setup.eventId(), query);
+        PriceBreakdownDTO breakdown = service.getPrice(setup.eventId(), query);
 
         assertThat(breakdown.total()).isEqualTo(Money.of("45.00", "USD"));
     }
@@ -152,7 +154,7 @@ class EventServiceFeaturesIT {
     void getEventAvailability_published_event_with_seats_is_available() {
         SeatingSetup setup = createSeatingEvent(3, "20.00");
 
-        assertThat(service.getEventAvailability(setup.eventId())).isEqualTo(EventAvailability.AVAILABLE);
+        assertThat(service.getEventAvailability(setup.eventId()).status()).isEqualTo(EventAvailability.AVAILABLE);
     }
 
     @Test
@@ -162,7 +164,7 @@ class EventServiceFeaturesIT {
         service.hold(setup.eventId(),
                 new HoldCommand(setup.areaId(), setup.seatIds(), null, token));
 
-        assertThat(service.getEventAvailability(setup.eventId())).isEqualTo(EventAvailability.SOLD_OUT);
+        assertThat(service.getEventAvailability(setup.eventId()).status()).isEqualTo(EventAvailability.SOLD_OUT);
     }
 
     @Test
@@ -170,7 +172,7 @@ class EventServiceFeaturesIT {
         SeatingSetup setup = createSeatingEvent(1, "10.00");
         service.cancel(setup.eventId(), setup.callerId());
 
-        assertThat(service.getEventAvailability(setup.eventId())).isEqualTo(EventAvailability.INACTIVE);
+        assertThat(service.getEventAvailability(setup.eventId()).status()).isEqualTo(EventAvailability.INACTIVE);
     }
 
     @Test
@@ -179,11 +181,11 @@ class EventServiceFeaturesIT {
         UUID token = UUID.randomUUID();
         service.hold(setup.eventId(),
                 new HoldCommand(setup.areaId(), setup.seatIds(), null, token));
-        assertThat(service.getEventAvailability(setup.eventId())).isEqualTo(EventAvailability.SOLD_OUT);
+        assertThat(service.getEventAvailability(setup.eventId()).status()).isEqualTo(EventAvailability.SOLD_OUT);
 
         service.releaseSeats(setup.eventId(), token, List.of(setup.seatIds().get(0)));
 
-        assertThat(service.getEventAvailability(setup.eventId())).isEqualTo(EventAvailability.AVAILABLE);
+        assertThat(service.getEventAvailability(setup.eventId()).status()).isEqualTo(EventAvailability.AVAILABLE);
     }
 
     // ── Task 4: getAreaAvailability ──────────────────────────────────────────
@@ -245,11 +247,11 @@ class EventServiceFeaturesIT {
         SeatingSetup setup = createSeatingEvent(3, "20.00");
         Set<UUID> seatIds = new java.util.HashSet<>(setup.seatIds());
 
-        Map<Boolean, Set<UUID>> result = service.getSeatsAvailability(
+        SeatsAvailabilityDTO result = service.getSeatsAvailability(
                 setup.eventId(), setup.areaId(), seatIds);
 
-        assertThat(result.get(Boolean.TRUE)).containsExactlyInAnyOrderElementsOf(seatIds);
-        assertThat(result.get(Boolean.FALSE)).isEmpty();
+        assertThat(result.available()).containsExactlyInAnyOrderElementsOf(seatIds);
+        assertThat(result.unavailable()).isEmpty();
     }
 
     @Test
@@ -260,11 +262,11 @@ class EventServiceFeaturesIT {
                 new HoldCommand(setup.areaId(), setup.seatIds(), null, token));
         Set<UUID> seatIds = new java.util.HashSet<>(setup.seatIds());
 
-        Map<Boolean, Set<UUID>> result = service.getSeatsAvailability(
+        SeatsAvailabilityDTO result = service.getSeatsAvailability(
                 setup.eventId(), setup.areaId(), seatIds);
 
-        assertThat(result.get(Boolean.TRUE)).isEmpty();
-        assertThat(result.get(Boolean.FALSE)).containsExactlyInAnyOrderElementsOf(seatIds);
+        assertThat(result.available()).isEmpty();
+        assertThat(result.unavailable()).containsExactlyInAnyOrderElementsOf(seatIds);
     }
 
     @Test
@@ -276,11 +278,11 @@ class EventServiceFeaturesIT {
         service.hold(setup.eventId(),
                 new HoldCommand(setup.areaId(), List.of(heldSeat), null, UUID.randomUUID()));
 
-        Map<Boolean, Set<UUID>> result = service.getSeatsAvailability(
+        SeatsAvailabilityDTO result = service.getSeatsAvailability(
                 setup.eventId(), setup.areaId(), Set.of(heldSeat, freeSeat1, freeSeat2));
 
-        assertThat(result.get(Boolean.TRUE)).containsExactlyInAnyOrder(freeSeat1, freeSeat2);
-        assertThat(result.get(Boolean.FALSE)).containsExactly(heldSeat);
+        assertThat(result.available()).containsExactlyInAnyOrder(freeSeat1, freeSeat2);
+        assertThat(result.unavailable()).containsExactly(heldSeat);
     }
 
     @Test
@@ -289,23 +291,22 @@ class EventServiceFeaturesIT {
         UUID realSeat = setup.seatIds().get(0);
         UUID ghost = UUID.randomUUID();
 
-        Map<Boolean, Set<UUID>> result = service.getSeatsAvailability(
+        SeatsAvailabilityDTO result = service.getSeatsAvailability(
                 setup.eventId(), setup.areaId(), Set.of(realSeat, ghost));
 
-        assertThat(result.get(Boolean.TRUE)).containsExactly(realSeat);
-        assertThat(result.get(Boolean.FALSE)).containsExactly(ghost);
+        assertThat(result.available()).containsExactly(realSeat);
+        assertThat(result.unavailable()).containsExactly(ghost);
     }
 
     @Test
     void getSeatsAvailability_empty_input_returns_two_empty_buckets() {
         SeatingSetup setup = createSeatingEvent(2, "20.00");
 
-        Map<Boolean, Set<UUID>> result = service.getSeatsAvailability(
+        SeatsAvailabilityDTO result = service.getSeatsAvailability(
                 setup.eventId(), setup.areaId(), Set.of());
 
-        assertThat(result).containsOnlyKeys(Boolean.TRUE, Boolean.FALSE);
-        assertThat(result.get(Boolean.TRUE)).isEmpty();
-        assertThat(result.get(Boolean.FALSE)).isEmpty();
+        assertThat(result.available()).isEmpty();
+        assertThat(result.unavailable()).isEmpty();
     }
 
     @Test

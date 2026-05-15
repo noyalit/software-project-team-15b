@@ -7,10 +7,10 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagem
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
+import com.software_project_team_15b.Ticketmaster.DTO.ConfirmationReceiptDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.HoldReceiptDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
@@ -49,11 +49,11 @@ class EventLifecycleIT {
 
         List<UUID> seatIds = seatIdsIn(service.getEvent(eventId), areaId);
         UUID token = UUID.randomUUID();
-        HoldReceipt hold = service.hold(eventId,
+        HoldReceiptDTO hold = service.hold(eventId,
                 new HoldCommand(areaId, seatIds.subList(0, 2), null, token));
         assertThat(hold.quantity()).isEqualTo(2);
 
-        ConfirmationReceipt confirm = service.confirm(eventId, token);
+        ConfirmationReceiptDTO confirm = service.confirm(eventId, token);
         assertThat(confirm.quantity()).isEqualTo(2);
         EventDTO after = service.getEvent(eventId);
         assertThat(areaOf(after, areaId).availableCapacity()).isEqualTo(1);

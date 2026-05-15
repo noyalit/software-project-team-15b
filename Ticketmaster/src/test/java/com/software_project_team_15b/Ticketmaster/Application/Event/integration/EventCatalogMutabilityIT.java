@@ -12,9 +12,9 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Pri
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
@@ -118,7 +118,7 @@ class EventCatalogMutabilityIT {
         service.updateArea(s.eventId(), s.areaId(),
                 new UpdateAreaCommand(null, Money.of("25.00", "USD"), null), s.callerId());
 
-        PriceBreakdown q = service.getPrice(s.eventId(),
+        PriceBreakdownDTO q = service.getPrice(s.eventId(),
                 new PriceQuery(s.areaId(), 2, UUID.randomUUID(), null, null));
         assertThat(q.basePrice()).isEqualTo(Money.of("25.00", "USD"));
         assertThat(q.total()).isEqualTo(Money.of("50.00", "USD"));
@@ -255,7 +255,7 @@ class EventCatalogMutabilityIT {
     @Test
     void replaceDiscountPolicies_changes_total_in_getPrice() {
         Setup s = createPublishedSeatingEvent(3, "100.00");
-        PriceBreakdown before = service.getPrice(s.eventId(),
+        PriceBreakdownDTO before = service.getPrice(s.eventId(),
                 new PriceQuery(s.areaId(), 2, UUID.randomUUID(), null, null));
         assertThat(before.total()).isEqualTo(Money.of("200.00", "USD"));
 
@@ -264,7 +264,7 @@ class EventCatalogMutabilityIT {
                 Instant.now().plusSeconds(86400));
         service.replaceDiscountPolicies(s.eventId(), List.of(half), s.callerId());
 
-        PriceBreakdown after = service.getPrice(s.eventId(),
+        PriceBreakdownDTO after = service.getPrice(s.eventId(),
                 new PriceQuery(s.areaId(), 2, UUID.randomUUID(), null, null));
         assertThat(after.total()).isEqualTo(Money.of("100.00", "USD"));
         assertThat(after.discount()).isEqualTo(Money.of("100.00", "USD"));
@@ -273,13 +273,13 @@ class EventCatalogMutabilityIT {
     @Test
     void replaceDiscountPolicies_empty_clears_discounts() {
         Setup s = createPublishedSeatingEventWithEarlyBird(2, "50.00", 50);
-        PriceBreakdown discounted = service.getPrice(s.eventId(),
+        PriceBreakdownDTO discounted = service.getPrice(s.eventId(),
                 new PriceQuery(s.areaId(), 2, UUID.randomUUID(), null, null));
         assertThat(discounted.discount()).isEqualTo(Money.of("50.00", "USD"));
 
         service.replaceDiscountPolicies(s.eventId(), List.of(), s.callerId());
 
-        PriceBreakdown plain = service.getPrice(s.eventId(),
+        PriceBreakdownDTO plain = service.getPrice(s.eventId(),
                 new PriceQuery(s.areaId(), 2, UUID.randomUUID(), null, null));
         assertThat(plain.discount()).isEqualTo(Money.of("0.00", "USD"));
     }
