@@ -1,13 +1,11 @@
-package com.software_project_team_15b.Ticketmaster.Application.Queue;
+package com.software_project_team_15b.Ticketmaster.white.Application.Queue;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyInQueueException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyQueueException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIsFullException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
-import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
-import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.VirtualQueue;
 
@@ -20,7 +18,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
-
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
@@ -31,7 +28,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class QueuesServiceTests {
+class QueueServiceWhiteTest {
 
     @Mock private IQueueRepository queueRepository;
     @Mock private IAuth auth;
@@ -39,13 +36,9 @@ class QueuesServiceTests {
 
     @BeforeEach
     void injectSelf() {
-        // @InjectMocks cannot satisfy the self-reference used for Spring-proxy-aware
-        // internal calls. Wire it manually so @Retryable/@Transactional semantics
-        // (and null-safety) are preserved in tests.
         ReflectionTestUtils.setField(service, "self", service);
     }
 
-    /** Constructs an ExposedQueuesService with its self-reference wired correctly. */
     private ExposedQueuesService createExposed() {
         ExposedQueuesService exposed = new ExposedQueuesService(queueRepository, auth);
         ReflectionTestUtils.setField(exposed, "self", exposed);
@@ -57,10 +50,6 @@ class QueuesServiceTests {
     private static final UUID USER_B   = UUID.fromString("00000000-0000-0000-0000-000000000003");
     private static final UUID USER_C   = UUID.fromString("00000000-0000-0000-0000-000000000004");
 
-    /**
-     * Promotes clearEventAccess from protected to public so tests can invoke it directly
-     * without waiting 100 seconds for the scheduler.
-     */
     private static class ExposedQueuesService extends QueueService {
         ExposedQueuesService(IQueueRepository r, IAuth a) {
             super(r, a);
@@ -73,7 +62,7 @@ class QueuesServiceTests {
     }
 
     // =========================================================================
-    // Site queue — positive tests
+    // Site queue — reflection/invokeAcceptUsers tests
     // =========================================================================
 
     @Test
@@ -115,7 +104,7 @@ class QueuesServiceTests {
 
         assertThat(service.validateAndExitQueue("expired")).isFalse();
         assertThat(service.validateAndExitQueue("valid")).isTrue();
-        assertThat(siteQueue(service)).isEmpty(); // expired is discarded, not re-queued
+        assertThat(siteQueue(service)).isEmpty();
     }
 
     @Test
@@ -157,12 +146,6 @@ class QueuesServiceTests {
     }
 
     @Test
-    void validateAndExitQueue_returnsFalse_whenTokenNotYetAdmitted() {
-        service.addUserToSiteQueue("token-a");
-        assertThat(service.validateAndExitQueue("token-a")).isFalse();
-    }
-
-    @Test
     void validateAndExitQueue_returnsTrue_afterSchedulerAdmitsToken() {
         when(auth.isTokenValid("token-a")).thenReturn(true);
         service.addUserToSiteQueue("token-a");
@@ -179,11 +162,6 @@ class QueuesServiceTests {
         invokeAcceptUsers(service);
 
         assertThat(service.validateAndExitQueue("token-a")).isFalse();
-    }
-
-    @Test
-    void canAccessWebsite_returnsTrue_whenEmpty() {
-        assertThat(service.canAccessWebsite()).isTrue();
     }
 
     @Test
@@ -205,175 +183,7 @@ class QueuesServiceTests {
     }
 
     // =========================================================================
-    // Site queue — negative tests
-    // =========================================================================
-
-    @Test
-    void addUserToSiteQueue_nullToken_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.addUserToSiteQueue(null))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void addUserToSiteQueue_duplicateToken_throwsIllegalArgument() {
-        service.addUserToSiteQueue("token-a");
-        assertThatThrownBy(() -> service.addUserToSiteQueue("token-a"))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void validateAndExitQueue_nullToken_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.validateAndExitQueue(null))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    // =========================================================================
-    // Site queue — concurrency tests
-    // =========================================================================
-
-    @Test
-    void concurrentAddToSiteQueue_sameToken_exactlyOneSucceeds() throws InterruptedException {
-        int threads = 20;
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
-        AtomicInteger successes = new AtomicInteger();
-        AtomicInteger duplicates = new AtomicInteger();
-
-        for (int i = 0; i < threads; i++) {
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    service.addUserToSiteQueue("shared-token");
-                    successes.incrementAndGet();
-                } catch (IllegalArgumentException e) {
-                    duplicates.incrementAndGet();
-                } catch (Exception ignored) {}
-                return null;
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
-
-        assertThat(successes.get()).isEqualTo(1);
-        assertThat(duplicates.get()).isEqualTo(threads - 1);
-        assertThat(siteQueue(service)).containsExactly("shared-token");
-    }
-
-    @Test
-    void concurrentAddToSiteQueue_distinctTokens_allSucceed() throws InterruptedException {
-        int n = 30;
-        List<String> tokens = generateTokens(n);
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(n);
-        AtomicInteger successes = new AtomicInteger();
-
-        for (String token : tokens) {
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    service.addUserToSiteQueue(token);
-                    successes.incrementAndGet();
-                } catch (Exception ignored) {}
-                return null;
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
-
-        assertThat(successes.get()).isEqualTo(n);
-        assertThat(siteQueue(service)).containsExactlyInAnyOrderElementsOf(tokens);
-    }
-
-    @Test
-    void concurrentAddAndAcceptSiteQueue_noTokensLost() throws InterruptedException {
-        int n = 50;
-        List<String> tokens = generateTokens(n);
-        when(auth.isTokenValid(anyString())).thenReturn(true);
-
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(n + 2);
-        AtomicInteger addSuccesses = new AtomicInteger();
-
-        for (String token : tokens) {
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    service.addUserToSiteQueue(token);
-                    addSuccesses.incrementAndGet();
-                } catch (Exception ignored) {}
-                return null;
-            });
-        }
-        for (int i = 0; i < 2; i++) {
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    invokeAcceptUsers(service);
-                } catch (Exception ignored) {}
-                return null;
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
-        invokeAcceptUsers(service); // drain any tokens still in queue
-
-        int totalTracked = acceptedTokens(service).size() + siteQueue(service).size();
-        assertThat(totalTracked).isEqualTo(addSuccesses.get());
-    }
-
-    @Test
-    void concurrentValidateAndExitQueue_allThreadsSeeConsistentAdmittedState() throws InterruptedException {
-        int threads = 30;
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        service.addUserToSiteQueue("token-a");
-        invokeAcceptUsers(service);
-
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
-        AtomicInteger trueCount = new AtomicInteger();
-
-        for (int i = 0; i < threads; i++) {
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    if (service.validateAndExitQueue("token-a")) {
-                        trueCount.incrementAndGet();
-                    }
-                } catch (Exception ignored) {}
-                return null;
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
-
-        assertThat(trueCount.get()).isEqualTo(threads);
-    }
-
-    // =========================================================================
-    // getPositionInEventQueue — positive tests
-    // =========================================================================
-
-    @Test
-    void getPositionInEventQueue_returnsCorrectPosition() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        queue.push("token-b");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-
-        assertThat(service.getPositionInEventQueue("token-a", EVENT_ID)).isEqualTo(0);
-        assertThat(service.getPositionInEventQueue("token-b", EVENT_ID)).isEqualTo(1);
-    }
-
-    // =========================================================================
-    // getPositionInEventQueue — negative tests
+    // getPositionInEventQueue — verify-based negative
     // =========================================================================
 
     @Test
@@ -390,20 +200,12 @@ class QueuesServiceTests {
         verifyNoInteractions(queueRepository);
     }
 
-    @Test
-    void getPositionInEventQueue_queueNotFound_throwsQueueNotFoundException() {
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
-        assertThatThrownBy(() -> service.getPositionInEventQueue("token-a", EVENT_ID))
-                .isInstanceOf(QueueNotFoundException.class);
-    }
-
     // =========================================================================
-    // Queue — positive tests
+    // Queue CRUD — verify-based positive
     // =========================================================================
 
     @Test
     void createEventQueue_callsAddQueueOnRepository() {
-        // advanceEventQueue fires after creation; stub an empty queue so it exits cleanly.
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(new VirtualQueue(EVENT_ID));
 
         service.createEventQueue(EVENT_ID);
@@ -445,36 +247,8 @@ class QueuesServiceTests {
         verify(queueRepository).updateQueue(queue);
     }
 
-    @Test
-    void popFromEventQueue_removesUserFromQueue() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-
-        service.popFromEventQueue(EVENT_ID);
-
-        assertThat(queue.isEmpty()).isTrue();
-    }
-
-    @Test
-    void popFromEventQueue_maintainsFifoOrder() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        queue.push("token-b");
-        queue.push("token-c");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-
-        String first  = service.popFromEventQueue(EVENT_ID);
-        String second = service.popFromEventQueue(EVENT_ID);
-        String third  = service.popFromEventQueue(EVENT_ID);
-
-        assertThat(first).isEqualTo("token-a");
-        assertThat(second).isEqualTo("token-b");
-        assertThat(third).isEqualTo("token-c");
-    }
-
     // =========================================================================
-    // Queue — negative tests
+    // Queue CRUD — verify-based negative
     // =========================================================================
 
     @Test
@@ -572,34 +346,8 @@ class QueuesServiceTests {
     }
 
     // =========================================================================
-    // Queue advancement / eventAccess — positive tests
+    // clearEventAccess — ExposedQueuesService (whitebox internal method)
     // =========================================================================
-
-    @Test
-    void createEventQueue_advancesPreLoadedUsersIntoEventAccess() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID);
-
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isTrue();
-    }
-
-    @Test
-    void pushToEventQueue_promotesUserToEventAccessWhenSlotAvailable() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID);       // queue empty, no one promoted yet
-        service.pushToEventQueue(EVENT_ID, "token-a"); // USER_A pushed then immediately promoted
-
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isTrue();
-    }
 
     @Test
     void clearEventAccess_removesUserFromEventAccess() {
@@ -610,8 +358,8 @@ class QueuesServiceTests {
         when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
-        exposed.createEventQueue(EVENT_ID);          // USER_A promoted
-        exposed.clearEventAccess(USER_A, EVENT_ID);  // access revoked
+        exposed.createEventQueue(EVENT_ID);
+        exposed.clearEventAccess(USER_A, EVENT_ID);
 
         assertThat(exposed.hasAccess("token-a", EVENT_ID)).isFalse();
     }
@@ -630,11 +378,10 @@ class QueuesServiceTests {
         when(auth.extractUserId("token-b")).thenReturn(USER_B);
         when(auth.extractUserId("token-c")).thenReturn(USER_C);
 
-        exposed.createEventQueue(EVENT_ID); // USER_A and USER_B both promoted (slots < 100)
+        exposed.createEventQueue(EVENT_ID);
 
-        // USER_C arrives while eventAccess is not yet at capacity after USER_A is cleared
         queue.push("token-c");
-        exposed.clearEventAccess(USER_A, EVENT_ID); // frees one slot → USER_C promoted
+        exposed.clearEventAccess(USER_A, EVENT_ID);
 
         assertThat(exposed.hasAccess("token-a", EVENT_ID)).isFalse();
         assertThat(exposed.hasAccess("token-b", EVENT_ID)).isTrue();
@@ -648,44 +395,14 @@ class QueuesServiceTests {
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
 
         exposed.createEventQueue(EVENT_ID);
-        exposed.deleteEventQueue(EVENT_ID); // removes eventAccess entry
+        exposed.deleteEventQueue(EVENT_ID);
 
-        // Simulates a scheduled task firing after the queue was deleted
         assertThatCode(() -> exposed.clearEventAccess(USER_A, EVENT_ID))
                 .doesNotThrowAnyException();
     }
 
     // =========================================================================
-    // hasAccess — positive tests
-    // =========================================================================
-
-    @Test
-    void hasAccess_returnsTrueWhenUserIsInEventAccess() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID);
-
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isTrue();
-    }
-
-    @Test
-    void hasAccess_returnsFalseWhenUserIsNotInEventAccess() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID); // queue is empty, no one promoted
-
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isFalse();
-    }
-
-    // =========================================================================
-    // hasAccess — negative tests
+    // hasAccess — verify-based negative
     // =========================================================================
 
     @Test
@@ -702,73 +419,9 @@ class QueuesServiceTests {
         verifyNoInteractions(auth);
     }
 
-    @Test
-    void hasAccess_invalidToken_throwsInvalidTokenException() {
-        when(auth.isTokenValid("bad-token")).thenReturn(false);
-
-        assertThatThrownBy(() -> service.hasAccess("bad-token", EVENT_ID))
-                .isInstanceOf(InvalidTokenException.class);
-    }
-
     // =========================================================================
-    // getQueueAccessView — positive tests
+    // getQueueAccessView — implementation-detail tests
     // =========================================================================
-
-    @Test
-    void getQueueAccessView_returnsNoQueue_whenNoQueueExistsForEvent() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        QueueAccessDTO view = service.getQueueAccessView("token-a", EVENT_ID);
-
-        assertThat(view.status()).isEqualTo(QueueAccessStatus.NO_QUEUE);
-        assertThat(view.position()).isNull();
-        assertThat(view.accessExpiresAt()).isNull();
-        assertThat(view.canCreateActiveOrder()).isTrue();
-    }
-
-    @Test
-    void getQueueAccessView_returnsAdmitted_withFutureExpiryAndCanCreateOrder() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID); // USER_A promoted into eventAccess
-
-        QueueAccessDTO view = service.getQueueAccessView("token-a", EVENT_ID);
-
-        assertThat(view.status()).isEqualTo(QueueAccessStatus.ADMITTED);
-        assertThat(view.position()).isNull();
-        assertThat(view.accessExpiresAt()).isNotNull();
-        assertThat(view.accessExpiresAt()).isAfter(LocalDateTime.now());
-        assertThat(view.canCreateActiveOrder()).isTrue();
-    }
-
-    @Test
-    void getQueueAccessView_returnsWaiting_withCorrectPosition_whenUserNotYetAdmitted() {
-        // First getQueue call (from popFromEventQueue inside advanceEventQueue) returns an
-        // empty queue so nobody is promoted. Second call (from getPositionInEventQueue)
-        // returns a queue that already contains USER_A so the position can be resolved.
-        VirtualQueue emptyForAdvance = new VirtualQueue(EVENT_ID);
-        VirtualQueue withUserForPosition = new VirtualQueue(EVENT_ID);
-        withUserForPosition.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID))
-                .thenReturn(emptyForAdvance)
-                .thenReturn(withUserForPosition);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID); // advanceEventQueue finds empty queue → no promotions
-
-        QueueAccessDTO view = service.getQueueAccessView("token-a", EVENT_ID);
-
-        assertThat(view.status()).isEqualTo(QueueAccessStatus.WAITING);
-        assertThat(view.position()).isEqualTo(0);
-        assertThat(view.accessExpiresAt()).isNull();
-        assertThat(view.canCreateActiveOrder()).isFalse();
-    }
 
     @Test
     void getQueueAccessView_accessExpiresAt_matchesScheduledWindow() {
@@ -782,16 +435,13 @@ class QueuesServiceTests {
         service.createEventQueue(EVENT_ID);
         LocalDateTime after = LocalDateTime.now();
 
-        QueueAccessDTO view = service.getQueueAccessView("token-a", EVENT_ID);
+        com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO view =
+                service.getQueueAccessView("token-a", EVENT_ID);
 
-        // accessExpiresAt should be ~100 s after admission, bounded by test wall-clock
+        // bounds come from the private ACCESS_TIME = 100 constant
         assertThat(view.accessExpiresAt()).isAfterOrEqualTo(before.plusSeconds(100));
         assertThat(view.accessExpiresAt()).isBeforeOrEqualTo(after.plusSeconds(100));
     }
-
-    // =========================================================================
-    // getQueueAccessView — negative tests
-    // =========================================================================
 
     @Test
     void getQueueAccessView_nullToken_throwsIllegalArgument() {
@@ -807,52 +457,12 @@ class QueuesServiceTests {
         verifyNoInteractions(auth);
     }
 
-    @Test
-    void getQueueAccessView_invalidToken_throwsInvalidTokenException() {
-        when(auth.isTokenValid("bad-token")).thenReturn(false);
-
-        assertThatThrownBy(() -> service.getQueueAccessView("bad-token", EVENT_ID))
-                .isInstanceOf(InvalidTokenException.class);
-    }
-
-    @Test
-    void getQueueAccessView_userNotInQueueAndNotAdmitted_throwsIllegalArgument() {
-        VirtualQueue emptyQueue = new VirtualQueue(EVENT_ID);
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(emptyQueue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID); // queue empty → no promotions
-
-        // USER_A is neither admitted nor in the queue
-        assertThatThrownBy(() -> service.getQueueAccessView("token-a", EVENT_ID))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
     // =========================================================================
-    // requestAccess — positive tests
+    // requestAccess — reflection / verify-based
     // =========================================================================
-
-    @Test
-    void requestAccess_returnsAdmittedView_whenUserIsImmediatelyPromoted() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID); // empty queue, slots available
-
-        QueueAccessDTO view = service.requestAccess("token-a", EVENT_ID);
-
-        // USER_A is pushed to queue then immediately promoted by advanceEventQueue
-        assertThat(view.status()).isEqualTo(QueueAccessStatus.ADMITTED);
-        assertThat(view.accessExpiresAt()).isNotNull().isAfter(LocalDateTime.now());
-        assertThat(view.canCreateActiveOrder()).isTrue();
-    }
 
     @Test
     void requestAccess_returnsAdmittedView_whenUserIsAlreadyAdmitted() {
-        // Seed eventAccess directly: USER_A already admitted, no queue interaction needed
         LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(100);
         ConcurrentHashMap<UUID, LocalDateTime> access = new ConcurrentHashMap<>();
         access.put(USER_A, expiresAt);
@@ -861,16 +471,17 @@ class QueuesServiceTests {
         when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
-        QueueAccessDTO view = service.requestAccess("token-a", EVENT_ID);
+        com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO view =
+                service.requestAccess("token-a", EVENT_ID);
 
-        assertThat(view.status()).isEqualTo(QueueAccessStatus.ADMITTED);
+        assertThat(view.status()).isEqualTo(
+                com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.ADMITTED);
         assertThat(view.accessExpiresAt()).isEqualTo(expiresAt);
-        verifyNoInteractions(queueRepository); // guard: no re-queuing occurred
+        verifyNoInteractions(queueRepository);
     }
 
     @Test
     void requestAccess_returnsWaitingView_whenAllAdmissionSlotsTaken() {
-        // Fill the 100-slot cap so USER_A cannot be promoted after joining
         ConcurrentHashMap<UUID, LocalDateTime> fullAccess = new ConcurrentHashMap<>();
         for (int i = 0; i < 100; i++) {
             fullAccess.put(UUID.randomUUID(), LocalDateTime.now().plusSeconds(100));
@@ -882,17 +493,15 @@ class QueuesServiceTests {
         when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
-        QueueAccessDTO view = service.requestAccess("token-a", EVENT_ID);
+        com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO view =
+                service.requestAccess("token-a", EVENT_ID);
 
-        assertThat(view.status()).isEqualTo(QueueAccessStatus.WAITING);
+        assertThat(view.status()).isEqualTo(
+                com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.WAITING);
         assertThat(view.position()).isEqualTo(0);
         assertThat(view.accessExpiresAt()).isNull();
         assertThat(view.canCreateActiveOrder()).isFalse();
     }
-
-    // =========================================================================
-    // requestAccess — negative tests
-    // =========================================================================
 
     @Test
     void requestAccess_nullToken_throwsIllegalArgument() {
@@ -909,40 +518,7 @@ class QueuesServiceTests {
     }
 
     @Test
-    void requestAccess_invalidToken_throwsInvalidTokenException() {
-        when(auth.isTokenValid("bad-token")).thenReturn(false);
-
-        assertThatThrownBy(() -> service.requestAccess("bad-token", EVENT_ID))
-                .isInstanceOf(InvalidTokenException.class);
-    }
-
-    @Test
-    void requestAccess_noQueueForEvent_throwsQueueNotFoundException() {
-        // No createEventQueue → eventAccess has no entry → delegates to pushToEventQueue
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        assertThatThrownBy(() -> service.requestAccess("token-a", EVENT_ID))
-                .isInstanceOf(QueueNotFoundException.class);
-    }
-
-    @Test
-    void requestAccess_queueFull_throwsQueueIsFullException() {
-        VirtualQueue fullQueue = new VirtualQueue(EVENT_ID, 1);
-        fullQueue.push("token-b");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(fullQueue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        assertThatThrownBy(() -> service.requestAccess("token-a", EVENT_ID))
-                .isInstanceOf(QueueIsFullException.class);
-    }
-
-    @Test
     void requestAccess_userAlreadyInQueue_throwsAlreadyInQueueException() {
-        // Seed eventAccess so the admitted-check passes (USER_A not admitted),
-        // then set up VirtualQueue with USER_A already present.
         eventAccessMap(service).put(EVENT_ID, new ConcurrentHashMap<>());
 
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
@@ -957,19 +533,138 @@ class QueuesServiceTests {
 
     // =========================================================================
     // Concurrency tests
-    //
-    // These tests use mock VirtualQueue / Lottery objects backed by thread-safe
-    // data structures to verify that concurrent service calls produce correct,
-    // non-duplicated results. The approach mirrors how the @Transactional +
-    // @Version mechanism works in production: each thread modifies a shared
-    // entity, and the outcomes must be consistent and conflict-free.
     // =========================================================================
+
+    @Test
+    void concurrentAddToSiteQueue_sameToken_exactlyOneSucceeds() throws InterruptedException {
+        int threads = 20;
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        AtomicInteger successes = new AtomicInteger();
+        AtomicInteger duplicates = new AtomicInteger();
+
+        for (int i = 0; i < threads; i++) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    service.addUserToSiteQueue("shared-token");
+                    successes.incrementAndGet();
+                } catch (IllegalArgumentException e) {
+                    duplicates.incrementAndGet();
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
+
+        assertThat(successes.get()).isEqualTo(1);
+        assertThat(duplicates.get()).isEqualTo(threads - 1);
+        assertThat(siteQueue(service)).containsExactly("shared-token");
+    }
+
+    @Test
+    void concurrentAddToSiteQueue_distinctTokens_allSucceed() throws InterruptedException {
+        int n = 30;
+        List<String> tokens = generateTokens(n);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(n);
+        AtomicInteger successes = new AtomicInteger();
+
+        for (String token : tokens) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    service.addUserToSiteQueue(token);
+                    successes.incrementAndGet();
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
+
+        assertThat(successes.get()).isEqualTo(n);
+        assertThat(siteQueue(service)).containsExactlyInAnyOrderElementsOf(tokens);
+    }
+
+    @Test
+    void concurrentAddAndAcceptSiteQueue_noTokensLost() throws InterruptedException {
+        int n = 50;
+        List<String> tokens = generateTokens(n);
+        when(auth.isTokenValid(anyString())).thenReturn(true);
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(n + 2);
+        AtomicInteger addSuccesses = new AtomicInteger();
+
+        for (String token : tokens) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    service.addUserToSiteQueue(token);
+                    addSuccesses.incrementAndGet();
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+        for (int i = 0; i < 2; i++) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    invokeAcceptUsers(service);
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
+        invokeAcceptUsers(service);
+
+        int totalTracked = acceptedTokens(service).size() + siteQueue(service).size();
+        assertThat(totalTracked).isEqualTo(addSuccesses.get());
+    }
+
+    @Test
+    void concurrentValidateAndExitQueue_allThreadsSeeConsistentAdmittedState() throws InterruptedException {
+        int threads = 30;
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        service.addUserToSiteQueue("token-a");
+        invokeAcceptUsers(service);
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        AtomicInteger trueCount = new AtomicInteger();
+
+        for (int i = 0; i < threads; i++) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    if (service.validateAndExitQueue("token-a")) {
+                        trueCount.incrementAndGet();
+                    }
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
+
+        assertThat(trueCount.get()).isEqualTo(threads);
+    }
 
     @Test
     void concurrentPushes_allUniqueUsersRecordedWithNoLostUpdates() throws InterruptedException {
         int n = 20;
         List<String> tokens = generateTokens(n);
-        // Thread-safe set to capture every token that reaches push()
         Set<String> capturedPushes = ConcurrentHashMap.newKeySet();
 
         VirtualQueue mockQueue = mock(VirtualQueue.class);
@@ -1002,9 +697,6 @@ class QueuesServiceTests {
 
     @Test
     void concurrentPops_allSucceedWithDistinctValues() throws InterruptedException {
-        // 20 items, 10 threads: every thread is guaranteed to see a non-empty
-        // queue, so all succeed. ConcurrentLinkedDeque.poll() is atomic,
-        // ensuring no two threads receive the same element.
         int items   = 20;
         int threads = 10;
         List<String> tokens = generateTokens(items);
@@ -1037,13 +729,11 @@ class QueuesServiceTests {
         assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
 
         assertThat(successes.get()).isEqualTo(threads);
-        assertThat(results).hasSize(threads); // all popped values are distinct
+        assertThat(results).hasSize(threads);
     }
 
     @Test
     void concurrentPops_onlyAsManySucceedAsQueueSize() throws InterruptedException {
-        // 5 items, 20 threads: exactly 5 should succeed; the rest throw
-        // EmptyQueueException once the queue is drained.
         int items   = 5;
         int threads = 20;
         List<String> tokens = generateTokens(items);
@@ -1078,14 +768,11 @@ class QueuesServiceTests {
         pool.shutdown();
         assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
 
-        // Total outcomes must account for all threads.
-        // Due to the isEmpty→pop TOCTOU window a tiny number of threads may
-        // receive null instead of throwing; count those as implicit empties.
         int implicitEmpties = threads - successes.get() - emptyThrown.get();
         assertThat(successes.get()).isLessThanOrEqualTo(items);
         assertThat(successes.get() + emptyThrown.get() + implicitEmpties).isEqualTo(threads);
         assertThat(results).doesNotHaveDuplicates();
-        assertThat(deque).isEmpty(); // the backing store is fully drained
+        assertThat(deque).isEmpty();
     }
 
     // =========================================================================
@@ -1100,26 +787,22 @@ class QueuesServiceTests {
         return tokens;
     }
 
-    /** Returns the live eventAccess map from the given service instance via reflection. */
     @SuppressWarnings("unchecked")
     private static ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>> eventAccessMap(QueueService svc) {
         return (ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>>)
                 ReflectionTestUtils.getField(svc, "eventAccess");
     }
 
-    /** Returns the live siteQueue from the given service instance via reflection. */
     @SuppressWarnings("unchecked")
     private static Queue<String> siteQueue(QueueService svc) {
         return (Queue<String>) ReflectionTestUtils.getField(svc, "siteQueue");
     }
 
-    /** Returns the live acceptedTokens set from the given service instance via reflection. */
     @SuppressWarnings("unchecked")
     private static Set<String> acceptedTokens(QueueService svc) {
         return (Set<String>) ReflectionTestUtils.getField(svc, "acceptedTokens");
     }
 
-    /** Invokes the private acceptUsersFromSiteQueue() method directly, bypassing the scheduler. */
     private static void invokeAcceptUsers(QueueService svc) {
         ReflectionTestUtils.invokeMethod(svc, "acceptUsersFromSiteQueue");
     }

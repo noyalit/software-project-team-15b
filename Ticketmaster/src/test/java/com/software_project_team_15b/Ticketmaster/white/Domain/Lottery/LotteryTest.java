@@ -1,5 +1,6 @@
-package com.software_project_team_15b.Ticketmaster.Domain.Lottery;
+package com.software_project_team_15b.Ticketmaster.white.Domain.Lottery;
 
+import com.software_project_team_15b.Ticketmaster.Domain.Lottery.Lottery;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
