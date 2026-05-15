@@ -6,11 +6,12 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Hol
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
+import com.software_project_team_15b.Ticketmaster.DTO.ConfirmationReceiptDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.EventAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
+import com.software_project_team_15b.Ticketmaster.DTO.HoldReceiptDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.SeatsAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.HoldNotFoundException;
@@ -63,7 +64,7 @@ public interface IEventManagementService {
      * @return map keyed by availability
      * @throws InvalidEventStateException if the event or area is not found
      */
-    Map<Boolean, Set<UUID>> getSeatsAvailability(UUID eventId, UUID areaId, Set<UUID> seatIds);
+    SeatsAvailabilityDTO getSeatsAvailability(UUID eventId, UUID areaId, Set<UUID> seatIds);
 
     /**
      * Returns every seat in an area as a flat list of {@link EventDTO.SeatView}.
@@ -98,10 +99,10 @@ public interface IEventManagementService {
      * (sold-out trigger).
      *
      * @param eventId event id
-     * @return current {@link EventAvailability}
+     * @return current availability wrapped in {@link EventAvailabilityDTO}
      * @throws InvalidEventStateException if the event is not found
      */
-    EventAvailability getEventAvailability(UUID eventId);
+    EventAvailabilityDTO getEventAvailability(UUID eventId);
 
     /**
      * Computes a price quote for one order line: base price, subtotal, discount,
@@ -115,7 +116,7 @@ public interface IEventManagementService {
      * @return price breakdown
      * @throws InvalidEventStateException if the event or area is not found
      */
-    PriceBreakdown getPrice(UUID eventId, PriceQuery query);
+    PriceBreakdownDTO getPrice(UUID eventId, PriceQuery query);
 
     /**
      * Releases a subset of seats from an active hold; the rest of the hold remains.
@@ -142,7 +143,7 @@ public interface IEventManagementService {
      * @throws InvalidEventStateException if the event is not found or is cancelled
      * @throws HoldNotFoundException      if no active hold exists for the token
      */
-    ConfirmationReceipt confirm(UUID eventId, UUID holdToken);
+    ConfirmationReceiptDTO confirm(UUID eventId, UUID holdToken);
 
     /**
      * Releases every seat / quantity bound to a hold token; unknown tokens are a no-op.
@@ -171,7 +172,7 @@ public interface IEventManagementService {
      *                                    or the area-shape mismatches the command
      * @throws SeatUnavailableException   if a requested seat is not available
      */
-    HoldReceipt hold(UUID eventId, HoldCommand cmd);
+    HoldReceiptDTO hold(UUID eventId, HoldCommand cmd);
 
     /**
      * Cancels the event. Idempotent. Refunds and notifications are dispatched by
