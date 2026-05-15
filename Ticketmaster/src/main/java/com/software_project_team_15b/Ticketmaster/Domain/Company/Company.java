@@ -212,6 +212,7 @@ public class Company {
      * @param memberId the id of the owner to remove; must not be null
      * @throws IllegalArgumentException if {@code memberId} is null, equals the founder id,
      *                                  or is not currently an owner
+     * @throws IllegalStateException    if attempting to remove the last owner from the company
      */
     public void removeOwner(UUID memberId) {
         if (memberId == null) {
@@ -222,6 +223,9 @@ public class Company {
         }
         if (!ownerIds.contains(memberId)) {
             throw new IllegalArgumentException("memberId is not an owner");
+        }
+        if (ownerIds.size() == 1) {
+            throw new IllegalStateException("Cannot remove the last owner from the company.");
         }
         ownerIds.remove(memberId);
         touch();
