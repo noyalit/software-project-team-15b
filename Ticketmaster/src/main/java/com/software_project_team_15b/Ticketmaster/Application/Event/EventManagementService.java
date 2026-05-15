@@ -1,6 +1,5 @@
 package com.software_project_team_15b.Ticketmaster.Application.Event;
 
-import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
@@ -12,42 +11,30 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Upd
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
+import com.software_project_team_15b.Ticketmaster.DTO.ConfirmationReceiptDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.EventAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.EventArea;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
+import com.software_project_team_15b.Ticketmaster.DTO.HoldReceiptDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.SeatsAvailabilityDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.Seat;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatStatus;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatingEventArea;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.StandingEventArea;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.EventAction;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ports.ICompanyAuthorizationPort;
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PessimisticLockException;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.CannotAcquireLockException;
-// Correct package path for ObjectOptimisticLockingFailureException
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.retry.annotation.Backoff;
@@ -60,43 +47,34 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Application service for the Event aggregate.
  *
- * Exposes use-case level operations as orchestration around the aggregate.
- * The service deliberately does NOT own any TTL/timer logic: the external
- * reservation-timer component is expected to invoke {@link #release} when a
- * hold's TTL expires.
+ * <p>Thin orchestrator: resolves tokens via {@link IAuth}, acquires per-event locks,
+ * runs the transaction/retry shell, delegates aggregate work to
+ * {@link IEventDomainService}, maps domain results to DTOs, and emits audit logs.
  *
- * Transaction style note: read/write methods that do NOT retry use @Transactional
- * directly. Methods that use @Retryable (hold/release/confirm/cancel) must manage
- * their own transaction boundary via TransactionTemplate so that a fresh transaction
- * is opened on each retry attempt — @Transactional on a retried method would keep
- * the same transaction open across retries and never see a different version.
+ * <p>Authorization has been temporarily removed; each mutating method carries a TODO
+ * noting the {@link com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission}
+ * a manager would need (owners and the founder always bypass).
  */
 @Service
 public class EventManagementService implements IEventManagementService, EventSubscriber {
 
     private static final Logger AUDIT = LoggerFactory.getLogger("audit.event-management");
 
-    private final IEventRepository events;
+    private final IEventDomainService eventDomainService;
     private final EventLockRegistry locks;
-    private final ICompanyAuthorizationPort authorization;
     private final TransactionTemplate txTemplate;
     private final EventCancelManager cancelManager;
-    private final CompanyService companyService;
     private final IAuth auth;
 
-    public EventManagementService(IEventRepository events,
+    public EventManagementService(IEventDomainService eventDomainService,
                                   EventLockRegistry locks,
-                                  ICompanyAuthorizationPort authorization,
                                   PlatformTransactionManager txManager,
                                   EventCancelManager cancelManager,
-                                  @Lazy CompanyService companyService,
                                   IAuth auth) {
-        this.events = events;
+        this.eventDomainService = eventDomainService;
         this.locks = locks;
-        this.authorization = authorization;
         this.txTemplate = new TransactionTemplate(txManager);
         this.cancelManager = cancelManager;
-        this.companyService = companyService;
         this.auth = auth;
         try {
             this.cancelManager.subscribe(this);
@@ -107,41 +85,23 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Transactional
     public UUID createEvent(CreateEventCommand cmd, UUID callerId) {
-        authorization.require(cmd.companyId(), callerId, EventAction.MANAGE_EVENT);
-        List<IEventPurchasePolicy> purchasePolicies = cmd.purchasePolicies() == null
-                ? List.of()
-                : cmd.purchasePolicies();
-        List<IEventDiscountPolicy> discountPolicies = cmd.discountPolicies() == null
-                ? List.of()
-                : cmd.discountPolicies();
-        Event event = new Event(
-                UUID.randomUUID(),
-                cmd.companyId(),
-                cmd.name(),
-                cmd.artist(),
-                cmd.category(),
-                cmd.startsAt(),
-                cmd.location(),
-                purchasePolicies,
-                discountPolicies
-        );
-        Event saved = events.save(event);
-        AUDIT.info("op=createEvent event={} caller={} result=ok", saved.eventId(), callerId);
-        return saved.eventId();
+        // TODO: authorize caller — require ManagerPermission.MANAGE_EVENTS on cmd.companyId()
+        //       (owner/founder bypass; manager needs the listed permission)
+        UUID id = eventDomainService.createEvent(cmd);
+        AUDIT.info("op=createEvent event={} caller={} result=ok", id, callerId);
+        return id;
     }
 
     @Transactional
     public UUID addArea(UUID eventId, AddAreaCommand cmd, UUID callerId) {
+        // TODO: authorize caller — require ManagerPermission.CONFIGURE_HALLS_AND_SEATS on event's company
+        //       (owner/founder bypass; manager needs the listed permission)
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
-            Event event = requireEvent(eventId);
-            authorization.require(event.companyId(), callerId, EventAction.CONFIGURE_HALL);
-            EventArea area = buildArea(cmd);
-            event.addArea(area);
-            events.save(event);
-            AUDIT.info("op=addArea event={} area={} caller={} result=ok", eventId, area.areaId(), callerId);
-            return area.areaId();
+            UUID areaId = eventDomainService.addArea(eventId, cmd);
+            AUDIT.info("op=addArea event={} area={} caller={} result=ok", eventId, areaId, callerId);
+            return areaId;
         } catch (RuntimeException e) {
             AUDIT.warn("op=addArea event={} caller={} result=rejected reason={}", eventId, callerId, e.getMessage());
             throw e;
@@ -152,13 +112,11 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Transactional
     public void publish(UUID eventId, UUID callerId) {
+        // TODO: authorize caller — owner/founder only (PUBLISH is owner-only; managers cannot)
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
-            Event event = requireEvent(eventId);
-            authorization.require(event.companyId(), callerId, EventAction.PUBLISH);
-            event.publish();
-            events.save(event);
+            eventDomainService.publish(eventId);
             AUDIT.info("op=publish event={} caller={} result=ok", eventId, callerId);
         } catch (RuntimeException e) {
             AUDIT.warn("op=publish event={} caller={} result=rejected reason={}", eventId, callerId, e.getMessage());
@@ -176,16 +134,11 @@ public class EventManagementService implements IEventManagementService, EventSub
             ObjectOptimisticLockingFailureException.class
     }, maxAttempts = 8, backoff = @Backoff(delay = 20, multiplier = 2))
     public void cancel(UUID eventId, UUID callerId) {
+        // TODO: authorize caller — owner/founder only (CANCEL is owner-only; managers cannot)
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
-            txTemplate.executeWithoutResult(status -> {
-                Event event = events.findByIdForUpdate(eventId)
-                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
-                authorization.require(event.companyId(), callerId, EventAction.CANCEL);
-                event.cancel();
-                events.save(event);
-            });
+            txTemplate.executeWithoutResult(status -> eventDomainService.cancel(eventId));
             AUDIT.info("op=cancel event={} caller={} result=ok", eventId, callerId);
             locks.forget(eventId);
         } catch (RuntimeException e) {
@@ -196,22 +149,25 @@ public class EventManagementService implements IEventManagementService, EventSub
         }
     }
 
+    @Override
     @Transactional(readOnly = true)
     public EventDTO getEvent(UUID eventId) {
-        Event event = requireEvent(eventId);
-        return EventDTO.from(event);
+        return eventDomainService.getEvent(eventId);
     }
 
+    @Override
     @Transactional(readOnly = true)
     public List<EventDTO> search(SearchCriteria criteria) {
-        return events.search(criteria).stream().map(EventDTO::from).toList();
+        return eventDomainService.search(criteria);
     }
 
+    @Override
     @Transactional(readOnly = true)
     public List<EventDTO> searchInCompany(UUID companyId, SearchCriteria criteria) {
-        return events.searchByCompany(companyId, criteria).stream().map(EventDTO::from).toList();
+        return eventDomainService.searchInCompany(companyId, criteria);
     }
 
+    @Override
     @Retryable(retryFor = {
             OptimisticLockException.class,
             PessimisticLockException.class,
@@ -219,19 +175,13 @@ public class EventManagementService implements IEventManagementService, EventSub
             CannotAcquireLockException.class,
             ObjectOptimisticLockingFailureException.class
     }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
-    public HoldReceipt hold(UUID eventId, HoldCommand cmd) {
+    public HoldReceiptDTO hold(UUID eventId, HoldCommand cmd) {
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
-            HoldReceipt receipt = txTemplate.execute(status -> {
-                Event event = events.findByIdForUpdate(eventId)
-                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
-                HoldReceipt r = cmd.isStanding()
-                        ? event.holdStanding(cmd.areaId(), cmd.standingQuantity(), cmd.holdToken())
-                        : event.holdSeats(cmd.areaId(), cmd.seatIds(), cmd.holdToken());
-                events.save(event);
-                return r;
-            });
+            HoldReceiptDTO receipt = HoldReceiptDTO.from(
+                    txTemplate.execute(status -> eventDomainService.hold(eventId, cmd))
+            );
             AUDIT.info("op=hold event={} token={} area={} qty={} result=ok",
                     eventId, cmd.holdToken(), cmd.areaId(), receipt.quantity());
             return receipt;
@@ -244,6 +194,7 @@ public class EventManagementService implements IEventManagementService, EventSub
         }
     }
 
+    @Override
     @Retryable(retryFor = {
             OptimisticLockException.class,
             PessimisticLockException.class,
@@ -255,12 +206,7 @@ public class EventManagementService implements IEventManagementService, EventSub
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
-            txTemplate.executeWithoutResult(status -> {
-                Event event = events.findByIdForUpdate(eventId)
-                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
-                event.releaseHold(holdToken);
-                events.save(event);
-            });
+            txTemplate.executeWithoutResult(status -> eventDomainService.release(eventId, holdToken));
             AUDIT.info("op=release event={} token={} result=ok", eventId, holdToken);
         } catch (RuntimeException e) {
             AUDIT.warn("op=release event={} token={} result=rejected reason={}", eventId, holdToken, e.getMessage());
@@ -270,6 +216,7 @@ public class EventManagementService implements IEventManagementService, EventSub
         }
     }
 
+    @Override
     @Retryable(retryFor = {
             OptimisticLockException.class,
             PessimisticLockException.class,
@@ -277,17 +224,13 @@ public class EventManagementService implements IEventManagementService, EventSub
             CannotAcquireLockException.class,
             ObjectOptimisticLockingFailureException.class
     }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
-    public ConfirmationReceipt confirm(UUID eventId, UUID holdToken) {
+    public ConfirmationReceiptDTO confirm(UUID eventId, UUID holdToken) {
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
-            ConfirmationReceipt receipt = txTemplate.execute(status -> {
-                Event event = events.findByIdForUpdate(eventId)
-                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
-                ConfirmationReceipt r = event.confirmHold(holdToken);
-                events.save(event);
-                return r;
-            });
+            ConfirmationReceiptDTO receipt = ConfirmationReceiptDTO.from(
+                    txTemplate.execute(status -> eventDomainService.confirm(eventId, holdToken))
+            );
             AUDIT.info("op=confirm event={} token={} qty={} result=ok",
                     eventId, holdToken, receipt.quantity());
             locks.forget(eventId);
@@ -303,6 +246,7 @@ public class EventManagementService implements IEventManagementService, EventSub
         }
     }
 
+    @Override
     @Retryable(retryFor = {
             OptimisticLockException.class,
             PessimisticLockException.class,
@@ -315,13 +259,9 @@ public class EventManagementService implements IEventManagementService, EventSub
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
-            boolean released = Boolean.TRUE.equals(txTemplate.execute(status -> {
-                Event event = events.findByIdForUpdate(eventId)
-                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
-                boolean r = event.releaseSeats(holdToken, seatIds);
-                events.save(event);
-                return r;
-            }));
+            boolean released = Boolean.TRUE.equals(
+                    txTemplate.execute(status -> eventDomainService.releaseSeats(eventId, holdToken, seatIds))
+            );
             AUDIT.info("op=releaseSeats event={} token={} seats={} result={}",
                     eventId, holdToken, seatIds.size(), released ? "ok" : "noop");
             return released;
@@ -333,38 +273,22 @@ public class EventManagementService implements IEventManagementService, EventSub
         }
     }
 
+    @Override
     @Transactional(readOnly = true)
-    public PriceBreakdown getPrice(UUID eventId, PriceQuery query) {
-        Event event = requireEvent(eventId);
-        EventArea area = event.areas().stream()
-                .filter(a -> a.areaId().equals(query.areaId()))
-                .findFirst()
-                .orElseThrow(() -> new InvalidEventStateException("area not found: " + query.areaId()));
-        Money subtotal = area.basePrice().multiply(query.quantity());
-        PurchaseRequest request = new PurchaseRequest(
-                eventId, query.areaId(), query.buyerId(), query.buyerBirthDate(),
-                query.quantity(), List.of(), query.couponCode()
+    public PriceBreakdownDTO getPrice(UUID eventId, PriceQuery query) {
+        PriceBreakdown breakdown = eventDomainService.getPrice(
+                eventId, query.areaId(), query.quantity(),
+                query.buyerId(), query.buyerBirthDate(), query.couponCode()
         );
-        Money eventTotal = event.cheapestPriceFor(query.areaId(), query.quantity(), request);
-        Money companyTotal = companyService.cheapestPriceFor(event.companyId(), subtotal, request);
-        Money total = eventTotal.amount().compareTo(companyTotal.amount()) <= 0 ? eventTotal : companyTotal;
-        Money discount = subtotal.subtract(total);
-        return new PriceBreakdown(area.basePrice(), subtotal, discount, total);
+        return PriceBreakdownDTO.from(breakdown);
     }
 
-    /**
-     * Validates that the buyer is eligible to purchase under every purchase policy attached to
-     * the event. Throws {@link PolicyViolationException} on the first failure to abort purchase.
-     */
+    @Override
     @Transactional(readOnly = true)
     public void validatePurchaseEligibility(UUID eventId, PurchaseRequest request) {
         Objects.requireNonNull(request, "request");
-        Event event = requireEvent(eventId);
         try {
-            for (IEventPurchasePolicy policy : event.purchasePolicies()) {
-                policy.validate(request, event);
-            }
-            companyService.validatePurchaseEligibility(event.companyId(), request);
+            eventDomainService.validatePurchaseEligibility(eventId, request);
             AUDIT.info("op=validatePurchaseEligibility event={} buyer={} result=ok",
                     eventId, request.buyerId());
         } catch (PolicyViolationException e) {
@@ -374,87 +298,35 @@ public class EventManagementService implements IEventManagementService, EventSub
         }
     }
 
+    @Override
     @Transactional(readOnly = true)
-    public EventAvailability getEventAvailability(UUID eventId) {
-        Event event = requireEvent(eventId);
-        return event.bookingStatus();
+    public EventAvailabilityDTO getEventAvailability(UUID eventId) {
+        return EventAvailabilityDTO.from(eventDomainService.getEventAvailability(eventId));
     }
 
+    @Override
     @Transactional(readOnly = true)
     public boolean getAreaAvailability(UUID eventId, UUID areaId) {
-        Objects.requireNonNull(areaId, "areaId");
-        Event event = requireEvent(eventId);
-        EventArea area = event.areas().stream()
-                .filter(a -> a.areaId().equals(areaId))
-                .findFirst()
-                .orElseThrow(() -> new InvalidEventStateException("area not found: " + areaId));
-        return area.availableCapacity() > 0;
+        return eventDomainService.getAreaAvailability(eventId, areaId);
     }
 
+    @Override
     @Transactional(readOnly = true)
-    public Map<Boolean, Set<UUID>> getSeatsAvailability(UUID eventId, UUID areaId, Set<UUID> seatIds) {
-        Objects.requireNonNull(areaId, "areaId");
-        Objects.requireNonNull(seatIds, "seatIds");
-        Event event = requireEvent(eventId);
-        EventArea area = event.areas().stream()
-                .filter(a -> a.areaId().equals(areaId))
-                .findFirst()
-                .orElseThrow(() -> new InvalidEventStateException("area not found: " + areaId));
-        Map<UUID, Seat> seats = seatsOf(area);
-
-        Set<UUID> available = new HashSet<>();
-        Set<UUID> unavailable = new HashSet<>();
-        for (UUID seatId : seatIds) {
-            Objects.requireNonNull(seatId, "seatIds element");
-            Seat seat = seats.get(seatId);
-            if (seat != null && seat.status() == SeatStatus.AVAILABLE) {
-                available.add(seatId);
-            } else {
-                unavailable.add(seatId);
-            }
-        }
-        Map<Boolean, Set<UUID>> result = new HashMap<>();
-        result.put(Boolean.TRUE, available);
-        result.put(Boolean.FALSE, unavailable);
-        return result;
-    }
-
-    private Map<UUID, Seat> seatsOf(EventArea area) {
-        if (area instanceof SeatingEventArea s) return s.seats();
-        if (area instanceof StandingEventArea s) return s.seats();
-        return Map.of();
+    public SeatsAvailabilityDTO getSeatsAvailability(UUID eventId, UUID areaId, Set<UUID> seatIds) {
+        return SeatsAvailabilityDTO.from(eventDomainService.getSeatsAvailability(eventId, areaId, seatIds));
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<EventDTO.SeatView> areaSeats(UUID eventId, UUID areaId) {
-        Objects.requireNonNull(areaId, "areaId");
-        Event event = requireEvent(eventId);
-        EventArea area = event.areas().stream()
-                .filter(a -> a.areaId().equals(areaId))
-                .findFirst()
-                .orElseThrow(() -> new InvalidEventStateException("area not found: " + areaId));
-        return seatsOf(area).values().stream()
-                .map(seat -> new EventDTO.SeatView(
-                        seat.seatId(), seat.row(), seat.number(), seat.status().name()))
-                .toList();
-    }
-
-    private Event requireEvent(UUID eventId) {
-        return events.findById(eventId)
-                .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
+        return eventDomainService.areaSeats(eventId, areaId);
     }
 
     /**
      * Resolves a member token to its caller id.
      * <p>
-     * Authentication only — per-action authorization is delegated to
-     * {@link ICompanyAuthorizationPort#require}.
-     *
-     * @param token an active member token
-     * @return the authenticated member's id
-     * @throws InvalidTokenException              if the token is null, blank, or not valid
-     * @throws UnauthorizedCompanyActionException if the bearer is not a member
+     * Authentication only — per-action authorization will be re-introduced via a
+     * dedicated port and is currently absent (see method-level TODOs).
      */
     private UUID resolveMemberCallerId(String token) {
         if (token == null || token.isBlank()) {
@@ -476,8 +348,7 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     // -------------------------------------------------------------------------
     // Token-authenticated overloads. Each resolves the token to a caller id and
-    // delegates to its UUID-based counterpart, which performs per-action
-    // authorization through the company port.
+    // delegates to its UUID-based counterpart.
     // -------------------------------------------------------------------------
 
     @Override
@@ -525,27 +396,6 @@ public class EventManagementService implements IEventManagementService, EventSub
         replaceDiscountPolicies(eventId, policies, resolveMemberCallerId(token));
     }
 
-    private EventArea buildArea(AddAreaCommand cmd) {
-        UUID areaId = UUID.randomUUID();
-        return switch (cmd.type()) {
-            case SEATING -> {
-                SeatingEventArea s = new SeatingEventArea(areaId, cmd.name(), cmd.basePrice());
-                if (cmd.seats() != null) {
-                    for (AddAreaCommand.SeatSpec spec : cmd.seats()) {
-                        s.addSeat(new Seat(UUID.randomUUID(), spec.row(), spec.number()));
-                    }
-                }
-                yield s;
-            }
-            case STANDING -> {
-                if (cmd.standingCapacity() == null) {
-                    throw new InvalidEventStateException("standing area requires capacity");
-                }
-                yield new StandingEventArea(areaId, cmd.name(), cmd.basePrice(), cmd.standingCapacity());
-            }
-        };
-    }
-
     // -------------------------------------------------------------------------
     // Catalog mutability — II.4.1 / II.4.3
     // -------------------------------------------------------------------------
@@ -553,14 +403,13 @@ public class EventManagementService implements IEventManagementService, EventSub
     @Override
     @Transactional
     public void updateEvent(UUID eventId, UpdateEventCommand cmd, UUID callerId) {
+        // TODO: authorize caller — require ManagerPermission.MANAGE_EVENTS on event's company
+        //       (owner/founder bypass; manager needs the listed permission)
         Objects.requireNonNull(cmd, "cmd");
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
-            Event event = requireEvent(eventId);
-            authorization.require(event.companyId(), callerId, EventAction.MANAGE_EVENT);
-            event.updateDetails(cmd.name(), cmd.artist(), cmd.category(), cmd.startsAt(), cmd.location());
-            events.save(event);
+            eventDomainService.updateEvent(eventId, cmd);
             AUDIT.info("op=updateEvent event={} caller={} result=ok", eventId, callerId);
         } catch (RuntimeException e) {
             AUDIT.warn("op=updateEvent event={} caller={} result=rejected reason={}",
@@ -580,18 +429,14 @@ public class EventManagementService implements IEventManagementService, EventSub
             ObjectOptimisticLockingFailureException.class
     }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
     public void updateArea(UUID eventId, UUID areaId, UpdateAreaCommand cmd, UUID callerId) {
+        // TODO: authorize caller — require ManagerPermission.UPDATE_EVENT_MAP on event's company
+        //       (owner/founder bypass; manager needs the listed permission)
         Objects.requireNonNull(cmd, "cmd");
         Objects.requireNonNull(areaId, "areaId");
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
-            txTemplate.executeWithoutResult(status -> {
-                Event event = events.findByIdForUpdate(eventId)
-                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
-                authorization.require(event.companyId(), callerId, EventAction.UPDATE_EVENT_MAP);
-                event.updateArea(areaId, cmd.name(), cmd.basePrice(), cmd.standingCapacity());
-                events.save(event);
-            });
+            txTemplate.executeWithoutResult(status -> eventDomainService.updateArea(eventId, areaId, cmd));
             AUDIT.info("op=updateArea event={} area={} caller={} result=ok", eventId, areaId, callerId);
         } catch (RuntimeException e) {
             AUDIT.warn("op=updateArea event={} area={} caller={} result=rejected reason={}",
@@ -605,14 +450,13 @@ public class EventManagementService implements IEventManagementService, EventSub
     @Override
     @Transactional
     public void removeArea(UUID eventId, UUID areaId, UUID callerId) {
+        // TODO: authorize caller — require ManagerPermission.CONFIGURE_HALLS_AND_SEATS on event's company
+        //       (owner/founder bypass; manager needs the listed permission)
         Objects.requireNonNull(areaId, "areaId");
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
-            Event event = requireEvent(eventId);
-            authorization.require(event.companyId(), callerId, EventAction.CONFIGURE_HALL);
-            event.removeArea(areaId);
-            events.save(event);
+            eventDomainService.removeArea(eventId, areaId);
             AUDIT.info("op=removeArea event={} area={} caller={} result=ok", eventId, areaId, callerId);
         } catch (RuntimeException e) {
             AUDIT.warn("op=removeArea event={} area={} caller={} result=rejected reason={}",
@@ -626,14 +470,13 @@ public class EventManagementService implements IEventManagementService, EventSub
     @Override
     @Transactional
     public void replacePurchasePolicies(UUID eventId, List<IEventPurchasePolicy> policies, UUID callerId) {
+        // TODO: authorize caller — require ManagerPermission.DEFINE_PURCHASE_POLICY on event's company
+        //       (owner/founder bypass; manager needs the listed permission)
         Objects.requireNonNull(policies, "policies");
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
-            Event event = requireEvent(eventId);
-            authorization.require(event.companyId(), callerId, EventAction.DEFINE_PURCHASE_POLICY);
-            event.replacePurchasePolicies(policies);
-            events.save(event);
+            eventDomainService.replacePurchasePolicies(eventId, policies);
             AUDIT.info("op=replacePurchasePolicies event={} caller={} count={} result=ok",
                     eventId, callerId, policies.size());
         } catch (RuntimeException e) {
@@ -648,14 +491,13 @@ public class EventManagementService implements IEventManagementService, EventSub
     @Override
     @Transactional
     public void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies, UUID callerId) {
+        // TODO: authorize caller — require ManagerPermission.DEFINE_DISCOUNT_POLICY on event's company
+        //       (owner/founder bypass; manager needs the listed permission)
         Objects.requireNonNull(policies, "policies");
         ReentrantLock lock = locks.forEvent(eventId);
         lock.lock();
         try {
-            Event event = requireEvent(eventId);
-            authorization.require(event.companyId(), callerId, EventAction.DEFINE_DISCOUNT_POLICY);
-            event.replaceDiscountPolicies(policies);
-            events.save(event);
+            eventDomainService.replaceDiscountPolicies(eventId, policies);
             AUDIT.info("op=replaceDiscountPolicies event={} caller={} count={} result=ok",
                     eventId, callerId, policies.size());
         } catch (RuntimeException e) {
@@ -680,12 +522,7 @@ public class EventManagementService implements IEventManagementService, EventSub
         ReentrantLock lock = locks.forEvent(event);
         lock.lock();
         try {
-            txTemplate.executeWithoutResult(status -> {
-                Event ev = events.findByIdForUpdate(event)
-                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + event));
-                ev.cancel();
-                events.save(ev);
-            });
+            txTemplate.executeWithoutResult(status -> eventDomainService.cancel(event));
             AUDIT.info("op=notifyEventIsCancelled event={} result=ok", event);
             locks.forget(event);
         } catch (RuntimeException e) {
