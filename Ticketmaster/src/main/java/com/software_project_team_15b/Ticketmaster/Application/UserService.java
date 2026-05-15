@@ -22,6 +22,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
+import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 
 /**
  * UserService provides functionality for managing user accounts and roles.
@@ -50,7 +51,7 @@ public class UserService {
      * @param birthDate  Birth date of the member
      * @return Registered member
      */
-    public Member registerMember(String token, String username, String password, LocalDate birthDate) {
+    public MemberDTO registerMember(String token, String username, String password, LocalDate birthDate) {
         try {
             validateEntranceToken(token);
             validateRawPassword(password);
@@ -62,7 +63,7 @@ public class UserService {
             );
 
             AUDIT.info("op=register-member userId={} username={}",saved.getUserId(),saved.getUsername());
-            return saved;
+            return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=register-member username={} result=rejected reason={}",username,e.getMessage());
@@ -223,10 +224,10 @@ public class UserService {
         throw new IllegalArgumentException("Unsupported user type");
     }
 
-    public String watchPersonalDetails(String token) {
+    public MemberDTO watchPersonalDetails(String token) {
         try {
             UUID userId = getAuthenticatedMemberId(token);
-            String details = userDomainService.watchPersonalDetails(userId);
+            MemberDTO details = userDomainService.watchPersonalDetails(userId);
             AUDIT.info("op=watch-personal-details userId={}",userId);
             return details;
 
@@ -236,12 +237,12 @@ public class UserService {
         }
     }
 
-    public Member changeUsername(String token, String newUsername) {
+    public MemberDTO changeUsername(String token, String newUsername) {
         try {
             UUID userId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.changeUsername(userId,newUsername);
             AUDIT.info("op=change-username userId={} newUsername={}",userId,newUsername);
-            return saved;
+            return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=change-username username={} result=rejected reason={}",newUsername,e.getMessage());
@@ -249,14 +250,14 @@ public class UserService {
         }
     }
 
-    public Member changePassword(String token, String newPassword) {
+    public MemberDTO changePassword(String token, String newPassword) {
         try {
             UUID userId = getAuthenticatedMemberId(token);
             validateRawPassword(newPassword);
             Member saved = userDomainService.changePassword(userId,passwordEncoder.encode(newPassword));
 
             AUDIT.info("op=change-password userId={}",userId);
-            return saved;
+            return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=change-password result=rejected reason={}",e.getMessage());
@@ -264,13 +265,13 @@ public class UserService {
         }
     }
 
-    public Member changeBirthDate(String token, LocalDate newBirthDate) {
+    public MemberDTO changeBirthDate(String token, LocalDate newBirthDate) {
         try {
             UUID userId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.changeBirthDate(userId,newBirthDate);
 
             AUDIT.info("op=change-birth-date userId={} newBirthDate={}",userId,newBirthDate);
-            return saved;
+            return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=change-birth-date newBirthDate={} result=rejected reason={}",newBirthDate,e.getMessage());
@@ -278,13 +279,13 @@ public class UserService {
         }
     }
 
-    public Member changeRoleToManager(String token, UUID eventId) {
+    public MemberDTO changeRoleToManager(String token, UUID eventId) {
         try {
             UUID userId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.changeRoleToManager(userId,eventId);
 
             AUDIT.info("op=switch-role userId={} role=Manager eventId={}",userId,eventId);
-            return saved;
+            return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=switch-role userId={} role=Manager eventId={} result=rejected reason={}",
@@ -293,13 +294,13 @@ public class UserService {
         }
     }
 
-    public Member changeRoleToOwner(String token, UUID companyId) {
+    public MemberDTO changeRoleToOwner(String token, UUID companyId) {
         try {
             UUID userId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.changeRoleToOwner(userId,companyId);
 
             AUDIT.info("op=switch-role userId={} role=Owner companyId={}",userId,companyId);
-            return saved;
+            return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=switch-role userId={} role=Owner companyId={} result=rejected reason={}",
@@ -308,13 +309,13 @@ public class UserService {
         }
     }
 
-    public Member changeRoleToFounder(String token, UUID companyId) {
+    public MemberDTO changeRoleToFounder(String token, UUID companyId) {
         try {
             UUID userId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.changeRoleToFounder(userId,companyId);
 
             AUDIT.info("op=switch-role userId={} role=Founder companyId={}",userId,companyId);
-            return saved;
+            return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=switch-role userId={} role=Founder companyId={} result=rejected reason={}",
@@ -323,13 +324,13 @@ public class UserService {
         }
     }
 
-    public Member changeRoleToRegularMember(String token) {
+    public MemberDTO changeRoleToRegularMember(String token) {
         try {
             UUID userId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.changeRoleToRegularMember(userId);
 
             AUDIT.info("op=switch-role userId={} role=RegularMember",userId);
-            return saved;
+            return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=switch-role userId={} role=RegularMember result=rejected reason={}",
@@ -338,14 +339,14 @@ public class UserService {
         }
     }
 
-    public Member appointManager(UUID memberId, String token, UUID companyId, UUID eventId, Set<ManagerPermission> permissions) {
+    public MemberDTO appointManager(UUID memberId, String token, UUID companyId, UUID eventId, Set<ManagerPermission> permissions) {
         try {
             UUID ownerId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.appointManager(memberId, ownerId, companyId, eventId, permissions);
 
             AUDIT.info("op=appoint-manager appointerId={} memberId={} companyId={} eventId={} permissions={}",
                     ownerId, memberId, companyId, eventId, permissions);
-            return saved;
+            return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=appoint-manager memberId={} companyId={} eventId={} result=rejected reason={}",
@@ -354,14 +355,14 @@ public class UserService {
         }
     }
 
-    public Member appointOwner(UUID memberId, String token, UUID companyId) {
+    public MemberDTO appointOwner(UUID memberId, String token, UUID companyId) {
         try {
             UUID ownerId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.appointOwner(memberId, ownerId, companyId);
 
             AUDIT.info("op=appoint-owner appointerId={} memberId={} companyId={}",
                     ownerId, memberId, companyId);
-            return saved;
+            return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=appoint-owner memberId={} companyId={} result=rejected reason={}",
@@ -370,14 +371,14 @@ public class UserService {
         }
     }
 
-    public Member appointFounder(UUID memberId, String token, UUID companyId) {
+    public MemberDTO appointFounder(UUID memberId, String token, UUID companyId) {
         try {
             UUID founderId = getAuthenticatedMemberId(token);
-            Member saved = userDomainService.appointFounder(memberId, founderId, companyId);
+            Member saved = userDomainService.appointFounder(memberId, companyId);
 
             AUDIT.info("op=appoint-founder appointerId={} memberId={} companyId={}",
                     founderId, memberId, companyId);
-            return saved;
+            return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=appoint-founder memberId={} companyId={} result=rejected reason={}",
@@ -386,14 +387,14 @@ public class UserService {
         }
     }
 
-    public Member removeOwnerAppointment(String token, UUID memberToRemoveId, UUID companyId) {
+    public MemberDTO removeOwnerAppointment(String token, UUID memberToRemoveId, UUID companyId) {
         try {
             UUID removerOwnerId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.removeOwnerAppointment(removerOwnerId, memberToRemoveId, companyId);
 
             AUDIT.info("op=remove-owner-appointment removerOwnerId={} memberId={} companyId={}",
                     removerOwnerId, memberToRemoveId, companyId);
-            return saved;
+            return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=remove-owner-appointment memberId={} companyId={} result=rejected reason={}",
@@ -402,14 +403,14 @@ public class UserService {
         }
     }
 
-    public Member removeManagerAppointment(String token, UUID memberToRemoveId, UUID companyId, UUID eventId) {
+    public MemberDTO removeManagerAppointment(String token, UUID memberToRemoveId, UUID companyId, UUID eventId) {
         try {
             UUID removerOwnerId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.removeManagerAppointment(removerOwnerId, memberToRemoveId, companyId, eventId);
 
             AUDIT.info("op=remove-manager-appointment removerOwnerId={} memberId={} companyId={} eventId={}",
                     removerOwnerId, memberToRemoveId, companyId, eventId);
-            return saved;
+            return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=remove-manager-appointment memberId={} companyId={} eventId={} result=rejected reason={}",
@@ -418,13 +419,13 @@ public class UserService {
         }
     }
 
-    public Member ownerResign(String token, UUID companyId) {
+    public MemberDTO ownerResign(String token, UUID companyId) {
         try {
             UUID ownerId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.ownerResign(ownerId, companyId);
 
             AUDIT.info("op=owner-resign ownerId={} companyId={}", ownerId, companyId);
-            return saved;
+            return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=owner-resign ownerId={} companyId={} result=rejected reason={}",
@@ -433,14 +434,14 @@ public class UserService {
         }
     }
 
-    public Member changeManagerPermissions(String token, UUID managerId, UUID eventId, Set<ManagerPermission> newPermissions) {
+    public MemberDTO changeManagerPermissions(String token, UUID managerId, UUID eventId, Set<ManagerPermission> newPermissions) {
         try {
             UUID ownerId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.changeManagerPermissions(ownerId, managerId, eventId, newPermissions);
 
             AUDIT.info("op=change-manager-permissions ownerId={} managerId={} eventId={} newPermissions={}",
                     ownerId, managerId, eventId, newPermissions);
-            return saved;
+            return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=change-manager-permissions managerId={} eventId={} result=rejected reason={}",
@@ -465,7 +466,7 @@ public class UserService {
         }
     }
 
-    public Member approveAppointment(String token) {
+    public MemberDTO approveAppointment(String token) {
         try {
             UUID approverId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.approveAppointment(approverId);
@@ -473,7 +474,7 @@ public class UserService {
             AUDIT.info("op=approve-appointment userId={} role={}",
                 approverId,
                 saved.getActiveRole() == null ? null : saved.getActiveRole().getRoleName());
-            return saved;
+            return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
             AUDIT.warn("op=approve-appointment approverId={} result=rejected reason={}",

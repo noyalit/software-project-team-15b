@@ -8,6 +8,8 @@ import java.time.LocalDate;
 
 import org.springframework.stereotype.Service;
 
+import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
+
 @Service
 public class UserDomainService {
 
@@ -26,33 +28,9 @@ public class UserDomainService {
         return memberRepository.save(member);
     }
 
-    public String watchPersonalDetails(UUID userId) {
+    public MemberDTO watchPersonalDetails(UUID userId) {
         Member member = getMemberOrThrow(userId);
-
-        String activeRole = member.getActiveRole() == null
-                ? "RegularMember"
-                : member.getActiveRole().getRoleName();
-
-        String allRoles = member.getAssignedRoles()
-                .stream()
-                .map(Role::getRoleName)
-                .toList()
-                .toString();
-
-        return """
-                {
-                "username": "%s",
-                "password": "********",
-                "birthDate": "%s",
-                "activeRole": "%s",
-                "availableRoles": "%s"
-                }
-                """.formatted(
-                member.getUsername(),
-                member.getBirthDate(),
-                activeRole,
-                allRoles
-        );
+        return toDTO(member);
     }
 
     public Member changeUsername(UUID userId, String newUsername) {
@@ -492,6 +470,29 @@ public class UserDomainService {
         return memberRepository.findByUsername(username)
                 .orElseThrow(() ->
                         new IllegalArgumentException("Invalid username or password"));
+    }
+
+    public MemberDTO toDTO(Member member) {
+        if (member == null) {
+            throw new IllegalArgumentException("Member cannot be null");
+        }
+
+        String activeRole = member.getActiveRole() == null
+                ? "RegularMember"
+                : member.getActiveRole().getRoleName();
+
+        List<String> assignedRoles = member.getAssignedRoles()
+                .stream()
+                .map(Role::getRoleName)
+                .toList();
+
+        return new MemberDTO(
+                member.getUserId(),
+                member.getUsername(),
+                member.getBirthDate(),
+                activeRole,
+                assignedRoles
+        );
     }
 
 }
