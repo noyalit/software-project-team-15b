@@ -245,7 +245,7 @@ public class UserService {
             Member saved = userDomainService.changeUsername(userId,newUsername);
             AUDIT.info("op=change-username userId={} newUsername={}",userId,newUsername);
             return userDomainService.toDTO(saved);
-            } catch (RuntimeException e) {
+        } catch (RuntimeException e) {
             AUDIT.warn("op=change-username username={} result=rejected reason={}",newUsername,e.getMessage());
             throw e;
         }
@@ -273,7 +273,7 @@ public class UserService {
             Member saved = userDomainService.changeBirthDate(userId,newBirthDate);
             AUDIT.info("op=change-birth-date userId={} newBirthDate={}",userId,newBirthDate);
             return userDomainService.toDTO(saved);
-             } catch (RuntimeException e) {
+        } catch (RuntimeException e) {
             AUDIT.warn("op=change-birth-date newBirthDate={} result=rejected reason={}",newBirthDate,e.getMessage());
             throw e;
         }
@@ -285,7 +285,7 @@ public class UserService {
             Member saved = userDomainService.changeRoleToManager(userId,eventId);
             AUDIT.info("op=switch-role userId={} role=Manager eventId={}",userId,eventId);
             return userDomainService.toDTO(saved);
-            } catch (RuntimeException e) {
+        } catch (RuntimeException e) {
             AUDIT.warn("op=switch-role userId={} role=Manager eventId={} result=rejected reason={}",
                     auth.extractUserId(token), eventId, e.getMessage());
             throw e;
@@ -299,7 +299,7 @@ public class UserService {
             Member saved = userDomainService.changeRoleToOwner(userId,companyId);
             AUDIT.info("op=switch-role userId={} role=Owner companyId={}",userId,companyId);
             return userDomainService.toDTO(saved);
-            } catch (RuntimeException e) {
+        } catch (RuntimeException e) {
             AUDIT.warn("op=switch-role userId={} role=Owner companyId={} result=rejected reason={}",
                     auth.extractUserId(token), companyId, e.getMessage());
             throw e;
@@ -312,7 +312,7 @@ public class UserService {
             Member saved = userDomainService.changeRoleToFounder(userId,companyId);
             AUDIT.info("op=switch-role userId={} role=Founder companyId={}",userId,companyId);
             return userDomainService.toDTO(saved);
-             } catch (RuntimeException e) {
+        } catch (RuntimeException e) {
             AUDIT.warn("op=switch-role userId={} role=Founder companyId={} result=rejected reason={}",
                     auth.extractUserId(token), companyId, e.getMessage());
             throw e;
@@ -325,7 +325,7 @@ public class UserService {
             Member saved = userDomainService.changeRoleToRegularMember(userId);
              AUDIT.info("op=switch-role userId={} role=RegularMember",userId);
             return userDomainService.toDTO(saved);
-            } catch (RuntimeException e) {
+        } catch (RuntimeException e) {
             AUDIT.warn("op=switch-role userId={} role=RegularMember result=rejected reason={}",
                     auth.extractUserId(token), e.getMessage());
             throw e;
@@ -339,7 +339,7 @@ public class UserService {
             AUDIT.info("op=appoint-manager appointerId={} memberId={} companyId={} eventId={} permissions={}",
                     ownerId, memberId, companyId, eventId, permissions);
             return userDomainService.toDTO(saved);
-            } catch (RuntimeException e) {
+        } catch (RuntimeException e) {
             AUDIT.warn("op=appoint-manager memberId={} companyId={} eventId={} result=rejected reason={}",
                     memberId, companyId, eventId, e.getMessage());
             throw e;
@@ -354,11 +354,13 @@ public class UserService {
             AUDIT.info("op=appoint-owner appointerId={} memberId={} companyId={}",
                     ownerId, memberId, companyId);
             return userDomainService.toDTO(saved);
-            } catch (RuntimeException e) {
+            
+        } catch (RuntimeException e) {
             AUDIT.warn("op=appoint-owner memberId={} companyId={} result=rejected reason={}",
                     memberId, companyId, e.getMessage());
             throw e;
         }
+    }
 
     public MemberDTO appointFounder(UUID memberId, String token, UUID companyId) {
         try {
@@ -368,7 +370,7 @@ public class UserService {
             AUDIT.info("op=appoint-founder appointerId={} memberId={} companyId={}",
                     founderId, memberId, companyId);
             return userDomainService.toDTO(saved);
-            } catch (RuntimeException e) {
+        } catch (RuntimeException e) {
             AUDIT.warn("op=appoint-founder memberId={} companyId={} result=rejected reason={}",
                     memberId, companyId, e.getMessage());
             throw e;
@@ -382,7 +384,7 @@ public class UserService {
             AUDIT.info("op=remove-owner-appointment removerOwnerId={} memberId={} companyId={}",
                     removerOwnerId, memberToRemoveId, companyId);
             return userDomainService.toDTO(saved);
-             } catch (RuntimeException e) {
+        } catch (RuntimeException e) {
             AUDIT.warn("op=remove-owner-appointment memberId={} companyId={} result=rejected reason={}",
                     memberToRemoveId, companyId, e.getMessage());
             throw e;
@@ -397,7 +399,7 @@ public class UserService {
             AUDIT.info("op=remove-manager-appointment removerOwnerId={} memberId={} companyId={} eventId={}",
                     removerOwnerId, memberToRemoveId, companyId, eventId);
             return userDomainService.toDTO(saved);
-             } catch (RuntimeException e) {
+        } catch (RuntimeException e) {
             AUDIT.warn("op=remove-manager-appointment memberId={} companyId={} eventId={} result=rejected reason={}",
                     memberToRemoveId, companyId, eventId, e.getMessage());
             throw e;
@@ -428,7 +430,7 @@ public class UserService {
             AUDIT.info("op=change-manager-permissions ownerId={} managerId={} eventId={} newPermissions={}",
                     ownerId, managerId, eventId, newPermissions);
             return userDomainService.toDTO(saved);
-            } catch (RuntimeException e) {
+        } catch (RuntimeException e) {
             AUDIT.warn("op=change-manager-permissions managerId={} eventId={} result=rejected reason={}",
                     managerId, eventId, e.getMessage());
             throw e;
@@ -442,7 +444,7 @@ public class UserService {
             AUDIT.info("op=get-manager-permissions requesterId={} managerId={} eventId={}",
                     requesterId, managerId, eventId);
             return permissions;
-             } catch (RuntimeException e) {
+        } catch (RuntimeException e) {
             AUDIT.warn("op=get-manager-permissions managerId={} eventId={} result=rejected reason={}",
                     managerId, eventId, e.getMessage());
             throw e;
@@ -457,7 +459,7 @@ public class UserService {
                 approverId,
                 saved.getActiveRole() == null ? null : saved.getActiveRole().getRoleName());
             return userDomainService.toDTO(saved);
-            } catch (RuntimeException e) {
+        } catch (RuntimeException e) {
             AUDIT.warn("op=approve-appointment approverId={} result=rejected reason={}",
                     auth.extractUserId(token), e.getMessage());
             throw e;
@@ -474,7 +476,7 @@ public class UserService {
             AUDIT.info("op=cancel-member-account-by-admin systemAdminId={} memberIdToCancel={}",
                     systemAdminId, memberIdToCancel);
             return result;
-            } catch (RuntimeException e) {
+        } catch (RuntimeException e) {
             AUDIT.warn("op=cancel-member-account-by-admin memberIdToCancel={} result=rejected reason={}",
                     memberIdToCancel, e.getMessage());
             throw e;
