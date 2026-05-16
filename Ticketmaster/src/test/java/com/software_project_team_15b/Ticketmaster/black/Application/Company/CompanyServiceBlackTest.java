@@ -1375,4 +1375,5 @@ class CompanyServiceBlackTest {
         assertThatThrownBy(() -> service.removeEventManager(founderToken, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID()))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
+
 }

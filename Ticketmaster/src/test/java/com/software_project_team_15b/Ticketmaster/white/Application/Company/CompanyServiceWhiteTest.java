@@ -244,6 +244,41 @@ class CompanyServiceWhiteTest {
     }
 
     @Test
+    void concurrent_addEventManager_same_manager_same_event_allows_exactly_one_success() throws Exception {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        Company company = service.createCompany(founderToken, "Acme");
+        UUID eventId = UUID.randomUUID();
+        UUID managerId = UUID.randomUUID();
+
+        int N = 20;
+        ExecutorService pool = Executors.newFixedThreadPool(16);
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger successes = new AtomicInteger();
+        AtomicInteger failures = new AtomicInteger();
+
+        for (int i = 0; i < N; i++) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    service.addEventManager(founderToken, company.getId(), eventId, managerId, Set.of());
+                    successes.incrementAndGet();
+                } catch (Exception e) {
+                    failures.incrementAndGet();
+                }
+            });
+        }
+
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(30, SECONDS)).isTrue();
+        assertThat(successes.get()).isEqualTo(1);
+        assertThat(failures.get()).isEqualTo(N - 1);
+        assertThat(repo.findById(company.getId()).orElseThrow().getEventManagers(eventId))
+                .containsExactly(managerId);
+    }
+
+    @Test
     void concurrent_changeStatus_does_not_throw() throws Exception {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
