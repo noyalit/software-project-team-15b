@@ -355,13 +355,12 @@ class QueueServiceWhiteTest {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         exposed.createEventQueue(EVENT_ID);
         exposed.clearEventAccess(USER_A, EVENT_ID);
 
-        assertThat(exposed.hasAccess("token-a", EVENT_ID)).isFalse();
+        assertThat(exposed.isUserAdmitted(USER_A, EVENT_ID)).isFalse();
     }
 
     @Test
@@ -371,9 +370,6 @@ class QueueServiceWhiteTest {
         queue.push("token-a");
         queue.push("token-b");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.isTokenValid("token-b")).thenReturn(true);
-        when(auth.isTokenValid("token-c")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
         when(auth.extractUserId("token-b")).thenReturn(USER_B);
         when(auth.extractUserId("token-c")).thenReturn(USER_C);
@@ -383,9 +379,9 @@ class QueueServiceWhiteTest {
         queue.push("token-c");
         exposed.clearEventAccess(USER_A, EVENT_ID);
 
-        assertThat(exposed.hasAccess("token-a", EVENT_ID)).isFalse();
-        assertThat(exposed.hasAccess("token-b", EVENT_ID)).isTrue();
-        assertThat(exposed.hasAccess("token-c", EVENT_ID)).isTrue();
+        assertThat(exposed.isUserAdmitted(USER_A, EVENT_ID)).isFalse();
+        assertThat(exposed.isUserAdmitted(USER_B, EVENT_ID)).isTrue();
+        assertThat(exposed.isUserAdmitted(USER_C, EVENT_ID)).isTrue();
     }
 
     @Test
@@ -402,21 +398,29 @@ class QueueServiceWhiteTest {
     }
 
     // =========================================================================
-    // hasAccess — verify-based negative
+    // isUserAdmitted — whitebox tests
     // =========================================================================
 
     @Test
-    void hasAccess_nullToken_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.hasAccess(null, EVENT_ID))
-                .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(auth);
+    void isUserAdmitted_returnsTrue_whenUserPresentInEventAccessMap() {
+        ConcurrentHashMap<UUID, LocalDateTime> access = new ConcurrentHashMap<>();
+        access.put(USER_A, LocalDateTime.now().plusSeconds(100));
+        eventAccessMap(service).put(EVENT_ID, access);
+
+        assertThat(service.isUserAdmitted(USER_A, EVENT_ID)).isTrue();
     }
 
     @Test
-    void hasAccess_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.hasAccess("token-a", null))
-                .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(auth);
+    void isUserAdmitted_returnsFalse_whenUserNotInEventAccessMap() {
+        ConcurrentHashMap<UUID, LocalDateTime> access = new ConcurrentHashMap<>();
+        eventAccessMap(service).put(EVENT_ID, access);
+
+        assertThat(service.isUserAdmitted(USER_A, EVENT_ID)).isFalse();
+    }
+
+    @Test
+    void isUserAdmitted_returnsFalse_whenEventNotInAccessMap() {
+        assertThat(service.isUserAdmitted(USER_A, EVENT_ID)).isFalse();
     }
 
     // =========================================================================
@@ -455,80 +459,6 @@ class QueueServiceWhiteTest {
         assertThatThrownBy(() -> service.getQueueAccessView("token-a", null))
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(auth);
-    }
-
-    // =========================================================================
-    // requestAccess — reflection / verify-based
-    // =========================================================================
-
-    @Test
-    void requestAccess_returnsAdmittedView_whenUserIsAlreadyAdmitted() {
-        LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(100);
-        ConcurrentHashMap<UUID, LocalDateTime> access = new ConcurrentHashMap<>();
-        access.put(USER_A, expiresAt);
-        eventAccessMap(service).put(EVENT_ID, access);
-
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO view =
-                service.requestAccess("token-a", EVENT_ID);
-
-        assertThat(view.status()).isEqualTo(
-                com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.ADMITTED);
-        assertThat(view.accessExpiresAt()).isEqualTo(expiresAt);
-        verifyNoInteractions(queueRepository);
-    }
-
-    @Test
-    void requestAccess_returnsWaitingView_whenAllAdmissionSlotsTaken() {
-        ConcurrentHashMap<UUID, LocalDateTime> fullAccess = new ConcurrentHashMap<>();
-        for (int i = 0; i < 100; i++) {
-            fullAccess.put(UUID.randomUUID(), LocalDateTime.now().plusSeconds(100));
-        }
-        eventAccessMap(service).put(EVENT_ID, fullAccess);
-
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO view =
-                service.requestAccess("token-a", EVENT_ID);
-
-        assertThat(view.status()).isEqualTo(
-                com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.WAITING);
-        assertThat(view.position()).isEqualTo(0);
-        assertThat(view.accessExpiresAt()).isNull();
-        assertThat(view.canCreateActiveOrder()).isFalse();
-    }
-
-    @Test
-    void requestAccess_nullToken_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.requestAccess(null, EVENT_ID))
-                .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(auth);
-    }
-
-    @Test
-    void requestAccess_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.requestAccess("token-a", null))
-                .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(auth);
-    }
-
-    @Test
-    void requestAccess_userAlreadyInQueue_throwsAlreadyInQueueException() {
-        eventAccessMap(service).put(EVENT_ID, new ConcurrentHashMap<>());
-
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        assertThatThrownBy(() -> service.requestAccess("token-a", EVENT_ID))
-                .isInstanceOf(AlreadyInQueueException.class);
     }
 
     // =========================================================================

@@ -1,7 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.black.Application.Queue;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIsFullException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
@@ -38,8 +37,6 @@ class QueueServiceBlackTest {
 
     private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID USER_A   = UUID.fromString("00000000-0000-0000-0000-000000000002");
-    private static final UUID USER_B   = UUID.fromString("00000000-0000-0000-0000-000000000003");
-    private static final UUID USER_C   = UUID.fromString("00000000-0000-0000-0000-000000000004");
 
     // =========================================================================
     // Site queue — behavior tests
@@ -135,62 +132,54 @@ class QueueServiceBlackTest {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         service.createEventQueue(EVENT_ID);
 
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isTrue();
+        assertThat(service.isUserAdmitted(USER_A, EVENT_ID)).isTrue();
     }
 
     @Test
     void pushToEventQueue_promotesUserToEventAccessWhenSlotAvailable() {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         service.createEventQueue(EVENT_ID);
         service.pushToEventQueue(EVENT_ID, "token-a");
 
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isTrue();
+        assertThat(service.isUserAdmitted(USER_A, EVENT_ID)).isTrue();
     }
 
     // =========================================================================
-    // hasAccess — behavior tests
+    // isUserAdmitted — behavior tests
     // =========================================================================
 
     @Test
-    void hasAccess_returnsTrueWhenUserIsInEventAccess() {
+    void isUserAdmitted_returnsFalse_whenNoQueueCreated() {
+        assertThat(service.isUserAdmitted(USER_A, EVENT_ID)).isFalse();
+    }
+
+    @Test
+    void isUserAdmitted_returnsTrue_whenUserWasAdmittedViaQueue() {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         service.createEventQueue(EVENT_ID);
 
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isTrue();
+        assertThat(service.isUserAdmitted(USER_A, EVENT_ID)).isTrue();
     }
 
     @Test
-    void hasAccess_returnsFalseWhenUserIsNotInEventAccess() {
+    void isUserAdmitted_returnsFalse_whenUserNotInQueue() {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         service.createEventQueue(EVENT_ID);
 
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isFalse();
-    }
-
-    @Test
-    void hasAccess_invalidToken_throwsInvalidTokenException() {
-        when(auth.isTokenValid("bad-token")).thenReturn(false);
-
-        assertThatThrownBy(() -> service.hasAccess("bad-token", EVENT_ID))
-                .isInstanceOf(InvalidTokenException.class);
+        assertThat(service.isUserAdmitted(USER_A, EVENT_ID)).isFalse();
     }
 
     // =========================================================================
@@ -270,53 +259,4 @@ class QueueServiceBlackTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    // =========================================================================
-    // requestAccess — behavior tests
-    // =========================================================================
-
-    @Test
-    void requestAccess_returnsAdmittedView_whenUserIsImmediatelyPromoted() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID);
-
-        QueueAccessDTO view = service.requestAccess("token-a", EVENT_ID);
-
-        assertThat(view.status()).isEqualTo(QueueAccessStatus.ADMITTED);
-        assertThat(view.accessExpiresAt()).isNotNull().isAfter(LocalDateTime.now());
-        assertThat(view.canCreateActiveOrder()).isTrue();
-    }
-
-    @Test
-    void requestAccess_invalidToken_throwsInvalidTokenException() {
-        when(auth.isTokenValid("bad-token")).thenReturn(false);
-
-        assertThatThrownBy(() -> service.requestAccess("bad-token", EVENT_ID))
-                .isInstanceOf(InvalidTokenException.class);
-    }
-
-    @Test
-    void requestAccess_noQueueForEvent_throwsQueueNotFoundException() {
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        assertThatThrownBy(() -> service.requestAccess("token-a", EVENT_ID))
-                .isInstanceOf(QueueNotFoundException.class);
-    }
-
-    @Test
-    void requestAccess_queueFull_throwsQueueIsFullException() {
-        VirtualQueue fullQueue = new VirtualQueue(EVENT_ID, 1);
-        fullQueue.push("token-b");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(fullQueue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        assertThatThrownBy(() -> service.requestAccess("token-a", EVENT_ID))
-                .isInstanceOf(QueueIsFullException.class);
-    }
 }
