@@ -10,6 +10,8 @@ import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.Lottery;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -37,6 +39,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class LotteryService {
 
+    private static final Logger AUDIT = LoggerFactory.getLogger("audit.lottery");
     private static final int WINNER_ACCESS_TIME = 600; // seconds
 
     private final ILotteryRepository lotteryRepository;
@@ -62,11 +65,17 @@ public class LotteryService {
      */
     @Transactional
     public void createEventLottery(UUID eventId) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
+        try {
+            if (eventId == null) {
+                throw new IllegalArgumentException("eventId cannot be null");
+            }
+            Lottery lottery = new Lottery(eventId);
+            lotteryRepository.addLottery(lottery);
+            AUDIT.info("op=createEventLottery eventId={} result=ok", eventId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=createEventLottery eventId={} result=rejected reason={}", eventId, e.getMessage());
+            throw e;
         }
-        Lottery lottery = new Lottery(eventId);
-        lotteryRepository.addLottery(lottery);
     }
 
     /**
@@ -78,14 +87,20 @@ public class LotteryService {
      */
     @Transactional
     public void deleteEventLottery(UUID eventId) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
+        try {
+            if (eventId == null) {
+                throw new IllegalArgumentException("eventId cannot be null");
+            }
+            Lottery lottery = lotteryRepository.getLottery(eventId);
+            if (lottery == null) {
+                throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
+            }
+            lotteryRepository.removeLottery(lottery);
+            AUDIT.info("op=deleteEventLottery eventId={} result=ok", eventId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=deleteEventLottery eventId={} result=rejected reason={}", eventId, e.getMessage());
+            throw e;
         }
-        Lottery lottery = lotteryRepository.getLottery(eventId);
-        if (lottery == null) {
-            throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
-        }
-        lotteryRepository.removeLottery(lottery);
     }
 
     /**
@@ -102,18 +117,24 @@ public class LotteryService {
     @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
     @Transactional
     public void addToEventLottery(UUID eventId, UUID userId) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
+        try {
+            if (eventId == null) {
+                throw new IllegalArgumentException("eventId cannot be null");
+            }
+            if (userId == null) {
+                throw new IllegalArgumentException("userId cannot be null");
+            }
+            Lottery lottery = lotteryRepository.getLottery(eventId);
+            if (lottery == null) {
+                throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
+            }
+            lottery.add(userId);
+            lotteryRepository.updateLottery(lottery);
+            AUDIT.info("op=addToEventLottery eventId={} userId={} result=ok", eventId, userId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=addToEventLottery eventId={} userId={} result=rejected reason={}", eventId, userId, e.getMessage());
+            throw e;
         }
-        if (userId == null) {
-            throw new IllegalArgumentException("userId cannot be null");
-        }
-        Lottery lottery = lotteryRepository.getLottery(eventId);
-        if (lottery == null) {
-            throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
-        }
-        lottery.add(userId);
-        lotteryRepository.updateLottery(lottery);
     }
 
     /**
@@ -131,19 +152,25 @@ public class LotteryService {
     @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
     @Transactional
     public UUID popRandomFromEventLottery(UUID eventId) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
+        try {
+            if (eventId == null) {
+                throw new IllegalArgumentException("eventId cannot be null");
+            }
+            Lottery lottery = lotteryRepository.getLottery(eventId);
+            if (lottery == null) {
+                throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
+            }
+            UUID value = lottery.popRandom();
+            if (value == null) {
+                throw new EmptyLotteryException("Event lottery is empty (eventId: " + eventId + ")");
+            }
+            lotteryRepository.updateLottery(lottery);
+            AUDIT.info("op=popRandomFromEventLottery eventId={} result=ok", eventId);
+            return value;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=popRandomFromEventLottery eventId={} result=rejected reason={}", eventId, e.getMessage());
+            throw e;
         }
-        Lottery lottery = lotteryRepository.getLottery(eventId);
-        if (lottery == null) {
-            throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
-        }
-        UUID value = lottery.popRandom();
-        if (value == null) {
-            throw new EmptyLotteryException("Event lottery is empty (eventId: " + eventId + ")");
-        }
-        lotteryRepository.updateLottery(lottery);
-        return value;
     }
 
     /**
@@ -162,22 +189,28 @@ public class LotteryService {
     @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
     @Transactional
     public Set<UUID> popRandomFromEventLottery(UUID eventId, int count) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
+        try {
+            if (eventId == null) {
+                throw new IllegalArgumentException("eventId cannot be null");
+            }
+            if (count < 0) {
+                throw new IllegalArgumentException("count cannot be negative");
+            }
+            Lottery lottery = lotteryRepository.getLottery(eventId);
+            if (lottery == null) {
+                throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
+            }
+            Set<UUID> values = lottery.popRandom(count);
+            if (values.isEmpty()) {
+                throw new EmptyLotteryException("Event lottery is empty (eventId: " + eventId + ")");
+            }
+            lotteryRepository.updateLottery(lottery);
+            AUDIT.info("op=popRandomFromEventLottery eventId={} count={} result=ok", eventId, count);
+            return values;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=popRandomFromEventLottery eventId={} count={} result=rejected reason={}", eventId, count, e.getMessage());
+            throw e;
         }
-        if (count < 0) {
-            throw new IllegalArgumentException("count cannot be negative");
-        }
-        Lottery lottery = lotteryRepository.getLottery(eventId);
-        if (lottery == null) {
-            throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
-        }
-        Set<UUID> values = lottery.popRandom(count);
-        if (values.isEmpty()) {
-            throw new EmptyLotteryException("Event lottery is empty (eventId: " + eventId + ")");
-        }
-        lotteryRepository.updateLottery(lottery);
-        return values;
     }
 
     /**
@@ -200,28 +233,34 @@ public class LotteryService {
      * @throws LotteryAlreadyDrawnException if the lottery for this event has already been drawn
      */
     public synchronized Set<UUID> runEventLottery(UUID eventId, int count) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
-        }
-        if (count < 0) {
-            throw new IllegalArgumentException("count cannot be negative");
-        }
-        if (winners.containsKey(eventId)) {
-            throw new LotteryAlreadyDrawnException("Lottery for event " + eventId + " has already been drawn");
-        }
+        try {
+            if (eventId == null) {
+                throw new IllegalArgumentException("eventId cannot be null");
+            }
+            if (count < 0) {
+                throw new IllegalArgumentException("count cannot be negative");
+            }
+            if (winners.containsKey(eventId)) {
+                throw new LotteryAlreadyDrawnException("Lottery for event " + eventId + " has already been drawn");
+            }
 
-        Set<UUID> drawn = self.drawWinnersTransactional(eventId, count);
+            Set<UUID> drawn = self.drawWinnersTransactional(eventId, count);
 
-        // Mark as drawn before scheduling — always, even when drawn is empty.
-        ConcurrentHashMap<UUID, LocalDateTime> eventWinners = new ConcurrentHashMap<>();
-        winners.put(eventId, eventWinners);
+            // Mark as drawn before scheduling — always, even when drawn is empty.
+            ConcurrentHashMap<UUID, LocalDateTime> eventWinners = new ConcurrentHashMap<>();
+            winners.put(eventId, eventWinners);
 
-        LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(WINNER_ACCESS_TIME);
-        for (UUID winner : drawn) {
-            eventWinners.put(winner, expiresAt);
+            LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(WINNER_ACCESS_TIME);
+            for (UUID winner : drawn) {
+                eventWinners.put(winner, expiresAt);
+            }
+
+            AUDIT.info("op=runEventLottery eventId={} count={} winnersDrawn={} result=ok", eventId, count, drawn.size());
+            return drawn;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=runEventLottery eventId={} count={} result=rejected reason={}", eventId, count, e.getMessage());
+            throw e;
         }
-
-        return drawn;
     }
 
     /**
@@ -265,6 +304,7 @@ public class LotteryService {
         ConcurrentHashMap<UUID, LocalDateTime> eventWinners = winners.get(eventId);
         if (eventWinners == null) return;
         eventWinners.remove(userId);
+        AUDIT.info("op=clearWinnerAccess userId={} eventId={} result=ok", userId, eventId);
     }
 
     /**
@@ -323,15 +363,21 @@ public class LotteryService {
     @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
     @Transactional
     public void clearEventLotteryWinners(UUID eventId) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
+        try {
+            if (eventId == null) {
+                throw new IllegalArgumentException("eventId cannot be null");
+            }
+            Lottery lottery = lotteryRepository.getLottery(eventId);
+            if (lottery == null) {
+                throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
+            }
+            lottery.clearWinners();
+            lotteryRepository.updateLottery(lottery);
+            AUDIT.info("op=clearEventLotteryWinners eventId={} result=ok", eventId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=clearEventLotteryWinners eventId={} result=rejected reason={}", eventId, e.getMessage());
+            throw e;
         }
-        Lottery lottery = lotteryRepository.getLottery(eventId);
-        if (lottery == null) {
-            throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
-        }
-        lottery.clearWinners();
-        lotteryRepository.updateLottery(lottery);
     }
 
     /**
