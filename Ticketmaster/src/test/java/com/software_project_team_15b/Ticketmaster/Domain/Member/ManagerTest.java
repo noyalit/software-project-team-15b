@@ -12,19 +12,27 @@ class ManagerTest {
 
     private UUID appointedBy;
     private UUID companyId;
+    private UUID eventId;
     private Manager manager;
 
     @BeforeEach
     void setUp() {
         appointedBy = UUID.randomUUID();
         companyId = UUID.randomUUID();
-        manager = new Manager(appointedBy, companyId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        eventId = UUID.randomUUID();
+        manager = new Manager(
+                appointedBy,
+                companyId,
+                eventId,
+                Set.of(ManagerPermission.MANAGE_EVENTS)
+        );
     }
 
     @Test
     void constructor_shouldCreateManager_whenValidDataGiven() {
         assertEquals(appointedBy, manager.getAppointedBy());
         assertEquals(companyId, manager.getCompanyId());
+        assertEquals(eventId, manager.getEventId());
         assertEquals("Manager", manager.getRoleName());
         assertTrue(manager.hasPermission(ManagerPermission.MANAGE_EVENTS));
     }
@@ -32,7 +40,7 @@ class ManagerTest {
     @Test
     void constructor_shouldThrowException_whenPermissionsAreNull() {
         assertThrows(IllegalArgumentException.class,
-                () -> new Manager(appointedBy, companyId, null));
+                () -> new Manager(appointedBy, companyId, eventId, null));
     }
 
     @Test

@@ -33,13 +33,16 @@ public class Manager extends Role {
     @Column(name = "permission")
     private Set<ManagerPermission> permissions = new HashSet<>();
 
+    @Column(name = "event_id")
+    private UUID eventId;
+
     protected Manager() {
         // JPA only
     }
 
-    public Manager(UUID appointedBy, UUID companyId, Set<ManagerPermission> permissions) {
+    public Manager(UUID appointedBy, UUID companyId, UUID eventId, Set<ManagerPermission> permissions) {
         super(appointedBy, companyId);
-        // A manager must always have at least one permission.
+        this.eventId = eventId;
         setPermissions(permissions);
     }
 
@@ -52,7 +55,6 @@ public class Manager extends Role {
     }
 
     public void setPermissions(Set<ManagerPermission> permissions) {
-        // Permissions are stored defensively to avoid shared mutable state.
         if (permissions == null || permissions.isEmpty()) {
             throw new IllegalArgumentException("Manager must have at least one permission");
         }
@@ -64,6 +66,21 @@ public class Manager extends Role {
                 getId(),
                 getCompanyId(),
                 this.permissions);
+    }
+
+    public UUID getEventId() {
+        return eventId;
+    }
+
+    public void setEventId(UUID eventId) {
+        this.eventId = eventId;
+
+        AUDIT.info(
+                "op=set-manager-event roleId={} companyId={} eventId={}",
+                getId(),
+                getCompanyId(),
+                this.eventId
+        );
     }
 
     @Override
