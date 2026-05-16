@@ -21,8 +21,6 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITick
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.OrderHistory.OrderHistoryService;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
-import com.software_project_team_15b.Ticketmaster.DTO.OrderHistoryDTO;
-import com.software_project_team_15b.Ticketmaster.DTO.TicketDTO;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Infrastructure.Auth;
 
@@ -37,6 +35,10 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.Ticket;
+import com.software_project_team_15b.Ticketmaster.DTO.OrderHistoryDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.TicketDTO;
+
+
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -134,6 +136,18 @@ class OrderHistoryTestIT {
                 .hasMessageContaining("Invalid token");
     }
 
+    @Test
+    void getOrderHistoryByUserId_does_not_extract_user_id_when_token_invalid() {
+
+    when(auth.isTokenValid(token)).thenReturn(false);
+
+    assertThatThrownBy(() ->
+            service.getOrderHistoryByUserId(token))
+            .isInstanceOf(IllegalArgumentException.class);
+
+    verify(auth, org.mockito.Mockito.never()).extractUserId(token);
+}
+
     // =========================================================
     // getSoldTicketsForCompany
     // =========================================================
@@ -200,6 +214,40 @@ class OrderHistoryTestIT {
                 .isInstanceOf(UnauthorizedCompanyActionException.class);
 
     }
+
+    @Test
+    void getSoldTicketsForCompany_excludes_cancelled_orders() {
+
+        Company company = org.mockito.Mockito.mock(Company.class);
+        when(company.getId()).thenReturn(companyId);
+        when(companyRepository.findByFounder(callerId)).thenReturn(List.of(company));
+        when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
+
+        Event event = createEvent(companyId);
+        eventsRepository.save(event);
+
+        OrderHistory activeOrder = createOrder(userId, event.eventId(), 2, "10.00");
+        OrderHistory cancelledOrder = createOrder(userId, event.eventId(), 3, "15.00");
+        cancelledOrder.cancel();
+
+        orderHistoryRepository.save(activeOrder);
+        orderHistoryRepository.save(cancelledOrder);
+
+        Map<UUID, List<TicketDTO>> result = service.getSoldTicketsForCompany(token, companyId);
+
+        assertThat(result.get(event.eventId())).hasSize(2);
+    }
+
+    @Test
+    void getOrderHistoryByUserId_throws_when_user_is_not_member() {
+
+    when(auth.isMember(token)).thenReturn(false);
+
+    assertThatThrownBy(() ->
+            service.getOrderHistoryByUserId(token))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("User must be a member");
+}
 
     // =========================================================
     // generateSalesReport
@@ -354,6 +402,35 @@ class OrderHistoryTestIT {
     assertThat(orders).hasSize(1);
     }
 
+    @Test
+    void generateSalesReport_excludes_cancelled_orders_from_totals() {
+
+        Company company = org.mockito.Mockito.mock(Company.class);
+        when(company.getId()).thenReturn(companyId);
+        when(companyRepository.findByFounder(callerId)).thenReturn(List.of(company));
+        when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
+        when(companyRepository.findById(companyId)).thenReturn(java.util.Optional.of(company));
+        when(userService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of());
+
+        Event event = createEvent(companyId);
+        eventsRepository.save(event);
+        when(company.getEventManagers(event.eventId())).thenReturn(Set.of(callerId));
+
+        OrderHistory activeOrder = createOrder(userId, event.eventId(), 2, "15.00");
+        OrderHistory cancelledOrder = createOrder(userId, event.eventId(), 3, "10.00");
+        cancelledOrder.cancel();
+
+        orderHistoryRepository.save(activeOrder);
+        orderHistoryRepository.save(cancelledOrder);
+
+        Map<String, Object> report = service.generateSalesReport(token, companyId);
+
+        assertThat(report.get("ticketsSold")).isEqualTo(2);
+        assertThat(report.get("totalRevenue")).isEqualTo(Money.of("30.00", "USD"));
+        List<?> orders = (List<?>) report.get("orders");
+        assertThat(orders).hasSize(1);
+    }
+
     // =========================================================
     // notifyEventIsCancelled
     // =========================================================
@@ -369,6 +446,32 @@ class OrderHistoryTestIT {
         service.notifyEventIsCancelled(eventId);
         verify(paymentGateway).refundPayment(order.getUserId(), order.getTotalPrice());
         verify(ticketProvider).cancelTickets(eq(eventId),eq(order.getAreaId()),any(Set.class));
+    }
+
+    @Test
+    void notifyEventIsCancelled_marks_orders_as_cancelled() {
+
+    UUID eventId = UUID.randomUUID();
+
+    OrderHistory order =
+            createOrder(userId, eventId, 2, "15.00");
+
+    orderHistoryRepository.save(order);
+
+    service.notifyEventIsCancelled(eventId);
+
+    OrderHistory updated =
+            orderHistoryRepository.findById(order.getOrderId()).orElseThrow();
+
+    assertThat(updated.isCancelled()).isTrue();
+    }
+
+    @Test
+    void notifyEventIsCancelled_throws_when_event_id_is_null() {
+
+    assertThatThrownBy(() ->
+            service.notifyEventIsCancelled(null))
+            .isInstanceOf(IllegalArgumentException.class);
     }
 
     // =========================================================
