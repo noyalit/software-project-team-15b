@@ -2,35 +2,31 @@ package com.software_project_team_15b.Ticketmaster.Application.Event;
 
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
-import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
-import com.software_project_team_15b.Ticketmaster.DTO.ConfirmationReceiptDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
-import com.software_project_team_15b.Ticketmaster.DTO.HoldReceiptDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.SeatsAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.HoldNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.SeatUnavailableException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 /**
  * Application-service contract for the Event aggregate.
  * <p>
- * Implementations own transactions, retry on lock conflicts, per-event locking,
- * and authorization checks via the company port.
+ * Implementations resolve tokens, perform authorization checks, emit audit logs,
+ * and delegate to the Event domain service. Concurrency control (per-event locks,
+ * retries, transactions) lives in the domain service so every caller benefits
+ * uniformly.
  *
  * <p>Authorization model: every mutating method has two flavors:
  * <ul>
@@ -42,6 +38,10 @@ import java.util.UUID;
  * </ul>
  * Both variants delegate to the company authorization port for the per-action
  * role / permission check.
+ *
+ * <p>Hold / release / releaseSeats / confirm are <b>not</b> exposed here: they are
+ * purchase-flow internals consumed by {@code PurchasingService} via
+ * {@code IEventDomainService}, not user-facing management operations.
  */
 public interface IEventManagementService {
 
@@ -117,62 +117,6 @@ public interface IEventManagementService {
      * @throws InvalidEventStateException if the event or area is not found
      */
     PriceBreakdownDTO getPrice(UUID eventId, PriceQuery query);
-
-    /**
-     * Releases a subset of seats from an active hold; the rest of the hold remains.
-     * <p>
-     * Requirement: {@code II.2.7} (modify active order).
-     *
-     * @param eventId   event id
-     * @param holdToken token issued at hold time
-     * @param seatIds   seat ids to release; may be empty
-     * @return {@code true} iff at least one seat was released
-     * @throws InvalidEventStateException if the event is not found
-     */
-    boolean releaseSeats(UUID eventId, UUID holdToken, List<UUID> seatIds);
-
-    /**
-     * Confirms a hold, transitioning its seats / quantity from HELD to SOLD.
-     * Triggers the SOLD_OUT transition when the last unit is confirmed.
-     * <p>
-     * Requirement: {@code II.2.8} (checkout), {@code INTEG} (purchase finality).
-     *
-     * @param eventId   event id
-     * @param holdToken token issued at hold time
-     * @return receipt with area id, seat ids, quantity, total
-     * @throws InvalidEventStateException if the event is not found or is cancelled
-     * @throws HoldNotFoundException      if no active hold exists for the token
-     */
-    ConfirmationReceiptDTO confirm(UUID eventId, UUID holdToken);
-
-    /**
-     * Releases every seat / quantity bound to a hold token; unknown tokens are a no-op.
-     * Called on TTL expiry, cart-clear, and checkout rollback.
-     * <p>
-     * Requirement: {@code INV} (TTL release), {@code II.2.8} (rollback).
-     *
-     * @param eventId   event id
-     * @param holdToken token to release
-     * @throws InvalidEventStateException if the event is not found
-     */
-    void release(UUID eventId, UUID holdToken);
-
-    /**
-     * Places a temporary hold on seats (seating area) or quantity (standing area).
-     * The TTL is owned by an external reservation-timer; this aggregate does not
-     * embed it.
-     * <p>
-     * Requirement: {@code II.2.4} (reserve), {@code II.2.5.a}/{@code b}
-     * (seat / quantity selection), {@code SLR.1} (race-safe).
-     *
-     * @param eventId event id
-     * @param cmd     hold spec (area, seat ids OR standing quantity, hold token)
-     * @return receipt with held seat ids, quantity, subtotal
-     * @throws InvalidEventStateException if the event is not found, not PUBLISHED,
-     *                                    or the area-shape mismatches the command
-     * @throws SeatUnavailableException   if a requested seat is not available
-     */
-    HoldReceiptDTO hold(UUID eventId, HoldCommand cmd);
 
     /**
      * Cancels the event. Idempotent. Refunds and notifications are dispatched by

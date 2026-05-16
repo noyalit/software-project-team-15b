@@ -11,8 +11,18 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.Invali
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 
+import jakarta.persistence.OptimisticLockException;
+import jakarta.persistence.PessimisticLockException;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.PessimisticLockingFailureException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.util.HashMap;
@@ -22,31 +32,39 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Domain service for the Event aggregate. Owns repository access (load → mutate → save)
- * and exposes the full Event-domain API to Application services.
+ * Domain service for the Event aggregate. Owns repository access (load → mutate → save),
+ * per-event locking, transactions, and retry on lock conflicts — so every caller of this
+ * interface (Application services, scheduled tasks, etc.) gets the same concurrency
+ * guarantees automatically.
  * <p>
  * {@link CompanyService} is injected only for the combined pricing / purchase-eligibility
- * paths (which need both Event-level and Company-level policy evaluation) so that callers
- * receive a single canonical result. All cross-cutting concerns (transactions, retries,
- * per-event locks, audit logging, authorization) live in the Application service.
+ * paths (which need both Event-level and Company-level policy evaluation).
  */
 @Service
 public class EventDomainServiceImpl implements IEventDomainService {
 
     private final IEventRepository events;
     private final CompanyService companyService;
+    private final EventLockRegistry locks;
+    private final TransactionTemplate txTemplate;
 
     public EventDomainServiceImpl(IEventRepository events,
-                                  @Lazy CompanyService companyService) {
+                                  @Lazy CompanyService companyService,
+                                  EventLockRegistry locks,
+                                  PlatformTransactionManager txManager) {
         this.events = Objects.requireNonNull(events);
-        this.companyService = Objects.requireNonNull(companyService);
+        this.companyService = Objects.requireNonNull(companyService); // TODO: to be removed once @OrMalky have a domain service
+        this.locks = Objects.requireNonNull(locks);
+        this.txTemplate = new TransactionTemplate(Objects.requireNonNull(txManager));
     }
 
     // ---- Catalog & lifecycle -------------------------------------------------
 
     @Override
+    @Transactional
     public UUID createEvent(CreateEventCommand cmd) {
         List<IEventPurchasePolicy> purchasePolicies = cmd.purchasePolicies() == null
                 ? List.of()
@@ -71,88 +89,171 @@ public class EventDomainServiceImpl implements IEventDomainService {
 
     @Override
     public UUID addArea(UUID eventId, AddAreaCommand cmd) {
-        Event event = requireEvent(eventId);
-        EventArea area = buildArea(cmd);
-        event.addArea(area);
-        events.save(event);
-        return area.areaId();
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            return txTemplate.execute(status -> {
+                Event event = requireEvent(eventId);
+                EventArea area = buildArea(cmd);
+                event.addArea(area);
+                events.save(event);
+                return area.areaId();
+            });
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
     public void publish(UUID eventId) {
-        Event event = requireEvent(eventId);
-        event.publish();
-        events.save(event);
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            txTemplate.executeWithoutResult(status -> {
+                Event event = requireEvent(eventId);
+                event.publish();
+                events.save(event);
+            });
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
+    @Retryable(retryFor = {
+            OptimisticLockException.class,
+            PessimisticLockException.class,
+            PessimisticLockingFailureException.class,
+            CannotAcquireLockException.class,
+            ObjectOptimisticLockingFailureException.class
+    }, maxAttempts = 8, backoff = @Backoff(delay = 20, multiplier = 2))
     public void cancel(UUID eventId) {
-        Event event = events.findByIdForUpdate(eventId)
-                .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
-        event.cancel();
-        events.save(event);
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            txTemplate.executeWithoutResult(status -> {
+                Event event = events.findByIdForUpdate(eventId)
+                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
+                event.cancel();
+                events.save(event);
+            });
+            locks.forget(eventId);
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
     public void updateEvent(UUID eventId, UpdateEventCommand cmd) {
         Objects.requireNonNull(cmd, "cmd");
-        Event event = requireEvent(eventId);
-        event.updateDetails(cmd.name(), cmd.artist(), cmd.category(), cmd.startsAt(), cmd.location());
-        events.save(event);
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            txTemplate.executeWithoutResult(status -> {
+                Event event = requireEvent(eventId);
+                event.updateDetails(cmd.name(), cmd.artist(), cmd.category(), cmd.startsAt(), cmd.location());
+                events.save(event);
+            });
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
+    @Retryable(retryFor = {
+            OptimisticLockException.class,
+            PessimisticLockException.class,
+            PessimisticLockingFailureException.class,
+            CannotAcquireLockException.class,
+            ObjectOptimisticLockingFailureException.class
+    }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
     public void updateArea(UUID eventId, UUID areaId, UpdateAreaCommand cmd) {
         Objects.requireNonNull(cmd, "cmd");
         Objects.requireNonNull(areaId, "areaId");
-        Event event = events.findByIdForUpdate(eventId)
-                .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
-        event.updateArea(areaId, cmd.name(), cmd.basePrice(), cmd.standingCapacity());
-        events.save(event);
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            txTemplate.executeWithoutResult(status -> {
+                Event event = events.findByIdForUpdate(eventId)
+                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
+                event.updateArea(areaId, cmd.name(), cmd.basePrice(), cmd.standingCapacity());
+                events.save(event);
+            });
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
     public void removeArea(UUID eventId, UUID areaId) {
         Objects.requireNonNull(areaId, "areaId");
-        Event event = requireEvent(eventId);
-        event.removeArea(areaId);
-        events.save(event);
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            txTemplate.executeWithoutResult(status -> {
+                Event event = requireEvent(eventId);
+                event.removeArea(areaId);
+                events.save(event);
+            });
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
     public void replacePurchasePolicies(UUID eventId, List<IEventPurchasePolicy> policies) {
         Objects.requireNonNull(policies, "policies");
-        Event event = requireEvent(eventId);
-        event.replacePurchasePolicies(policies);
-        events.save(event);
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            txTemplate.executeWithoutResult(status -> {
+                Event event = requireEvent(eventId);
+                event.replacePurchasePolicies(policies);
+                events.save(event);
+            });
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
     public void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies) {
         Objects.requireNonNull(policies, "policies");
-        Event event = requireEvent(eventId);
-        event.replaceDiscountPolicies(policies);
-        events.save(event);
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            txTemplate.executeWithoutResult(status -> {
+                Event event = requireEvent(eventId);
+                event.replaceDiscountPolicies(policies);
+                events.save(event);
+            });
+        } finally {
+            lock.unlock();
+        }
     }
 
     // ---- Reads ---------------------------------------------------------------
 
     @Override
+    @Transactional(readOnly = true)
     public EventDTO getEvent(UUID eventId) {
         return EventDTO.from(requireEvent(eventId));
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<EventDTO> search(SearchCriteria criteria) {
         return events.search(criteria).stream().map(EventDTO::from).toList();
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<EventDTO> searchInCompany(UUID companyId, SearchCriteria criteria) {
         return events.searchByCompany(companyId, criteria).stream().map(EventDTO::from).toList();
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<EventDTO.SeatView> areaSeats(UUID eventId, UUID areaId) {
         Objects.requireNonNull(areaId, "areaId");
         Event event = requireEvent(eventId);
@@ -164,11 +265,13 @@ public class EventDomainServiceImpl implements IEventDomainService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public EventAvailability getEventAvailability(UUID eventId) {
         return requireEvent(eventId).bookingStatus();
     }
 
     @Override
+    @Transactional(readOnly = true)
     public boolean getAreaAvailability(UUID eventId, UUID areaId) {
         Objects.requireNonNull(areaId, "areaId");
         Event event = requireEvent(eventId);
@@ -177,6 +280,7 @@ public class EventDomainServiceImpl implements IEventDomainService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Map<Boolean, Set<UUID>> getSeatsAvailability(UUID eventId, UUID areaId, Set<UUID> seatIds) {
         Objects.requireNonNull(areaId, "areaId");
         Objects.requireNonNull(seatIds, "seatIds");
@@ -204,6 +308,7 @@ public class EventDomainServiceImpl implements IEventDomainService {
     // ---- Pricing -------------------------------------------------------------
 
     @Override
+    @Transactional(readOnly = true)
     public PriceBreakdown getPrice(
             UUID eventId,
             UUID areaId,
@@ -220,6 +325,7 @@ public class EventDomainServiceImpl implements IEventDomainService {
                 quantity, List.of(), couponCode
         );
         Money eventTotal = event.cheapestPriceFor(areaId, quantity, request);
+        // TODO: We need @OrMalky cheapestPriceFor() func for evaluating the price with the polices to return final price
         Money companyTotal = companyService.cheapestPriceFor(event.companyId(), subtotal, request);
         Money total = eventTotal.amount().compareTo(companyTotal.amount()) <= 0 ? eventTotal : companyTotal;
         Money discount = subtotal.subtract(total);
@@ -229,14 +335,29 @@ public class EventDomainServiceImpl implements IEventDomainService {
     // ---- Holds / confirmations ----------------------------------------------
 
     @Override
+    @Retryable(retryFor = {
+            OptimisticLockException.class,
+            PessimisticLockException.class,
+            PessimisticLockingFailureException.class,
+            CannotAcquireLockException.class,
+            ObjectOptimisticLockingFailureException.class
+    }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
     public HoldReceipt hold(UUID eventId, HoldCommand cmd) {
-        Event event = events.findByIdForUpdate(eventId)
-                .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
-        HoldReceipt receipt = cmd.isStanding()
-                ? event.holdStanding(cmd.areaId(), cmd.standingQuantity(), cmd.holdToken())
-                : event.holdSeats(cmd.areaId(), cmd.seatIds(), cmd.holdToken());
-        events.save(event);
-        return receipt;
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            return txTemplate.execute(status -> {
+                Event event = events.findByIdForUpdate(eventId)
+                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
+                HoldReceipt receipt = cmd.isStanding()
+                        ? event.holdStanding(cmd.areaId(), cmd.standingQuantity(), cmd.holdToken())
+                        : event.holdSeats(cmd.areaId(), cmd.seatIds(), cmd.holdToken());
+                events.save(event);
+                return receipt;
+            });
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
@@ -245,35 +366,83 @@ public class EventDomainServiceImpl implements IEventDomainService {
     }
 
     @Override
+    @Retryable(retryFor = {
+            OptimisticLockException.class,
+            PessimisticLockException.class,
+            PessimisticLockingFailureException.class,
+            CannotAcquireLockException.class,
+            ObjectOptimisticLockingFailureException.class
+    }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
     public void release(UUID eventId, UUID holdToken) {
-        Event event = events.findByIdForUpdate(eventId)
-                .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
-        event.releaseHold(holdToken);
-        events.save(event);
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            txTemplate.executeWithoutResult(status -> {
+                Event event = events.findByIdForUpdate(eventId)
+                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
+                event.releaseHold(holdToken);
+                events.save(event);
+            });
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
+    @Retryable(retryFor = {
+            OptimisticLockException.class,
+            PessimisticLockException.class,
+            PessimisticLockingFailureException.class,
+            CannotAcquireLockException.class,
+            ObjectOptimisticLockingFailureException.class
+    }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
     public boolean releaseSeats(UUID eventId, UUID holdToken, List<UUID> seatIds) {
         Objects.requireNonNull(seatIds, "seatIds");
-        Event event = events.findByIdForUpdate(eventId)
-                .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
-        boolean released = event.releaseSeats(holdToken, seatIds);
-        events.save(event);
-        return released;
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            return Boolean.TRUE.equals(txTemplate.execute(status -> {
+                Event event = events.findByIdForUpdate(eventId)
+                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
+                boolean released = event.releaseSeats(holdToken, seatIds);
+                events.save(event);
+                return released;
+            }));
+        } finally {
+            lock.unlock();
+        }
     }
 
     @Override
+    @Retryable(retryFor = {
+            OptimisticLockException.class,
+            PessimisticLockException.class,
+            PessimisticLockingFailureException.class,
+            CannotAcquireLockException.class,
+            ObjectOptimisticLockingFailureException.class
+    }, maxAttempts = 5, backoff = @Backoff(delay = 20, multiplier = 2))
     public ConfirmationReceipt confirm(UUID eventId, UUID holdToken) {
-        Event event = events.findByIdForUpdate(eventId)
-                .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
-        ConfirmationReceipt receipt = event.confirmHold(holdToken);
-        events.save(event);
-        return receipt;
+        ReentrantLock lock = locks.forEvent(eventId);
+        lock.lock();
+        try {
+            ConfirmationReceipt receipt = txTemplate.execute(status -> {
+                Event event = events.findByIdForUpdate(eventId)
+                        .orElseThrow(() -> new InvalidEventStateException("event not found: " + eventId));
+                ConfirmationReceipt r = event.confirmHold(holdToken);
+                events.save(event);
+                return r;
+            });
+            locks.forget(eventId);
+            return receipt;
+        } finally {
+            lock.unlock();
+        }
     }
 
     // ---- Validation ----------------------------------------------------------
 
     @Override
+    @Transactional(readOnly = true)
     public void validatePurchaseEligibility(UUID eventId, PurchaseRequest request) {
         Objects.requireNonNull(request, "request");
         Event event = requireEvent(eventId);
