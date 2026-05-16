@@ -9,6 +9,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepositor
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.UserType;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -67,13 +68,13 @@ class UserServiceConcurrencyTest {
         owner1Token = auth.registerMemberToken(owner1Id);
         owner2Token = auth.registerMemberToken(owner2Id);
 
+        UserDomainService userDomainService = new UserDomainService(memberRepository);
         service = new UserService(
-                memberRepository,
-                new NoopSystemAdminRepository(),
+                userDomainService,
                 auth,
                 new NoopPasswordEncoder(),
                 null,
-                null
+                new NoopSystemAdminRepository()
         );
     }
 
