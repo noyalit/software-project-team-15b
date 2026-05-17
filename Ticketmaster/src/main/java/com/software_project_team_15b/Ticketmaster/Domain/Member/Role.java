@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Member;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException;
 import jakarta.persistence.Column;
 import jakarta.persistence.DiscriminatorColumn;
 import jakarta.persistence.Entity;
@@ -42,7 +43,7 @@ public abstract class Role {
     public Role(UUID appointedBy, UUID companyId) {
         // appointedBy may be null only for special roles (e.g., Founder) that cannot have an appointer.
         if (companyId == null) {
-            throw new IllegalArgumentException("Company ID cannot be null");
+            throw new InvalidMemberInputException("Company ID cannot be null");
         }
         this.appointedBy = appointedBy;
         this.companyId = companyId;
@@ -76,7 +77,7 @@ public abstract class Role {
 
     public void setCompanyId(UUID companyId) {
         if (companyId == null) {
-            throw new IllegalArgumentException("Company ID cannot be null");
+            throw new InvalidMemberInputException("Company ID cannot be null");
         }
         this.companyId = companyId;
 

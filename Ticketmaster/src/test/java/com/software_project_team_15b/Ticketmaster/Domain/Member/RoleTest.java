@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException;
 
 class RoleTest {
 
@@ -48,7 +49,7 @@ class RoleTest {
 
     @Test
     void constructor_shouldThrowException_whenCompanyIdIsNull() {
-        assertThrows(IllegalArgumentException.class, () -> new TestRole(UUID.randomUUID(), null));
+        assertThrows(InvalidMemberInputException.class, () -> new TestRole(UUID.randomUUID(), null));
     }
 
     @Test

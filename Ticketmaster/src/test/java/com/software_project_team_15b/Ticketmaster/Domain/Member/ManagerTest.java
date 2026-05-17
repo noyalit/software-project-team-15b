@@ -7,6 +7,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidManagerPermissionsException;
 
 class ManagerTest {
 
@@ -39,7 +40,7 @@ class ManagerTest {
 
     @Test
     void constructor_shouldThrowException_whenPermissionsAreNull() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidManagerPermissionsException.class,
                 () -> new Manager(appointedBy, companyId, eventId, null));
     }
 

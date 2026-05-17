@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Domain.AdminSystem;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidSystemAdminInputException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -57,20 +58,20 @@ public class SystemAdmin {
             return;
         }
         if (adminId == null) {
-            throw new IllegalArgumentException("adminId cannot be null");
+            throw new InvalidSystemAdminInputException("adminId cannot be null");
         }
         this.adminId = adminId;
     }
 
     private static void requireNonBlank(String value, String name) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " cannot be null/blank");
+            throw new InvalidSystemAdminInputException(name + " cannot be null/blank");
         }
     }
 
     private static void validatePasswordHash(String passwordHash) {
         if (passwordHash == null || passwordHash.isBlank()) {
-            throw new IllegalArgumentException("Password hash cannot be null or empty");
+            throw new InvalidSystemAdminInputException("Password hash cannot be null or empty");
         }
     }
 }

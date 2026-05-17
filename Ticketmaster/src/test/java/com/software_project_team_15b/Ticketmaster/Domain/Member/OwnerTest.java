@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException;
 
 class OwnerTest {
 
@@ -30,7 +31,7 @@ class OwnerTest {
 
     @Test
     void constructor_shouldThrowException_whenAppointerIsNull() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidMemberInputException.class,
                 () -> new Owner(null, UUID.randomUUID()));
     }
 

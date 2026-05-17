@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidSystemAdminInputException;
 
 class SystemAdminTest {
 
@@ -28,25 +29,25 @@ class SystemAdminTest {
 
     @Test
     void constructor_shouldThrowException_whenUsernameIsNull() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidSystemAdminInputException.class,
                 () -> new SystemAdmin(null, "Password1"));
     }
 
     @Test
     void constructor_shouldThrowException_whenPasswordIsInvalid() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidSystemAdminInputException.class,
                 () -> new SystemAdmin("admin", " "));
     }
 
     @Test
     void constructor_shouldThrowException_whenPasswordIsNull() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidSystemAdminInputException.class,
                 () -> new SystemAdmin("admin", null));
     }
 
     @Test
     void constructor_shouldThrowException_whenPasswordIsBlank() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidSystemAdminInputException.class,
                 () -> new SystemAdmin("admin", ""));
     }
 
@@ -58,18 +59,18 @@ class SystemAdminTest {
 
     @Test
     void changePassword_shouldThrowException_whenInvalid() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidSystemAdminInputException.class,
                 () -> admin.setPassword(" "));
     }
 
     @Test
     void setPassword_shouldThrowException_whenPasswordIsNull() {
-        assertThrows(IllegalArgumentException.class, () -> admin.setPassword(null));
+        assertThrows(InvalidSystemAdminInputException.class, () -> admin.setPassword(null));
     }
 
     @Test
     void setPassword_shouldThrowException_whenPasswordIsBlank() {
-        assertThrows(IllegalArgumentException.class, () -> admin.setPassword(" "));
+        assertThrows(InvalidSystemAdminInputException.class, () -> admin.setPassword(" "));
     }
 
     @Test
@@ -94,7 +95,7 @@ class SystemAdminTest {
 
     @Test
     void assignAdminId_shouldThrowException_whenNull() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidSystemAdminInputException.class,
                 () -> admin.assignAdminId(null));
     }
 }
