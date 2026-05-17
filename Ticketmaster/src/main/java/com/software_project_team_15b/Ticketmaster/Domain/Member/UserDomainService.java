@@ -1,14 +1,15 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Member;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.time.LocalDate;
 
 import org.springframework.stereotype.Service;
 
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 
 @Service
 public class UserDomainService {
@@ -267,6 +268,49 @@ public class UserDomainService {
                 ));
 
         return managerRole.getPermissions();
+    }
+
+    public boolean hasManagerPermission(
+            UUID eventId,
+            UUID managerId,
+            ManagerPermission required
+    ) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID cannot be null");
+        }
+
+        if (managerId == null) {
+            throw new IllegalArgumentException("Manager ID cannot be null");
+        }
+
+        if (required == null) {
+            throw new IllegalArgumentException("Required permission cannot be null");
+        }
+
+        Member member = getMemberOrThrow(managerId);
+
+        Manager managerRole = member.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof Manager)
+                .map(role -> (Manager) role)
+                .filter(role -> eventId.equals(role.getEventId()))
+                .findFirst()
+                .orElseThrow(() -> new PolicyViolationException(
+                        "Member is not a manager for this event. " +
+                        "managerId=" + managerId +
+                        ", eventId=" + eventId
+                ));
+
+        if (!managerRole.hasPermission(required)) {
+            throw new PolicyViolationException(
+                    "Manager does not have required permission. " +
+                    "managerId=" + managerId +
+                    ", eventId=" + eventId +
+                    ", permission=" + required
+            );
+        }
+
+        return true;
     }
 
     public Member approveAppointment(UUID userId) {
