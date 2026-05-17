@@ -23,7 +23,7 @@ import com.software_project_team_15b.Ticketmaster.Application.OrderHistory.Order
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.DTO.OrderHistoryDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.TicketDTO;
-import com.software_project_team_15b.Ticketmaster.Application.UserService;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Infrastructure.Auth;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
@@ -76,7 +76,7 @@ class OrderHistoryTestIT {
     EventCancelManager eventCancelManager;
 
     @MockitoBean
-    UserService userService;
+    UserDomainService userDomainService;
 
     private final String token = "token";
 
@@ -215,7 +215,7 @@ class OrderHistoryTestIT {
         when(companyRepository.findById(companyId)).thenReturn(java.util.Optional.of(company));
 
         UUID appointedMemberId = UUID.randomUUID();
-        when(userService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of(appointedMemberId));
+        when(userDomainService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of(appointedMemberId));
 
         Event e1 = createEvent(companyId);
         Event e2 = createEvent(companyId);
@@ -246,7 +246,7 @@ class OrderHistoryTestIT {
         when(companyRepository.findByFounder(callerId)).thenReturn(List.of());
         when(companyRepository.findByOwner(callerId)).thenReturn(List.of(company));
         when(companyRepository.findById(companyId)).thenReturn(java.util.Optional.of(company));
-        when(userService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of());
+        when(userDomainService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of());
 
         Event event = createEvent(companyId);
         eventsRepository.save(event);
@@ -268,7 +268,7 @@ class OrderHistoryTestIT {
         when(company.getId()).thenReturn(companyId);
         when(companyRepository.findByFounder(callerId)).thenReturn(List.of(company));
         when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
-        when(userService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of(callerId));
+        when(userDomainService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of(callerId));
 
         Map<String, Object> report = service.generateSalesReport(token, companyId);
 
@@ -300,7 +300,7 @@ class OrderHistoryTestIT {
     UUID appointedManager = UUID.randomUUID();
     UUID outsideManager = UUID.randomUUID();
 
-    when(userService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of(appointedManager));
+    when(userDomainService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of(appointedManager));
 
     Event visibleEvent = createEvent(companyId);
     Event hiddenEvent = createEvent(companyId);
@@ -334,7 +334,7 @@ class OrderHistoryTestIT {
     when(companyRepository.findById(companyId)).thenReturn(java.util.Optional.of(company));
 
     UUID appointedManager = UUID.randomUUID();
-    when(userService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of(appointedManager));
+    when(userDomainService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of(appointedManager));
 
     Event appointedManagerEvent = createEvent(companyId);
 

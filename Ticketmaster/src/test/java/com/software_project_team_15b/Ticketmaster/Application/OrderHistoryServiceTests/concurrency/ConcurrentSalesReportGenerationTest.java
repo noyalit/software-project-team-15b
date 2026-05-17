@@ -14,7 +14,7 @@ import java.util.concurrent.*;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.OrderHistory.OrderHistoryService;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
-import com.software_project_team_15b.Ticketmaster.Application.UserService;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
@@ -49,7 +49,7 @@ class ConcurrentSalesReportGenerationTest {
     ICompanyRepository companyRepository;
 
     @Mock
-    UserService userService;
+    UserDomainService userDomainService;
 
     @Mock
     EventCancelManager eventCancelManager;
@@ -69,7 +69,7 @@ class ConcurrentSalesReportGenerationTest {
         when(company.getId()).thenReturn(companyId);
         when(companyRepository.findByFounder(callerId)).thenReturn(List.of(company));
         when(companyRepository.findById(companyId)).thenReturn(Optional.of(company));
-        when(userService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of());
+        when(userDomainService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of());
 
         UUID eventId1 = UUID.randomUUID();
         UUID eventId2 = UUID.randomUUID();

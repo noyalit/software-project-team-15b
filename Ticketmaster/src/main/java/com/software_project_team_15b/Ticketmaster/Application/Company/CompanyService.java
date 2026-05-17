@@ -5,6 +5,7 @@ import java.util.*;
 import com.software_project_team_15b.Ticketmaster.Application.Event.IEventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -46,6 +47,7 @@ public class CompanyService {
 
     private final ICompanyRepository companyRepository;
     private final UserService userService;
+    private final UserDomainService userDomainService;
     private final IEventManagementService eventManagementService;
     private final IAuth auth;
 
@@ -56,9 +58,10 @@ public class CompanyService {
      * @param auth                   authentication/authorization gateway; must not be null
      * @throws NullPointerException if any argument is null
      */
-    public CompanyService(ICompanyRepository companyRepository, UserService userService, IEventManagementService eventManagementService, IAuth auth) {
+    public CompanyService(ICompanyRepository companyRepository, UserService userService, UserDomainService userDomainService, IEventManagementService eventManagementService, IAuth auth) {
         this.companyRepository = Objects.requireNonNull(companyRepository, "companyRepository cannot be null");
         this.userService = Objects.requireNonNull(userService, "userService cannot be null");
+        this.userDomainService = Objects.requireNonNull(userDomainService, "userDomainService cannot be null");
         this.auth = Objects.requireNonNull(auth, "auth cannot be null");
         this.eventManagementService = Objects.requireNonNull(eventManagementService, "eventManagementService cannot be null");
     }
@@ -654,7 +657,7 @@ public class CompanyService {
         }
         // isActiveOwner excludes Founders; check isActiveFounder as well so that
         // the company founder can exercise owner-level actions.
-        if (!userService.isActiveOwner(callerId) && !userService.isActiveFounder(callerId)) {
+        if (!userDomainService.isActiveOwner(callerId) && !userDomainService.isActiveFounder(callerId)) {
             throw new UnauthorizedCompanyActionException(
                     "Only an owner of the company can perform this action");
         }
@@ -682,7 +685,7 @@ public class CompanyService {
             throw new UnauthorizedCompanyActionException(
                     "Only the company's founder or a system admin can perform this action");
         }
-        if (!userService.isActiveFounder(callerId)) {
+        if (!userDomainService.isActiveFounder(callerId)) {
             throw new UnauthorizedCompanyActionException(
                     "Only the company's founder or a system admin can perform this action");
         }

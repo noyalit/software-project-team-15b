@@ -37,6 +37,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyReposit
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -47,6 +48,7 @@ class CompanyServiceBlackTest {
     @Mock private ICompanyRepository repo;
     @Mock private IAuth auth;
     @Mock private UserService userService;
+    @Mock private UserDomainService userDomainService;
     @Mock private IEventManagementService eventManagementService;
 
     private CompanyService service;
@@ -80,10 +82,10 @@ class CompanyServiceBlackTest {
             return null;
         }).when(repo).remove(any(Company.class));
 
-        when(userService.isActiveOwner(any())).thenReturn(true);
-        when(userService.isActiveFounder(any())).thenReturn(true);
         when(eventManagementService.searchInCompany(any(), any())).thenReturn(List.of());
-        service = new CompanyService(repo, userService, eventManagementService, auth);
+        when(userDomainService.isActiveOwner(any())).thenReturn(true);
+        when(userDomainService.isActiveFounder(any())).thenReturn(true);
+        service = new CompanyService(repo, userService, userDomainService, eventManagementService, auth);
     }
 
     private Company saveToRepo(Company company) {
@@ -250,8 +252,8 @@ class CompanyServiceBlackTest {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
-        when(userService.isActiveOwner(founderId)).thenReturn(false);
-        when(userService.isActiveFounder(founderId)).thenReturn(false);
+        when(userDomainService.isActiveOwner(founderId)).thenReturn(false);
+        when(userDomainService.isActiveFounder(founderId)).thenReturn(false);
 
         assertThatThrownBy(() -> service.addOwner(founderToken, company.getId(), UUID.randomUUID()))
                 .isInstanceOf(UnauthorizedCompanyActionException.class);
