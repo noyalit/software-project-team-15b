@@ -1,7 +1,10 @@
-package com.software_project_team_15b.Ticketmaster.Application;
+package com.software_project_team_15b.Ticketmaster.black.Application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.IPasswordEncoder;
+import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Founder;
