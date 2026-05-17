@@ -70,7 +70,7 @@ public class OrderHistoryService implements EventSubscriber{
         if (event == null) {
             throw new IllegalArgumentException("Event ID cannot be null");
         }
-        var orderHistories = orderHistoryRepository.findByEventId(event);
+        var orderHistories = orderHistoryRepository.findByEventIdAndIsCancelledFalse(event);
         orderHistories.forEach(orderHistory -> {
             cancelOrderHistory(orderHistory);
         });

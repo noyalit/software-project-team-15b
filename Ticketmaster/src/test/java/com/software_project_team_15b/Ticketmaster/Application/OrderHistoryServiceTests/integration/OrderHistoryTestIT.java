@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -472,6 +473,27 @@ class OrderHistoryTestIT {
     assertThatThrownBy(() ->
             service.notifyEventIsCancelled(null))
             .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void notifyEventIsCancelled_does_not_refund_already_cancelled_orders() {
+
+    UUID eventId = UUID.randomUUID();
+
+    OrderHistory cancelled =
+            createOrder(userId, eventId, 2, "15.00");
+
+    cancelled.cancel();
+
+    orderHistoryRepository.save(cancelled);
+
+    service.notifyEventIsCancelled(eventId);
+
+    verify(paymentGateway, never())
+            .refundPayment(any(UUID.class), any(Money.class));
+
+    verify(ticketProvider, never())
+            .cancelTickets(any(), any(), any());
     }
 
     // =========================================================
