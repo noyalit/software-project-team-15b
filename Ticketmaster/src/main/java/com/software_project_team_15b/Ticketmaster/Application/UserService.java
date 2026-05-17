@@ -1,22 +1,23 @@
 package com.software_project_team_15b.Ticketmaster.Application;
 
+import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.time.LocalDate;
 
-import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.stereotype.Service;
 
-import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
-import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainServiceImpl;
-import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
+import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainServiceImpl;
 
 /**
  * UserService provides functionality for managing user accounts and roles.
@@ -31,19 +32,22 @@ public class UserService {
     private final IPasswordEncoder passwordEncoder;
     private final QueueDomainServiceImpl queueDomainService;
     private final ISystemAdminRepository systemAdminRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public UserService(
             UserDomainService userDomainService,
             IAuth auth, 
             IPasswordEncoder passwordEncoder, 
             QueueDomainServiceImpl queueDomainService,
-            ISystemAdminRepository systemAdminRepository
+            ISystemAdminRepository systemAdminRepository,
+            ApplicationEventPublisher eventPublisher
             ) {
         this.userDomainService = userDomainService;
         this.auth = auth;
         this.passwordEncoder = passwordEncoder;
         this.queueDomainService = queueDomainService;
         this.systemAdminRepository = systemAdminRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -204,7 +208,7 @@ public class UserService {
         }
 
         if (auth.isGuest(token)) {
-           //TO DO: add listener to PurchasingService 
+            eventPublisher.publishEvent(new GuestLoggedOutEvent(token));
             auth.exitSystem(token);
             AUDIT.info("op=logout userType=guest");
             return null;
