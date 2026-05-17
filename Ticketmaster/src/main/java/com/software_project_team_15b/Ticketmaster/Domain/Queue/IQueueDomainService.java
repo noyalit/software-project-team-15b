@@ -8,4 +8,10 @@ public interface IQueueDomainService {
     QueueAccessDTO requestAccess(String accessToken, UUID eventId);
 
     boolean hasAccess(String accessToken, UUID eventId);
+
+    boolean canAccessWebsite();
+
+    void addUserToSiteQueue(String token);
+
+    boolean validateAndExitQueue(String token);
 }

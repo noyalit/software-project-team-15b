@@ -73,13 +73,13 @@ class EventCatalogManagementE2ETest {
         String sfx = n + "_" + System.nanoTime();
 
         String founderUser = "cat_founder_" + sfx;
-        com.software_project_team_15b.Ticketmaster.Domain.Member.Member mFounder = userService.registerMember(userService.enterAsGuest(), founderUser, "Password1", LocalDate.of(1985, 1, 1));
+        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO mFounder = userService.registerMember(userService.enterAsGuest(), founderUser, "Password1", LocalDate.of(1985, 1, 1));
         String founderToken = userService.login(userService.enterAsGuest(), founderUser, "Password1");
         founderId = mFounder.getUserId();
 
         Company company = companyService.createCompany(founderToken, "CatTestCo_" + n);
         companyId = company.getId();
-        userService.changeRoleToFounder(founderToken);
+        userService.changeRoleToFounder(founderToken, companyId);
 
         ownerId = registerAndApproveOwner("cat_owner_" + sfx, founderToken, company.getId());
         mgrManageEventsId = registerAndApproveManager("cat_mgr_me_" + sfx, founderToken,
@@ -92,7 +92,7 @@ class EventCatalogManagementE2ETest {
                 company.getId(), Set.of(ManagerPermission.HANDLE_INQUIRIES));
 
         String unauthUser = "cat_unauth_" + sfx;
-        com.software_project_team_15b.Ticketmaster.Domain.Member.Member mUnauth = userService.registerMember(userService.enterAsGuest(), unauthUser, "Password1", LocalDate.of(1990, 1, 1));
+        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO mUnauth = userService.registerMember(userService.enterAsGuest(), unauthUser, "Password1", LocalDate.of(1990, 1, 1));
         unauthorizedId = mUnauth.getUserId();
     }
 
@@ -653,22 +653,24 @@ class EventCatalogManagementE2ETest {
     }
 
     private UUID registerAndApproveOwner(String username, String founderToken, UUID companyId) {
-        com.software_project_team_15b.Ticketmaster.Domain.Member.Member m = userService.registerMember(userService.enterAsGuest(), username, "Password1", LocalDate.of(1990, 1, 1));
+        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO m = userService.registerMember(userService.enterAsGuest(), username, "Password1", LocalDate.of(1990, 1, 1));
         String token = userService.login(userService.enterAsGuest(), username, "Password1");
         UUID id = m.getUserId();
         companyService.addOwner(founderToken, companyId, id);
-        userService.changeRoleToOwner(token);
+        userService.changeRoleToOwner(token, companyId);
         userService.approveAppointment(token);
         return id;
     }
 
     private UUID registerAndApproveManager(String username, String founderToken,
                                             UUID companyId, Set<ManagerPermission> perms) {
-        com.software_project_team_15b.Ticketmaster.Domain.Member.Member m = userService.registerMember(userService.enterAsGuest(), username, "Password1", LocalDate.of(1990, 1, 1));
+        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO m = userService.registerMember(userService.enterAsGuest(), username, "Password1", LocalDate.of(1990, 1, 1));
         String token = userService.login(userService.enterAsGuest(), username, "Password1");
         UUID id = m.getUserId();
-        companyService.addManager(founderToken, companyId, id, perms);
-        userService.changeRoleToManager(token);
+
+        UUID eventId = UUID.randomUUID();
+        companyService.addManager(founderToken, companyId, eventId, id, perms);
+        userService.changeRoleToManager(token, eventId);
         userService.approveAppointment(token);
         return id;
     }

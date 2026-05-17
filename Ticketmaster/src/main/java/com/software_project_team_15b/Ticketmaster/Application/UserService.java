@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
-import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainServiceImpl;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
@@ -29,14 +29,14 @@ public class UserService {
     private final UserDomainService userDomainService;
     private final IAuth auth;
     private final IPasswordEncoder passwordEncoder;
-    private final QueueDomainService queueDomainService;
+    private final QueueDomainServiceImpl queueDomainService;
     private final ISystemAdminRepository systemAdminRepository;
 
     public UserService(
             UserDomainService userDomainService,
             IAuth auth, 
             IPasswordEncoder passwordEncoder, 
-            QueueDomainService queueDomainService,
+            QueueDomainServiceImpl queueDomainService,
             ISystemAdminRepository systemAdminRepository
             ) {
         this.userDomainService = userDomainService;
@@ -483,112 +483,24 @@ public class UserService {
         }
     }
 
-    /**
-     * @return True if active owner, false otherwise
-     */
     public boolean isActiveOwner(UUID userId) {
-        Member member = getMemberOrThrow(userId);
-        return member.getAssignedRoles()
-                .stream()
-                .anyMatch(role -> role instanceof Owner
-                        && !(role instanceof Founder)
-                        && role.isAppointmentApproved());
+        return userDomainService.isActiveOwner(userId);
     }
+
     public boolean isActiveManager(UUID userId) {
-        Member member = getMemberOrThrow(userId);
-        return member.getAssignedRoles()
-                .stream()
-                .anyMatch(role -> role instanceof Manager
-                        && role.isAppointmentApproved());
+        return userDomainService.isActiveManager(userId);
     }
 
     public boolean isActiveFounder(UUID userId) {
-        Member member = getMemberOrThrow(userId);
-        return member.getAssignedRoles()
-                .stream()
-                .anyMatch(role -> role instanceof Founder
-                        && role.isAppointmentApproved());
+        return userDomainService.isActiveFounder(userId);
     }
 
     public boolean isAppointmentApproved(UUID userId) {
-        Member member = getMemberOrThrow(userId);
-        if (member.getActiveRole() == null) {
-            return false;
-        }
-        return member.getActiveRole().isAppointmentApproved();
+        return userDomainService.isAppointmentApproved(userId);
     }
 
-   private Member getMemberOrThrow(UUID userId) {
-        if (userId == null) {
-            throw new IllegalArgumentException("User ID cannot be null");
-        }
-        return memberRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("Member not found with id: " + userId));
-    }
-
-    private void validateOwnerAppointer(UUID appointedByUserId) {
-        Member appointedBy = getMemberOrThrow(appointedByUserId);
-        boolean isApprovedOwner = appointedBy.getAssignedRoles()
-                .stream()
-                .anyMatch(role -> role instanceof Owner
-                        && role.isAppointmentApproved());
-
-        if (!isApprovedOwner) {
-            throw new IllegalArgumentException("Only an approved owner can perform this action");
-        }
-    }
-
-    private void validateOwnerAppointer(UUID appointedByUserId, UUID companyId) {
-        Member appointedBy = getMemberOrThrow(appointedByUserId);
-
-        boolean isApprovedOwnerInCompany = appointedBy.getAssignedRoles()
-                .stream()
-                .anyMatch(role -> role instanceof Owner
-                        && role.isAppointmentApproved()
-                        && role.belongsToCompany(companyId));
-
-        if (!isApprovedOwnerInCompany) {
-            throw new IllegalArgumentException("Only an approved owner of this company can perform this action");
-        }
-    }
-
-    private void validateNoAppointmentCycle(Member member, UUID appointedById, UUID companyId) {
-        if (member == null) {
-            throw new IllegalArgumentException("Member cannot be null");
-        }
-        if (appointedById == null) {
-            throw new IllegalArgumentException("Appointer ID cannot be null");
-        }
-        if (companyId == null) {
-            throw new IllegalArgumentException("Company ID cannot be null");
-        }
-        if (member.getUserId().equals(appointedById)) {
-            throw new IllegalArgumentException("Member cannot be appointed by themselves");
-        }
-        UUID currentId = appointedById;
-
-        while (currentId != null) {
-            Member current = getMemberOrThrow(currentId);
-
-            UUID nextAppointerId = current.getAssignedRoles()
-                    .stream()
-                    .filter(role -> role.belongsToCompany(companyId))
-                    .filter(role -> role instanceof Owner || role instanceof Manager || role instanceof Founder)
-                    .map(Role::getAppointedBy)
-                    .filter(appointerId -> appointerId != null)
-                    .findFirst()
-                    .orElse(null);
-
-            if (nextAppointerId == null) {
-                return;
-            }
-
-            if (nextAppointerId.equals(member.getUserId())) {
-                throw new IllegalArgumentException("Appointment cycle detected");
-            }
-
-            currentId = nextAppointerId;
-        }
+    public List<UUID> getAppointedMembersTree(UUID memberId, UUID companyId) {
+        return userDomainService.getAppointedMembersTree(memberId, companyId);
     }
 
     private void validateRawPassword(String password) {

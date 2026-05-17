@@ -26,4 +26,19 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
     public boolean hasAccess(String accessToken, UUID eventId) {
         return queueService.hasAccess(accessToken, eventId);
     }
+
+    @Override
+    public boolean canAccessWebsite() {
+        return queueService.canAccessWebsite();
+    }
+
+    @Override
+    public void addUserToSiteQueue(String token) {
+        queueService.addUserToSiteQueue(token);
+    }
+
+    @Override
+    public boolean validateAndExitQueue(String token) {
+        return queueService.validateAndExitQueue(token);
+    }
 }

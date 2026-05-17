@@ -203,14 +203,15 @@ public class CompanyService {
      * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
-    public void addManager(String token, UUID companyId, UUID newOwnerId, Set<ManagerPermission> managerPermissions) {
+    public void addManager(String token, UUID companyId, UUID eventId, UUID newOwnerId, Set<ManagerPermission> managerPermissions) {
         try {
             requireNonNull(companyId, "Company ID");
+            requireNonNull(eventId, "Event ID");
             requireNonNull(newOwnerId, "New manager ID");
             Company company = getCompany(companyId);
             UUID calledId = requireAuthenticatedMember(token);
             requireOwner(company, calledId);
-            userService.appointManager(newOwnerId, token, company.getId(), managerPermissions);
+            userService.appointManager(newOwnerId, token, company.getId(), eventId, managerPermissions);
             AUDIT.info("op=addManager callerId={} companyId={} newManagerId={} result=ok",
                     calledId, companyId, newOwnerId);
         } catch (RuntimeException e) {
@@ -226,6 +227,7 @@ public class CompanyService {
      *
      * @param token     an active member token; must not be null or blank
      * @param companyId the target company's id; must not be null or blank
+     * @param eventId   the event id; must not be null or blank
      * @param managerId the id of the manager to remove; must not be null
      * @throws IllegalArgumentException           if {@code companyId} is null/blank, {@code managerId} is null,
      *                                            or the manager was not appointed by the calling owner
@@ -233,14 +235,15 @@ public class CompanyService {
      * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
-    public void removeManager(String token, UUID companyId, UUID managerId) {
+    public void removeManager(String token, UUID companyId, UUID eventId, UUID managerId) {
         try {
             requireNonNull(companyId, "Company ID");
+            requireNonNull(eventId, "Event ID");
             requireNonNull(managerId, "Manager ID to remove");
             Company company = getCompany(companyId);
             UUID calledId = requireAuthenticatedMember(token);
             requireOwner(company, calledId);
-            userService.removeManagerAppointment(token, managerId, company.getId());
+            userService.removeManagerAppointment(token, managerId, company.getId(), eventId);
             AUDIT.info("op=removeManager callerId={} companyId={} managerId={} result=ok",
                     calledId, companyId, managerId);
         } catch (RuntimeException e) {
@@ -256,6 +259,7 @@ public class CompanyService {
      *
      * @param token              an active member token; must not be null or blank
      * @param companyId          the target company's id; must not be null or blank
+     * @param eventId            the event id; must not be null or blank
      * @param managerId          the id of the manager whose permissions should change; must not be null
      * @param managerPermissions the new set of permissions to assign; must not be null
      * @throws IllegalArgumentException           if {@code companyId} is null/blank or {@code managerId} is null
@@ -263,14 +267,15 @@ public class CompanyService {
      * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
-    public void updateManagerPermissions(String token, UUID companyId, UUID managerId, Set<ManagerPermission> managerPermissions) {
+    public void updateManagerPermissions(String token, UUID companyId, UUID eventId, UUID managerId, Set<ManagerPermission> managerPermissions) {
         try {
             requireNonNull(companyId, "Company ID");
+            requireNonNull(eventId, "Event ID");
             requireNonNull(managerId, "manager ID");
             Company company = getCompany(companyId);
             UUID calledId = requireAuthenticatedMember(token);
             requireOwner(company, calledId);
-            userService.changeManagerPermissions(token, managerId, managerPermissions);
+            userService.changeManagerPermissions(token, managerId, eventId, managerPermissions);
             AUDIT.info("op=updateManagerPermissions callerId={} companyId={} managerId={} result=ok",
                     calledId, companyId, managerId);
         } catch (RuntimeException e) {
@@ -525,7 +530,7 @@ public class CompanyService {
             UUID callerId = requireAuthenticatedMember(token);
             requireOwner(company, callerId);
             company.addManager(eventId, userId);
-            userService.appointManager(userId, token, company.getId(), permissions);
+            userService.appointManager(userId, token, company.getId(), eventId, permissions);
             companyRepository.save(company);
             AUDIT.info("op=addEventManager callerId={} companyId={} eventId={} userId={} result=ok",
                     callerId, companyId, eventId, userId);
@@ -559,7 +564,7 @@ public class CompanyService {
             UUID callerId = requireAuthenticatedMember(token);
             requireOwner(company, callerId);
             company.removeManager(eventId, userId);
-            userService.removeManagerAppointment(token, userId, company.getId());
+            userService.removeManagerAppointment(token, userId, company.getId(), eventId);
             companyRepository.save(company);
             AUDIT.info("op=removeEventManager callerId={} companyId={} eventId={} userId={} result=ok",
                     callerId, companyId, eventId, userId);
