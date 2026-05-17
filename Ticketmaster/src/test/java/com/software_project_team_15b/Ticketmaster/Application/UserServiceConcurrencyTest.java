@@ -11,6 +11,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.UserType;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,7 +28,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
+import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainServiceImpl;
 
 class UserServiceConcurrencyTest {
 
@@ -69,13 +72,36 @@ class UserServiceConcurrencyTest {
         owner2Token = auth.registerMemberToken(owner2Id);
 
         UserDomainService userDomainService = new UserDomainService(memberRepository);
+        QueueDomainServiceImpl queueDomainService = new QueueDomainServiceImpl(new NoopQueueService());
+        ApplicationEventPublisher eventPublisher = ignored -> {};
         service = new UserService(
                 userDomainService,
                 auth,
                 new NoopPasswordEncoder(),
-                null,
-                new NoopSystemAdminRepository()
+                queueDomainService,
+                new NoopSystemAdminRepository(),
+                eventPublisher
         );
+    }
+
+    private static final class NoopQueueService extends QueueService {
+        NoopQueueService() {
+            super(null, null);
+        }
+
+        @Override
+        public boolean canAccessWebsite() {
+            return true;
+        }
+
+        @Override
+        public synchronized void addUserToSiteQueue(String token) {
+        }
+
+        @Override
+        public boolean validateAndExitQueue(String token) {
+            return true;
+        }
     }
 
     @Test

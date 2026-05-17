@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
+import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.Mockito;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
@@ -44,6 +46,7 @@ class UserServiceTest {
     @Mock private IPasswordEncoder passwordEncoder;
     @Mock private PurchasingService purchasingService;
     @Mock private QueueService queueService;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private UserService service;
     private UserDomainService userDomainService;
@@ -63,7 +66,7 @@ class UserServiceTest {
 
         userDomainService = new UserDomainService(memberRepository);
         queueDomainService = new QueueDomainServiceImpl(queueService);
-        service = new UserService(userDomainService, auth, passwordEncoder, queueDomainService, systemAdminRepository);
+        service = new UserService(userDomainService, auth, passwordEncoder, queueDomainService, systemAdminRepository, eventPublisher);
     }
 
     ///------------------------------ II.1.3: Register ---------------------------------
@@ -106,7 +109,6 @@ class UserServiceTest {
         String entranceToken = "entrance";
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
-        when(memberRepository.existsByUsername("john")).thenReturn(false);
 
         assertThatThrownBy(() -> service.registerMember(
                 entranceToken,
@@ -126,7 +128,6 @@ class UserServiceTest {
         String entranceToken = "entrance";
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
-        when(memberRepository.existsByUsername("john")).thenReturn(false);
 
         assertThatThrownBy(() -> service.registerMember(
                 entranceToken,
@@ -146,7 +147,6 @@ class UserServiceTest {
         String entranceToken = "entrance";
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
-        when(memberRepository.existsByUsername("john")).thenReturn(false);
 
         assertThatThrownBy(() -> service.registerMember(
                 entranceToken,
@@ -293,7 +293,7 @@ class UserServiceTest {
 
         assertThat(result).isNull();
 
-        verify(purchasingService).cancelAllActiveOrdersOfCurrentUser(guestToken);
+        verify(eventPublisher).publishEvent(new GuestLoggedOutEvent(guestToken));
         verify(auth).exitSystem(guestToken);
     }
 
@@ -308,7 +308,7 @@ class UserServiceTest {
 
         assertThat(result).isNull();
 
-        verify(purchasingService).cancelAllActiveOrdersOfCurrentUser(guestToken);
+        verify(eventPublisher).publishEvent(new GuestLoggedOutEvent(guestToken));
         verify(auth).exitSystem(guestToken);
     }
 
@@ -563,9 +563,6 @@ class UserServiceTest {
         when(auth.isTokenValid(token)).thenReturn(true);
         when(auth.isMember(token)).thenReturn(true);
         when(auth.extractUserId(token)).thenReturn(memberId);
-
-        Member member = memberWithId(memberId, null);
-        when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
 
         assertThatThrownBy(() -> service.changePassword(token, "bad"))
                 .isInstanceOf(IllegalArgumentException.class)
