@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
@@ -28,7 +27,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.Mockito;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainServiceImpl;
 
@@ -44,13 +42,11 @@ class UserServiceTest {
     @Mock private ISystemAdminRepository systemAdminRepository;
     @Mock private IAuth auth;
     @Mock private IPasswordEncoder passwordEncoder;
-    @Mock private PurchasingService purchasingService;
-    @Mock private QueueService queueService;
+    @Mock private QueueDomainServiceImpl queueDomainService;
     @Mock private ApplicationEventPublisher eventPublisher;
 
     private UserService service;
     private UserDomainService userDomainService;
-    private QueueDomainServiceImpl queueDomainService;
 
     private String entranceToken;
     private String username;
@@ -65,7 +61,6 @@ class UserServiceTest {
         birthDate = DEFAULT_BIRTH_DATE;
 
         userDomainService = new UserDomainService(memberRepository);
-        queueDomainService = new QueueDomainServiceImpl(queueService);
         service = new UserService(userDomainService, auth, passwordEncoder, queueDomainService, systemAdminRepository, eventPublisher);
     }
 
@@ -328,7 +323,6 @@ class UserServiceTest {
 
         assertThat(result).isEqualTo("guest-token");
         verify(auth).logout(memberToken);
-        verifyNoInteractions(purchasingService);
     }
 
     @Test
@@ -344,7 +338,6 @@ class UserServiceTest {
 
         assertThat(result).isEqualTo("guest-token");
         verify(auth).logout(memberToken);
-        verifyNoInteractions(purchasingService);
     }
 
     @Test
@@ -358,7 +351,6 @@ class UserServiceTest {
                 .hasMessageContaining("Invalid or expired token");
 
         verify(auth, never()).logout(anyString());
-        verifyNoInteractions(purchasingService);
     }
 
     @Test
@@ -372,7 +364,6 @@ class UserServiceTest {
                 .hasMessageContaining("Invalid or expired token");
 
         verify(auth, never()).logout(anyString());
-        verifyNoInteractions(purchasingService);
     }
 
     ///------------------------------ II.3.2: Registering a Production Company ---------------------------------

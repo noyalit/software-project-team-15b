@@ -30,10 +30,10 @@ public class Manager extends Role {
             name = "manager_permissions",
             joinColumns = @JoinColumn(name = "role_id")
     )
-    @Column(name = "permission")
+    @Column(name = "permission", nullable = false)
     private Set<ManagerPermission> permissions = new HashSet<>();
 
-    @Column(name = "event_id")
+    @Column(name = "event_id", nullable = false)
     private UUID eventId;
 
     protected Manager() {
