@@ -8,6 +8,8 @@ import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.VirtualQueue;
 
 import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -34,6 +36,9 @@ import java.util.concurrent.TimeUnit;
  */
 @Service
 public class QueueService {
+
+    private static final Logger AUDIT = LoggerFactory.getLogger("audit.queue");
+
     private final int ACCESS_TIME = 100;
     private final int MAX_VISITORS = 100;
     private final int SITE_QUEUE_INTERVAL = 10;
@@ -71,13 +76,19 @@ public class QueueService {
      * @throws IllegalArgumentException if {@code token} is null or is already present in the queue
      */
     public synchronized void addUserToSiteQueue(String token) {
-        if (token == null) {
-            throw new IllegalArgumentException("token cannot be null");
+        try {
+            if (token == null) {
+                throw new IllegalArgumentException("token cannot be null");
+            }
+            if (siteQueue.contains(token)) {
+                throw new IllegalArgumentException("User with token " + token + " is already in the site queue");
+            }
+            siteQueue.add(token);
+            AUDIT.info("op=addUserToSiteQueue result=ok");
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=addUserToSiteQueue result=rejected reason={}", e.getMessage());
+            throw e;
         }
-        if (siteQueue.contains(token)) {
-            throw new IllegalArgumentException("User with token " + token + " is already in the site queue");
-        }
-        siteQueue.add(token);
     }
 
     /**
@@ -182,6 +193,7 @@ public class QueueService {
         if (access == null) return;
         access.remove(userId);
         advanceEventQueue(eventId);
+        AUDIT.info("op=clearEventAccess userId={} eventId={} result=ok", userId, eventId);
     }
 
     /**
@@ -315,24 +327,29 @@ public class QueueService {
      * @throws AlreadyInQueueException  if the user is already waiting in the queue
      */
     public QueueAccessDTO requestAccess(String token, UUID eventId) {
-        if (token == null) {
-            throw new IllegalArgumentException("token cannot be null");
+        try {
+            if (token == null) {
+                throw new IllegalArgumentException("token cannot be null");
+            }
+            if (eventId == null) {
+                throw new IllegalArgumentException("eventId cannot be null");
+            }
+            if (!auth.isTokenValid(token)) {
+                throw new InvalidTokenException("Invalid token");
+            }
+            UUID userId = auth.extractUserId(token);
+            ConcurrentHashMap<UUID, LocalDateTime> admittedUsers = eventAccess.get(eventId);
+            if (admittedUsers == null || !admittedUsers.containsKey(userId)) {
+                self.pushToEventQueue(eventId, token);
+            }
+            QueueAccessDTO view = getQueueAccessView(token, eventId);
+            AUDIT.info("op=requestAccess eventId={} userId={} result=ok", eventId, userId);
+            return view;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=requestAccess eventId={} result=rejected reason={}", eventId, e.getMessage());
+            throw e;
         }
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
-        }
-        if (!auth.isTokenValid(token)) {
-            throw new InvalidTokenException("Invalid token");
-        }
-        UUID userId = auth.extractUserId(token);
-        ConcurrentHashMap<UUID, LocalDateTime> admittedUsers = eventAccess.get(eventId);
-        if (admittedUsers != null && admittedUsers.containsKey(userId)) {
-            return getQueueAccessView(token, eventId);
-        }
-        self.pushToEventQueue(eventId, token);
-        return getQueueAccessView(token, eventId);
     }
-
 
     /**
      * Creates a new, empty virtual queue for the given event.
@@ -342,13 +359,19 @@ public class QueueService {
      */
     @Transactional
     public void createEventQueue(UUID eventId) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
+        try {
+            if (eventId == null) {
+                throw new IllegalArgumentException("eventId cannot be null");
+            }
+            VirtualQueue queue = new VirtualQueue(eventId);
+            queueRepository.addQueue(queue);
+            eventAccess.put(eventId, new ConcurrentHashMap<>());
+            advanceEventQueue(eventId);
+            AUDIT.info("op=createEventQueue eventId={} result=ok", eventId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=createEventQueue eventId={} result=rejected reason={}", eventId, e.getMessage());
+            throw e;
         }
-        VirtualQueue queue = new VirtualQueue(eventId);
-        queueRepository.addQueue(queue);
-        eventAccess.put(eventId, new ConcurrentHashMap<>());
-        advanceEventQueue(eventId);
     }
 
     /**
@@ -360,15 +383,21 @@ public class QueueService {
      */
     @Transactional
     public void deleteEventQueue(UUID eventId) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
+        try {
+            if (eventId == null) {
+                throw new IllegalArgumentException("eventId cannot be null");
+            }
+            VirtualQueue queue = queueRepository.getQueue(eventId);
+            if (queue == null) {
+                throw new QueueNotFoundException("Queue not found for eventId: " + eventId);
+            }
+            queueRepository.removeQueue(queue);
+            eventAccess.remove(eventId);
+            AUDIT.info("op=deleteEventQueue eventId={} result=ok", eventId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=deleteEventQueue eventId={} result=rejected reason={}", eventId, e.getMessage());
+            throw e;
         }
-        VirtualQueue queue = queueRepository.getQueue(eventId);
-        if  (queue == null) {
-            throw new QueueNotFoundException("Queue not found for eventId: " + eventId);
-        }
-        queueRepository.removeQueue(queue);
-        eventAccess.remove(eventId);
     }
 
     /**
@@ -386,19 +415,25 @@ public class QueueService {
     @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
     @Transactional
     public String popFromEventQueue(UUID eventId) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
+        try {
+            if (eventId == null) {
+                throw new IllegalArgumentException("eventId cannot be null");
+            }
+            VirtualQueue queue = queueRepository.getQueue(eventId);
+            if (queue == null) {
+                throw new QueueNotFoundException("Queue not found for eventId: " + eventId);
+            }
+            if (queue.isEmpty()) {
+                throw new EmptyQueueException("Event queue is empty (eventId: " + eventId + ")");
+            }
+            String value = queue.pop();
+            queueRepository.updateQueue(queue);
+            AUDIT.info("op=popFromEventQueue eventId={} result=ok", eventId);
+            return value;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=popFromEventQueue eventId={} result=rejected reason={}", eventId, e.getMessage());
+            throw e;
         }
-        VirtualQueue queue = queueRepository.getQueue(eventId);
-        if (queue == null) {
-            throw new QueueNotFoundException("Queue not found for eventId: " + eventId);
-        }
-        if (queue.isEmpty()) {
-            throw new EmptyQueueException("Event queue is empty (eventId: " + eventId + ")");
-        }
-        String value = queue.pop();
-        queueRepository.updateQueue(queue);
-        return value;
     }
 
     /**
@@ -417,25 +452,31 @@ public class QueueService {
     @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
     @Transactional
     public void pushToEventQueue(UUID eventId, String token) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
+        try {
+            if (eventId == null) {
+                throw new IllegalArgumentException("eventId cannot be null");
+            }
+            if (token == null) {
+                throw new IllegalArgumentException("token cannot be null");
+            }
+            VirtualQueue queue = queueRepository.getQueue(eventId);
+            if (queue == null) {
+                throw new QueueNotFoundException("Queue not found for eventId: " + eventId);
+            }
+            if (queue.isFull()) {
+                throw new QueueIsFullException("Event queue is full (eventId: " + eventId + ")");
+            }
+            if (queue.contains(token)) {
+                throw new AlreadyInQueueException("Token " + token + " is already in the queue for eventId: " + eventId);
+            }
+            queue.push(token);
+            queueRepository.updateQueue(queue);
+            advanceEventQueue(eventId);
+            AUDIT.info("op=pushToEventQueue eventId={} result=ok", eventId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=pushToEventQueue eventId={} result=rejected reason={}", eventId, e.getMessage());
+            throw e;
         }
-        if (token == null) {
-            throw new IllegalArgumentException("token cannot be null");
-        }
-        VirtualQueue queue = queueRepository.getQueue(eventId);
-        if (queue == null) {
-            throw new QueueNotFoundException("Queue not found for eventId: " + eventId);
-        }
-        if (queue.isFull()) {
-            throw new QueueIsFullException("Event queue is full (eventId: " + eventId + ")");
-        }
-        if (queue.contains(token)) {
-            throw new AlreadyInQueueException("Token " + token + " is already in the queue for eventId: " + eventId);
-        }
-        queue.push(token);
-        queueRepository.updateQueue(queue);
-        advanceEventQueue(eventId);
     }
 
 }

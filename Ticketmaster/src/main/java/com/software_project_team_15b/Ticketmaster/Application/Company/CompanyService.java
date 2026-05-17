@@ -5,6 +5,8 @@ import java.util.*;
 import com.software_project_team_15b.Ticketmaster.Application.Event.IEventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
@@ -40,6 +42,8 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 @Service
 public class CompanyService {
 
+    private static final Logger AUDIT = LoggerFactory.getLogger("audit.company");
+
     private final ICompanyRepository companyRepository;
     private final UserService userService;
     private final IEventManagementService eventManagementService;
@@ -70,12 +74,19 @@ public class CompanyService {
      * @throws UnauthorizedCompanyActionException if the caller is not a member
      */
     public Company createCompany(String token, String name) {
-        requireNonBlank(name, "Company name");
-        UUID founderId = requireAuthenticatedMember(token);
-        Company company = new Company(name, founderId);
-        Company saved = companyRepository.save(company);
-        userService.appointFounder(founderId, token, saved.getId());
-        return saved;
+        try {
+            requireNonBlank(name, "Company name");
+            UUID founderId = requireAuthenticatedMember(token);
+            Company company = new Company(name, founderId);
+            Company saved = companyRepository.save(company);
+            userService.appointFounder(founderId, token, saved.getId());
+            AUDIT.info("op=createCompany founderId={} companyId={} name={} result=ok",
+                    founderId, saved.getId(), name);
+            return saved;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=createCompany name={} result=rejected reason={}", name, e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -91,14 +102,22 @@ public class CompanyService {
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
     public void addOwner(String token, UUID companyId, UUID newOwnerId) {
-        requireNonNull(companyId, "Company ID");
-        requireNonNull(newOwnerId, "New owner ID");
-        Company company = getCompany(companyId);
-        UUID appointingUserId = requireAuthenticatedMember(token);
-        requireOwner(company, appointingUserId);
-        userService.appointOwner(newOwnerId, token, company.getId());
-        company.addOwner(newOwnerId);
-        companyRepository.save(company);
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireNonNull(newOwnerId, "New owner ID");
+            Company company = getCompany(companyId);
+            UUID appointingUserId = requireAuthenticatedMember(token);
+            requireOwner(company, appointingUserId);
+            userService.appointOwner(newOwnerId, token, company.getId());
+            company.addOwner(newOwnerId);
+            companyRepository.save(company);
+            AUDIT.info("op=addOwner callerId={} companyId={} newOwnerId={} result=ok",
+                    appointingUserId, companyId, newOwnerId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=addOwner companyId={} newOwnerId={} result=rejected reason={}",
+                    companyId, newOwnerId, e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -115,20 +134,28 @@ public class CompanyService {
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
     public void removeOwner(String token, UUID companyId, UUID ownerId) {
-        requireNonNull(companyId, "Company ID");
-        requireNonNull(ownerId, "Owner ID to remove");
-        Company company = getCompany(companyId);
-        UUID calledId = requireAuthenticatedMember(token);
-        requireOwner(company, calledId);
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireNonNull(ownerId, "Owner ID to remove");
+            Company company = getCompany(companyId);
+            UUID calledId = requireAuthenticatedMember(token);
+            requireOwner(company, calledId);
 
-        if (calledId.equals(ownerId)) {
-            userService.ownerResign(token, company.getId());
-        } else {
-            userService.removeOwnerAppointment(token, ownerId, company.getId());
+            if (calledId.equals(ownerId)) {
+                userService.ownerResign(token, company.getId());
+            } else {
+                userService.removeOwnerAppointment(token, ownerId, company.getId());
+            }
+
+            company.removeOwner(ownerId);
+            companyRepository.save(company);
+            AUDIT.info("op=removeOwner callerId={} companyId={} ownerId={} result=ok",
+                    calledId, companyId, ownerId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=removeOwner companyId={} ownerId={} result=rejected reason={}",
+                    companyId, ownerId, e.getMessage());
+            throw e;
         }
-
-        company.removeOwner(ownerId);
-        companyRepository.save(company);
     }
 
     /**
@@ -145,15 +172,22 @@ public class CompanyService {
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
     public void ownerResign(String token, UUID companyId, UUID userId) {
-        requireNonNull(companyId, "Company ID");
-        requireNonNull(userId, "Owner ID to resign");
-        if (!auth.isTokenValid(token) || !auth.extractUserId(token).equals(userId) || !auth.isMember(token)) {
-            throw new UnauthorizedCompanyActionException("Only the owner themselves can resign ownership");
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireNonNull(userId, "Owner ID to resign");
+            if (!auth.isTokenValid(token) || !auth.extractUserId(token).equals(userId) || !auth.isMember(token)) {
+                throw new UnauthorizedCompanyActionException("Only the owner themselves can resign ownership");
+            }
+            Company company = getCompany(companyId);
+            company.removeOwner(userId);
+            companyRepository.save(company);
+            userService.ownerResign(token, company.getId());
+            AUDIT.info("op=ownerResign userId={} companyId={} result=ok", userId, companyId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=ownerResign companyId={} userId={} result=rejected reason={}",
+                    companyId, userId, e.getMessage());
+            throw e;
         }
-        Company company = getCompany(companyId);
-        company.removeOwner(userId);
-        companyRepository.save(company);
-        userService.ownerResign(token, company.getId());
     }
 
     /**
@@ -170,12 +204,20 @@ public class CompanyService {
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
     public void addManager(String token, UUID companyId, UUID newOwnerId, Set<ManagerPermission> managerPermissions) {
-        requireNonNull(companyId, "Company ID");
-        requireNonNull(newOwnerId, "New manager ID");
-        Company company = getCompany(companyId);
-        UUID calledId = requireAuthenticatedMember(token);
-        requireOwner(company, calledId);
-        userService.appointManager(newOwnerId, token, company.getId(), managerPermissions);
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireNonNull(newOwnerId, "New manager ID");
+            Company company = getCompany(companyId);
+            UUID calledId = requireAuthenticatedMember(token);
+            requireOwner(company, calledId);
+            userService.appointManager(newOwnerId, token, company.getId(), managerPermissions);
+            AUDIT.info("op=addManager callerId={} companyId={} newManagerId={} result=ok",
+                    calledId, companyId, newOwnerId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=addManager companyId={} newManagerId={} result=rejected reason={}",
+                    companyId, newOwnerId, e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -192,12 +234,20 @@ public class CompanyService {
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
     public void removeManager(String token, UUID companyId, UUID managerId) {
-        requireNonNull(companyId, "Company ID");
-        requireNonNull(managerId, "Manager ID to remove");
-        Company company = getCompany(companyId);
-        UUID calledId = requireAuthenticatedMember(token);
-        requireOwner(company, calledId);
-        userService.removeManagerAppointment(token, managerId, company.getId());
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireNonNull(managerId, "Manager ID to remove");
+            Company company = getCompany(companyId);
+            UUID calledId = requireAuthenticatedMember(token);
+            requireOwner(company, calledId);
+            userService.removeManagerAppointment(token, managerId, company.getId());
+            AUDIT.info("op=removeManager callerId={} companyId={} managerId={} result=ok",
+                    calledId, companyId, managerId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=removeManager companyId={} managerId={} result=rejected reason={}",
+                    companyId, managerId, e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -214,12 +264,20 @@ public class CompanyService {
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
     public void updateManagerPermissions(String token, UUID companyId, UUID managerId, Set<ManagerPermission> managerPermissions) {
-        requireNonNull(companyId, "Company ID");
-        requireNonNull(managerId, "manager ID");
-        Company company = getCompany(companyId);
-        UUID calledId = requireAuthenticatedMember(token);
-        requireOwner(company, calledId);
-        userService.changeManagerPermissions(token, managerId, managerPermissions);
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireNonNull(managerId, "manager ID");
+            Company company = getCompany(companyId);
+            UUID calledId = requireAuthenticatedMember(token);
+            requireOwner(company, calledId);
+            userService.changeManagerPermissions(token, managerId, managerPermissions);
+            AUDIT.info("op=updateManagerPermissions callerId={} companyId={} managerId={} result=ok",
+                    calledId, companyId, managerId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=updateManagerPermissions companyId={} managerId={} result=rejected reason={}",
+                    companyId, managerId, e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -299,13 +357,20 @@ public class CompanyService {
      * @throws IllegalStateException if the company is not active
      */
     public Company updatePurchasePolicy(String token, UUID companyId, ICompanyPurchasePolicy policy) {
-        requireNonNull(companyId, "Company ID");
-        requireNonNull(policy, "Purchase policy");
-        UUID callerId = requireAuthenticatedMember(token);
-        Company company = getCompanyOrThrow(companyId);
-        requireOwner(company, callerId);
-        company.updatePurchasePolicy(policy);
-        return companyRepository.save(company);
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireNonNull(policy, "Purchase policy");
+            UUID callerId = requireAuthenticatedMember(token);
+            Company company = getCompanyOrThrow(companyId);
+            requireOwner(company, callerId);
+            company.updatePurchasePolicy(policy);
+            Company saved = companyRepository.save(company);
+            AUDIT.info("op=updatePurchasePolicy callerId={} companyId={} result=ok", callerId, companyId);
+            return saved;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=updatePurchasePolicy companyId={} result=rejected reason={}", companyId, e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -323,13 +388,20 @@ public class CompanyService {
      * @throws IllegalStateException if the company is not active
      */
     public Company updateDiscountPolicy(String token, UUID companyId, ICompanyDiscountPolicy policy) {
-        requireNonNull(companyId, "Company ID");
-        requireNonNull(policy, "Discount policy");
-        UUID callerId = requireAuthenticatedMember(token);
-        Company company = getCompanyOrThrow(companyId);
-        requireOwner(company, callerId);
-        company.updateDiscountPolicy(policy);
-        return companyRepository.save(company);
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireNonNull(policy, "Discount policy");
+            UUID callerId = requireAuthenticatedMember(token);
+            Company company = getCompanyOrThrow(companyId);
+            requireOwner(company, callerId);
+            company.updateDiscountPolicy(policy);
+            Company saved = companyRepository.save(company);
+            AUDIT.info("op=updateDiscountPolicy callerId={} companyId={} result=ok", callerId, companyId);
+            return saved;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=updateDiscountPolicy companyId={} result=rejected reason={}", companyId, e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -346,16 +418,24 @@ public class CompanyService {
      * @throws CompanyNotFoundException if no company with {@code companyId} exists
      */
     public Company changeStatus(String token, UUID companyId, CompanyStatus newStatus) {
-        requireNonNull(companyId, "Company ID");
-        requireNonNull(newStatus, "Company status");
-        Company company = getCompanyOrThrow(companyId);
-        requireFounderOrSystemAdmin(token, company);
-        company.changeStatus(newStatus);
-        if (newStatus == CompanyStatus.CLOSED) {
-            eventManagementService.searchInCompany(companyId, null)
-                    .forEach(event -> eventManagementService.cancel(event.eventId(), auth.extractUserId(token)));
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireNonNull(newStatus, "Company status");
+            Company company = getCompanyOrThrow(companyId);
+            requireFounderOrSystemAdmin(token, company);
+            company.changeStatus(newStatus);
+            if (newStatus == CompanyStatus.CLOSED) {
+                eventManagementService.searchInCompany(companyId, null)
+                        .forEach(event -> eventManagementService.cancel(event.eventId(), auth.extractUserId(token)));
+            }
+            Company saved = companyRepository.save(company);
+            AUDIT.info("op=changeStatus companyId={} newStatus={} result=ok", companyId, newStatus);
+            return saved;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=changeStatus companyId={} newStatus={} result=rejected reason={}",
+                    companyId, newStatus, e.getMessage());
+            throw e;
         }
-        return companyRepository.save(company);
     }
 
     /**
@@ -436,16 +516,24 @@ public class CompanyService {
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
     public void addEventManager(String token, UUID companyId, UUID eventId, UUID userId, Set<ManagerPermission> permissions) {
-        requireNonNull(companyId, "Company ID");
-        requireNonNull(eventId, "Event ID");
-        requireNonNull(userId, "User ID");
-        requireNonNull(permissions, "Permissions");
-        Company company = getCompany(companyId);
-        UUID callerId = requireAuthenticatedMember(token);
-        requireOwner(company, callerId);
-        company.addManager(eventId, userId);
-        userService.appointManager(userId, token, company.getId(), permissions);
-        companyRepository.save(company);
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireNonNull(eventId, "Event ID");
+            requireNonNull(userId, "User ID");
+            requireNonNull(permissions, "Permissions");
+            Company company = getCompany(companyId);
+            UUID callerId = requireAuthenticatedMember(token);
+            requireOwner(company, callerId);
+            company.addManager(eventId, userId);
+            userService.appointManager(userId, token, company.getId(), permissions);
+            companyRepository.save(company);
+            AUDIT.info("op=addEventManager callerId={} companyId={} eventId={} userId={} result=ok",
+                    callerId, companyId, eventId, userId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=addEventManager companyId={} eventId={} userId={} result=rejected reason={}",
+                    companyId, eventId, userId, e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -463,15 +551,23 @@ public class CompanyService {
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      */
     public void removeEventManager(String token, UUID companyId, UUID eventId, UUID userId) {
-        requireNonNull(companyId, "Company ID");
-        requireNonNull(eventId, "Event ID");
-        requireNonNull(userId, "User ID");
-        Company company = getCompany(companyId);
-        UUID callerId = requireAuthenticatedMember(token);
-        requireOwner(company, callerId);
-        company.removeManager(eventId, userId);
-        userService.removeManagerAppointment(token, userId, company.getId());
-        companyRepository.save(company);
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireNonNull(eventId, "Event ID");
+            requireNonNull(userId, "User ID");
+            Company company = getCompany(companyId);
+            UUID callerId = requireAuthenticatedMember(token);
+            requireOwner(company, callerId);
+            company.removeManager(eventId, userId);
+            userService.removeManagerAppointment(token, userId, company.getId());
+            companyRepository.save(company);
+            AUDIT.info("op=removeEventManager callerId={} companyId={} eventId={} userId={} result=ok",
+                    callerId, companyId, eventId, userId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=removeEventManager companyId={} eventId={} userId={} result=rejected reason={}",
+                    companyId, eventId, userId, e.getMessage());
+            throw e;
+        }
     }
 
     /**
