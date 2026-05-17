@@ -138,6 +138,30 @@ class CompanyServiceWhiteTest {
     }
 
     // ===========================================================================================
+    // removeOwner — last-owner guard
+
+    @Test
+    void removeOwner_throws_when_removing_the_last_owner() throws Exception {
+        UUID founderId = UUID.randomUUID();
+        UUID coOwnerId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        String coOwnerToken = registerMember(coOwnerId);
+        Company company = service.createCompany(founderToken, "Acme");
+        service.addOwner(founderToken, company.getId(), coOwnerId);
+
+        // Strip the founder out so coOwnerId becomes the sole owner, exercising the last-owner guard
+        Company stored = repo.findById(company.getId()).orElseThrow();
+        Field ownerIdsField = Company.class.getDeclaredField("ownerIds");
+        ownerIdsField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Set<UUID> owners = (Set<UUID>) ownerIdsField.get(stored);
+        owners.remove(founderId);
+
+        assertThatThrownBy(() -> service.removeOwner(coOwnerToken, company.getId(), coOwnerId))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    // ===========================================================================================
     // Concurrency
 
     @Test
