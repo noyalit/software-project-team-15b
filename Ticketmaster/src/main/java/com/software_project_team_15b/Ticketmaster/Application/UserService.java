@@ -471,7 +471,7 @@ public class UserService {
             if (!auth.isTokenValid(token) || !auth.isSystemAdmin(token)) {
                 throw new IllegalArgumentException("Only a system admin can cancel member accounts");
             }
-            UUID systemAdminId = getAuthenticatedMemberId(token);
+            UUID systemAdminId = auth.extractUserId(token);
             boolean result = userDomainService.cancelMemberAccount(memberIdToCancel);
             AUDIT.info("op=cancel-member-account-by-admin systemAdminId={} memberIdToCancel={}",
                     systemAdminId, memberIdToCancel);

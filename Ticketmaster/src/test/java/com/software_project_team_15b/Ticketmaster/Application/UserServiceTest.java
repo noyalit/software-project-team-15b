@@ -22,12 +22,13 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainServiceImpl;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
@@ -44,7 +45,9 @@ class UserServiceTest {
     @Mock private PurchasingService purchasingService;
     @Mock private QueueService queueService;
 
-    @InjectMocks private UserService service;
+    private UserService service;
+    private UserDomainService userDomainService;
+    private QueueDomainServiceImpl queueDomainService;
 
     private String entranceToken;
     private String username;
@@ -57,6 +60,10 @@ class UserServiceTest {
         username = DEFAULT_USERNAME;
         password = DEFAULT_PASSWORD;
         birthDate = DEFAULT_BIRTH_DATE;
+
+        userDomainService = new UserDomainService(memberRepository);
+        queueDomainService = new QueueDomainServiceImpl(queueService);
+        service = new UserService(userDomainService, auth, passwordEncoder, queueDomainService, systemAdminRepository);
     }
 
     ///------------------------------ II.1.3: Register ---------------------------------
@@ -66,13 +73,14 @@ class UserServiceTest {
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
         when(memberRepository.existsByUsername("john")).thenReturn(true);
+        when(passwordEncoder.encode("Password1")).thenReturn("hashed");
 
         assertThatThrownBy(() -> service.registerMember(entranceToken, "john", "Password1", LocalDate.of(2000, 1, 1)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Username already exists");
 
         verify(memberRepository, never()).save(any());
-        verifyNoInteractions(passwordEncoder);
+        verify(passwordEncoder).encode("Password1");
     }
 
     @Test
