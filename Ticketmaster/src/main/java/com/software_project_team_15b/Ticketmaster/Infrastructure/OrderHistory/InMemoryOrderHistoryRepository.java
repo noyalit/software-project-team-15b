@@ -59,6 +59,15 @@ public class InMemoryOrderHistoryRepository implements IOrderHistoryRepository {
     }
 
     @Override
+    public List<OrderHistory> findByEventIdAndIsCancelledFalse(UUID eventId) {
+        if (eventId == null)
+            throw new IllegalArgumentException("eventId cannot be null");
+        return storage.values().stream()
+                .filter(o -> Objects.equals(o.getEventId(), eventId) && !o.isCancelled())
+                .collect(Collectors.toList());
+    }
+
+    @Override
     public List<OrderHistory> findByEventIdIn(List<UUID> eventIds) {
         if (eventIds == null || eventIds.isEmpty())
             return List.of();
