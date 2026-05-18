@@ -4,9 +4,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.DiscriminatorValue;
@@ -21,8 +18,6 @@ import java.util.UUID;
 @Entity
 @DiscriminatorValue("MANAGER")
 public class Manager extends Role {
-
-    private static final Logger AUDIT = LoggerFactory.getLogger("audit.manager");
 
     @ElementCollection(fetch = FetchType.EAGER)
     @Enumerated(EnumType.STRING)
@@ -61,11 +56,6 @@ public class Manager extends Role {
 
         this.permissions.clear();
         this.permissions.addAll(permissions);
-
-        AUDIT.info("op=set-manager-permissions roleId={} companyId={} permissions={}",
-                getId(),
-                getCompanyId(),
-                this.permissions);
     }
 
     public UUID getEventId() {
@@ -74,13 +64,6 @@ public class Manager extends Role {
 
     public void setEventId(UUID eventId) {
         this.eventId = eventId;
-
-        AUDIT.info(
-                "op=set-manager-event roleId={} companyId={} eventId={}",
-                getId(),
-                getCompanyId(),
-                this.eventId
-        );
     }
 
     @Override
