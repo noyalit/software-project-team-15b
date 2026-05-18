@@ -5,9 +5,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.DiscriminatorValue;
@@ -23,18 +20,16 @@ import java.util.UUID;
 @DiscriminatorValue("MANAGER")
 public class Manager extends Role {
 
-    private static final Logger AUDIT = LoggerFactory.getLogger("audit.manager");
-
     @ElementCollection(fetch = FetchType.EAGER)
     @Enumerated(EnumType.STRING)
     @CollectionTable(
             name = "manager_permissions",
             joinColumns = @JoinColumn(name = "role_id")
     )
-    @Column(name = "permission")
+    @Column(name = "permission", nullable = false)
     private Set<ManagerPermission> permissions = new HashSet<>();
 
-    @Column(name = "event_id")
+    @Column(name = "event_id", nullable = false)
     private UUID eventId;
 
     protected Manager() {
@@ -60,12 +55,8 @@ public class Manager extends Role {
             throw new InvalidManagerPermissionsException("Manager must have at least one permission");
         }
 
-        this.permissions = new HashSet<>(permissions);
-
-        AUDIT.info("op=set-manager-permissions roleId={} companyId={} permissions={}",
-                getId(),
-                getCompanyId(),
-                this.permissions);
+        this.permissions.clear();
+        this.permissions.addAll(permissions);
     }
 
     public UUID getEventId() {
@@ -74,13 +65,6 @@ public class Manager extends Role {
 
     public void setEventId(UUID eventId) {
         this.eventId = eventId;
-
-        AUDIT.info(
-                "op=set-manager-event roleId={} companyId={} eventId={}",
-                getId(),
-                getCompanyId(),
-                this.eventId
-        );
     }
 
     @Override

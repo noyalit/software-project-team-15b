@@ -1,7 +1,10 @@
-package com.software_project_team_15b.Ticketmaster.Application;
+package com.software_project_team_15b.Ticketmaster.black.Application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.IPasswordEncoder;
+import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Founder;
@@ -12,6 +15,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.UserType;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
+import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -72,7 +76,7 @@ class UserServiceConcurrencyTest {
         owner2Token = auth.registerMemberToken(owner2Id);
 
         UserDomainService userDomainService = new UserDomainService(memberRepository);
-        QueueDomainServiceImpl queueDomainService = new QueueDomainServiceImpl(new NoopQueueService());
+        IQueueDomainService queueDomainService = new QueueDomainServiceImpl(new NoopQueueService());
         ApplicationEventPublisher eventPublisher = ignored -> {};
         service = new UserService(
                 userDomainService,

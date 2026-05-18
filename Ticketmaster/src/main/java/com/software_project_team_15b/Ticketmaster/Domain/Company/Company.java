@@ -95,7 +95,7 @@ public class Company {
      * @return the set of user ids that are managers for {@code eventId}, or an empty set if none
      * @throws IllegalArgumentException if {@code eventId} is null
      */
-    public Set<UUID> getEventManagers(UUID eventId) {
+    public synchronized Set<UUID> getEventManagers(UUID eventId) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
@@ -239,7 +239,7 @@ public class Company {
      * @throws IllegalArgumentException if either argument is null, or if {@code userId}
      *                                  is already a manager for {@code eventId}
      */
-    public void addManager(UUID eventId, UUID userId) {
+    public synchronized void addManager(UUID eventId, UUID userId) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
@@ -261,7 +261,7 @@ public class Company {
      * @throws IllegalArgumentException if either argument is null, or if {@code userId}
      *                                  is not currently a manager for {@code eventId}
      */
-    public void removeManager(UUID eventId, UUID userId) {
+    public synchronized void removeManager(UUID eventId, UUID userId) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }

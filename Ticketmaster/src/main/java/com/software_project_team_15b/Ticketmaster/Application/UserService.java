@@ -18,7 +18,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
-import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainServiceImpl;
+import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 
 /**
  * UserService provides functionality for managing user accounts and roles.
@@ -31,7 +31,7 @@ public class UserService {
     private final UserDomainService userDomainService;
     private final IAuth auth;
     private final IPasswordEncoder passwordEncoder;
-    private final QueueDomainServiceImpl queueDomainService;
+    private final IQueueDomainService queueDomainService;
     private final ISystemAdminRepository systemAdminRepository;
     private final ApplicationEventPublisher eventPublisher;
 
@@ -39,7 +39,7 @@ public class UserService {
             UserDomainService userDomainService,
             IAuth auth, 
             IPasswordEncoder passwordEncoder, 
-            QueueDomainServiceImpl queueDomainService,
+            IQueueDomainService queueDomainService,
             ISystemAdminRepository systemAdminRepository,
             ApplicationEventPublisher eventPublisher
             ) {
@@ -486,26 +486,6 @@ public class UserService {
                     memberIdToCancel, e.getMessage());
             throw e;
         }
-    }
-
-    public boolean isActiveOwner(UUID userId) {
-        return userDomainService.isActiveOwner(userId);
-    }
-
-    public boolean isActiveManager(UUID userId) {
-        return userDomainService.isActiveManager(userId);
-    }
-
-    public boolean isActiveFounder(UUID userId) {
-        return userDomainService.isActiveFounder(userId);
-    }
-
-    public boolean isAppointmentApproved(UUID userId) {
-        return userDomainService.isAppointmentApproved(userId);
-    }
-
-    public List<UUID> getAppointedMembersTree(UUID memberId, UUID companyId) {
-        return userDomainService.getAppointedMembersTree(memberId, companyId);
     }
 
     private void validateRawPassword(String password) {

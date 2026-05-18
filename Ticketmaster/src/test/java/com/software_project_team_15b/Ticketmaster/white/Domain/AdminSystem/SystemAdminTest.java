@@ -1,4 +1,4 @@
-package com.software_project_team_15b.Ticketmaster.Domain.AdminSystem;
+package com.software_project_team_15b.Ticketmaster.white.Domain.AdminSystem;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -7,6 +7,8 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidSystemAdminInputException;
+
+import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 
 class SystemAdminTest {
 

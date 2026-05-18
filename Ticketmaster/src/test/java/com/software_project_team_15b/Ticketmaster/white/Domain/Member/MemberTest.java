@@ -1,9 +1,13 @@
-package com.software_project_team_15b.Ticketmaster.Domain.Member;
+package com.software_project_team_15b.Ticketmaster.white.Domain.Member;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
+
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 
 import org.springframework.test.util.ReflectionTestUtils;
 import java.util.UUID;
