@@ -20,7 +20,7 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITick
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
@@ -30,6 +30,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.DTO.OrderHistoryDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.TicketDTO;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import org.springframework.transaction.annotation.Transactional;
 
 
@@ -44,7 +45,7 @@ public class OrderHistoryService implements EventSubscriber{
     private final IEventRepository eventsRepository;
     private final IAuth auth;
     private final UserDomainService userDomainService;
-    private final ICompanyDomainService companyDomainService;
+    private final ICompanyRepository companyRepository;
 
 
     public OrderHistoryService(IOrderHistoryRepository orderHistoryRepository,
@@ -54,14 +55,14 @@ public class OrderHistoryService implements EventSubscriber{
                                IEventRepository eventsRepository,
                                IAuth auth,
                                UserDomainService userDomainService,
-                               ICompanyDomainService companyDomainService) {
+                               ICompanyRepository companyRepository) {
         this.orderHistoryRepository = orderHistoryRepository;
         this.paymentGateway = paymentGateway;
         this.ticketProvider = ticketProvider;
         this.eventsRepository = eventsRepository;
         this.auth = auth;
         this.userDomainService = userDomainService;
-        this.companyDomainService = companyDomainService;
+        this.companyRepository = companyRepository;
         eventCancelManager.subscribe(this);
     }
 
@@ -108,12 +109,7 @@ public class OrderHistoryService implements EventSubscriber{
             throw new IllegalArgumentException("User token cannot be null");
         }
         if (!auth.isTokenValid(token)) {
-            try {
-                UUID candidate = auth.extractUserId(token);
-                AUDIT.warn("op=validateUser invalidToken callerCandidate={}", candidate);
-            } catch (Exception ex) {
-                AUDIT.warn("op=validateUser invalidToken");
-            }
+            AUDIT.warn("op=validateUser invalidToken");
             throw new IllegalArgumentException("Invalid token");
         }
     }
@@ -125,10 +121,11 @@ public class OrderHistoryService implements EventSubscriber{
         validateUser(token);
         UUID callerId = auth.extractUserId(token);
         AUDIT.info("op=getSoldTicketsForCompany callerId={} companyId={}", callerId, companyId);
-        if (!companyDomainService.isCompanyFounderOrOwner(companyId, callerId)) {
+        if (!isFounderOrOwner(callerId, companyId)) {
             AUDIT.warn("op=getSoldTicketsForCompany callerId={} companyId={} result=rejected reason=unauthorized", callerId, companyId);
             throw new UnauthorizedCompanyActionException("Only the company founder or owner can view sold tickets");
         }
+
         SearchCriteria criteria = SearchCriteria.empty();
         List<Event> events = eventsRepository.searchByCompany(companyId, criteria);
         if (events.isEmpty()) {
@@ -168,11 +165,12 @@ public class OrderHistoryService implements EventSubscriber{
         validateUser(token);
         UUID callerId = auth.extractUserId(token);
         AUDIT.info("op=generateSalesReport callerId={} companyId={}", callerId, companyId);
-        if (!companyDomainService.isCompanyFounderOrOwner(companyId, callerId)) {
+        
+        if (!isFounderOrOwner(callerId, companyId)) {
             AUDIT.warn("op=generateSalesReport callerId={} companyId={} result=rejected reason=unauthorized", callerId, companyId);
             throw new UnauthorizedCompanyActionException("Only the company founder or owner can view sold tickets");
         }
-        
+
         List<UUID> appointedMembers = userDomainService.getAppointedMembersTree(callerId, companyId);
         List<UUID> visibleManagers = appointedMembers.contains(callerId)
                 ? appointedMembers
@@ -291,12 +289,24 @@ public class OrderHistoryService implements EventSubscriber{
         if (appointedMembers == null || appointedMembers.isEmpty()) return false;
         for (UUID member : appointedMembers) {
             try {
-                if (companyDomainService.isEventManager(event.eventId(), member)) return true;
+                var opt = companyRepository.findById(event.companyId());
+                if (opt.isEmpty()) throw new CompanyNotFoundException("Company not found: " + event.companyId());
+                var company = opt.get();
+                if (company.getEventManagers(event.eventId()).contains(member)) return true;
             } catch (CompanyNotFoundException ex) {
                 AUDIT.warn("op=isEventManagedByAppointedMembers companyNotFound eventId={} companyId={}", event.eventId(), event.companyId());
             }
         }
         return false;
     }
+
+    private boolean isFounderOrOwner(UUID callerId, UUID companyId) {
+        if (callerId == null || companyId == null) return false;
+
+        return companyRepository.findByFounder(callerId).stream().anyMatch(company -> companyId.equals(company.getId()))
+            || companyRepository.findByOwner(callerId).stream().anyMatch(company -> companyId.equals(company.getId()));
+    }
+
+    
     
 }
