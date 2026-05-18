@@ -1,4 +1,4 @@
-package com.software_project_team_15b.Ticketmaster.Application.OrderHistoryServiceTests.concurrency;
+package com.software_project_team_15b.Ticketmaster.white.Application.OrderHistory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
