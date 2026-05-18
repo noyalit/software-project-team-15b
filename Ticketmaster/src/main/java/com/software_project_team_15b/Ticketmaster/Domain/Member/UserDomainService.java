@@ -13,7 +13,6 @@ import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 
 @Service
-@Transactional
 public class UserDomainService {
 
     private final IMemberRepository memberRepository;
@@ -22,6 +21,7 @@ public class UserDomainService {
         this.memberRepository = memberRepository;
     }
 
+    @Transactional
     public Member registerMember(String username, String passwordHash, LocalDate birthDate) {
         if (memberRepository.existsByUsername(username)) {
             throw new IllegalArgumentException("Username already exists");
@@ -31,11 +31,13 @@ public class UserDomainService {
         return memberRepository.save(member);
     }
 
+    @Transactional(readOnly = true)
     public MemberDTO watchPersonalDetails(UUID userId) {
         Member member = getMemberOrThrow(userId);
         return toDTO(member);
     }
 
+    @Transactional
     public Member changeUsername(UUID userId, String newUsername) {
         Member member = getMemberOrThrow(userId);
 
@@ -48,18 +50,21 @@ public class UserDomainService {
         return memberRepository.save(member);
     }
 
+    @Transactional
     public Member changePassword(UUID userId, String passwordHash) {
         Member member = getMemberOrThrow(userId);
         member.setPassword(passwordHash);
         return memberRepository.save(member);
     }
 
+    @Transactional
     public Member changeBirthDate(UUID userId, LocalDate newBirthDate) {
         Member member = getMemberOrThrow(userId);
         member.setBirthDate(newBirthDate);
         return memberRepository.save(member);
     }
 
+    @Transactional
     public Member changeRoleToManager(UUID userId, UUID eventId) {
         if (eventId == null) {
             throw new IllegalArgumentException("Event ID cannot be null");
@@ -81,6 +86,7 @@ public class UserDomainService {
         return memberRepository.save(member);
     }
 
+    @Transactional
     public Member changeRoleToOwner(UUID userId, UUID companyId) {
         if (companyId == null) {
             throw new IllegalArgumentException("Company ID cannot be null");
@@ -102,6 +108,7 @@ public class UserDomainService {
         return memberRepository.save(member);
     }
 
+    @Transactional
     public Member changeRoleToFounder(UUID userId, UUID companyId) {
         if (companyId == null) {
             throw new IllegalArgumentException("Company ID cannot be null");
@@ -122,12 +129,14 @@ public class UserDomainService {
         return memberRepository.save(member);
     }
 
+    @Transactional
     public Member changeRoleToRegularMember(UUID userId) {
         Member member = getMemberOrThrow(userId);
         member.switchActiveRole(null);
         return memberRepository.save(member);
     }
 
+    @Transactional
     public Member appointManager(UUID memberId, UUID ownerId, UUID companyId, UUID eventId, Set<ManagerPermission> permissions) {
         if (permissions == null || permissions.isEmpty()) {
             throw new IllegalArgumentException("Manager must have at least one permission");
@@ -144,6 +153,7 @@ public class UserDomainService {
         return memberRepository.save(member);
     }
 
+    @Transactional
     public Member appointOwner(UUID memberId, UUID ownerId, UUID companyId) {
         Member member = getMemberOrThrow(memberId);
 
@@ -166,6 +176,7 @@ public class UserDomainService {
         return memberRepository.save(member);
     }
 
+    @Transactional
     public Member appointFounder(UUID memberId, UUID companyId) {
         Member member = getMemberOrThrow(memberId);
 
@@ -175,6 +186,7 @@ public class UserDomainService {
         return memberRepository.save(member);
     }
 
+    @Transactional
     public Member removeOwnerAppointment(UUID removerOwnerId, UUID memberToRemoveId, UUID companyId) {
         Member memberToRemove = getMemberOrThrow(memberToRemoveId);
 
@@ -195,6 +207,7 @@ public class UserDomainService {
         return memberRepository.save(memberToRemove);
     }
 
+    @Transactional
     public Member removeManagerAppointment(UUID removerOwnerId, UUID memberToRemoveId, UUID companyId, UUID eventId) {
         Member memberToRemove = getMemberOrThrow(memberToRemoveId);
 
@@ -215,6 +228,7 @@ public class UserDomainService {
         return memberRepository.save(memberToRemove);
     }
 
+    @Transactional
     public Member ownerResign(UUID ownerId, UUID companyId) {
         Member owner = getMemberOrThrow(ownerId);
 
@@ -233,6 +247,7 @@ public class UserDomainService {
         return memberRepository.save(owner);
     }
 
+    @Transactional
     public Member changeManagerPermissions(UUID ownerId, UUID managerId, UUID eventId, Set<ManagerPermission> newPermissions) {
         Member manager = getMemberOrThrow(managerId);
 
@@ -253,6 +268,7 @@ public class UserDomainService {
         return memberRepository.save(manager);
     }
 
+    @Transactional(readOnly = true)
     public Set<ManagerPermission> getManagerPermissions(UUID ownerId, UUID managerId, UUID eventId) {
         Member manager = getMemberOrThrow(managerId);
 
@@ -272,6 +288,7 @@ public class UserDomainService {
         return managerRole.getPermissions();
     }
 
+    @Transactional(readOnly = true)
     public boolean hasManagerPermission(
             UUID eventId,
             UUID managerId,
@@ -315,6 +332,7 @@ public class UserDomainService {
         return true;
     }
 
+    @Transactional
     public Member approveAppointment(UUID userId) {
         Member member = getMemberOrThrow(userId);
 
@@ -326,6 +344,7 @@ public class UserDomainService {
         return memberRepository.save(member);
     }
 
+    @Transactional
     public boolean cancelMemberAccount(UUID memberIdToCancel) {
         if (memberIdToCancel == null) {
             throw new IllegalArgumentException("Member ID cannot be null");
@@ -339,6 +358,7 @@ public class UserDomainService {
         return memberRepository.deleteById(memberIdToCancel);
     }
 
+    @Transactional(readOnly = true)
     public boolean isActiveOwner(UUID userId) {
         Member member = getMemberOrThrow(userId);
         return member.getAssignedRoles()
@@ -348,6 +368,7 @@ public class UserDomainService {
                         && role.isAppointmentApproved());
     }
 
+    @Transactional(readOnly = true)
     public boolean isActiveManager(UUID userId) {
         Member member = getMemberOrThrow(userId);
         return member.getAssignedRoles()
@@ -356,6 +377,7 @@ public class UserDomainService {
                         && role.isAppointmentApproved());
     }
 
+    @Transactional(readOnly = true)
     public boolean isActiveFounder(UUID userId) {
         Member member = getMemberOrThrow(userId);
         return member.getAssignedRoles()
@@ -364,6 +386,7 @@ public class UserDomainService {
                         && role.isAppointmentApproved());
     }
 
+    @Transactional(readOnly = true)
     public boolean isAppointmentApproved(UUID userId) {
         Member member = getMemberOrThrow(userId);
         if (member.getActiveRole() == null) {
@@ -462,6 +485,7 @@ public class UserDomainService {
         }
     }
 
+    @Transactional(readOnly = true)
     public List<UUID> getAppointedMembersTree(UUID memberId, UUID companyId) {
         if (companyId == null) {
             throw new IllegalArgumentException("Company ID cannot be null");
@@ -512,6 +536,7 @@ public class UserDomainService {
         }
     }
 
+    @Transactional(readOnly = true)
     public Member getMemberByUsername(String username) {
         return memberRepository.findByUsername(username)
                 .orElseThrow(() ->

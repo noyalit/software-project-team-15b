@@ -30,8 +30,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.Mockito;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainServiceImpl;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
@@ -63,7 +63,7 @@ class UserServiceTest {
         password = DEFAULT_PASSWORD;
         birthDate = DEFAULT_BIRTH_DATE;
 
-        userDomainService = new UserDomainService(memberRepository);
+        userDomainService = Mockito.spy(new UserDomainService(memberRepository));
         service = new UserService(userDomainService, auth, passwordEncoder, queueDomainService, systemAdminRepository, eventPublisher);
     }
 
@@ -73,14 +73,16 @@ class UserServiceTest {
         String entranceToken = "entrance";
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
-        when(memberRepository.existsByUsername("john")).thenReturn(true);
         when(passwordEncoder.encode("Password1")).thenReturn("hashed");
+        doThrow(new IllegalArgumentException("Username already exists"))
+                .when(userDomainService)
+                .registerMember(eq("john"), eq("hashed"), eq(LocalDate.of(2000, 1, 1)));
 
         assertThatThrownBy(() -> service.registerMember(entranceToken, "john", "Password1", LocalDate.of(2000, 1, 1)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Username already exists");
 
-        verify(memberRepository, never()).save(any());
+        verify(userDomainService).registerMember(eq("john"), eq("hashed"), eq(LocalDate.of(2000, 1, 1)));
         verify(passwordEncoder).encode("Password1");
     }
 
@@ -89,9 +91,10 @@ class UserServiceTest {
         String entranceToken = "entrance";
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
-        when(memberRepository.existsByUsername("john")).thenReturn(false);
         when(passwordEncoder.encode("Password1")).thenReturn("hashed");
-        when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
+        doReturn(new Member("john", "hashed", null, LocalDate.of(2000, 1, 1)))
+                .when(userDomainService)
+                .registerMember(eq("john"), eq("hashed"), eq(LocalDate.of(2000, 1, 1)));
 
         MemberDTO saved = service.registerMember(entranceToken, "john", "Password1", LocalDate.of(2000, 1, 1));
 
@@ -99,7 +102,7 @@ class UserServiceTest {
         assertThat(saved.getBirthDate()).isEqualTo(LocalDate.of(2000, 1, 1));
 
         verify(passwordEncoder).encode("Password1");
-        verify(memberRepository).save(any(Member.class));
+        verify(userDomainService).registerMember(eq("john"), eq("hashed"), eq(LocalDate.of(2000, 1, 1)));
     }
 
     @Test
@@ -117,8 +120,8 @@ class UserServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Password cannot be null or empty");
 
-        verify(memberRepository, never()).save(any());
-        verifyNoInteractions(passwordEncoder);
+        verifyNoInteractions(userDomainService);
+        verify(passwordEncoder, never()).encode(any());
     }
 
     @Test
@@ -136,7 +139,7 @@ class UserServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Password must be at least 8 characters long");
 
-        verify(memberRepository, never()).save(any());
+        verifyNoInteractions(userDomainService);
         verifyNoInteractions(passwordEncoder);
     }
 
@@ -155,7 +158,7 @@ class UserServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Password must contain at least one uppercase letter and one number");
 
-        verify(memberRepository, never()).save(any());
+        verifyNoInteractions(userDomainService);
         verifyNoInteractions(passwordEncoder);
     }
 
@@ -176,7 +179,7 @@ class UserServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Birth date cannot be null");
 
-        verify(memberRepository, never()).save(any());
+        verify(passwordEncoder).encode("Password1");
     }
 
     @Test
@@ -194,7 +197,7 @@ class UserServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Only guest");
 
-        verify(memberRepository, never()).save(any());
+        verifyNoInteractions(userDomainService);
     }
 
     ///------------------------------ II.1.4: Login ---------------------------------
@@ -203,7 +206,9 @@ class UserServiceTest {
         String entranceToken = "entrance";
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
-        when(memberRepository.findByUsername("john")).thenReturn(Optional.empty());
+        doThrow(new IllegalArgumentException("Invalid username or password"))
+                .when(userDomainService)
+                .getMemberByUsername("john");
 
         assertThatThrownBy(() -> service.login(entranceToken, "john", "Password1"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -219,7 +224,7 @@ class UserServiceTest {
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
         Member member = new Member("john", "hash", null, LocalDate.of(2000, 1, 1));
-        when(memberRepository.findByUsername("john")).thenReturn(Optional.of(member));
+        doReturn(member).when(userDomainService).getMemberByUsername("john");
         when(passwordEncoder.matches("Password1", "hash")).thenReturn(false);
 
         assertThatThrownBy(() -> service.login(entranceToken, "john", "Password1"))
@@ -236,7 +241,7 @@ class UserServiceTest {
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
         Member member = new Member("john", "hash", null, LocalDate.of(2000, 1, 1));
-        when(memberRepository.findByUsername("john")).thenReturn(Optional.of(member));
+        doReturn(member).when(userDomainService).getMemberByUsername("john");
         when(passwordEncoder.matches("Password1", "hash")).thenReturn(true);
         when(auth.generateMemberToken(member)).thenReturn("token");
 
@@ -257,7 +262,7 @@ class UserServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Invalid or expired token");
 
-        verifyNoInteractions(memberRepository);
+        verifyNoInteractions(userDomainService);
         verifyNoInteractions(passwordEncoder);
     }
 
