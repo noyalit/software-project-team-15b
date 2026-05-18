@@ -6,7 +6,10 @@ import static org.mockito.Mockito.*;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyOwnerInCompanyException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AppointmentCycleDetectedException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidManagerPermissionsException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidCredentialsException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.MemberNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.IPasswordEncoder;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
@@ -80,7 +83,7 @@ class UserServiceTest {
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
         when(passwordEncoder.encode("Password1")).thenReturn("hashed");
-        doThrow(new IllegalArgumentException("Username already exists"))
+        doThrow(new UsernameAlreadyExistsException("Username already exists"))
                 .when(userDomainService)
                 .registerMember(eq("john"), eq("hashed"), eq(LocalDate.of(2000, 1, 1)));
 
@@ -212,7 +215,7 @@ class UserServiceTest {
         String entranceToken = "entrance";
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
-        doThrow(new IllegalArgumentException("Invalid username or password"))
+        doThrow(new InvalidCredentialsException("Invalid username or password"))
                 .when(userDomainService)
                 .getMemberByUsername("john");
 
