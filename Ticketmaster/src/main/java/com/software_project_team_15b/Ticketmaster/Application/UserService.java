@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
@@ -489,16 +490,16 @@ public class UserService {
 
     private void validateRawPassword(String password) {
         if (password == null || password.isBlank()) {
-            throw new IllegalArgumentException("Password cannot be null or empty");
+            throw new InvalidMemberInputException("Password cannot be null or empty");
         }
 
         if (password.length() < 8) {
-            throw new IllegalArgumentException("Password must be at least 8 characters long");
+            throw new InvalidMemberInputException("Password must be at least 8 characters long");
         }
 
         String regex = "^(?=.*[A-Z])(?=.*\\d).+$";
         if (!password.matches(regex)) {
-            throw new IllegalArgumentException(
+            throw new InvalidMemberInputException(
                     "Password must contain at least one uppercase letter and one number"
             );
         }

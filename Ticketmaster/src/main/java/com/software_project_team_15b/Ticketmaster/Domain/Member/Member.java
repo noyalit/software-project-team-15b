@@ -1,5 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Member;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.RoleNotAssignedException;
 import jakarta.persistence.*;
 import java.util.Objects;
 import java.util.UUID;
@@ -121,7 +123,7 @@ public class Member {
 
     public void addRole(Role role) {
         if (role == null) {
-            throw new IllegalArgumentException("Role cannot be null");
+            throw new InvalidMemberInputException("Role cannot be null");
         }
 
         assignedRoles.add(role);
@@ -161,7 +163,7 @@ public class Member {
         }
 
         if (!assignedRoles.contains(role)) {
-            throw new IllegalArgumentException("Cannot switch to a role that was not assigned to this member");
+            throw new RoleNotAssignedException("Cannot switch to a role that was not assigned to this member");
         }
         activeRole = role;
 
@@ -192,23 +194,23 @@ public class Member {
 
     private static void validateUsername(String username) {
         if (username == null || username.isBlank()) {
-            throw new IllegalArgumentException("Username cannot be null or empty");
+            throw new InvalidMemberInputException("Username cannot be null or empty");
         }
     }
 
     private static void validatePasswordHash(String passwordHash) {
         if (passwordHash == null || passwordHash.isBlank()) {
-            throw new IllegalArgumentException("Password hash cannot be null or empty");
+            throw new InvalidMemberInputException("Password hash cannot be null or empty");
         }
     }
 
     private static void validateBirthDate(LocalDate birthDate) {
         if (birthDate == null) {
-            throw new IllegalArgumentException("Birth date cannot be null");
+            throw new InvalidMemberInputException("Birth date cannot be null");
         }
 
         if (birthDate.isAfter(LocalDate.now())) {
-            throw new IllegalArgumentException("Birth date cannot be in the future");
+            throw new InvalidMemberInputException("Birth date cannot be in the future");
         }
     }
 

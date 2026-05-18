@@ -4,10 +4,19 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyOwnerInCompanyException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AppointmentCycleDetectedException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidManagerPermissionsException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidCredentialsException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.MemberNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.IPasswordEncoder;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.RoleNotAssignedException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UsernameAlreadyExistsException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
@@ -74,12 +83,12 @@ class UserServiceTest {
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
         when(passwordEncoder.encode("Password1")).thenReturn("hashed");
-        doThrow(new IllegalArgumentException("Username already exists"))
+        doThrow(new UsernameAlreadyExistsException("Username already exists"))
                 .when(userDomainService)
                 .registerMember(eq("john"), eq("hashed"), eq(LocalDate.of(2000, 1, 1)));
 
         assertThatThrownBy(() -> service.registerMember(entranceToken, "john", "Password1", LocalDate.of(2000, 1, 1)))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(UsernameAlreadyExistsException.class)
                 .hasMessageContaining("Username already exists");
 
         verify(userDomainService).registerMember(eq("john"), eq("hashed"), eq(LocalDate.of(2000, 1, 1)));
@@ -117,7 +126,7 @@ class UserServiceTest {
                 null,
                 LocalDate.of(2000, 1, 1)
         ))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidMemberInputException.class)
                 .hasMessageContaining("Password cannot be null or empty");
 
         verifyNoInteractions(userDomainService);
@@ -136,7 +145,7 @@ class UserServiceTest {
                 "Pass1",
                 LocalDate.of(2000, 1, 1)
         ))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidMemberInputException.class)
                 .hasMessageContaining("Password must be at least 8 characters long");
 
         verifyNoInteractions(userDomainService);
@@ -155,7 +164,7 @@ class UserServiceTest {
                 "password",
                 LocalDate.of(2000, 1, 1)
         ))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidMemberInputException.class)
                 .hasMessageContaining("Password must contain at least one uppercase letter and one number");
 
         verifyNoInteractions(userDomainService);
@@ -176,7 +185,7 @@ class UserServiceTest {
                 "Password1",
                 null
         ))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidMemberInputException.class)
                 .hasMessageContaining("Birth date cannot be null");
 
         verify(passwordEncoder).encode("Password1");
@@ -206,12 +215,12 @@ class UserServiceTest {
         String entranceToken = "entrance";
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
-        doThrow(new IllegalArgumentException("Invalid username or password"))
+        doThrow(new InvalidCredentialsException("Invalid username or password"))
                 .when(userDomainService)
                 .getMemberByUsername("john");
 
         assertThatThrownBy(() -> service.login(entranceToken, "john", "Password1"))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidCredentialsException.class)
                 .hasMessageContaining("Invalid username or password");
 
         verifyNoInteractions(passwordEncoder);
@@ -411,7 +420,7 @@ class UserServiceTest {
         when(memberRepository.findById(memberId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.appointFounder(memberId, token, companyId))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(MemberNotFoundException.class)
                 .hasMessageContaining("Member not found with id: " + memberId);
 
         verify(memberRepository, never()).save(any());
@@ -469,7 +478,7 @@ class UserServiceTest {
         when(memberRepository.findByUsername("taken")).thenReturn(Optional.of(other));
 
         assertThatThrownBy(() -> service.changeUsername(token, "taken"))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(UsernameAlreadyExistsException.class)
                 .hasMessageContaining("Username already exists");
 
         verify(memberRepository, never()).save(any());
@@ -548,7 +557,7 @@ class UserServiceTest {
         when(memberRepository.findByUsername("")).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.changeUsername(token, ""))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidMemberInputException.class)
                 .hasMessageContaining("Username cannot be null or empty");
 
         verify(memberRepository, never()).save(any());
@@ -564,7 +573,7 @@ class UserServiceTest {
         when(auth.extractUserId(token)).thenReturn(memberId);
 
         assertThatThrownBy(() -> service.changePassword(token, "bad"))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidMemberInputException.class)
                 .hasMessageContaining("Password must be at least 8 characters long");
 
         verify(memberRepository, never()).save(any());
@@ -583,7 +592,7 @@ class UserServiceTest {
         when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
 
         assertThatThrownBy(() -> service.changeBirthDate(token, null))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidMemberInputException.class)
                 .hasMessageContaining("Birth date cannot be null");
 
         verify(memberRepository, never()).save(any());
@@ -655,7 +664,7 @@ class UserServiceTest {
         Mockito.lenient().when(memberRepository.findById(targetId)).thenReturn(Optional.of(target));
 
         assertThatThrownBy(() -> service.appointManager(targetId, token, companyId, eventId, Set.of()))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidManagerPermissionsException.class)
                 .hasMessageContaining("at least one permission");
 
         verify(memberRepository, never()).save(any());
@@ -686,7 +695,7 @@ class UserServiceTest {
                 eventId,
                 Set.of(ManagerPermission.MANAGE_EVENTS)
         ))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(UnauthorizedCompanyActionException.class)
                 .hasMessageContaining("approved owner");
 
         verify(memberRepository, never()).save(any());
@@ -752,7 +761,7 @@ class UserServiceTest {
         when(memberRepository.findById(targetId)).thenReturn(Optional.of(target));
 
         assertThatThrownBy(() -> service.appointOwner(targetId, token, companyId))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(UnauthorizedCompanyActionException.class)
                 .hasMessageContaining("approved owner");
 
         verify(memberRepository, never()).save(any());
@@ -787,7 +796,7 @@ class UserServiceTest {
         when(memberRepository.findById(owner1Id)).thenReturn(Optional.of(owner1));
 
         assertThatThrownBy(() -> service.appointOwner(owner1Id, token, companyId))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(AppointmentCycleDetectedException.class)
                 .hasMessageContaining("Appointment cycle detected");
 
         verify(memberRepository, never()).save(any());
@@ -820,7 +829,7 @@ class UserServiceTest {
         when(memberRepository.findById(targetId)).thenReturn(Optional.of(target));
 
         assertThatThrownBy(() -> service.appointOwner(targetId, token, companyId))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(AlreadyOwnerInCompanyException.class)
                 .hasMessageContaining("already an owner");
 
         verify(memberRepository, never()).save(any());
@@ -884,7 +893,7 @@ class UserServiceTest {
         when(memberRepository.findById(owner2Id)).thenReturn(Optional.of(owner2));
 
         assertThatThrownBy(() -> service.removeOwnerAppointment(token, owner2Id, companyId))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(RoleNotAssignedException.class)
                 .hasMessageContaining("No owner appointment by this owner was found");
 
         verify(memberRepository, never()).save(any());
@@ -936,7 +945,7 @@ class UserServiceTest {
         when(memberRepository.findById(founderId)).thenReturn(Optional.of(founder));
 
         assertThatThrownBy(() -> service.ownerResign(token, companyId))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(RoleNotAssignedException.class)
                 .hasMessageContaining("Member is not an owner in this company");
 
         verify(memberRepository, never()).save(any());
@@ -1017,7 +1026,7 @@ class UserServiceTest {
                 eventId,
                 Set.of(ManagerPermission.MANAGE_EVENTS, ManagerPermission.UPDATE_EVENT_MAP)
         ))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(RoleNotAssignedException.class)
                 .hasMessageContaining("No manager appointment by this owner was found");
 
         verify(memberRepository, never()).save(any());
@@ -1083,7 +1092,7 @@ class UserServiceTest {
         when(memberRepository.findById(managerId)).thenReturn(Optional.of(manager));
 
         assertThatThrownBy(() -> service.removeManagerAppointment(token, managerId, companyId, eventId))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(RoleNotAssignedException.class)
                 .hasMessageContaining("No manager appointment by this owner was found");
 
         verify(memberRepository, never()).save(any());
@@ -1133,7 +1142,7 @@ class UserServiceTest {
         when(memberRepository.findById(memberId)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.cancelMemberAccountBySystemAdmin(adminToken, memberId))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(MemberNotFoundException.class)
                 .hasMessageContaining("Member not found with id: " + memberId);
 
         verify(memberRepository, never()).deleteById(any());

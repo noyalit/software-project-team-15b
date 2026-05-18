@@ -12,6 +12,8 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 import org.springframework.test.util.ReflectionTestUtils;
 import java.util.UUID;
 import java.time.LocalDate;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.RoleNotAssignedException;
 
 class MemberTest {
 
@@ -36,14 +38,14 @@ class MemberTest {
 
     @Test
     void addRole_shouldThrowException_whenRoleIsNull() {
-        assertThrows(IllegalArgumentException.class, () -> member.addRole(null));
+        assertThrows(InvalidMemberInputException.class, () -> member.addRole(null));
     }
 
     @Test
     void switchActiveRole_shouldThrowException_whenRoleWasNotAssigned() {
         Role role = new Owner(UUID.randomUUID(), UUID.randomUUID());
 
-        assertThrows(IllegalArgumentException.class, () -> member.switchActiveRole(role));
+        assertThrows(RoleNotAssignedException.class, () -> member.switchActiveRole(role));
     }
 
     @Test
@@ -55,37 +57,37 @@ class MemberTest {
 
     @Test
     void constructor_shouldThrowException_whenUsernameIsNull() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidMemberInputException.class,
                 () -> new Member(null, "hashedPassword123", null, LocalDate.of(2000, 1, 1)));
     }
 
     @Test
     void constructor_shouldThrowException_whenUsernameIsBlank() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidMemberInputException.class,
                 () -> new Member("   ", "hashedPassword123", null, LocalDate.of(2003,3, 15)));
     }
 
     @Test
     void constructor_shouldThrowException_whenPasswordHashIsNull() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidMemberInputException.class,
                 () -> new Member("john", null, null, LocalDate.of(2003, 3, 15)));
     }
 
     @Test
     void constructor_shouldThrowException_whenPasswordHashIsBlank() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidMemberInputException.class,
                 () -> new Member("john", "   ", null, LocalDate.of(2000, 1, 1)));
     }
 
     @Test
     void constructor_shouldThrowException_whenBirthDateIsNull() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidMemberInputException.class,
                 () -> new Member("john", "hashedPassword123", null, null));
     }
 
     @Test
     void constructor_shouldThrowException_whenBirthDateIsInFuture() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidMemberInputException.class,
                 () -> new Member("john", "hashedPassword123", null, LocalDate.now().plusDays(1)));
     }
 
@@ -105,7 +107,7 @@ class MemberTest {
 
     @Test
     void setUsername_shouldThrowException_whenUsernameIsBlank() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidMemberInputException.class,
                 () -> member.setUsername(" "));
     }
 
@@ -122,13 +124,13 @@ class MemberTest {
     void setPassword_shouldThrowException_whenPasswordHashIsBlank() {
         Member member = new Member("john", "oldHash", null, LocalDate.of(2000, 1, 1));
 
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidMemberInputException.class,
                 () -> member.setPassword(" "));
     }
 
     @Test
     void setBirthDate_shouldThrowException_whenBirthDateIsInFuture() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidMemberInputException.class,
                 () -> member.setBirthDate(LocalDate.now().plusDays(1)));
     }
 
@@ -176,7 +178,7 @@ class MemberTest {
 
     @Test
     void setUsername_shouldThrowException_whenUsernameIsNull() {
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidMemberInputException.class,
                 () -> member.setUsername(null));
     }
 
@@ -184,7 +186,7 @@ class MemberTest {
     void setPassword_shouldThrowException_whenPasswordHashIsNull() {
         Member member = new Member("john", "oldHash", null, LocalDate.of(2000, 1, 1));
 
-        assertThrows(IllegalArgumentException.class,
+        assertThrows(InvalidMemberInputException.class,
                 () -> member.setPassword(null));
     }
 }

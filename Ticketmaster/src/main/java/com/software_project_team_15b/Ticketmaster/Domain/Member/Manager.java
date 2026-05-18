@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Member;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidManagerPermissionsException;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
@@ -51,7 +52,7 @@ public class Manager extends Role {
 
     public void setPermissions(Set<ManagerPermission> permissions) {
         if (permissions == null || permissions.isEmpty()) {
-            throw new IllegalArgumentException("Manager must have at least one permission");
+            throw new InvalidManagerPermissionsException("Manager must have at least one permission");
         }
 
         this.permissions.clear();

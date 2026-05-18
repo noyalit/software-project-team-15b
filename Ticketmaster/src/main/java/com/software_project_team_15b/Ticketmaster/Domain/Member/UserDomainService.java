@@ -9,6 +9,16 @@ import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyOwnerInCompanyException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AppointmentCycleDetectedException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidAppointmentStateException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidCredentialsException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidManagerPermissionsException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.MemberNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.RoleNotAssignedException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UsernameAlreadyExistsException;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 
@@ -24,7 +34,7 @@ public class UserDomainService {
     @Transactional
     public Member registerMember(String username, String passwordHash, LocalDate birthDate) {
         if (memberRepository.existsByUsername(username)) {
-            throw new IllegalArgumentException("Username already exists");
+            throw new UsernameAlreadyExistsException("Username already exists");
         }
 
         Member member = new Member(username, passwordHash, null, birthDate);
@@ -43,7 +53,7 @@ public class UserDomainService {
 
         Optional<Member> existing = memberRepository.findByUsername(newUsername);
         if (existing.isPresent() && !existing.get().getUserId().equals(userId)) {
-            throw new IllegalArgumentException("Username already exists");
+            throw new UsernameAlreadyExistsException("Username already exists");
         }
 
         member.setUsername(newUsername);
@@ -67,7 +77,7 @@ public class UserDomainService {
     @Transactional
     public Member changeRoleToManager(UUID userId, UUID eventId) {
         if (eventId == null) {
-            throw new IllegalArgumentException("Event ID cannot be null");
+            throw new InvalidMemberInputException("Event ID cannot be null");
         }
 
         Member member = getMemberOrThrow(userId);
@@ -78,7 +88,7 @@ public class UserDomainService {
                 .map(role -> (Manager) role)
                 .filter(manager -> eventId.equals(manager.getEventId()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
+                .orElseThrow(() -> new RoleNotAssignedException(
                         "Member does not have an assigned Manager role for this event"
                 ));
 
@@ -89,7 +99,7 @@ public class UserDomainService {
     @Transactional
     public Member changeRoleToOwner(UUID userId, UUID companyId) {
         if (companyId == null) {
-            throw new IllegalArgumentException("Company ID cannot be null");
+            throw new InvalidMemberInputException("Company ID cannot be null");
         }
 
         Member member = getMemberOrThrow(userId);
@@ -100,7 +110,7 @@ public class UserDomainService {
                 .filter(role -> !(role instanceof Founder))
                 .filter(role -> role.belongsToCompany(companyId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
+                .orElseThrow(() -> new RoleNotAssignedException(
                         "Member does not have an assigned Owner role for this company"
                 ));
 
@@ -111,7 +121,7 @@ public class UserDomainService {
     @Transactional
     public Member changeRoleToFounder(UUID userId, UUID companyId) {
         if (companyId == null) {
-            throw new IllegalArgumentException("Company ID cannot be null");
+            throw new InvalidMemberInputException("Company ID cannot be null");
         }
 
         Member member = getMemberOrThrow(userId);
@@ -121,7 +131,7 @@ public class UserDomainService {
                 .filter(role -> role instanceof Founder)
                 .filter(role -> role.belongsToCompany(companyId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
+                .orElseThrow(() -> new RoleNotAssignedException(
                         "Member does not have a Founder role for this company"
                 ));
 
@@ -139,7 +149,7 @@ public class UserDomainService {
     @Transactional
     public Member appointManager(UUID memberId, UUID ownerId, UUID companyId, UUID eventId, Set<ManagerPermission> permissions) {
         if (permissions == null || permissions.isEmpty()) {
-            throw new IllegalArgumentException("Manager must have at least one permission");
+            throw new InvalidManagerPermissionsException("Manager must have at least one permission");
         }
 
         Member member = getMemberOrThrow(memberId);
@@ -167,7 +177,7 @@ public class UserDomainService {
                         && role.belongsToCompany(companyId));
 
         if (alreadyOwnerInCompany) {
-            throw new IllegalArgumentException("Member is already an owner in this company");
+            throw new AlreadyOwnerInCompanyException("Member is already an owner in this company");
         }
 
         Role ownerRole = new Owner(ownerId, companyId);
@@ -199,7 +209,7 @@ public class UserDomainService {
                 .filter(role -> removerOwnerId.equals(role.getAppointedBy()))
                 .filter(role -> role.belongsToCompany(companyId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
+                .orElseThrow(() -> new RoleNotAssignedException(
                         "No owner appointment by this owner was found"
                 ));
 
@@ -220,7 +230,7 @@ public class UserDomainService {
                 .filter(role -> role.belongsToCompany(companyId))
                 .filter(role -> eventId.equals(((Manager) role).getEventId()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
+                .orElseThrow(() -> new RoleNotAssignedException(
                         "No manager appointment by this owner was found"
                 ));
 
@@ -239,7 +249,7 @@ public class UserDomainService {
                 .filter(role -> role.isAppointmentApproved())
                 .filter(role -> role.belongsToCompany(companyId))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
+                .orElseThrow(() -> new RoleNotAssignedException(
                         "Member is not an owner in this company"
                 ));
 
@@ -260,7 +270,7 @@ public class UserDomainService {
                 .filter(role -> ownerId.equals(role.getAppointedBy()))
                 .filter(role -> eventId.equals(role.getEventId()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
+                .orElseThrow(() -> new RoleNotAssignedException(
                         "No manager appointment by this owner was found"
                 ));
 
@@ -281,7 +291,7 @@ public class UserDomainService {
                 .filter(role -> ownerId.equals(role.getAppointedBy()))
                 .filter(role -> eventId.equals(role.getEventId()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
+                .orElseThrow(() -> new RoleNotAssignedException(
                         "No manager appointment by this owner was found"
                 ));
 
@@ -289,47 +299,27 @@ public class UserDomainService {
     }
 
     @Transactional(readOnly = true)
-    public boolean hasManagerPermission(
-            UUID eventId,
-            UUID managerId,
-            ManagerPermission required
-    ) {
+    public boolean hasManagerPermission(UUID managerId, UUID eventId, ManagerPermission required) {
         if (eventId == null) {
-            throw new IllegalArgumentException("Event ID cannot be null");
+            throw new InvalidMemberInputException("Event ID cannot be null");
         }
 
         if (managerId == null) {
-            throw new IllegalArgumentException("Manager ID cannot be null");
+            throw new InvalidMemberInputException("Manager ID cannot be null");
         }
 
         if (required == null) {
-            throw new IllegalArgumentException("Required permission cannot be null");
+            throw new InvalidMemberInputException("Required permission cannot be null");
         }
 
         Member member = getMemberOrThrow(managerId);
 
-        Manager managerRole = member.getAssignedRoles()
+        return member.getAssignedRoles()
                 .stream()
                 .filter(role -> role instanceof Manager)
                 .map(role -> (Manager) role)
                 .filter(role -> eventId.equals(role.getEventId()))
-                .findFirst()
-                .orElseThrow(() -> new PolicyViolationException(
-                        "Member is not a manager for this event. " +
-                        "managerId=" + managerId +
-                        ", eventId=" + eventId
-                ));
-
-        if (!managerRole.hasPermission(required)) {
-            throw new PolicyViolationException(
-                    "Manager does not have required permission. " +
-                    "managerId=" + managerId +
-                    ", eventId=" + eventId +
-                    ", permission=" + required
-            );
-        }
-
-        return true;
+                .anyMatch(managerRole -> managerRole.hasPermission(required));
     }
 
     @Transactional
@@ -337,7 +327,7 @@ public class UserDomainService {
         Member member = getMemberOrThrow(userId);
 
         if (member.getActiveRole() == null) {
-            throw new IllegalStateException("Regular member has no appointment to approve");
+            throw new InvalidAppointmentStateException("Regular member has no appointment to approve");
         }
 
         member.getActiveRole().approveAppointment();
@@ -347,11 +337,11 @@ public class UserDomainService {
     @Transactional
     public boolean cancelMemberAccount(UUID memberIdToCancel) {
         if (memberIdToCancel == null) {
-            throw new IllegalArgumentException("Member ID cannot be null");
+            throw new InvalidMemberInputException("Member ID cannot be null");
         }
 
         memberRepository.findById(memberIdToCancel)
-                .orElseThrow(() -> new IllegalArgumentException(
+                .orElseThrow(() -> new MemberNotFoundException(
                         "Member not found with id: " + memberIdToCancel
                 ));
 
@@ -397,10 +387,10 @@ public class UserDomainService {
 
    private Member getMemberOrThrow(UUID userId) {
         if (userId == null) {
-            throw new IllegalArgumentException("User ID cannot be null");
+            throw new InvalidMemberInputException("User ID cannot be null");
         }
         return memberRepository.findById(userId)
-                .orElseThrow(() -> new IllegalArgumentException("Member not found with id: " + userId));
+                .orElseThrow(() -> new MemberNotFoundException("Member not found with id: " + userId));
     }
 
     private void validateOwnerAppointer(UUID appointedByUserId) {
@@ -411,7 +401,7 @@ public class UserDomainService {
                         && role.isAppointmentApproved());
 
         if (!isApprovedOwner) {
-            throw new IllegalArgumentException("Only an approved owner can perform this action");
+            throw new UnauthorizedCompanyActionException("Only an approved owner can perform this action");
         }
     }
 
@@ -425,22 +415,22 @@ public class UserDomainService {
                         && role.belongsToCompany(companyId));
 
         if (!isApprovedOwnerInCompany) {
-            throw new IllegalArgumentException("Only an approved owner of this company can perform this action");
+            throw new UnauthorizedCompanyActionException("Only an approved owner of this company can perform this action");
         }
     }
 
     private void validateNoAppointmentCycle(Member member, UUID appointedById, UUID companyId) {
         if (member == null) {
-            throw new IllegalArgumentException("Member cannot be null");
+            throw new InvalidMemberInputException("Member cannot be null");
         }
         if (appointedById == null) {
-            throw new IllegalArgumentException("Appointer ID cannot be null");
+            throw new InvalidMemberInputException("Appointer ID cannot be null");
         }
         if (companyId == null) {
-            throw new IllegalArgumentException("Company ID cannot be null");
+            throw new InvalidMemberInputException("Company ID cannot be null");
         }
         if (member.getUserId().equals(appointedById)) {
-            throw new IllegalArgumentException("Member cannot be appointed by themselves");
+            throw new InvalidMemberInputException("Member cannot be appointed by themselves");
         }
         UUID currentId = appointedById;
 
@@ -461,7 +451,7 @@ public class UserDomainService {
             }
 
             if (nextAppointerId.equals(member.getUserId())) {
-                throw new IllegalArgumentException("Appointment cycle detected");
+                throw new AppointmentCycleDetectedException("Appointment cycle detected");
             }
 
             currentId = nextAppointerId;
@@ -470,16 +460,16 @@ public class UserDomainService {
 
     private void validateRawPassword(String password) {
         if (password == null || password.isBlank()) {
-            throw new IllegalArgumentException("Password cannot be null or empty");
+            throw new InvalidMemberInputException("Password cannot be null or empty");
         }
 
         if (password.length() < 8) {
-            throw new IllegalArgumentException("Password must be at least 8 characters long");
+            throw new InvalidMemberInputException("Password must be at least 8 characters long");
         }
 
         String regex = "^(?=.*[A-Z])(?=.*\\d).+$";
         if (!password.matches(regex)) {
-            throw new IllegalArgumentException(
+            throw new InvalidMemberInputException(
                     "Password must contain at least one uppercase letter and one number"
             );
         }
@@ -488,7 +478,7 @@ public class UserDomainService {
     @Transactional(readOnly = true)
     public List<UUID> getAppointedMembersTree(UUID memberId, UUID companyId) {
         if (companyId == null) {
-            throw new IllegalArgumentException("Company ID cannot be null");
+            throw new InvalidMemberInputException("Company ID cannot be null");
         }
 
         Member root = getMemberOrThrow(memberId);
@@ -502,7 +492,7 @@ public class UserDomainService {
                 );
 
         if (!hasRoleInCompany) {
-            throw new IllegalArgumentException("Member does not have an approved role in this company");
+            throw new UnauthorizedCompanyActionException("Member does not have an approved role in this company");
         }
 
         List<UUID> result = new java.util.ArrayList<>();
@@ -540,12 +530,12 @@ public class UserDomainService {
     public Member getMemberByUsername(String username) {
         return memberRepository.findByUsername(username)
                 .orElseThrow(() ->
-                        new IllegalArgumentException("Invalid username or password"));
+                        new InvalidCredentialsException("Invalid username or password"));
     }
 
     public MemberDTO toDTO(Member member) {
         if (member == null) {
-            throw new IllegalArgumentException("Member cannot be null");
+            throw new InvalidMemberInputException("Member cannot be null");
         }
 
         String activeRole = member.getActiveRole() == null
