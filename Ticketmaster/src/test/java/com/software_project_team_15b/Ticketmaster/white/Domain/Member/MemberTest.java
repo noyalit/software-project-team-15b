@@ -1,8 +1,13 @@
-package com.software_project_team_15b.Ticketmaster.Domain.Member;
+package com.software_project_team_15b.Ticketmaster.white.Domain.Member;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
+
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 
 import org.springframework.test.util.ReflectionTestUtils;
 import java.util.UUID;
@@ -10,26 +15,32 @@ import java.time.LocalDate;
 
 class MemberTest {
 
+    private static final String USERNAME = "john";
+    private static final String PASSWORD_HASH = "hashedPassword123";
+    private static final LocalDate BIRTH_DATE = LocalDate.of(2000, 1, 1);
+
+    private Member member;
+
+    @BeforeEach
+    void setUp() {
+        member = new Member(USERNAME, PASSWORD_HASH, null, BIRTH_DATE);
+    }
+
     @Test
     void constructor_shouldCreateMember_whenValidDataGiven() {
-        Member member = new Member("john", "hashedPassword123", null, LocalDate.of(2000, 1, 1));
-
         assertNotNull(member.getUserId());
-        assertEquals("john", member.getUsername());
-        assertEquals("hashedPassword123", member.getPasswordHash());
+        assertEquals(USERNAME, member.getUsername());
+        assertEquals(PASSWORD_HASH, member.getPasswordHash());
         assertNull(member.getRole());
     }
 
     @Test
     void addRole_shouldThrowException_whenRoleIsNull() {
-        Member member = new Member("john", "hashedPassword123", null, LocalDate.of(2000, 1, 1));
-
         assertThrows(IllegalArgumentException.class, () -> member.addRole(null));
     }
 
     @Test
     void switchActiveRole_shouldThrowException_whenRoleWasNotAssigned() {
-        Member member = new Member("john", "hashedPassword123", null, LocalDate.of(2000, 1, 1));
         Role role = new Owner(UUID.randomUUID(), UUID.randomUUID());
 
         assertThrows(IllegalArgumentException.class, () -> member.switchActiveRole(role));
@@ -37,9 +48,9 @@ class MemberTest {
 
     @Test
     void constructor_shouldTrimUsername() {
-        Member member = new Member("  john  ", "hashedPassword123", null, LocalDate.of(2000, 1, 1));
+        Member member = new Member("  " + USERNAME + "  ", PASSWORD_HASH, null, BIRTH_DATE);
 
-        assertEquals("john", member.getUsername());
+        assertEquals(USERNAME, member.getUsername());
     }
 
     @Test
@@ -80,8 +91,6 @@ class MemberTest {
 
     @Test
     void setUsername_shouldUpdateUsername_whenValid() {
-        Member member = new Member("john", "hashedPassword123", null, LocalDate.of(2000, 1, 1));
-
         member.setUsername("david");
 
         assertEquals("david", member.getUsername());
@@ -89,8 +98,6 @@ class MemberTest {
 
     @Test
     void setUsername_shouldTrimUsername() {
-        Member member = new Member("john", "hashedPassword123", null, LocalDate.of(2000, 1, 1));
-
         member.setUsername("  david  ");
 
         assertEquals("david", member.getUsername());
@@ -98,8 +105,6 @@ class MemberTest {
 
     @Test
     void setUsername_shouldThrowException_whenUsernameIsBlank() {
-        Member member = new Member("john", "hashedPassword123", null, LocalDate.of(2000, 1, 1));
-
         assertThrows(IllegalArgumentException.class,
                 () -> member.setUsername(" "));
     }
@@ -123,16 +128,12 @@ class MemberTest {
 
     @Test
     void setBirthDate_shouldThrowException_whenBirthDateIsInFuture() {
-        Member member = new Member("john", "hashedPassword123", null, LocalDate.of(2000, 1, 1));
-
         assertThrows(IllegalArgumentException.class,
                 () -> member.setBirthDate(LocalDate.now().plusDays(1)));
     }
 
     @Test
     void setRole_shouldAllowNullRole_forRegularMember() {
-        Member member = new Member("john", "hashedPassword123", null, LocalDate.of(2000, 1, 1));
-
         member.setRole(null);
 
         assertNull(member.getRole());
@@ -140,8 +141,6 @@ class MemberTest {
 
     @Test
     void equals_shouldReturnTrue_forSameObject() {
-        Member member = new Member("john", "hashedPassword123", null, LocalDate.of(2000, 1, 1));
-
         assertEquals(member, member);
     }
 
@@ -155,8 +154,6 @@ class MemberTest {
 
     @Test
     void hashCode_shouldBeStable() {
-        Member member = new Member("john", "hashedPassword123", null, LocalDate.of(2000, 1, 1));
-
         int hash1 = member.hashCode();
         int hash2 = member.hashCode();
 
@@ -167,7 +164,7 @@ class MemberTest {
     void equals_shouldReturnTrue_whenMembersHaveSameUserId() {
         UUID sameUserId = UUID.randomUUID();
 
-        Member member1 = new Member("john", "hashedPassword123", null, LocalDate.of(2000, 1, 1));
+        Member member1 = new Member(USERNAME, PASSWORD_HASH, null, BIRTH_DATE);
         Member member2 = new Member("david", "hashedPassword456", null, LocalDate.of(2000, 1, 1));
 
         ReflectionTestUtils.setField(member1, "userId", sameUserId);
@@ -179,8 +176,6 @@ class MemberTest {
 
     @Test
     void setUsername_shouldThrowException_whenUsernameIsNull() {
-        Member member = new Member("john", "hashedPassword123", null, LocalDate.of(2000, 1, 1));
-
         assertThrows(IllegalArgumentException.class,
                 () -> member.setUsername(null));
     }

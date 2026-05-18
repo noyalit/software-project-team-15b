@@ -85,19 +85,19 @@ class EventOrderFlowE2ETest {
         String sfx = n + "_" + System.nanoTime();
 
         String founderUser = "ord_founder_" + sfx;
-        com.software_project_team_15b.Ticketmaster.Domain.Member.Member mFounder = userService.registerMember(userService.enterAsGuest(), founderUser, "Password1", LocalDate.of(1985, 1, 1));
+        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO mFounder = userService.registerMember(userService.enterAsGuest(), founderUser, "Password1", LocalDate.of(1985, 1, 1));
         founderToken = userService.login(userService.enterAsGuest(), founderUser, "Password1");
         founderId = mFounder.getUserId();
 
         Company company = companyService.createCompany(founderToken, "OrdTestCo_" + n);
         companyId = company.getId();
-        userService.changeRoleToFounder(founderToken);
+        userService.changeRoleToFounder(founderToken, companyId);
 
         mgrWrongPermId = registerAndApproveManager("ord_mgr_wp_" + sfx, founderToken,
                 company.getId(), Set.of(ManagerPermission.HANDLE_INQUIRIES));
 
         String unauthUser = "ord_unauth_" + sfx;
-        com.software_project_team_15b.Ticketmaster.Domain.Member.Member mUnauth = userService.registerMember(userService.enterAsGuest(), unauthUser, "Password1", LocalDate.of(1990, 1, 1));
+        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO mUnauth = userService.registerMember(userService.enterAsGuest(), unauthUser, "Password1", LocalDate.of(1990, 1, 1));
         unauthorizedId = mUnauth.getUserId();
     }
 
@@ -521,11 +521,13 @@ class EventOrderFlowE2ETest {
 
     private UUID registerAndApproveManager(String username, String founderToken,
                                             UUID companyId, Set<ManagerPermission> perms) {
-        com.software_project_team_15b.Ticketmaster.Domain.Member.Member m = userService.registerMember(userService.enterAsGuest(), username, "Password1", LocalDate.of(1990, 1, 1));
+        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO m = userService.registerMember(userService.enterAsGuest(), username, "Password1", LocalDate.of(1990, 1, 1));
         String token = userService.login(userService.enterAsGuest(), username, "Password1");
         UUID id = m.getUserId();
-        companyService.addManager(founderToken, companyId, id, perms);
-        userService.changeRoleToManager(token);
+
+        UUID eventId = UUID.randomUUID();
+        companyService.addManager(founderToken, companyId, eventId, id, perms);
+        userService.changeRoleToManager(token, eventId);
         userService.approveAppointment(token);
         return id;
     }

@@ -19,7 +19,7 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaym
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
-import com.software_project_team_15b.Ticketmaster.Application.UserService;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
@@ -43,7 +43,7 @@ public class OrderHistoryService implements EventSubscriber{
     private final IEventRepository eventsRepository;
     private final ICompanyRepository companyRepository;
     private final IAuth auth;
-    private final UserService userService;
+    private final UserDomainService userDomainService;
 
 
     public OrderHistoryService(IOrderHistoryRepository orderHistoryRepository,
@@ -53,14 +53,14 @@ public class OrderHistoryService implements EventSubscriber{
                                IEventRepository eventsRepository,
                                ICompanyRepository companyRepository,
                                IAuth auth,
-                               UserService userService) {
+                               UserDomainService userDomainService) {
         this.orderHistoryRepository = orderHistoryRepository;
         this.paymentGateway = paymentGateway;
         this.ticketProvider = ticketProvider;
         this.eventsRepository = eventsRepository;
         this.companyRepository = companyRepository;
         this.auth = auth;
-        this.userService = userService;
+        this.userDomainService = userDomainService;
         eventCancelManager.subscribe(this);
     }
 
@@ -144,8 +144,10 @@ public class OrderHistoryService implements EventSubscriber{
             throw new UnauthorizedCompanyActionException("Only the company founder or owner can view sold tickets");
         }
         
-        List<UUID> appointedMembers = userService.getAppointedMembersTree(callerId, companyId);
-        List<UUID> visibleManagers = new ArrayList<>(appointedMembers);
+        List<UUID> appointedMembers = userDomainService.getAppointedMembersTree(callerId, companyId);
+        List<UUID> visibleManagers = appointedMembers.contains(callerId)
+                ? appointedMembers
+                : new ArrayList<>(appointedMembers);
         if (!visibleManagers.contains(callerId)) {
             visibleManagers.add(callerId);
         }

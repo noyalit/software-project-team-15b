@@ -12,6 +12,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import java.lang.reflect.Field;
+
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
@@ -218,6 +220,22 @@ class CompanyTest {
     void removeOwner_throws_when_member_is_not_owner() {
         Company c = new Company("Acme", UUID.randomUUID());
         assertThrows(IllegalArgumentException.class, () -> c.removeOwner(UUID.randomUUID()));
+    }
+
+    @Test
+    void removeOwner_throws_when_removing_the_last_owner() throws Exception {
+        UUID founderId = UUID.randomUUID();
+        UUID coOwnerId = UUID.randomUUID();
+        Company c = new Company("Acme", founderId);
+        c.addOwner(coOwnerId);
+        // Strip the founder out so coOwnerId becomes the sole owner, exercising the last-owner guard
+        Field ownerIdsField = Company.class.getDeclaredField("ownerIds");
+        ownerIdsField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Set<UUID> owners = (Set<UUID>) ownerIdsField.get(c);
+        owners.remove(founderId);
+
+        assertThrows(IllegalStateException.class, () -> c.removeOwner(coOwnerId));
     }
 
     // ==============================================================================================================

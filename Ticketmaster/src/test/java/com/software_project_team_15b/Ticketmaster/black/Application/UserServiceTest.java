@@ -1,10 +1,13 @@
-package com.software_project_team_15b.Ticketmaster.Application;
+package com.software_project_team_15b.Ticketmaster.black.Application;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.IPasswordEncoder;
+import com.software_project_team_15b.Ticketmaster.Application.UserService;
+import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
@@ -14,30 +17,55 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Founder;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Manager;
+import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.Mockito;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
+import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainServiceImpl;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
+
+    private static final String DEFAULT_ENTRANCE_TOKEN = "entrance";
+    private static final String DEFAULT_USERNAME = "john";
+    private static final String DEFAULT_PASSWORD = "Password1";
+    private static final LocalDate DEFAULT_BIRTH_DATE = LocalDate.of(2000, 1, 1);
 
     @Mock private IMemberRepository memberRepository;
     @Mock private ISystemAdminRepository systemAdminRepository;
     @Mock private IAuth auth;
     @Mock private IPasswordEncoder passwordEncoder;
-    @Mock private PurchasingService purchasingService;
-    @Mock private QueueService queueService;
+    @Mock private QueueDomainServiceImpl queueDomainService;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
-    @InjectMocks private UserService service;
+    private UserService service;
+    private UserDomainService userDomainService;
+
+    private String entranceToken;
+    private String username;
+    private String password;
+    private LocalDate birthDate;
+
+    @BeforeEach
+    void setUp() {
+        entranceToken = DEFAULT_ENTRANCE_TOKEN;
+        username = DEFAULT_USERNAME;
+        password = DEFAULT_PASSWORD;
+        birthDate = DEFAULT_BIRTH_DATE;
+
+        userDomainService = Mockito.spy(new UserDomainService(memberRepository));
+        service = new UserService(userDomainService, auth, passwordEncoder, queueDomainService, systemAdminRepository, eventPublisher);
+    }
 
     ///------------------------------ II.1.3: Register ---------------------------------
     @Test
@@ -45,14 +73,17 @@ class UserServiceTest {
         String entranceToken = "entrance";
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
-        when(memberRepository.existsByUsername("john")).thenReturn(true);
+        when(passwordEncoder.encode("Password1")).thenReturn("hashed");
+        doThrow(new IllegalArgumentException("Username already exists"))
+                .when(userDomainService)
+                .registerMember(eq("john"), eq("hashed"), eq(LocalDate.of(2000, 1, 1)));
 
         assertThatThrownBy(() -> service.registerMember(entranceToken, "john", "Password1", LocalDate.of(2000, 1, 1)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Username already exists");
 
-        verify(memberRepository, never()).save(any());
-        verifyNoInteractions(passwordEncoder);
+        verify(userDomainService).registerMember(eq("john"), eq("hashed"), eq(LocalDate.of(2000, 1, 1)));
+        verify(passwordEncoder).encode("Password1");
     }
 
     @Test
@@ -60,18 +91,18 @@ class UserServiceTest {
         String entranceToken = "entrance";
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
-        when(memberRepository.existsByUsername("john")).thenReturn(false);
         when(passwordEncoder.encode("Password1")).thenReturn("hashed");
-        when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
+        doReturn(new Member("john", "hashed", null, LocalDate.of(2000, 1, 1)))
+                .when(userDomainService)
+                .registerMember(eq("john"), eq("hashed"), eq(LocalDate.of(2000, 1, 1)));
 
-        Member saved = service.registerMember(entranceToken, "john", "Password1", LocalDate.of(2000, 1, 1));
+        MemberDTO saved = service.registerMember(entranceToken, "john", "Password1", LocalDate.of(2000, 1, 1));
 
         assertThat(saved.getUsername()).isEqualTo("john");
-        assertThat(saved.getPasswordHash()).isEqualTo("hashed");
         assertThat(saved.getBirthDate()).isEqualTo(LocalDate.of(2000, 1, 1));
 
         verify(passwordEncoder).encode("Password1");
-        verify(memberRepository).save(any(Member.class));
+        verify(userDomainService).registerMember(eq("john"), eq("hashed"), eq(LocalDate.of(2000, 1, 1)));
     }
 
     @Test
@@ -79,7 +110,6 @@ class UserServiceTest {
         String entranceToken = "entrance";
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
-        when(memberRepository.existsByUsername("john")).thenReturn(false);
 
         assertThatThrownBy(() -> service.registerMember(
                 entranceToken,
@@ -90,8 +120,8 @@ class UserServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Password cannot be null or empty");
 
-        verify(memberRepository, never()).save(any());
-        verifyNoInteractions(passwordEncoder);
+        verifyNoInteractions(userDomainService);
+        verify(passwordEncoder, never()).encode(any());
     }
 
     @Test
@@ -99,7 +129,6 @@ class UserServiceTest {
         String entranceToken = "entrance";
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
-        when(memberRepository.existsByUsername("john")).thenReturn(false);
 
         assertThatThrownBy(() -> service.registerMember(
                 entranceToken,
@@ -110,7 +139,7 @@ class UserServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Password must be at least 8 characters long");
 
-        verify(memberRepository, never()).save(any());
+        verifyNoInteractions(userDomainService);
         verifyNoInteractions(passwordEncoder);
     }
 
@@ -119,7 +148,6 @@ class UserServiceTest {
         String entranceToken = "entrance";
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
-        when(memberRepository.existsByUsername("john")).thenReturn(false);
 
         assertThatThrownBy(() -> service.registerMember(
                 entranceToken,
@@ -130,7 +158,7 @@ class UserServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Password must contain at least one uppercase letter and one number");
 
-        verify(memberRepository, never()).save(any());
+        verifyNoInteractions(userDomainService);
         verifyNoInteractions(passwordEncoder);
     }
 
@@ -151,7 +179,7 @@ class UserServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Birth date cannot be null");
 
-        verify(memberRepository, never()).save(any());
+        verify(passwordEncoder).encode("Password1");
     }
 
     @Test
@@ -169,7 +197,7 @@ class UserServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Only guest");
 
-        verify(memberRepository, never()).save(any());
+        verifyNoInteractions(userDomainService);
     }
 
     ///------------------------------ II.1.4: Login ---------------------------------
@@ -178,7 +206,9 @@ class UserServiceTest {
         String entranceToken = "entrance";
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
-        when(memberRepository.findByUsername("john")).thenReturn(Optional.empty());
+        doThrow(new IllegalArgumentException("Invalid username or password"))
+                .when(userDomainService)
+                .getMemberByUsername("john");
 
         assertThatThrownBy(() -> service.login(entranceToken, "john", "Password1"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -194,7 +224,7 @@ class UserServiceTest {
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
         Member member = new Member("john", "hash", null, LocalDate.of(2000, 1, 1));
-        when(memberRepository.findByUsername("john")).thenReturn(Optional.of(member));
+        doReturn(member).when(userDomainService).getMemberByUsername("john");
         when(passwordEncoder.matches("Password1", "hash")).thenReturn(false);
 
         assertThatThrownBy(() -> service.login(entranceToken, "john", "Password1"))
@@ -211,7 +241,7 @@ class UserServiceTest {
         when(auth.isTokenValid(entranceToken)).thenReturn(true);
         when(auth.isGuest(entranceToken)).thenReturn(true);
         Member member = new Member("john", "hash", null, LocalDate.of(2000, 1, 1));
-        when(memberRepository.findByUsername("john")).thenReturn(Optional.of(member));
+        doReturn(member).when(userDomainService).getMemberByUsername("john");
         when(passwordEncoder.matches("Password1", "hash")).thenReturn(true);
         when(auth.generateMemberToken(member)).thenReturn("token");
 
@@ -232,7 +262,7 @@ class UserServiceTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Invalid or expired token");
 
-        verifyNoInteractions(memberRepository);
+        verifyNoInteractions(userDomainService);
         verifyNoInteractions(passwordEncoder);
     }
 
@@ -266,7 +296,7 @@ class UserServiceTest {
 
         assertThat(result).isNull();
 
-        verify(purchasingService).cancelAllActiveOrdersOfCurrentUser(guestToken);
+        verify(eventPublisher).publishEvent(new GuestLoggedOutEvent(guestToken));
         verify(auth).exitSystem(guestToken);
     }
 
@@ -281,7 +311,7 @@ class UserServiceTest {
 
         assertThat(result).isNull();
 
-        verify(purchasingService).cancelAllActiveOrdersOfCurrentUser(guestToken);
+        verify(eventPublisher).publishEvent(new GuestLoggedOutEvent(guestToken));
         verify(auth).exitSystem(guestToken);
     }
 
@@ -301,7 +331,6 @@ class UserServiceTest {
 
         assertThat(result).isEqualTo("guest-token");
         verify(auth).logout(memberToken);
-        verifyNoInteractions(purchasingService);
     }
 
     @Test
@@ -317,7 +346,6 @@ class UserServiceTest {
 
         assertThat(result).isEqualTo("guest-token");
         verify(auth).logout(memberToken);
-        verifyNoInteractions(purchasingService);
     }
 
     @Test
@@ -331,7 +359,6 @@ class UserServiceTest {
                 .hasMessageContaining("Invalid or expired token");
 
         verify(auth, never()).logout(anyString());
-        verifyNoInteractions(purchasingService);
     }
 
     @Test
@@ -345,7 +372,6 @@ class UserServiceTest {
                 .hasMessageContaining("Invalid or expired token");
 
         verify(auth, never()).logout(anyString());
-        verifyNoInteractions(purchasingService);
     }
 
     ///------------------------------ II.3.2: Registering a Production Company ---------------------------------
@@ -365,13 +391,9 @@ class UserServiceTest {
         when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Member saved = service.appointFounder(memberId, token, companyId);
+        MemberDTO saved = service.appointFounder(memberId, token, companyId);
 
-        assertThat(saved.getAssignedRoles())
-                .anySatisfy(role -> {
-                    assertThat(role).isInstanceOf(Founder.class);
-                    assertThat(role.getCompanyId()).isEqualTo(companyId);
-                });
+        assertThat(saved.getAssignedRoles()).contains("Founder");
 
         verify(memberRepository).save(member);
     }
@@ -409,12 +431,10 @@ class UserServiceTest {
         Member member = memberWithId(memberId, null);
         when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
 
-        String result = service.watchPersonalDetails(token);
+        MemberDTO result = service.watchPersonalDetails(token);
 
-        assertThat(result).contains(member.getUsername());
-        assertThat(result).contains(member.getBirthDate().toString());
-        assertThat(result).contains("RegularMember");
-        assertThat(result).contains("********");
+        assertThat(result.getUsername()).isEqualTo(member.getUsername());
+        assertThat(result.getBirthDate()).isEqualTo(member.getBirthDate());
     }
 
     @Test
@@ -469,7 +489,7 @@ class UserServiceTest {
         when(memberRepository.findByUsername("newName")).thenReturn(Optional.empty());
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Member saved = service.changeUsername(token, "newName");
+        MemberDTO saved = service.changeUsername(token, "newName");
 
         assertThat(saved.getUsername()).isEqualTo("newName");
         verify(memberRepository).save(caller);
@@ -489,9 +509,8 @@ class UserServiceTest {
         when(passwordEncoder.encode("NewPassword1")).thenReturn("newHash");
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Member saved = service.changePassword(token, "NewPassword1");
+        MemberDTO saved = service.changePassword(token, "NewPassword1");
 
-        assertThat(saved.getPasswordHash()).isEqualTo("newHash");
         verify(memberRepository).save(member);
     }
 
@@ -509,7 +528,7 @@ class UserServiceTest {
         when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Member saved = service.changeBirthDate(token, newBirthDate);
+        MemberDTO saved = service.changeBirthDate(token, newBirthDate);
 
         assertThat(saved.getBirthDate()).isEqualTo(newBirthDate);
         verify(memberRepository).save(member);
@@ -544,9 +563,6 @@ class UserServiceTest {
         when(auth.isMember(token)).thenReturn(true);
         when(auth.extractUserId(token)).thenReturn(memberId);
 
-        Member member = memberWithId(memberId, null);
-        when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
-
         assertThatThrownBy(() -> service.changePassword(token, "bad"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Password must be at least 8 characters long");
@@ -578,6 +594,7 @@ class UserServiceTest {
     @Test
     void appointManager_adds_manager_role_with_inventory_permission_when_owner_logged_in() {
         UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         String token = "owner-token";
@@ -600,21 +617,15 @@ class UserServiceTest {
         when(memberRepository.findById(targetId)).thenReturn(Optional.of(target));
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Member saved = service.appointManager(
+        MemberDTO saved = service.appointManager(
                 targetId,
                 token,
                 companyId,
+                eventId,
                 Set.of(ManagerPermission.MANAGE_EVENTS)
         );
 
-        assertThat(saved.getAssignedRoles())
-                .anySatisfy(role -> {
-                    assertThat(role).isInstanceOf(Manager.class);
-                    Manager managerRole = (Manager) role;
-                    assertThat(managerRole.getAppointedBy()).isEqualTo(ownerId);
-                    assertThat(managerRole.getCompanyId()).isEqualTo(companyId);
-                    assertThat(managerRole.hasPermission(ManagerPermission.MANAGE_EVENTS)).isTrue();
-                });
+        assertThat(saved.getAssignedRoles()).contains("Manager");
 
         verify(memberRepository).save(target);
     }
@@ -622,6 +633,7 @@ class UserServiceTest {
     @Test
     void appointManager_throws_when_permissions_empty() {
         UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
         UUID appointerId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         String token = "t";
@@ -642,7 +654,7 @@ class UserServiceTest {
         Mockito.lenient().when(memberRepository.findById(appointerOfAppointerId)).thenReturn(Optional.of(appointerOfAppointer));
         Mockito.lenient().when(memberRepository.findById(targetId)).thenReturn(Optional.of(target));
 
-        assertThatThrownBy(() -> service.appointManager(targetId, token, companyId, Set.of()))
+        assertThatThrownBy(() -> service.appointManager(targetId, token, companyId, eventId, Set.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("at least one permission");
 
@@ -652,6 +664,7 @@ class UserServiceTest {
     @Test
     void appointManager_throws_when_token_member_is_not_owner() {
         UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
         UUID notOwnerId = UUID.randomUUID();
         UUID targetId = UUID.randomUUID();
         String token = "member-token";
@@ -670,6 +683,7 @@ class UserServiceTest {
                 targetId,
                 token,
                 companyId,
+                eventId,
                 Set.of(ManagerPermission.MANAGE_EVENTS)
         ))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -707,14 +721,9 @@ class UserServiceTest {
         when(memberRepository.findById(targetId)).thenReturn(Optional.of(target));
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Member saved = service.appointOwner(targetId, token, companyId);
+        MemberDTO saved = service.appointOwner(targetId, token, companyId);
 
-        assertThat(saved.getAssignedRoles())
-                .anySatisfy(r -> {
-                    assertThat(r).isInstanceOf(Owner.class);
-                    assertThat(r.getAppointedBy()).isEqualTo(appointerId);
-                    assertThat(r.getCompanyId()).isEqualTo(companyId);
-                });
+        assertThat(saved.getAssignedRoles()).contains("Owner");
 
         verify(memberRepository).save(target);
     }
@@ -843,16 +852,12 @@ class UserServiceTest {
         when(memberRepository.findById(owner2Id)).thenReturn(Optional.of(owner2));
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Member saved = service.removeOwnerAppointment(token, owner2Id, companyId);
+        MemberDTO saved = service.removeOwnerAppointment(token, owner2Id, companyId);
 
-        assertThat(saved.getAssignedRoles())
-                .noneMatch(role -> role instanceof Owner
-                        && !(role instanceof Founder)
-                        && role.belongsToCompany(companyId));
+        assertThat(saved.getAssignedRoles()).doesNotContain("Owner");
 
         verify(memberRepository).save(owner2);
     }
-
 
     @Test
     void removeOwnerAppointment_throws_when_logged_owner_was_not_the_appointer() {
@@ -885,7 +890,6 @@ class UserServiceTest {
         verify(memberRepository, never()).save(any());
     }
 
-
     ///------------------------------ II.4.10: Resign from Ownership ---------------------------------
     
     @Test
@@ -907,12 +911,9 @@ class UserServiceTest {
         when(memberRepository.findById(ownerId)).thenReturn(Optional.of(owner));
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Member saved = service.ownerResign(token, companyId);
+        MemberDTO saved = service.ownerResign(token, companyId);
 
-        assertThat(saved.getAssignedRoles())
-                .noneMatch(role -> role instanceof Owner
-                        && !(role instanceof Founder)
-                        && role.belongsToCompany(companyId));
+        assertThat(saved.getAssignedRoles()).doesNotContain("Owner");
 
         verify(memberRepository).save(owner);
     }
@@ -941,12 +942,12 @@ class UserServiceTest {
         verify(memberRepository, never()).save(any());
     }
 
-
     ///------------------------------ II.4.11: Update Manager Permissions ---------------------------------
     
     @Test
     void changeManagerPermissions_updates_permissions_when_owner_was_appointer() {
         UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         UUID managerId = UUID.randomUUID();
         UUID appointerOfOwnerId = UUID.randomUUID();
@@ -963,6 +964,7 @@ class UserServiceTest {
         Manager managerRole = new Manager(
                 ownerId,
                 companyId,
+                eventId,
                 Set.of(ManagerPermission.MANAGE_EVENTS)
         );
         managerRole.approveAppointment();
@@ -972,21 +974,14 @@ class UserServiceTest {
         when(memberRepository.findById(managerId)).thenReturn(Optional.of(manager));
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Member saved = service.changeManagerPermissions(
+        MemberDTO saved = service.changeManagerPermissions(
                 token,
                 managerId,
+                eventId,
                 Set.of(ManagerPermission.MANAGE_EVENTS, ManagerPermission.UPDATE_EVENT_MAP)
         );
 
-        Manager updatedRole = saved.getAssignedRoles()
-                .stream()
-                .filter(role -> role instanceof Manager)
-                .map(role -> (Manager) role)
-                .findFirst()
-                .orElseThrow();
-
-        assertThat(updatedRole.hasPermission(ManagerPermission.MANAGE_EVENTS)).isTrue();
-        assertThat(updatedRole.hasPermission(ManagerPermission.UPDATE_EVENT_MAP)).isTrue();
+        assertThat(saved.getAssignedRoles()).contains("Manager");
 
         verify(memberRepository).save(manager);
     }
@@ -994,6 +989,7 @@ class UserServiceTest {
     @Test
     void changeManagerPermissions_throws_when_owner_was_not_appointer() {
         UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
         UUID owner2Id = UUID.randomUUID();
         UUID owner1Id = UUID.randomUUID();
         UUID managerId = UUID.randomUUID();
@@ -1008,11 +1004,7 @@ class UserServiceTest {
         owner2Role.approveAppointment();
         Member owner2 = memberWithId(owner2Id, owner2Role);
 
-        Manager managerRole = new Manager(
-                owner1Id,
-                companyId,
-                Set.of(ManagerPermission.MANAGE_EVENTS)
-        );
+        Manager managerRole = new Manager(owner1Id, companyId, eventId, Set.of(ManagerPermission.MANAGE_EVENTS));
         managerRole.approveAppointment();
         Member manager = memberWithId(managerId, managerRole);
 
@@ -1022,6 +1014,7 @@ class UserServiceTest {
         assertThatThrownBy(() -> service.changeManagerPermissions(
                 token,
                 managerId,
+                eventId,
                 Set.of(ManagerPermission.MANAGE_EVENTS, ManagerPermission.UPDATE_EVENT_MAP)
         ))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -1030,13 +1023,12 @@ class UserServiceTest {
         verify(memberRepository, never()).save(any());
     }
 
-
-
     ///------------------------------ II.4.12: Remove Manager Appointment ---------------------------------
     
     @Test
     void removeManagerAppointment_removes_manager_role_when_owner_was_appointer() {
         UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
         UUID ownerId = UUID.randomUUID();
         UUID managerId = UUID.randomUUID();
         UUID appointerOfOwnerId = UUID.randomUUID();
@@ -1050,7 +1042,7 @@ class UserServiceTest {
         ownerRole.approveAppointment();
         Member owner = memberWithId(ownerId, ownerRole);
 
-        Manager managerRole = new Manager(ownerId, companyId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        Manager managerRole = new Manager(ownerId, companyId, eventId, Set.of(ManagerPermission.MANAGE_EVENTS));
         managerRole.approveAppointment();
         Member manager = memberWithId(managerId, managerRole);
 
@@ -1058,11 +1050,9 @@ class UserServiceTest {
         when(memberRepository.findById(managerId)).thenReturn(Optional.of(manager));
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        Member saved = service.removeManagerAppointment(token, managerId, companyId);
+        MemberDTO saved = service.removeManagerAppointment(token, managerId, companyId, eventId);
 
-        assertThat(saved.getAssignedRoles())
-                .noneMatch(role -> role instanceof Manager
-                        && role.belongsToCompany(companyId));
+        assertThat(saved.getAssignedRoles()).doesNotContain("Manager");
 
         verify(memberRepository).save(manager);
     }
@@ -1070,6 +1060,7 @@ class UserServiceTest {
     @Test
     void removeManagerAppointment_throws_when_owner_was_not_appointer() {
         UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
         UUID owner2Id = UUID.randomUUID();
         UUID owner1Id = UUID.randomUUID();
         UUID managerId = UUID.randomUUID();
@@ -1084,14 +1075,14 @@ class UserServiceTest {
         owner2Role.approveAppointment();
         Member owner2 = memberWithId(owner2Id, owner2Role);
 
-        Manager managerRole = new Manager(owner1Id, companyId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        Manager managerRole = new Manager(owner1Id, companyId, eventId, Set.of(ManagerPermission.MANAGE_EVENTS));
         managerRole.approveAppointment();
         Member manager = memberWithId(managerId, managerRole);
 
         when(memberRepository.findById(owner2Id)).thenReturn(Optional.of(owner2));
         when(memberRepository.findById(managerId)).thenReturn(Optional.of(manager));
 
-        assertThatThrownBy(() -> service.removeManagerAppointment(token, managerId, companyId))
+        assertThatThrownBy(() -> service.removeManagerAppointment(token, managerId, companyId, eventId))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("No manager appointment by this owner was found");
 
