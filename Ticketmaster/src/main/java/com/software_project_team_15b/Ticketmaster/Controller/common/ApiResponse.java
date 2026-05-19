@@ -28,4 +28,12 @@ public class ApiResponse<T> {
     public void setError(String error) {
         this.error = error;
     }
+
+    public boolean isFailure() {
+        return error != null && !error.isEmpty();
+    }
+
+    public boolean isSuccess() {
+        return !isFailure();
+    }
 }
