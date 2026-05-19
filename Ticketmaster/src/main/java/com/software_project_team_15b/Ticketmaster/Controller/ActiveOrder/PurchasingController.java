@@ -1,6 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.Controller.ActiveOrder;
 
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.RemoveOrAddSeatsFromActiveOrderCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
 import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
@@ -55,6 +56,8 @@ public class PurchasingController {
 
             return ResponseEntity.ok(new ApiResponse<>(access, null));
 
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         } catch (IllegalStateException ex) {
@@ -80,6 +83,8 @@ public class PurchasingController {
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(new ApiResponse<>(orderId, null));
 
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
         } catch (DataIntegrityViolationException ex) {
             return conflict(new IllegalStateException("User already has an active order for this event"));
         } catch (IllegalArgumentException ex) {
@@ -108,6 +113,8 @@ public class PurchasingController {
 
             return ResponseEntity.ok(new ApiResponse<>(null, null));
 
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
         } catch (TimeExpiredException ex) {
             return gone(ex);
         } catch (OrderSeatsUnavailableException ex) {
@@ -136,6 +143,8 @@ public class PurchasingController {
 
             return ResponseEntity.ok(new ApiResponse<>(null, null));
 
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
         } catch (TimeExpiredException ex) {
             return gone(ex);
         } catch (IllegalArgumentException ex) {
@@ -158,6 +167,8 @@ public class PurchasingController {
 
             return ResponseEntity.ok(new ApiResponse<>(activeOrder, null));
 
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
         } catch (TimeExpiredException ex) {
             return gone(ex);
         } catch (IllegalArgumentException ex) {
@@ -181,6 +192,8 @@ public class PurchasingController {
 
             return ResponseEntity.ok(new ApiResponse<>(checkout, null));
 
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
         } catch (TimeExpiredException ex) {
             return gone(ex);
         } catch (OrderSeatsUnavailableException ex) {
@@ -213,6 +226,8 @@ public class PurchasingController {
 
             return ResponseEntity.ok(new ApiResponse<>(checkout, null));
 
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
         } catch (TimeExpiredException ex) {
             return gone(ex);
         } catch (OrderSeatsUnavailableException ex) {
@@ -243,6 +258,8 @@ public class PurchasingController {
 
             return ResponseEntity.ok(new ApiResponse<>(result, null));
 
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
         } catch (TimeExpiredException ex) {
             return gone(ex);
         } catch (FailedPaymentException ex) {
@@ -275,6 +292,8 @@ public class PurchasingController {
 
             return ResponseEntity.ok(new ApiResponse<>(result, null));
 
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
         } catch (TimeExpiredException ex) {
             return gone(ex);
         } catch (FailedPaymentException ex) {
@@ -349,6 +368,11 @@ public class PurchasingController {
 
     private <T> ResponseEntity<ApiResponse<T>> internalServerError(Exception ex) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(new ApiResponse<>(null, "Internal server error"));
+    }
+
+    private <T> ResponseEntity<ApiResponse<T>> unauthorized(Exception ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(new ApiResponse<>(null, ex.getMessage()));
     }
 }

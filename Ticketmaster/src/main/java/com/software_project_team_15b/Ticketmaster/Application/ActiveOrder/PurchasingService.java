@@ -22,6 +22,7 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITick
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutCompletedDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutStartedDTO;
@@ -417,7 +418,7 @@ public class PurchasingService {
 
     private UUID requireValidUser(String token) {
         if (!auth.isTokenValid(token)) {
-            throw new IllegalStateException("Token is invalid or expired");
+            throw new InvalidTokenException("Token is invalid or expired");
         }
         return auth.extractUserId(token);
     }
