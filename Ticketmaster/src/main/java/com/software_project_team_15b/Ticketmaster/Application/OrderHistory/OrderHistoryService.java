@@ -30,9 +30,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.DTO.OrderHistoryDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.TicketDTO;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import org.springframework.transaction.annotation.Transactional;
-
 
 @Service
 public class OrderHistoryService implements EventSubscriber{
