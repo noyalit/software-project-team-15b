@@ -69,4 +69,11 @@ public class JpaOrderHistoryRepositoryAdapter implements IOrderHistoryRepository
             return List.of();
         return jpaRepo.findByEventIdIn(eventIds);
     }
+
+    @Override
+    public List<OrderHistory> findByEventIdInAndIsCancelledFalse(List<UUID> eventIds) {
+        if (eventIds == null || eventIds.isEmpty())
+            return List.of();
+        return jpaRepo.findByEventIdInAndIsCancelledFalse(eventIds);
+    }
 }

@@ -1,6 +1,7 @@
-package com.software_project_team_15b.Ticketmaster.Domain.OrderHistory;
+package com.software_project_team_15b.Ticketmaster.white.Domain.OrderHistory;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
+import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.Ticket;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

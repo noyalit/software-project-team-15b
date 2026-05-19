@@ -18,5 +18,7 @@ public interface IOrderHistoryRepository {
 
     List<OrderHistory> findByEventIdAndIsCancelledFalse(UUID eventId);
 
+    List<OrderHistory> findByEventIdInAndIsCancelledFalse(List<UUID> eventIds);
+
     List<OrderHistory> findByEventIdIn(List<UUID> eventIds);
 }
