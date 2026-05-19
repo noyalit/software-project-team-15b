@@ -303,7 +303,7 @@ class GetActiveOrderBlackTest {
 
     private MoneyDTO moneyDTO(String string) {
         return MoneyDTO.from(Money.of(string, "ILS"));
-}
+    }
 
     private Money money(String amount) {
         return Money.of(amount, "ILS");
