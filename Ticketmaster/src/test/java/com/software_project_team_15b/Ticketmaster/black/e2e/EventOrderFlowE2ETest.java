@@ -33,6 +33,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import org.apache.commons.lang3.NotImplementedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -521,15 +523,16 @@ class EventOrderFlowE2ETest {
 
     private UUID registerAndApproveManager(String username, String founderToken,
                                             UUID companyId, Set<ManagerPermission> perms) {
-        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO m = userService.registerMember(userService.enterAsGuest(), username, "Password1", LocalDate.of(1990, 1, 1));
-        String token = userService.login(userService.enterAsGuest(), username, "Password1");
-        UUID id = m.getUserId();
-
-        UUID eventId = UUID.randomUUID();
-        companyService.addManager(founderToken, companyId, eventId, id, perms);
-        userService.changeRoleToManager(token, eventId);
-        userService.approveAppointment(token);
-        return id;
+        throw new NotImplementedException();
+//        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO m = userService.registerMember(userService.enterAsGuest(), username, "Password1", LocalDate.of(1990, 1, 1));
+//        String token = userService.login(userService.enterAsGuest(), username, "Password1");
+//        UUID id = m.getUserId();
+//
+//        UUID eventId = UUID.randomUUID();
+//        companyService.addManager(founderToken, companyId, eventId, id, perms);
+//        userService.changeRoleToManager(token, eventId);
+//        userService.approveAppointment(token);
+//        return id;
     }
 
     /**
