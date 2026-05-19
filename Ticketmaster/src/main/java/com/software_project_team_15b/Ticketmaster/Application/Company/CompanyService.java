@@ -7,6 +7,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainServic
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
@@ -70,6 +71,7 @@ public class CompanyService {
      * @throws InvalidTokenException if the token is null, blank, or not valid
      * @throws UnauthorizedCompanyActionException if the caller is not a member
      */
+    @Transactional
     public Company createCompany(String token, String name) {
         try {
             requireNonBlank(name, "Company name");
@@ -98,6 +100,7 @@ public class CompanyService {
      * @throws IllegalArgumentException if {@code founderId} is null
      * @throws IllegalStateException    if the repository returns null instead of an empty list
      */
+    @Transactional(readOnly = true)
     public List<Company> findCompaniesByFounder(String token, UUID founderId) {
         requireNonNull(founderId, "Founder ID");
         List<Company> result = companyRepository.findByFounder(founderId);
@@ -121,6 +124,7 @@ public class CompanyService {
      * @throws CompanyNotFoundException if no company with {@code companyId} exists
      * @throws IllegalStateException if the company is not active
      */
+    @Transactional
     public Company updatePurchasePolicy(String token, UUID companyId, ICompanyPurchasePolicy policy) {
         try {
             requireNonNull(companyId, "Company ID");
@@ -152,6 +156,7 @@ public class CompanyService {
      * @throws CompanyNotFoundException if no company with {@code companyId} exists
      * @throws IllegalStateException if the company is not active
      */
+    @Transactional
     public Company updateDiscountPolicy(String token, UUID companyId, ICompanyDiscountPolicy policy) {
         try {
             requireNonNull(companyId, "Company ID");
@@ -182,6 +187,7 @@ public class CompanyService {
      * @throws UnauthorizedCompanyActionException if the caller is neither the founder nor a system admin
      * @throws CompanyNotFoundException if no company with {@code companyId} exists
      */
+    @Transactional
     public Company changeStatus(String token, UUID companyId, CompanyStatus newStatus) {
         try {
             requireNonNull(companyId, "Company ID");
@@ -211,6 +217,7 @@ public class CompanyService {
      * @throws IllegalArgumentException if {@code companyId} is null
      * @throws CompanyNotFoundException if no company with {@code companyId} exists
      */
+    @Transactional(readOnly = true)
     public Company getCompany(UUID companyId) {
         requireNonNull(companyId, "Company ID");
         return getCompanyOrThrow(companyId);
@@ -222,6 +229,7 @@ public class CompanyService {
      * @param companyId the company's id; may be null
      * @return an {@link Optional} containing the company if found, or empty when the id is null
      */
+    @Transactional(readOnly = true)
     public Optional<Company> findCompany(UUID companyId) {
         if (companyId == null) {
             return Optional.empty();
