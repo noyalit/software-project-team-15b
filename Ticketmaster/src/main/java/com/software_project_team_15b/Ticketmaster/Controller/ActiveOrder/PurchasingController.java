@@ -4,6 +4,7 @@ import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Comman
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
 import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.CheckoutCompletedDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutStartedDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedPaymentException;
@@ -229,7 +230,7 @@ public class PurchasingController {
 
     @Operation(summary = "Complete checkout for a member active order")
     @PostMapping(path = "/{orderId}/checkout/member/complete", consumes = "application/json")
-    public ResponseEntity<ApiResponse<Void>> completeCheckoutForMember(
+    public ResponseEntity<ApiResponse<CheckoutCompletedDTO>> completeCheckoutForMember(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
             @PathVariable UUID orderId,
             @RequestBody(required = false) CompleteMemberCheckoutRequest request
@@ -237,9 +238,10 @@ public class PurchasingController {
         try {
             String couponCode = request == null ? null : request.couponCode();
 
-            purchasingService.completeCheckoutForMember(token, orderId, couponCode);
+            CheckoutCompletedDTO result =
+                    purchasingService.completeCheckoutForMember(token, orderId, couponCode);
 
-            return ResponseEntity.ok(new ApiResponse<>(null, null));
+            return ResponseEntity.ok(new ApiResponse<>(result, null));
 
         } catch (TimeExpiredException ex) {
             return gone(ex);
@@ -258,20 +260,20 @@ public class PurchasingController {
 
     @Operation(summary = "Complete checkout for a guest active order")
     @PostMapping(path = "/{orderId}/checkout/guest/complete", consumes = "application/json")
-    public ResponseEntity<ApiResponse<Void>> completeCheckoutForGuest(
+    public ResponseEntity<ApiResponse<CheckoutCompletedDTO>> completeCheckoutForGuest(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
             @PathVariable UUID orderId,
             @RequestBody CompleteGuestCheckoutRequest request
     ) {
         try {
-            purchasingService.completeCheckoutForGuest(
+            CheckoutCompletedDTO result = purchasingService.completeCheckoutForGuest(
                     token,
                     orderId,
                     request.birthDate(),
                     request.couponCode()
             );
 
-            return ResponseEntity.ok(new ApiResponse<>(null, null));
+            return ResponseEntity.ok(new ApiResponse<>(result, null));
 
         } catch (TimeExpiredException ex) {
             return gone(ex);
