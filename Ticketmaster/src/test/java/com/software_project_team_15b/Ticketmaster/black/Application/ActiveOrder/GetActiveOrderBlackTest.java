@@ -1,6 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.black.Application.ActiveOrder;
 
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
@@ -133,7 +134,7 @@ class GetActiveOrderBlackTest {
     void getActiveOrderShouldFailWhenTokenIsInvalid() {
         when(auth.isTokenValid(token)).thenReturn(false);
 
-        assertThrows(IllegalStateException.class, () ->
+        assertThrows(InvalidTokenException.class, () ->
                 service.getActiveOrder(token, orderId)
         );
     }
