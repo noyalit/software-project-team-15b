@@ -34,41 +34,4 @@ public interface ICompanyDomainService {
      * @throws CompanyNotFoundException if the company does not exist
      */
     void validatePurchaseEligibility(UUID companyId, PurchaseRequest request);
-
-    /**
-     * Returns the set of owner ids for the company. Only an existing owner
-     * of the company may query this information.
-     *
-     * @param token     an active member token; must not be null or blank
-     * @param companyId the target company's id; must not be null or blank
-     * @return an unmodifiable set of owner ids
-     * @throws IllegalArgumentException           if {@code companyId} is null or blank
-     * @throws InvalidTokenException              if the token is null, blank, or not valid
-     * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
-     * @throws CompanyNotFoundException           if no company with {@code companyId} exists
-     */
-    public Set<UUID> getOwnerIds(String token, UUID companyId);
-
-    /**
-     * Returns {@code true} if {@code userId} is the founder or an owner of the given company.
-     *
-     * @param companyId the company to check; must not be null
-     * @param userId    the user to check; must not be null
-     * @return {@code true} if the user is the founder or is in the owner set
-     * @throws IllegalArgumentException if {@code companyId} or {@code userId} is null
-     * @throws CompanyNotFoundException if no company with {@code companyId} exists
-     */
-    public boolean isCompanyFounderOrOwner(UUID companyId, UUID userId);
-
-    /**
-     * Returns {@code true} if {@code userId} is registered as a manager for {@code eventId}
-     * in the company that owns the event.
-     *
-     * @param eventId the event to check; must not be null
-     * @param userId  the user to check; must not be null
-     * @return {@code true} if the user is an event manager for that event
-     * @throws IllegalArgumentException if {@code eventId} or {@code userId} is null
-     * @throws CompanyNotFoundException if the owning company cannot be found
-     */
-    public boolean isEventManager(UUID eventId, UUID userId);
 }
