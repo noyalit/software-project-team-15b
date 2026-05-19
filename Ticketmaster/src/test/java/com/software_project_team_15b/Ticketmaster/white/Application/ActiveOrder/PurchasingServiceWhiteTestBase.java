@@ -94,6 +94,7 @@ abstract class PurchasingServiceWhiteTestBase {
     protected void mockValidUser() {
         when(auth.isTokenValid(token)).thenReturn(true);
         when(auth.extractUserId(token)).thenReturn(userId);
+        when(auth.isGuest(token)).thenReturn(true);
     }
 
     protected void mockInvalidUser() {

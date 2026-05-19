@@ -307,7 +307,7 @@ class CheckoutBlackTest {
     private void mockValidGuestOperation() {
         when(auth.isTokenValid(token)).thenReturn(true);
         when(auth.extractUserId(token)).thenReturn(userId);
-        when(auth.isGuest(token)).thenReturn(false);
+        when(auth.isGuest(token)).thenReturn(true);
     }
 
     private void mockPurchaseAccess(boolean hasQueueAccess) {
