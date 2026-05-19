@@ -2,10 +2,15 @@ package com.software_project_team_15b.Ticketmaster.Infrastructure.Company;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Founder;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 
 import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -19,6 +24,11 @@ import org.springframework.stereotype.Repository;
 public class InMemoryCompanyRepository implements ICompanyRepository {
 
     private final Map<UUID, Company> store = new ConcurrentHashMap<>();
+    private final IMemberRepository memberRepository;
+
+    public InMemoryCompanyRepository(IMemberRepository memberRepository) {
+        this.memberRepository = Objects.requireNonNull(memberRepository, "memberRepository cannot be null");
+    }
 
     /**
      * Persists a company. If the company has no id yet (i.e. it has not been
@@ -69,14 +79,29 @@ public class InMemoryCompanyRepository implements ICompanyRepository {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Returns all companies where {@code ownerId} holds an approved {@link Owner}
+     * or {@link Founder} role. Ownership is no longer tracked on the
+     * {@link Company} aggregate; this implementation resolves it via the member
+     * repository.
+     */
     @Override
     public List<Company> findByOwner(UUID ownerId) {
         if (ownerId == null) {
             return List.of();
         }
-        return store.values().stream()
-                .filter(c -> c.getOwnerIds().contains(ownerId))
-                .collect(Collectors.toList());
+        return memberRepository.findById(ownerId)
+                .map(member -> member.getAssignedRoles().stream()
+                        .filter(role -> (role instanceof Owner || role instanceof Founder)
+                                && role.isAppointmentApproved())
+                        .map(Role::getCompanyId)
+                        .filter(Objects::nonNull)
+                        .distinct()
+                        .map(this::findById)
+                        .filter(Optional::isPresent)
+                        .map(Optional::get)
+                        .collect(Collectors.toList()))
+                .orElse(List.of());
     }
 
     /**
