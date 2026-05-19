@@ -31,7 +31,7 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
 
     @Test
     void startCheckoutForGuestShouldValidateOrderHoldSeatsAndStartCheckout() {
-        mockValidUser();
+        mockValidGuest();
 
         ActiveOrder order = activeOrderWithSeats(seatId1);
         LocalDate birthDate = LocalDate.of(2000, 1, 1);
@@ -100,7 +100,7 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
 
     @Test
     void startCheckoutForGuestShouldThrowWhenSeatsBecameUnavailable() {
-        mockValidUser();
+        mockValidGuest();
 
         ActiveOrder order = activeOrderWithSeats(seatId1, seatId2);
 
@@ -132,7 +132,7 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
 
     @Test
     void startCheckoutForGuestShouldCancelOrderWhenPurchasePolicyIsViolated() {
-        mockValidUser();
+        mockValidGuest();
 
         ActiveOrder order = activeOrderWithSeats(seatId1);
         LocalDate birthDate = LocalDate.of(2000, 1, 1);
@@ -176,7 +176,7 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
 
     @Test
     void startCheckoutForGuestShouldReleaseHoldWhenStartCheckoutFailsAfterHoldWasCreated() {
-        mockValidUser();
+        mockValidGuest();
 
         ActiveOrder order = activeOrderWithSeats(seatId1);
         LocalDate birthDate = LocalDate.of(2000, 1, 1);
@@ -219,7 +219,7 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
 
     @Test
     void completeCheckoutForGuestShouldPayIssueTicketsFinalizeAndConfirm() {
-        mockValidUser();
+        mockValidGuest();
 
         ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
         LocalDate birthDate = LocalDate.of(2000, 1, 1);
@@ -268,7 +268,7 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
 
     @Test
     void completeCheckoutForGuestShouldThrowWhenPaymentFailsAndNotIssueTickets() {
-        mockValidUser();
+        mockValidGuest();
 
         ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
         LocalDate birthDate = LocalDate.of(2000, 1, 1);
@@ -299,7 +299,7 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
 
     @Test
     void completeCheckoutForGuestShouldRefundPaymentWhenTicketIssuanceFails() {
-        mockValidUser();
+        mockValidGuest();
 
         ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
         LocalDate birthDate = LocalDate.of(2000, 1, 1);
@@ -333,7 +333,7 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
 
     @Test
     void completeCheckoutForGuestShouldCancelTicketsWhenFinalizeFailsAfterTicketsIssued() {
-        mockValidUser();
+        mockValidGuest();
 
         ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
         LocalDate birthDate = LocalDate.of(2000, 1, 1);
@@ -370,7 +370,7 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
 
     @Test
     void completeCheckoutForGuestShouldReleaseHoldWhenConfirmFailsAfterFinalize() {
-        mockValidUser();
+        mockValidGuest();
 
         ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
         LocalDate birthDate = LocalDate.of(2000, 1, 1);
@@ -410,7 +410,7 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
 
     @Test
     void completeCheckoutForGuestShouldExpireOrderWhenCheckoutTimerExpired() {
-        mockValidUser();
+        mockValidGuest();
 
         ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
         LocalDate birthDate = LocalDate.of(2000, 1, 1);

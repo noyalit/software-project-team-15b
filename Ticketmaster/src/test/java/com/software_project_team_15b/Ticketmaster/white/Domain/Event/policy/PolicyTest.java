@@ -1,6 +1,5 @@
 package com.software_project_team_15b.Ticketmaster.white.Domain.Event.policy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.*;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.*;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

@@ -215,7 +215,7 @@ public class EventController {
             eventService.validatePurchaseEligibility(eventId, request);
             return ResponseEntity.ok(new ApiResponse<>(null, null));
         } catch (PolicyViolationException ex) {
-            return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+            return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT)
                     .body(new ApiResponse<>(null, ex.getMessage()));
         } catch (InvalidEventStateException ex) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)

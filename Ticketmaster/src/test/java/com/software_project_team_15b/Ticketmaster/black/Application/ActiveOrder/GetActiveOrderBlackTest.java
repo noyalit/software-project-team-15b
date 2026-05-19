@@ -1,6 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.black.Application.ActiveOrder;
 
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
@@ -17,6 +18,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainServi
 import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -132,7 +134,7 @@ class GetActiveOrderBlackTest {
     void getActiveOrderShouldFailWhenTokenIsInvalid() {
         when(auth.isTokenValid(token)).thenReturn(false);
 
-        assertThrows(IllegalStateException.class, () ->
+        assertThrows(InvalidTokenException.class, () ->
                 service.getActiveOrder(token, orderId)
         );
     }
@@ -268,7 +270,7 @@ class GetActiveOrderBlackTest {
         EventDTO.AreaView areaView = new EventDTO.AreaView(
                 areaId,
                 "Main Area",
-                money("100.00"),
+                moneyDTO("100.00"),
                 "SEATING",
                 2,
                 List.of(
@@ -297,6 +299,10 @@ class GetActiveOrderBlackTest {
         when(EventDTO.status()).thenReturn(EventStatus.PUBLISHED);
 
         return EventDTO;
+    }
+
+    private MoneyDTO moneyDTO(String string) {
+        return MoneyDTO.from(Money.of(string, "ILS"));
     }
 
     private Money money(String amount) {

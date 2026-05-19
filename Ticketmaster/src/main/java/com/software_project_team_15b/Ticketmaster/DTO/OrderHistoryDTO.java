@@ -3,15 +3,13 @@ package com.software_project_team_15b.Ticketmaster.DTO;
 import java.util.List;
 import java.util.UUID;
 
-import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
-
 public class OrderHistoryDTO {
 
 	private final UUID orderId;
 	private final UUID userId;
 	private final UUID eventId;
 	private final UUID areaId;
-	private final Money totalPrice;
+	private final MoneyDTO totalPrice;
 	private final List<TicketDTO> tickets;
 	private final boolean cancelled;
 
@@ -19,7 +17,7 @@ public class OrderHistoryDTO {
 						   UUID userId,
 						   UUID eventId,
 						   UUID areaId,
-						   Money totalPrice,
+						   MoneyDTO totalPrice,
 						   List<TicketDTO> tickets,
 						   boolean cancelled) {
 		this.orderId = orderId;
@@ -47,7 +45,7 @@ public class OrderHistoryDTO {
 		return areaId;
 	}
 
-	public Money getTotalPrice() {
+	public MoneyDTO getTotalPrice() {
 		return totalPrice;
 	}
 
