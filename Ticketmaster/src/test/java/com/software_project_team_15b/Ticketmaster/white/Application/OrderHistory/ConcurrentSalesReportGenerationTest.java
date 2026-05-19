@@ -18,6 +18,10 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainServic
 
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Manager;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.*;
 
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.*;
@@ -49,6 +53,9 @@ class ConcurrentSalesReportGenerationTest {
     ICompanyRepository companyRepository;
 
     @Mock
+    IMemberRepository memberRepository;
+
+    @Mock
     UserDomainService userDomainService;
 
     @Mock
@@ -77,8 +84,8 @@ class ConcurrentSalesReportGenerationTest {
         Event e1 = createEvent(eventId1);
         Event e2 = createEvent(eventId2);
 
-        when(company.getEventManagers(eventId1)).thenReturn(Set.of(callerId));
-        when(company.getEventManagers(eventId2)).thenReturn(Set.of(callerId));
+        mockMemberWithManagerRole(callerId, eventId1, companyId);
+        mockMemberWithManagerRole(callerId, eventId2, companyId);
 
         List<Event> events = List.of(e1, e2);
 
@@ -127,6 +134,15 @@ class ConcurrentSalesReportGenerationTest {
     }
 
     // ---------------- helpers ----------------
+    private void mockMemberWithManagerRole(UUID memberId, UUID eventId, UUID companyId) {
+        Member member = org.mockito.Mockito.mock(Member.class);
+        Manager manager = new Manager(UUID.randomUUID(), companyId, eventId, Set.of(ManagerPermission.GENERATE_SALES_REPORTS));
+        Set<com.software_project_team_15b.Ticketmaster.Domain.Member.Role> roles = new HashSet<>();
+        roles.add(manager);
+        when(member.getAssignedRoles()).thenReturn(roles);
+        when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
+    }
+
     private Event createEvent(UUID eventId) {
         return new Event(eventId,companyId,"Test Event","Artist",Category.CONCERT,
         Instant.now().plusSeconds(3600),"Location",List.of(),List.of());
