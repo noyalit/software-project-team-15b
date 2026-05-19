@@ -1,12 +1,9 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Company;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 
-import java.util.Set;
 import java.util.UUID;
 
 public interface ICompanyDomainService {

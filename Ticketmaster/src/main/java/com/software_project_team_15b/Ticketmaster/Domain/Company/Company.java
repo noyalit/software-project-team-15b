@@ -14,10 +14,6 @@ import java.util.*;
  * owner. Owners may be added or removed (the founder cannot be removed).
  * Purchase and discount policies may only be updated while the company is
  * {@link CompanyStatus#ACTIVE}.
- *
- * <p>Each company tracks which users are managers for each of its events via
- * an {@code eventManagerEntries} collection. Use {@link #addManager} and
- * {@link #removeManager} to mutate it, and {@link #getEventManagers} to query it.
  */
 @Entity
 @Table(name = "companies")
