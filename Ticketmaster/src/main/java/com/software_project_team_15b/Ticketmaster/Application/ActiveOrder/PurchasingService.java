@@ -209,7 +209,7 @@ public class PurchasingService {
     })
     public CheckoutStartedDTO startCheckoutForGuest(String token, UUID orderId, LocalDate guestBirthDate) {
         UUID userId = requireValidUser(token);
-        if (auth.isGuest(token)) {
+        if (!auth.isGuest(token)) {
             throw new IllegalStateException("Only guests can use this method");
         }
         return startCheckoutForUser(token, userId, orderId, guestBirthDate);
@@ -287,7 +287,7 @@ public class PurchasingService {
     })
     public void completeCheckoutForGuest(String token, UUID orderId, LocalDate birthDate, String couponCode) {
         UUID userId = requireValidUser(token);
-        if (auth.isGuest(token)) {
+        if (!auth.isGuest(token)) {
             throw new IllegalStateException("Only guests can use this method");
         }
         completeCheckoutForUser(token, userId, orderId, birthDate, couponCode);
