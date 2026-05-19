@@ -86,7 +86,7 @@ public class PurchasingController {
         } catch (InvalidTokenException ex) {
             return unauthorized(ex);
         } catch (DataIntegrityViolationException ex) {
-            return conflict(new IllegalStateException("User already has an active order for this event"));
+            return conflict(new IllegalStateException("Active order request conflicts with existing data"));
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         } catch (IllegalStateException ex) {
