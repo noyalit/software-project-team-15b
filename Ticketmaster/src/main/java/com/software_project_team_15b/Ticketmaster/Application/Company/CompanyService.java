@@ -2,7 +2,7 @@ package com.software_project_team_15b.Ticketmaster.Application.Company;
 
 import java.util.*;
 
-import com.software_project_team_15b.Ticketmaster.Application.Event.IEventManagementService;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,7 +43,7 @@ public class CompanyService {
 
     private final ICompanyRepository companyRepository;
     private final UserDomainService userDomainService;
-    private final IEventManagementService eventManagementService;
+    private final IEventDomainService eventManagementService;
     private final IAuth auth;
 
     /**
@@ -53,7 +53,7 @@ public class CompanyService {
      * @param auth                   authentication/authorization gateway; must not be null
      * @throws NullPointerException if any argument is null
      */
-    public CompanyService(ICompanyRepository companyRepository, UserDomainService userDomainService, IEventManagementService eventManagementService, IAuth auth) {
+    public CompanyService(ICompanyRepository companyRepository, UserDomainService userDomainService, IEventDomainService eventManagementService, IAuth auth) {
         this.companyRepository = Objects.requireNonNull(companyRepository, "companyRepository cannot be null");
         this.userDomainService = Objects.requireNonNull(userDomainService, "userDomainService cannot be null");
         this.auth = Objects.requireNonNull(auth, "auth cannot be null");
@@ -191,7 +191,7 @@ public class CompanyService {
             company.changeStatus(newStatus);
             if (newStatus == CompanyStatus.CLOSED) {
                 eventManagementService.searchInCompany(companyId, null)
-                        .forEach(event -> eventManagementService.cancel(event.eventId(), auth.extractUserId(token)));
+                        .forEach(event -> eventManagementService.cancel(event.eventId()));
             }
             Company saved = companyRepository.save(company);
             AUDIT.info("op=changeStatus companyId={} newStatus={} result=ok", companyId, newStatus);

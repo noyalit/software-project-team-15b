@@ -5,6 +5,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompany
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -18,6 +19,7 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public Money cheapestPriceFor(UUID companyId, Money subtotal, PurchaseRequest request) {
         if (companyId == null) {
             throw new IllegalArgumentException("companyId cannot be null");
@@ -42,6 +44,7 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public void validatePurchaseEligibility(UUID companyId, PurchaseRequest request) {
         if (companyId == null) {
             throw new IllegalArgumentException("companyId cannot be null");

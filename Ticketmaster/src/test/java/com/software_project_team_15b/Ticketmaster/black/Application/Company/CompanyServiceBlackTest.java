@@ -23,7 +23,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
-import com.software_project_team_15b.Ticketmaster.Application.Event.IEventManagementService;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
@@ -45,7 +45,7 @@ class CompanyServiceBlackTest {
     @Mock private ICompanyRepository repo;
     @Mock private IAuth auth;
     @Mock private UserDomainService userDomainService;
-    @Mock private IEventManagementService eventManagementService;
+    @Mock private IEventDomainService eventManagementService;
 
     private CompanyService service;
 
@@ -398,7 +398,7 @@ class CompanyServiceBlackTest {
 
         service.changeStatus(founderToken, company.getId(), CompanyStatus.CLOSED);
 
-        verify(eventManagementService).cancel(eventId, founderId);
+        verify(eventManagementService).cancel(eventId);
     }
 
     // changeStatus — negative

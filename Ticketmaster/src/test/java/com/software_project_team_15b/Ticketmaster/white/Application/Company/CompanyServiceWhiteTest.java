@@ -23,7 +23,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
-import com.software_project_team_15b.Ticketmaster.Application.Event.IEventManagementService;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
@@ -39,7 +39,7 @@ class CompanyServiceWhiteTest {
     private ICompanyRepository repo;
     private IAuth auth;
     private UserDomainService userDomainService;
-    private IEventManagementService eventManagementService;
+    private IEventDomainService eventManagementService;
     private CompanyService service;
 
     @BeforeEach
@@ -62,7 +62,7 @@ class CompanyServiceWhiteTest {
 
         auth = mock(IAuth.class);
         userDomainService = mock(UserDomainService.class);
-        eventManagementService = mock(IEventManagementService.class);
+        eventManagementService = mock(IEventDomainService.class);
         when(userDomainService.isActiveOwner(any())).thenReturn(true);
         when(userDomainService.isActiveFounder(any())).thenReturn(true);
         when(eventManagementService.searchInCompany(any(), any())).thenReturn(List.of());
