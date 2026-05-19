@@ -20,7 +20,6 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.RoleNot
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UsernameAlreadyExistsException;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 
 @Service
 public class UserDomainService {

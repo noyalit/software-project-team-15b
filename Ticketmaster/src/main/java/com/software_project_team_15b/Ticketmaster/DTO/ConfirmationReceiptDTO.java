@@ -1,7 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.DTO;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 
 import java.util.List;
 import java.util.UUID;
@@ -11,9 +10,9 @@ public record ConfirmationReceiptDTO(
         UUID areaId,
         List<UUID> seatIds,
         int quantity,
-        Money total
+        MoneyDTO total
 ) {
     public static ConfirmationReceiptDTO from(ConfirmationReceipt r) {
-        return new ConfirmationReceiptDTO(r.holdToken(), r.areaId(), r.seatIds(), r.quantity(), r.total());
+        return new ConfirmationReceiptDTO(r.holdToken(), r.areaId(), r.seatIds(), r.quantity(), MoneyDTO.from(r.total()));
     }
 }

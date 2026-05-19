@@ -17,6 +17,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainServi
 import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -268,7 +269,7 @@ class GetActiveOrderBlackTest {
         EventDTO.AreaView areaView = new EventDTO.AreaView(
                 areaId,
                 "Main Area",
-                money("100.00"),
+                moneyDTO("100.00"),
                 "SEATING",
                 2,
                 List.of(
@@ -298,6 +299,10 @@ class GetActiveOrderBlackTest {
 
         return EventDTO;
     }
+
+    private MoneyDTO moneyDTO(String string) {
+        return MoneyDTO.from(Money.of(string, "ILS"));
+}
 
     private Money money(String amount) {
         return Money.of(amount, "ILS");

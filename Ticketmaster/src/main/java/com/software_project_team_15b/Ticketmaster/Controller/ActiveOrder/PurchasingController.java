@@ -331,7 +331,7 @@ public class PurchasingController {
     }
 
     private <T> ResponseEntity<ApiResponse<T>> unprocessableEntity(Exception ex) {
-        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT)
                 .body(new ApiResponse<>(null, ex.getMessage()));
     }
 
