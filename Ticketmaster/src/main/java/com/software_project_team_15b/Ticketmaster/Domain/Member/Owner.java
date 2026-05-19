@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Member;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException;
 import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
 import java.util.UUID;
@@ -20,7 +21,7 @@ public class Owner extends Role {
         super(appointedBy, companyId);
         // Owners must have an appointer. The Founder is modeled as a special Owner subclass.
         if (appointedBy == null && getClass().equals(Owner.class)) {
-            throw new IllegalArgumentException("appointedBy cannot be null");
+            throw new InvalidMemberInputException("appointedBy cannot be null");
         }
 
         AUDIT.info("op=create-owner roleId={} appointedBy={} companyId={}", getId(), appointedBy, companyId);

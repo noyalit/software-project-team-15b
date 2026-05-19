@@ -19,9 +19,7 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaym
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
-import com.software_project_team_15b.Ticketmaster.DTO.OrderHistoryDTO;
-import com.software_project_team_15b.Ticketmaster.DTO.TicketDTO;
-import com.software_project_team_15b.Ticketmaster.Application.UserService;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
@@ -29,7 +27,8 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
-
+import com.software_project_team_15b.Ticketmaster.DTO.OrderHistoryDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.TicketDTO;
 import org.springframework.transaction.annotation.Transactional;
 
 
@@ -44,7 +43,7 @@ public class OrderHistoryService implements EventSubscriber{
     private final IEventRepository eventsRepository;
     private final ICompanyRepository companyRepository;
     private final IAuth auth;
-    private final UserService userService;
+    private final UserDomainService userDomainService;
 
 
     public OrderHistoryService(IOrderHistoryRepository orderHistoryRepository,
@@ -54,14 +53,14 @@ public class OrderHistoryService implements EventSubscriber{
                                IEventRepository eventsRepository,
                                ICompanyRepository companyRepository,
                                IAuth auth,
-                               UserService userService) {
+                               UserDomainService userDomainService) {
         this.orderHistoryRepository = orderHistoryRepository;
         this.paymentGateway = paymentGateway;
         this.ticketProvider = ticketProvider;
         this.eventsRepository = eventsRepository;
         this.companyRepository = companyRepository;
         this.auth = auth;
-        this.userService = userService;
+        this.userDomainService = userDomainService;
         eventCancelManager.subscribe(this);
     }
 
@@ -71,7 +70,7 @@ public class OrderHistoryService implements EventSubscriber{
         if (event == null) {
             throw new IllegalArgumentException("Event ID cannot be null");
         }
-        var orderHistories = orderHistoryRepository.findByEventId(event);
+        var orderHistories = orderHistoryRepository.findByEventIdAndIsCancelledFalse(event);
         orderHistories.forEach(orderHistory -> {
             cancelOrderHistory(orderHistory);
         });
@@ -118,7 +117,9 @@ public class OrderHistoryService implements EventSubscriber{
         List<UUID> eventIds = events.stream().map(Event::eventId).toList();
         List<OrderHistory> orders = orderHistoryRepository.findByEventIdIn(eventIds);
         Map<UUID, List<TicketDTO>> soldTicketsByEvent = new LinkedHashMap<>();
-        orders.forEach(order -> {
+        orders.stream()
+            .filter(order -> !order.isCancelled())
+            .forEach(order -> {
             List<TicketDTO> ticketDTOs = order.getTickets().stream()
                     .map(t -> new TicketDTO(t.getSeatId(), t.getBasePrice()))
                     .collect(Collectors.toList());
@@ -143,7 +144,7 @@ public class OrderHistoryService implements EventSubscriber{
             throw new UnauthorizedCompanyActionException("Only the company founder or owner can view sold tickets");
         }
         
-        List<UUID> appointedMembers = userService.getAppointedMembersTree(callerId, companyId);
+        List<UUID> appointedMembers = userDomainService.getAppointedMembersTree(callerId, companyId);
         List<UUID> visibleManagers = appointedMembers.contains(callerId)
                 ? appointedMembers
                 : new ArrayList<>(appointedMembers);
@@ -166,9 +167,10 @@ public class OrderHistoryService implements EventSubscriber{
         
         List<UUID> eventIds = filteredEvents.stream().map(Event::eventId).toList();
         List<OrderHistory> orders = orderHistoryRepository.findByEventIdIn(eventIds);
-        int ticketsSold = orders.stream().mapToInt(order -> order.getTickets().size()).sum();
-        Money totalRevenue = calculateTotalRevenue(orders);
-        List<OrderHistoryDTO> orderDTOs = orders.stream().map(this::toOrderHistoryDTO).collect(Collectors.toList());
+        List<OrderHistory> activeOrders = orders.stream().filter(order -> !order.isCancelled()).toList();
+        int ticketsSold = activeOrders.stream().mapToInt(order -> order.getTickets().size()).sum();
+        Money totalRevenue = calculateTotalRevenue(activeOrders);
+        List<OrderHistoryDTO> orderDTOs = activeOrders.stream().map(this::toOrderHistoryDTO).collect(Collectors.toList());
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("ticketsSold", ticketsSold);
         report.put("totalRevenue", totalRevenue);

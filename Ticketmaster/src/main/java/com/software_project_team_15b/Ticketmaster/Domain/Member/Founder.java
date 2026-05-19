@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Member;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidAppointmentStateException;
 import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
 import java.util.UUID;
@@ -26,7 +27,7 @@ public class Founder extends Owner {
 
     @Override
     public void setAppointedBy(UUID appointedBy) {
-        throw new IllegalStateException("Founder cannot have an appointer");
+        throw new InvalidAppointmentStateException("Founder cannot have an appointer");
     }
 
     @Override

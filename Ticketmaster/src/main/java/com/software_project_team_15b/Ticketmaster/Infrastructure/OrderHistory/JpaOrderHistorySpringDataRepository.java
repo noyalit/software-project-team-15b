@@ -14,5 +14,7 @@ public interface JpaOrderHistorySpringDataRepository
 
     List<OrderHistory> findByEventId(UUID eventId);
 
+    List<OrderHistory> findByEventIdAndIsCancelledFalse(UUID eventId);
+
     List<OrderHistory> findByEventIdIn(List<UUID> eventIds);
 }

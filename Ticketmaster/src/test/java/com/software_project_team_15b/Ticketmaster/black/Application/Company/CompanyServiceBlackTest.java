@@ -37,6 +37,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyReposit
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -47,6 +48,7 @@ class CompanyServiceBlackTest {
     @Mock private ICompanyRepository repo;
     @Mock private IAuth auth;
     @Mock private UserService userService;
+    @Mock private UserDomainService userDomainService;
     @Mock private IEventManagementService eventManagementService;
 
     private CompanyService service;
@@ -80,10 +82,10 @@ class CompanyServiceBlackTest {
             return null;
         }).when(repo).remove(any(Company.class));
 
-        when(userService.isActiveOwner(any())).thenReturn(true);
-        when(userService.isActiveFounder(any())).thenReturn(true);
         when(eventManagementService.searchInCompany(any(), any())).thenReturn(List.of());
-        service = new CompanyService(repo, userService, eventManagementService, auth);
+        when(userDomainService.isActiveOwner(any())).thenReturn(true);
+        when(userDomainService.isActiveFounder(any())).thenReturn(true);
+        service = new CompanyService(repo, userService, userDomainService, eventManagementService, auth);
     }
 
     private Company saveToRepo(Company company) {
@@ -250,8 +252,8 @@ class CompanyServiceBlackTest {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
-        when(userService.isActiveOwner(founderId)).thenReturn(false);
-        when(userService.isActiveFounder(founderId)).thenReturn(false);
+        when(userDomainService.isActiveOwner(founderId)).thenReturn(false);
+        when(userDomainService.isActiveFounder(founderId)).thenReturn(false);
 
         assertThatThrownBy(() -> service.addOwner(founderToken, company.getId(), UUID.randomUUID()))
                 .isInstanceOf(UnauthorizedCompanyActionException.class);
@@ -407,6 +409,27 @@ class CompanyServiceBlackTest {
                 .isInstanceOf(InvalidTokenException.class);
     }
 
+    @Test
+    void removeOwner_throws_when_removing_the_last_owner() throws Exception {
+        UUID founderId = UUID.randomUUID();
+        UUID coOwnerId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        String coOwnerToken = registerMember(coOwnerId);
+        Company company = service.createCompany(founderToken, "Acme");
+        service.addOwner(founderToken, company.getId(), coOwnerId);
+
+        // Strip the founder out so coOwnerId becomes the sole owner, exercising the last-owner guard
+        Company stored = repo.findById(company.getId()).orElseThrow();
+        Field ownerIdsField = Company.class.getDeclaredField("ownerIds");
+        ownerIdsField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Set<UUID> owners = (Set<UUID>) ownerIdsField.get(stored);
+        owners.remove(founderId);
+
+        assertThatThrownBy(() -> service.removeOwner(coOwnerToken, company.getId(), coOwnerId))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
     // ===========================================================================================
     // changeCompanyStatus — positive
 
@@ -492,8 +515,9 @@ class CompanyServiceBlackTest {
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
         UUID managerId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
 
-        service.addManager(founderToken, company.getId(), managerId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        service.addManager(founderToken, company.getId(), eventId, managerId, Set.of(ManagerPermission.MANAGE_EVENTS));
     }
 
     // addManager — negative
@@ -505,7 +529,7 @@ class CompanyServiceBlackTest {
         Company company = service.createCompany(founderToken, "Acme");
         String strangerToken = registerMember(UUID.randomUUID());
 
-        assertThatThrownBy(() -> service.addManager(strangerToken, company.getId(), UUID.randomUUID(), Set.of()))
+        assertThatThrownBy(() -> service.addManager(strangerToken, company.getId(), UUID.randomUUID(), UUID.randomUUID(), Set.of()))
                 .isInstanceOf(UnauthorizedCompanyActionException.class);
     }
 
@@ -515,7 +539,7 @@ class CompanyServiceBlackTest {
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
 
-        assertThatThrownBy(() -> service.addManager(founderToken, company.getId(), null, Set.of()))
+        assertThatThrownBy(() -> service.addManager(founderToken, company.getId(), UUID.randomUUID(), null, Set.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("New manager ID");
     }
@@ -523,7 +547,7 @@ class CompanyServiceBlackTest {
     @Test
     void addManager_throws_when_company_id_is_null() {
         String founderToken = registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.addManager(founderToken, null, UUID.randomUUID(), Set.of()))
+        assertThatThrownBy(() -> service.addManager(founderToken, null, UUID.randomUUID(), UUID.randomUUID(), Set.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Company ID");
     }
@@ -531,7 +555,7 @@ class CompanyServiceBlackTest {
     @Test
     void addManager_throws_when_company_not_found() {
         String founderToken = registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.addManager(founderToken, UUID.randomUUID(), UUID.randomUUID(), Set.of()))
+        assertThatThrownBy(() -> service.addManager(founderToken, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), Set.of()))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
@@ -541,7 +565,7 @@ class CompanyServiceBlackTest {
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
 
-        assertThatThrownBy(() -> service.addManager("bad-token", company.getId(), UUID.randomUUID(), Set.of()))
+        assertThatThrownBy(() -> service.addManager("bad-token", company.getId(), UUID.randomUUID(), UUID.randomUUID(), Set.of()))
                 .isInstanceOf(InvalidTokenException.class);
     }
 
@@ -554,8 +578,9 @@ class CompanyServiceBlackTest {
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
         UUID managerId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
 
-        service.removeManager(founderToken, company.getId(), managerId);
+        service.removeManager(founderToken, company.getId(), eventId, managerId);
     }
 
     // removeManager — negative
@@ -567,7 +592,7 @@ class CompanyServiceBlackTest {
         Company company = service.createCompany(founderToken, "Acme");
         String strangerToken = registerMember(UUID.randomUUID());
 
-        assertThatThrownBy(() -> service.removeManager(strangerToken, company.getId(), UUID.randomUUID()))
+        assertThatThrownBy(() -> service.removeManager(strangerToken, company.getId(), UUID.randomUUID(), UUID.randomUUID()))
                 .isInstanceOf(UnauthorizedCompanyActionException.class);
     }
 
@@ -577,7 +602,7 @@ class CompanyServiceBlackTest {
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
 
-        assertThatThrownBy(() -> service.removeManager(founderToken, company.getId(), null))
+        assertThatThrownBy(() -> service.removeManager(founderToken, company.getId(), UUID.randomUUID(), null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Manager ID");
     }
@@ -585,7 +610,7 @@ class CompanyServiceBlackTest {
     @Test
     void removeManager_throws_when_company_id_is_null() {
         String founderToken = registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.removeManager(founderToken, null, UUID.randomUUID()))
+        assertThatThrownBy(() -> service.removeManager(founderToken, null, UUID.randomUUID(), UUID.randomUUID()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Company ID");
     }
@@ -599,8 +624,9 @@ class CompanyServiceBlackTest {
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
         UUID managerId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
 
-        service.updateManagerPermissions(founderToken, company.getId(), managerId,
+        service.updateManagerPermissions(founderToken, company.getId(), eventId, managerId,
                 Set.of(ManagerPermission.MANAGE_EVENTS));
     }
 
@@ -613,7 +639,7 @@ class CompanyServiceBlackTest {
         Company company = service.createCompany(founderToken, "Acme");
         String strangerToken = registerMember(UUID.randomUUID());
 
-        assertThatThrownBy(() -> service.updateManagerPermissions(strangerToken, company.getId(), UUID.randomUUID(), Set.of()))
+        assertThatThrownBy(() -> service.updateManagerPermissions(strangerToken, company.getId(), UUID.randomUUID(), UUID.randomUUID(), Set.of()))
                 .isInstanceOf(UnauthorizedCompanyActionException.class);
     }
 
@@ -623,7 +649,7 @@ class CompanyServiceBlackTest {
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
 
-        assertThatThrownBy(() -> service.updateManagerPermissions(founderToken, company.getId(), null, Set.of()))
+        assertThatThrownBy(() -> service.updateManagerPermissions(founderToken, company.getId(), UUID.randomUUID(), null, Set.of()))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("manager ID");
     }
@@ -631,7 +657,7 @@ class CompanyServiceBlackTest {
     @Test
     void updateManagerPermissions_throws_when_company_not_found() {
         String founderToken = registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.updateManagerPermissions(founderToken, UUID.randomUUID(), UUID.randomUUID(), Set.of()))
+        assertThatThrownBy(() -> service.updateManagerPermissions(founderToken, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), Set.of()))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
@@ -1375,4 +1401,5 @@ class CompanyServiceBlackTest {
         assertThatThrownBy(() -> service.removeEventManager(founderToken, UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID()))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
+
 }

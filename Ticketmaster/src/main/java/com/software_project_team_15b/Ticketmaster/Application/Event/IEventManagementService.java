@@ -2,34 +2,31 @@ package com.software_project_team_15b.Ticketmaster.Application.Event;
 
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
-import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
+import com.software_project_team_15b.Ticketmaster.DTO.EventAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
+import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.SeatsAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.HoldNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.SeatUnavailableException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 /**
  * Application-service contract for the Event aggregate.
  * <p>
- * Implementations own transactions, retry on lock conflicts, per-event locking,
- * and authorization checks via the company port.
+ * Implementations resolve tokens, perform authorization checks, emit audit logs,
+ * and delegate to the Event domain service. Concurrency control (per-event locks,
+ * retries, transactions) lives in the domain service so every caller benefits
+ * uniformly.
  *
  * <p>Authorization model: every mutating method has two flavors:
  * <ul>
@@ -41,6 +38,10 @@ import java.util.UUID;
  * </ul>
  * Both variants delegate to the company authorization port for the per-action
  * role / permission check.
+ *
+ * <p>Hold / release / releaseSeats / confirm are <b>not</b> exposed here: they are
+ * purchase-flow internals consumed by {@code PurchasingService} via
+ * {@code IEventDomainService}, not user-facing management operations.
  */
 public interface IEventManagementService {
 
@@ -63,7 +64,7 @@ public interface IEventManagementService {
      * @return map keyed by availability
      * @throws InvalidEventStateException if the event or area is not found
      */
-    Map<Boolean, Set<UUID>> getSeatsAvailability(UUID eventId, UUID areaId, Set<UUID> seatIds);
+    SeatsAvailabilityDTO getSeatsAvailability(UUID eventId, UUID areaId, Set<UUID> seatIds);
 
     /**
      * Returns every seat in an area as a flat list of {@link EventDTO.SeatView}.
@@ -98,10 +99,10 @@ public interface IEventManagementService {
      * (sold-out trigger).
      *
      * @param eventId event id
-     * @return current {@link EventAvailability}
+     * @return current availability wrapped in {@link EventAvailabilityDTO}
      * @throws InvalidEventStateException if the event is not found
      */
-    EventAvailability getEventAvailability(UUID eventId);
+    EventAvailabilityDTO getEventAvailability(UUID eventId);
 
     /**
      * Computes a price quote for one order line: base price, subtotal, discount,
@@ -115,63 +116,7 @@ public interface IEventManagementService {
      * @return price breakdown
      * @throws InvalidEventStateException if the event or area is not found
      */
-    PriceBreakdown getPrice(UUID eventId, PriceQuery query);
-
-    /**
-     * Releases a subset of seats from an active hold; the rest of the hold remains.
-     * <p>
-     * Requirement: {@code II.2.7} (modify active order).
-     *
-     * @param eventId   event id
-     * @param holdToken token issued at hold time
-     * @param seatIds   seat ids to release; may be empty
-     * @return {@code true} iff at least one seat was released
-     * @throws InvalidEventStateException if the event is not found
-     */
-    boolean releaseSeats(UUID eventId, UUID holdToken, List<UUID> seatIds);
-
-    /**
-     * Confirms a hold, transitioning its seats / quantity from HELD to SOLD.
-     * Triggers the SOLD_OUT transition when the last unit is confirmed.
-     * <p>
-     * Requirement: {@code II.2.8} (checkout), {@code INTEG} (purchase finality).
-     *
-     * @param eventId   event id
-     * @param holdToken token issued at hold time
-     * @return receipt with area id, seat ids, quantity, total
-     * @throws InvalidEventStateException if the event is not found or is cancelled
-     * @throws HoldNotFoundException      if no active hold exists for the token
-     */
-    ConfirmationReceipt confirm(UUID eventId, UUID holdToken);
-
-    /**
-     * Releases every seat / quantity bound to a hold token; unknown tokens are a no-op.
-     * Called on TTL expiry, cart-clear, and checkout rollback.
-     * <p>
-     * Requirement: {@code INV} (TTL release), {@code II.2.8} (rollback).
-     *
-     * @param eventId   event id
-     * @param holdToken token to release
-     * @throws InvalidEventStateException if the event is not found
-     */
-    void release(UUID eventId, UUID holdToken);
-
-    /**
-     * Places a temporary hold on seats (seating area) or quantity (standing area).
-     * The TTL is owned by an external reservation-timer; this aggregate does not
-     * embed it.
-     * <p>
-     * Requirement: {@code II.2.4} (reserve), {@code II.2.5.a}/{@code b}
-     * (seat / quantity selection), {@code SLR.1} (race-safe).
-     *
-     * @param eventId event id
-     * @param cmd     hold spec (area, seat ids OR standing quantity, hold token)
-     * @return receipt with held seat ids, quantity, subtotal
-     * @throws InvalidEventStateException if the event is not found, not PUBLISHED,
-     *                                    or the area-shape mismatches the command
-     * @throws SeatUnavailableException   if a requested seat is not available
-     */
-    HoldReceipt hold(UUID eventId, HoldCommand cmd);
+    PriceBreakdownDTO getPrice(UUID eventId, PriceQuery query);
 
     /**
      * Cancels the event. Idempotent. Refunds and notifications are dispatched by
@@ -388,40 +333,5 @@ public interface IEventManagementService {
     /** Token-authenticated variant of {@link #replaceDiscountPolicies(UUID, List, UUID)}. */
     void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies, String token);
 
-    /*
-     * =========================================================================
-     * STILL-MISSING REQUIREMENTS — out of scope for the Event aggregate.
-     * Listed here for traceability; they belong to other aggregates / services
-     * (Lottery, Queue, OrderHistory, Notification, Company, ExternalAPIs).
-     * =========================================================================
-     *
-     *  II.3.6           — Lottery registration / win-permit issuance.
-     *                     Belongs to the Lottery aggregate.
-     *  II.2.6 / I.7     — Virtual queue gating and queue-state visibility.
-     *                     Belongs to the Queue aggregate.
-     *  II.2.8           — End-to-end "all-or-nothing" checkout orchestration
-     *                     across payment + ticketing externals. Belongs to
-     *                     an Order / Checkout coordinator.
-     *  I.5              — Outbound notification fan-out (sold-out, cancelled,
-     *                     rescheduled, role changes). Belongs to a
-     *                     Notification port + Application-level publisher.
-     *  I.3 / INTEG      — Automatic refund cascade on cancel. Belongs to the
-     *                     Payment / Refund external integration layer.
-     *  II.4.5           — Per-event purchase / order history query. Belongs
-     *                     to the OrderHistory aggregate.
-     *  II.4.6           — Sales reports. Belongs to the Reporting / Company
-     *                     aggregate, aggregating OrderHistory data.
-     *  II.4.13          — Hide events of inactive companies from search.
-     *                     Belongs to the Company aggregate (the repository
-     *                     specification already enforces this filter).
-     *  II.6.5           — System analytics primitives. Belongs to a dedicated
-     *                     Admin / Analytics service, not the Event aggregate.
-     *  II.3.5 / II.4.5  — Immutable historical purchase snapshots. Belongs to
-     *                     the OrderHistory aggregate.
-     *  Concept §3.b     — "Buy N get M free" shape at the price-query
-     *                     boundary requires multi-line PriceQuery; deferred
-     *                     to a future PriceQuery DTO change.
-     *  SLR.7            — Persistency / recovery hooks. Cross-cutting
-     *                     infrastructure concern, not a service method.
-     */
+
 }
