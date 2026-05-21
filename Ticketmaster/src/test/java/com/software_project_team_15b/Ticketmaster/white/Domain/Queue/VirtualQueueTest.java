@@ -23,12 +23,7 @@ public class VirtualQueueTest {
         queue = new VirtualQueue(queueId);
     }
 
-    // --- Constructor ---
-
-    @Test
-    void constructorShouldThrowWhenQueueIdIsNull() {
-        assertThrows(IllegalArgumentException.class, () -> new VirtualQueue(null));
-    }
+    // --- Constructor (positive) ---
 
     @Test
     void constructorShouldCreateEmptyQueue() {
@@ -37,23 +32,54 @@ public class VirtualQueueTest {
         assertEquals(0, q.size());
     }
 
-    // --- push ---
+    @Test
+    void constructorShouldStoreProvidedQueueId() {
+        VirtualQueue q = new VirtualQueue(queueId);
+        assertEquals(queueId, q.getId());
+    }
 
     @Test
-    void pushShouldThrowWhenItemIsNull() {
-        assertThrows(IllegalArgumentException.class, () -> queue.push(null));
+    void constructorShouldDefaultCapacityToIntegerMaxValueWhenUnbounded() {
+        VirtualQueue q = new VirtualQueue(queueId);
+        assertEquals(Integer.MAX_VALUE, q.getCapacity());
     }
+
+    @Test
+    void constructorWithCapacityShouldStoreProvidedCapacity() {
+        VirtualQueue q = new VirtualQueue(queueId, 5);
+        assertEquals(5, q.getCapacity());
+    }
+
+    @Test
+    void constructorWithCapacityShouldAllowZeroCapacity() {
+        VirtualQueue q = new VirtualQueue(queueId, 0);
+        assertEquals(0, q.getCapacity());
+        assertTrue(q.isFull());
+    }
+
+    // --- Constructor (negative) ---
+
+    @Test
+    void constructorShouldThrowWhenQueueIdIsNull() {
+        assertThrows(IllegalArgumentException.class, () -> new VirtualQueue(null));
+    }
+
+    @Test
+    void constructorWithCapacityShouldThrowWhenQueueIdIsNull() {
+        assertThrows(IllegalArgumentException.class, () -> new VirtualQueue(null, 10));
+    }
+
+    @Test
+    void constructorWithCapacityShouldThrowWhenCapacityIsNegative() {
+        assertThrows(IllegalArgumentException.class, () -> new VirtualQueue(queueId, -1));
+    }
+
+    // --- push (positive) ---
 
     @Test
     void pushShouldAddItemToQueue() {
         queue.push(ALICE);
         assertTrue(queue.contains(ALICE));
-    }
-
-    @Test
-    void pushShouldThrowWhenItemAlreadyExists() {
-        queue.push(ALICE);
-        assertThrows(IllegalArgumentException.class, () -> queue.push(ALICE));
     }
 
     @Test
@@ -66,12 +92,42 @@ public class VirtualQueueTest {
         assertTrue(queue.contains(CAROL));
     }
 
-    // --- pop ---
+    @Test
+    void pushShouldRespectInsertionOrder() {
+        queue.push(ALICE);
+        queue.push(BOB);
+        assertEquals(0, queue.getPosition(ALICE));
+        assertEquals(1, queue.getPosition(BOB));
+    }
+
+    // --- push (negative) ---
 
     @Test
-    void popShouldReturnNullWhenQueueIsEmpty() {
-        assertNull(queue.pop());
+    void pushShouldThrowWhenItemIsNull() {
+        assertThrows(IllegalArgumentException.class, () -> queue.push(null));
     }
+
+    @Test
+    void pushShouldThrowWhenItemAlreadyExists() {
+        queue.push(ALICE);
+        assertThrows(IllegalArgumentException.class, () -> queue.push(ALICE));
+    }
+
+    @Test
+    void pushShouldThrowIllegalStateWhenQueueIsFull() {
+        VirtualQueue bounded = new VirtualQueue(queueId, 2);
+        bounded.push(ALICE);
+        bounded.push(BOB);
+        assertThrows(IllegalStateException.class, () -> bounded.push(CAROL));
+    }
+
+    @Test
+    void pushShouldThrowImmediatelyOnZeroCapacityQueue() {
+        VirtualQueue zero = new VirtualQueue(queueId, 0);
+        assertThrows(IllegalStateException.class, () -> zero.push(ALICE));
+    }
+
+    // --- pop (positive) ---
 
     @Test
     void popShouldReturnFrontItem() {
@@ -110,12 +166,25 @@ public class VirtualQueueTest {
         assertNull(queue.pop());
     }
 
-    // --- peek ---
+    @Test
+    void popShouldFreeCapacitySlot() {
+        VirtualQueue bounded = new VirtualQueue(queueId, 1);
+        bounded.push(ALICE);
+        assertTrue(bounded.isFull());
+        bounded.pop();
+        assertFalse(bounded.isFull());
+        bounded.push(BOB);
+        assertTrue(bounded.contains(BOB));
+    }
+
+    // --- pop (negative) ---
 
     @Test
-    void peekShouldReturnNullWhenQueueIsEmpty() {
-        assertNull(queue.peek());
+    void popShouldReturnNullWhenQueueIsEmpty() {
+        assertNull(queue.pop());
     }
+
+    // --- peek (positive) ---
 
     @Test
     void peekShouldReturnFrontItem() {
@@ -142,6 +211,13 @@ public class VirtualQueueTest {
         queue.pop();
 
         assertEquals(BOB, queue.peek());
+    }
+
+    // --- peek (negative) ---
+
+    @Test
+    void peekShouldReturnNullWhenQueueIsEmpty() {
+        assertNull(queue.peek());
     }
 
     // --- size ---
@@ -189,17 +265,32 @@ public class VirtualQueueTest {
         assertTrue(queue.isEmpty());
     }
 
-    // --- contains ---
+    // --- isFull ---
 
     @Test
-    void containsShouldThrowWhenItemIsNull() {
-        assertThrows(IllegalArgumentException.class, () -> queue.contains(null));
+    void isFullShouldReturnFalseForNewUnboundedQueue() {
+        assertFalse(queue.isFull());
     }
 
     @Test
-    void containsShouldReturnFalseForNewQueue() {
-        assertFalse(queue.contains(ALICE));
+    void isFullShouldReturnTrueWhenSizeEqualsCapacity() {
+        VirtualQueue bounded = new VirtualQueue(queueId, 2);
+        bounded.push(ALICE);
+        assertFalse(bounded.isFull());
+        bounded.push(BOB);
+        assertTrue(bounded.isFull());
     }
+
+    @Test
+    void isFullShouldReturnFalseAgainAfterPop() {
+        VirtualQueue bounded = new VirtualQueue(queueId, 1);
+        bounded.push(ALICE);
+        assertTrue(bounded.isFull());
+        bounded.pop();
+        assertFalse(bounded.isFull());
+    }
+
+    // --- contains (positive) ---
 
     @Test
     void containsShouldReturnTrueForPushedItem() {
@@ -221,5 +312,62 @@ public class VirtualQueueTest {
         queue.pop();
         assertFalse(queue.contains(ALICE));
         assertTrue(queue.contains(BOB));
+    }
+
+    // --- contains (negative) ---
+
+    @Test
+    void containsShouldThrowWhenItemIsNull() {
+        assertThrows(IllegalArgumentException.class, () -> queue.contains(null));
+    }
+
+    @Test
+    void containsShouldReturnFalseForNewQueue() {
+        assertFalse(queue.contains(ALICE));
+    }
+
+    // --- getPosition (positive) ---
+
+    @Test
+    void getPositionShouldReturnZeroForFrontOfQueue() {
+        queue.push(ALICE);
+        queue.push(BOB);
+        assertEquals(0, queue.getPosition(ALICE));
+    }
+
+    @Test
+    void getPositionShouldReturnInsertionIndexForLaterItems() {
+        queue.push(ALICE);
+        queue.push(BOB);
+        queue.push(CAROL);
+        assertEquals(2, queue.getPosition(CAROL));
+    }
+
+    @Test
+    void getPositionShouldUpdateAfterPop() {
+        queue.push(ALICE);
+        queue.push(BOB);
+        queue.push(CAROL);
+        queue.pop();
+        assertEquals(0, queue.getPosition(BOB));
+        assertEquals(1, queue.getPosition(CAROL));
+    }
+
+    // --- getPosition (negative) ---
+
+    @Test
+    void getPositionShouldThrowWhenItemIsNull() {
+        assertThrows(IllegalArgumentException.class, () -> queue.getPosition(null));
+    }
+
+    @Test
+    void getPositionShouldThrowWhenItemNotPresent() {
+        queue.push(ALICE);
+        assertThrows(IllegalArgumentException.class, () -> queue.getPosition(BOB));
+    }
+
+    @Test
+    void getPositionShouldThrowOnEmptyQueue() {
+        assertThrows(IllegalArgumentException.class, () -> queue.getPosition(ALICE));
     }
 }
