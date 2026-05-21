@@ -75,4 +75,13 @@ public class InMemoryOrderHistoryRepository implements IOrderHistoryRepository {
                 .filter(o -> eventIds.contains(o.getEventId()))
                 .collect(Collectors.toList());
     }
+
+    @Override
+    public List<OrderHistory> findByEventIdInAndIsCancelledFalse(List<UUID> eventIds) {
+        if (eventIds == null || eventIds.isEmpty())
+            return List.of();
+        return storage.values().stream()
+                .filter(o -> eventIds.contains(o.getEventId()) && !o.isCancelled())
+                .collect(Collectors.toList());
+    }
 }

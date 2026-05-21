@@ -22,9 +22,12 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITick
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.CheckoutCompletedDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutStartedDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
@@ -209,7 +212,7 @@ public class PurchasingService {
     })
     public CheckoutStartedDTO startCheckoutForGuest(String token, UUID orderId, LocalDate guestBirthDate) {
         UUID userId = requireValidUser(token);
-        if (auth.isGuest(token)) {
+        if (!auth.isGuest(token)) {
             throw new IllegalStateException("Only guests can use this method");
         }
         return startCheckoutForUser(token, userId, orderId, guestBirthDate);
@@ -270,14 +273,14 @@ public class PurchasingService {
             FailedPaymentException.class,
             FailedToIssueTicketsException.class
     })
-    public void completeCheckoutForMember(String token, UUID orderId, String couponCode) {
+    public CheckoutCompletedDTO completeCheckoutForMember(String token, UUID orderId, String couponCode) {
         UUID userId = requireValidUser(token);
         if (!auth.isMember(token)) {
             throw new IllegalStateException("Only members can use this method");
         }
         LocalDate birthDate = getUserBirthDate(userId);
 
-        completeCheckoutForUser(token, userId, orderId, birthDate, couponCode);
+        return completeCheckoutForUser(token, userId, orderId, birthDate, couponCode);
     }
 
     @Transactional(noRollbackFor = {
@@ -285,15 +288,15 @@ public class PurchasingService {
             FailedPaymentException.class,
             FailedToIssueTicketsException.class
     })
-    public void completeCheckoutForGuest(String token, UUID orderId, LocalDate birthDate, String couponCode) {
+    public CheckoutCompletedDTO completeCheckoutForGuest(String token, UUID orderId, LocalDate birthDate, String couponCode) {
         UUID userId = requireValidUser(token);
-        if (auth.isGuest(token)) {
+        if (!auth.isGuest(token)) {
             throw new IllegalStateException("Only guests can use this method");
         }
-        completeCheckoutForUser(token, userId, orderId, birthDate, couponCode);
+        return completeCheckoutForUser(token, userId, orderId, birthDate, couponCode);
     }
 
-    private void completeCheckoutForUser(String token, UUID userId, UUID orderId, LocalDate birthDate, String couponCode) {
+    private CheckoutCompletedDTO completeCheckoutForUser(String token, UUID userId, UUID orderId, LocalDate birthDate, String couponCode) {
         ActiveOrder activeOrder = null;
         PriceBreakdown priceBreakdown = null;
 
@@ -328,6 +331,14 @@ public class PurchasingService {
                     receipt.quantity()
             );
 
+            return new CheckoutCompletedDTO(
+                    activeOrder.getOrderId(),
+                    activeOrder.getEventId(),
+                    activeOrder.getAreaId(),
+                    receipt.quantity(),
+                    MoneyDTO.from(priceBreakdown.total())
+            );
+            
         } catch (RuntimeException e) {
             compensateCheckoutFailure(
                     token,
@@ -407,7 +418,7 @@ public class PurchasingService {
 
     private UUID requireValidUser(String token) {
         if (!auth.isTokenValid(token)) {
-            throw new IllegalStateException("Token is invalid or expired");
+            throw new InvalidTokenException("Token is invalid or expired");
         }
         return auth.extractUserId(token);
     }

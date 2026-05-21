@@ -1,4 +1,4 @@
-package com.software_project_team_15b.Ticketmaster.Application.OrderHistoryServiceTests.integration;
+package com.software_project_team_15b.Ticketmaster.black.Application.OrderHistory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;

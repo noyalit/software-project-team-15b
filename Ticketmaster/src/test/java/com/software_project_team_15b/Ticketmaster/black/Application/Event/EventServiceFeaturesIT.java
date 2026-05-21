@@ -9,7 +9,6 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Add
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
-import com.software_project_team_15b.Ticketmaster.DTO.EventAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
 import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
@@ -23,7 +22,6 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.StandingEventArea
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;

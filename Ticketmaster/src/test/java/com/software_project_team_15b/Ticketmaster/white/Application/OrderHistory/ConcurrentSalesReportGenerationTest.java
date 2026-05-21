@@ -1,4 +1,4 @@
-package com.software_project_team_15b.Ticketmaster.Application.OrderHistoryServiceTests.concurrency;
+package com.software_project_team_15b.Ticketmaster.white.Application.OrderHistory;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -65,11 +65,11 @@ class ConcurrentSalesReportGenerationTest {
         when(auth.isTokenValid(token)).thenReturn(true);
         when(auth.extractUserId(token)).thenReturn(callerId);
 
+        when(userDomainService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of());
         Company company = org.mockito.Mockito.mock(Company.class);
         when(company.getId()).thenReturn(companyId);
         when(companyRepository.findByFounder(callerId)).thenReturn(List.of(company));
         when(companyRepository.findById(companyId)).thenReturn(Optional.of(company));
-        when(userDomainService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of());
 
         UUID eventId1 = UUID.randomUUID();
         UUID eventId2 = UUID.randomUUID();
@@ -89,7 +89,7 @@ class ConcurrentSalesReportGenerationTest {
                 createOrder(userId, eventId1, 2, "10.00"),
                 createOrder(userId, eventId2, 5, "20.00")
         );
-        when(orderHistoryRepository.findByEventIdIn(any())).thenReturn(orders);
+        when(orderHistoryRepository.findByEventIdInAndIsCancelledFalse(any())).thenReturn(orders);
     }
 
     @Test
