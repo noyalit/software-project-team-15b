@@ -79,4 +79,6 @@ public interface IEventDomainService {
     // ---- Validation (combined event + company) -------------------------------
 
     void validatePurchaseEligibility(UUID eventId, PurchaseRequest request);
+
+    UUID getCompanyIdForEventId(UUID eventId);
 }

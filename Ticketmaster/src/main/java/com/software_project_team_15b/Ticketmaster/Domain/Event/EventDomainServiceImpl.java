@@ -449,10 +449,16 @@ public class EventDomainServiceImpl implements IEventDomainService {
         for (IEventPurchasePolicy policy : event.purchasePolicies()) {
             policy.validate(request, event);
         }
-        companyService.validatePurchaseEligibility(event.companyId(), request);
+        //companyService.validatePurchaseEligibility(event.companyId(), request);
     }
 
     // ---- Helpers -------------------------------------------------------------
+
+
+    @Override
+    public UUID getCompanyIdForEventId(UUID eventId) {
+        return events.findById(eventId).get().companyId();
+    }
 
     private Event requireEvent(UUID eventId) {
         return events.findById(eventId)
