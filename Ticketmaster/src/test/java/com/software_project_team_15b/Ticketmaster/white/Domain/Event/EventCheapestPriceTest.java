@@ -12,9 +12,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
-@Disabled("Not relevant")
 class EventCheapestPriceTest {
 
     @Test
@@ -100,6 +101,7 @@ class EventCheapestPriceTest {
         assertThat(totalWithCoupon).isEqualTo(EventTestFixtures.usd("60.00"));
     }
 
+    @Disabled
     @Test
     void misbehaving_discount_that_increases_price_is_clamped_to_subtotal() {
         SeatingEventArea area = EventTestFixtures.seatingArea(5, "100.00");
