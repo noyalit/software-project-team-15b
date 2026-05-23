@@ -3,7 +3,6 @@ package com.software_project_team_15b.Ticketmaster.DTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventStatus;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 
 import java.time.Instant;
@@ -26,17 +25,17 @@ public record ActiveOrderDTO(
         LocalDateTime createdAt,
         LocalDateTime expiresAt,
         int quantity,
-        Money basePricePerSeat,
-        Money subtotal,
-        Money total,
-        List<SeatInOrderView> seats
+        MoneyDTO basePricePerSeat,
+        MoneyDTO subtotal,
+        MoneyDTO total,
+        List<SeatInOrderDTO> seats
 ) {
-    public record SeatInOrderView(
+    public record SeatInOrderDTO(
             UUID seatId,
             String row,
             String number,
             String seatStatus,
-            Money basePrice
+            MoneyDTO basePrice
     ) {
     }
 
@@ -62,7 +61,7 @@ public record ActiveOrderDTO(
                         "Area not found in event: " + activeOrder.getAreaId()
                 ));
 
-        List<SeatInOrderView> seats = activeOrder.getOrderSeats().stream()
+        List<SeatInOrderDTO> seats = activeOrder.getOrderSeats().stream()
                 .map(seatId -> {
                     EventDTO.SeatView seatView = area.seats().stream()
                             .filter(s -> s.seatId().equals(seatId))
@@ -71,12 +70,12 @@ public record ActiveOrderDTO(
                                     "Seat not found in area: " + seatId
                             ));
 
-                    return new SeatInOrderView(
+                    return new SeatInOrderDTO(
                             seatId,
                             seatView.row(),
                             seatView.number(),
                             seatView.status(),
-                            pricing.basePrice()
+                            MoneyDTO.from(pricing.basePrice())
                     );
                 })
                 .toList();
@@ -98,9 +97,9 @@ public record ActiveOrderDTO(
                 activeOrder.getCreatedAt(),
                 activeOrder.getExpiresAt(),
                 quantity,
-                pricing.basePrice(),
-                pricing.basePrice().multiply(quantity),
-                pricing.total(),
+                MoneyDTO.from(pricing.basePrice()),
+                MoneyDTO.from(pricing.basePrice().multiply(quantity)),
+                MoneyDTO.from(pricing.total()),
                 seats
         );
     }

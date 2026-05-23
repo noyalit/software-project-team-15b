@@ -7,6 +7,7 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITick
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
@@ -100,6 +101,12 @@ abstract class PurchasingServiceWhiteTestBase {
         when(auth.isTokenValid(token)).thenReturn(false);
     }
 
+    protected void mockValidGuest() {
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(userId);
+        when(auth.isGuest(token)).thenReturn(true);
+    }
+
     protected LotteryEligibilityDTO mockLotteryEligibilityDTO() {
         LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
 
@@ -143,9 +150,14 @@ abstract class PurchasingServiceWhiteTestBase {
         return order;
     }
 
+    protected MoneyDTO moneyDTO(String amount) {
+        return MoneyDTO.from(Money.of(amount, "ILS"));
+    }
+
     protected Money money(String amount) {
         return Money.of(amount, "ILS");
     }
+
 
     protected PriceBreakdown priceBreakdown(String total) {
         Money basePrice = money(total);
@@ -160,7 +172,7 @@ abstract class PurchasingServiceWhiteTestBase {
         EventDTO.AreaView areaView = new EventDTO.AreaView(
                 areaId,
                 "area",
-                money("0.00"),
+                moneyDTO("0.00"),
                 "SEATING",
                 1,
                 List.of(

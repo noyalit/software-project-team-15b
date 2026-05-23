@@ -29,10 +29,11 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
+import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.OrderHistoryDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.TicketDTO;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
 import org.springframework.transaction.annotation.Transactional;
-
 
 @Service
 public class OrderHistoryService implements EventSubscriber{
@@ -225,7 +226,7 @@ public class OrderHistoryService implements EventSubscriber{
     }
     AUDIT.info("op=cancelOrderHistory orderId={} eventId={} userId={} refund={}", orderHistory.getOrderId(), orderHistory.getEventId(), orderHistory.getUserId(), orderHistory.getTotalPrice());
     try {
-        paymentGateway.refundPayment(orderHistory.getUserId(),orderHistory.getTotalPrice());
+        paymentGateway.refundPayment(orderHistory.getUserId(), orderHistory.getTotalPrice());
         
         AUDIT.info(
         "op=cancelOrderHistory orderId={} result=refund_ok",
@@ -283,7 +284,7 @@ public class OrderHistoryService implements EventSubscriber{
                 order.getUserId(),
                 order.getEventId(),
                 order.getAreaId(),
-                order.getTotalPrice(),
+                MoneyDTO.from(order.getTotalPrice()),
                 tickets,
                 order.isCancelled()
         );

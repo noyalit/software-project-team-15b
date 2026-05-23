@@ -4,7 +4,6 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventArea;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventStatus;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatingEventArea;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.StandingEventArea;
 import java.time.Instant;
@@ -25,7 +24,7 @@ public record EventDTO(
     public record AreaView(
             UUID areaId,
             String name,
-            Money basePrice,
+            MoneyDTO basePrice,
             String type,
             int availableCapacity,
             List<SeatView> seats
@@ -50,6 +49,6 @@ public record EventDTO(
                         .map(seat -> new SeatView(seat.seatId(), seat.row(), seat.number(), seat.status().name()))
                         .toList()
                 : List.of();
-        return new AreaView(a.areaId(), a.name(), a.basePrice(), type, a.availableCapacity(), seats);
+        return new AreaView(a.areaId(), a.name(), MoneyDTO.from(a.basePrice()), type, a.availableCapacity(), seats);
     }
 }
