@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.white.Application.ActiveOrder;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 
@@ -62,7 +63,7 @@ class CreateActiveOrderWhiteTest extends PurchasingServiceWhiteTestBase {
     void createActiveOrderShouldThrowWhenTokenIsInvalid() {
         mockInvalidUser();
 
-        assertThrows(IllegalStateException.class, () ->
+        assertThrows(InvalidTokenException.class, () ->
                 service.createActiveOrder(token, eventId, areaId)
         );
 

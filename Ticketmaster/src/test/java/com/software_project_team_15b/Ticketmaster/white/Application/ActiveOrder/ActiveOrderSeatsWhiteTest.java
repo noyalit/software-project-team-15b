@@ -1,6 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.white.Application.ActiveOrder;
 
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.RemoveOrAddSeatsFromActiveOrderCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
@@ -113,7 +114,7 @@ class ActiveOrderSeatsWhiteTest extends PurchasingServiceWhiteTestBase {
         RemoveOrAddSeatsFromActiveOrderCommand cmd =
                 new RemoveOrAddSeatsFromActiveOrderCommand(orderId, Set.of(seatId1));
 
-        assertThrows(IllegalStateException.class, () ->
+        assertThrows(InvalidTokenException.class, () ->
                 service.addSeatsToExistingOrder(token, cmd)
         );
 
@@ -281,7 +282,7 @@ class ActiveOrderSeatsWhiteTest extends PurchasingServiceWhiteTestBase {
         RemoveOrAddSeatsFromActiveOrderCommand cmd =
                 new RemoveOrAddSeatsFromActiveOrderCommand(orderId, Set.of(seatId1));
 
-        assertThrows(IllegalStateException.class, () ->
+        assertThrows(InvalidTokenException.class, () ->
                 service.removeSeatsFromExistingOrder(token, cmd)
         );
 
