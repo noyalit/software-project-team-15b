@@ -407,7 +407,7 @@ public class UserDomainService {
                         || hasManagerPermission(managerId, eventId, companyId, required);
 
         if (!isAllowed) {
-            throw new PolicyViolationException(
+            throw new InvalidManagerPermissionsException(
                     "User is not authorized for this event action. " +
                             "managerId=" + managerId +
                             ", companyId=" + companyId +
