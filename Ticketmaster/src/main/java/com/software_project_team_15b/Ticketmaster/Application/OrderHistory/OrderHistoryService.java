@@ -1,6 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.Application.OrderHistory;
 
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.Set;
 import java.util.List;
@@ -45,6 +46,7 @@ public class OrderHistoryService implements EventSubscriber{
     private final IAuth auth;
     private final UserDomainService userDomainService;
     private final ICompanyRepository companyRepository;
+    private static final ConcurrentHashMap<UUID, Object> ORDER_LOCKS = new ConcurrentHashMap<>();
 
 
     public OrderHistoryService(IOrderHistoryRepository orderHistoryRepository,
@@ -318,47 +320,57 @@ public class OrderHistoryService implements EventSubscriber{
         if (orderHistory == null) {
             throw new IllegalArgumentException("Order history cannot be null");
         }
-        AUDIT.info("op=cancelOrderHistory orderId={} eventId={} userId={} refund={}", orderHistory.getOrderId(), orderHistory.getEventId(), orderHistory.getUserId(), orderHistory.getTotalPrice());
-        try {
-            paymentGateway.refundPayment(orderHistory.getUserId(), orderHistory.getTotalPrice());
-            
-            AUDIT.info(
-            "op=cancelOrderHistory orderId={} result=refund_ok",
-                    orderHistory.getOrderId()
-            );
-        } catch (Exception ex) {
-            AUDIT.error(
-                "op=cancelOrderHistory orderId={} eventId={} userId={} amount={} result=failed reason=refund_error",
-                orderHistory.getOrderId(),
-                orderHistory.getEventId(),
-                orderHistory.getUserId(),
-                orderHistory.getTotalPrice(),
-                ex
-            );
-                throw new RuntimeException(ex);
-        }
+        Object lock = ORDER_LOCKS.computeIfAbsent(orderHistory.getOrderId(), id -> new Object());
+        synchronized (lock) {
+            // re-fetch to get the latest state
+            OrderHistory current = orderHistoryRepository.findById(orderHistory.getOrderId()).orElse(orderHistory);
+            if (current.isCancelled()) {
+                AUDIT.info("op=cancelOrderHistory orderId={} result=already_cancelled", orderHistory.getOrderId());
+                return;
+            }
 
-        Set<UUID> seatIds = orderHistory.getTickets().stream().map(ticket -> ticket.getSeatId()).collect(Collectors.toSet());
-        try {
-            ticketProvider.cancelTickets(orderHistory.getEventId(), orderHistory.getAreaId(), seatIds);
-            AUDIT.info(
-        "op=cancelOrderHistory orderId={} result=cancel_tickets_ok",
-                orderHistory.getOrderId()
+            AUDIT.info("op=cancelOrderHistory orderId={} eventId={} userId={} refund={}", current.getOrderId(), current.getEventId(), current.getUserId(), current.getTotalPrice());
+            try {
+                paymentGateway.refundPayment(current.getUserId(), current.getTotalPrice());
+                AUDIT.info("op=cancelOrderHistory orderId={} result=refund_ok", current.getOrderId());
+            } catch (Exception ex) {
+                AUDIT.error(
+                    "op=cancelOrderHistory orderId={} eventId={} userId={} amount={} result=failed reason=refund_error",
+                    current.getOrderId(),
+                    current.getEventId(),
+                    current.getUserId(),
+                    current.getTotalPrice(),
+                    ex
                 );
-        } catch (Exception ex) {
-            AUDIT.error(
-            "op=cancelOrderHistory orderId={} eventId={} areaId={} result=failed reason=cancel_tickets_error",
-            orderHistory.getOrderId(),
-            orderHistory.getEventId(),
-            orderHistory.getAreaId(),
-            ex
-        );
                 throw new RuntimeException(ex);
-        }
+            }
 
-        orderHistory.cancel();
-        orderHistoryRepository.save(orderHistory);
-        AUDIT.info("op=cancelOrderHistory orderId={} result=ok", orderHistory.getOrderId());
+            Set<UUID> seatIds = current.getTickets().stream().map(ticket -> ticket.getSeatId()).collect(Collectors.toSet());
+            try {
+                ticketProvider.cancelTickets(current.getEventId(), current.getAreaId(), seatIds);
+                AUDIT.info("op=cancelOrderHistory orderId={} result=cancel_tickets_ok", current.getOrderId());
+            } catch (Exception ex) {
+                AUDIT.error(
+                    "op=cancelOrderHistory orderId={} eventId={} areaId={} result=failed reason=cancel_tickets_error",
+                    current.getOrderId(),
+                    current.getEventId(),
+                    current.getAreaId(),
+                    ex
+                );
+                throw new RuntimeException(ex);
+            }
+
+            try {
+                current.cancel();
+            } catch (IllegalStateException ex) {
+                AUDIT.info("op=cancelOrderHistory orderId={} result=already_cancelled_during_cancel", current.getOrderId());
+                // already cancelled by another concurrent execution; nothing more to do
+                return;
+            }
+            orderHistoryRepository.save(current);
+            AUDIT.info("op=cancelOrderHistory orderId={} result=ok", current.getOrderId());
+        }
+        ORDER_LOCKS.remove(orderHistory.getOrderId());
         }
 
     private Money calculateTotalRevenue(List<OrderHistory> orders) {

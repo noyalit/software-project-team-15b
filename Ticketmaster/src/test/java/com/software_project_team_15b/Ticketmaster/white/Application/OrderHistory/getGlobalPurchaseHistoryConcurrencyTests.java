@@ -16,6 +16,11 @@ import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.OrderHistory.OrderHistoryService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
+import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.Ticket;
+
+import java.time.Instant;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.DTO.OrderHistoryDTO;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,7 +30,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest
-public class getGlobalPurchaseHistoryConcurrencyTests {
+public class GetGlobalPurchaseHistoryConcurrencyTests {
 
         @Autowired
         OrderHistoryService service;
@@ -178,6 +183,35 @@ public class getGlobalPurchaseHistoryConcurrencyTests {
                 }
 
                 executor.shutdown();
+        }
+
+        // helpers
+        private Event createEvent(UUID companyId) {
+                return new Event(
+                                UUID.randomUUID(),
+                                companyId,
+                                "Test Event",
+                                "Artist",
+                                Category.CONCERT,
+                                Instant.now().plusSeconds(3600),
+                                "Location",
+                                List.of(),
+                                List.of()
+                );
+        }
+
+        private com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory createOrder(UUID userId, UUID eventId, int ticketCount, String price) {
+                if (eventId != null && eventsRepository.findById(eventId).isEmpty()) {
+                        eventsRepository.save(createEvent(UUID.randomUUID()));
+                }
+                Money basePrice = Money.of(price, "USD");
+                java.util.Set<Ticket> tickets = new java.util.HashSet<>();
+                for (int i = 0; i < ticketCount; i++) {
+                        tickets.add(new Ticket(UUID.randomUUID(), basePrice));
+                }
+                java.math.BigDecimal total = basePrice.amount().multiply(java.math.BigDecimal.valueOf(ticketCount));
+                Money totalPrice = Money.of(total.toPlainString(), "USD");
+                return new com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory(UUID.randomUUID(), userId, eventId, UUID.randomUUID(), totalPrice, tickets);
         }
 
 }
