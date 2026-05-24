@@ -315,7 +315,6 @@ public class OrderHistoryService implements EventSubscriber{
     }
 
 
-
     private void cancelOrderHistory(OrderHistory orderHistory) {
         if (orderHistory == null) {
             throw new IllegalArgumentException("Order history cannot be null");
