@@ -108,7 +108,7 @@ class OrderHistoryTestIT {
     // =========================================================
 
     @Test
-    void getOrderHistoryByUserId_whenMember_returnsOrders() {
+    void getOrderHistoryByUserId_returnsOrders_whenMember() {
 
         when(auth.extractUserId(token)).thenReturn(userId);
 
@@ -131,7 +131,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getOrderHistoryByUserId_throws_when_token_is_invalid() {
+    void getOrderHistoryByUserId_throwsIllegalArgumentException_whenTokenInvalid() {
 
         when(auth.isTokenValid(token)).thenReturn(false);
 
@@ -142,7 +142,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getOrderHistoryByUserId_whenTokenInvalid_doesNotExtractUserId() {
+    void getOrderHistoryByUserId_doesNotExtractUserId_whenTokenInvalid() {
 
     when(auth.isTokenValid(token)).thenReturn(false);
 
@@ -158,7 +158,7 @@ class OrderHistoryTestIT {
     // =========================================================
 
     @Test
-    void getSoldTicketsForCompany_whenUserIsFounder_returnsTicketsGroupedByEvent() {
+    void getSoldTicketsForCompany_returnsTicketsGroupedByEvent_whenUserIsFounder() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
         when(company.getId()).thenReturn(companyId);
@@ -190,7 +190,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getSoldTicketsForCompany_whenUserIsOwner_returnsTicketsGroupedByEvent() {
+    void getSoldTicketsForCompany_returnsTicketsGroupedByEvent_whenUserIsOwner() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
         when(company.getId()).thenReturn(companyId);
@@ -209,7 +209,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getSoldTicketsForCompany_whenNotFounderOrOwner_throwsUnauthorizedCompanyActionException() {
+    void getSoldTicketsForCompany_throwsUnauthorizedCompanyActionException_whenNotFounderOrOwner() {
 
         when(companyRepository.findByFounder(callerId)).thenReturn(List.of());
         when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
@@ -221,7 +221,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getSoldTicketsForCompany_excludesCancelledOrders() {
+    void getSoldTicketsForCompany_excludesCancelledOrders_whenCalled() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
         when(company.getId()).thenReturn(companyId);
@@ -244,7 +244,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getOrderHistoryByUserId_whenUserNotMember_throwsIllegalArgument() {
+    void getOrderHistoryByUserId_throwsIllegalArgumentException_whenUserNotMember() {
 
     when(auth.isMember(token)).thenReturn(false);
 
@@ -259,7 +259,7 @@ class OrderHistoryTestIT {
     // =========================================================
 
     @Test
-    void generateSalesReport_whenUserIsFounder_returnsCorrectTotals() {
+    void generateSalesReport_returnsCorrectTotals_whenUserIsFounder() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
         when(company.getId()).thenReturn(companyId);
@@ -292,7 +292,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void generateSalesReport_whenUserIsOwner_returnsCorrectTotals() {
+    void generateSalesReport_returnsCorrectTotals_whenUserIsOwner() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
         when(company.getId()).thenReturn(companyId);
@@ -315,7 +315,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void generateSalesReport_whenNoEvents_returnsZero() {
+    void generateSalesReport_returnsZero_whenNoEvents() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
         when(company.getId()).thenReturn(companyId);
@@ -331,7 +331,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void generateSalesReport_whenNotFounderOrOwner_throwsUnauthorizedCompanyActionException() {
+    void generateSalesReport_throwsUnauthorizedCompanyActionException_whenNotFounderOrOwner() {
 
         when(companyRepository.findByFounder(callerId)).thenReturn(List.of());
         when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
@@ -342,7 +342,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void generateSalesReport_excludesEventsManagedByOutsideManager() {
+    void generateSalesReport_excludesEventsManagedByOutsideManager_whenCalled() {
 
     Company company = org.mockito.Mockito.mock(Company.class);
     when(company.getId()).thenReturn(companyId);
@@ -377,7 +377,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void generateSalesReport_includesEventsManagedByAppointedMembers() {
+    void generateSalesReport_includesEventsManagedByAppointedMembers_whenCalled() {
 
     Company company = org.mockito.Mockito.mock(Company.class);
 
@@ -408,7 +408,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void generateSalesReport_excludesCancelledOrdersFromTotals() {
+    void generateSalesReport_excludesCancelledOrdersFromTotals_whenCalled() {
 
     Company company = org.mockito.Mockito.mock(Company.class);
     when(company.getId()).thenReturn(companyId);
@@ -441,7 +441,7 @@ class OrderHistoryTestIT {
     // =========================================================
 
     @Test
-    void notifyEventIsCancelled_whenActiveOrders_refundsAndCancelsTickets() {
+    void notifyEventIsCancelled_refundsAndCancelsTickets_whenActiveOrders() {
 
         UUID eventId = UUID.randomUUID();
         OrderHistory order =
@@ -454,7 +454,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void notifyEventIsCancelled_marksOrdersAsCancelled() {
+    void notifyEventIsCancelled_marksOrdersAsCancelled_whenCalled() {
 
     UUID eventId = UUID.randomUUID();
 
@@ -472,7 +472,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void notifyEventIsCancelled_whenEventIdNull_throwsIllegalArgument() {
+    void notifyEventIsCancelled_throwsIllegalArgumentException_whenEventIdNull() {
 
     assertThatThrownBy(() ->
             service.notifyEventIsCancelled(null))
@@ -480,7 +480,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void notifyEventIsCancelled_doesNotRefundAlreadyCancelledOrders() {
+    void notifyEventIsCancelled_doesNotRefundAlreadyCancelledOrders_whenCalled() {
 
     UUID eventId = UUID.randomUUID();
 
@@ -505,7 +505,7 @@ class OrderHistoryTestIT {
     // =========================================================
 
     @Test
-    void getGlobalPurchaseHistoryByBuyers_whenAdmin_returnsGroupedOrders() {
+    void getGlobalPurchaseHistoryByBuyers_returnsGroupedOrders_whenAdmin() {
 
         UUID user1 = UUID.randomUUID();
         UUID user2 = UUID.randomUUID();
@@ -531,7 +531,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getGlobalPurchaseHistoryByBuyers_whenNonAdmin_throwsUnauthorizedCompanyActionException() {
+    void getGlobalPurchaseHistoryByBuyers_throwsUnauthorizedCompanyActionException_whenNonAdmin() {
 
         String token = "member-token";
 
@@ -545,7 +545,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getGlobalPurchaseHistoryByBuyers_whenInvalidToken_throwsIllegalArgument() {
+    void getGlobalPurchaseHistoryByBuyers_throwsIllegalArgumentException_whenInvalidToken() {
 
         String token = "invalid-token";
 
@@ -562,7 +562,7 @@ class OrderHistoryTestIT {
     // =========================================================
 
     @Test
-    void getGlobalPurchaseHistoryByEvents_whenAdmin_returnsGroupedOrders() {
+    void getGlobalPurchaseHistoryByEvents_returnsGroupedOrders_whenAdmin() {
 
         UUID event1 = UUID.randomUUID();
         UUID event2 = UUID.randomUUID();
@@ -584,7 +584,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getGlobalPurchaseHistoryByEvents_whenNonAdmin_throwsUnauthorizedCompanyActionException() {
+    void getGlobalPurchaseHistoryByEvents_throwsUnauthorizedCompanyActionException_whenNonAdmin() {
 
         String token = "member-token-events";
 
@@ -598,7 +598,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getGlobalPurchaseHistoryByEvents_whenInvalidToken_throwsIllegalArgument() {
+    void getGlobalPurchaseHistoryByEvents_throwsIllegalArgumentException_whenInvalidToken() {
 
         String token = "invalid-token-events";
 
@@ -615,7 +615,7 @@ class OrderHistoryTestIT {
     // =========================================================
 
     @Test
-    void getGlobalPurchaseHistoryByCompanies_whenAdmin_returnsGroupedOrders() {
+    void getGlobalPurchaseHistoryByCompanies_returnsGroupedOrders_whenAdmin() {
 
         UUID company1 = UUID.randomUUID();
         UUID company2 = UUID.randomUUID();
@@ -646,7 +646,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getGlobalPurchaseHistoryByCompanies_whenNonAdmin_throwsUnauthorizedCompanyActionException() {
+    void getGlobalPurchaseHistoryByCompanies_throwsUnauthorizedCompanyActionException_whenNonAdmin() {
 
         String token = "member-token-companies";
 
@@ -660,7 +660,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getGlobalPurchaseHistoryByCompanies_whenInvalidToken_throwsIllegalArgument() {
+    void getGlobalPurchaseHistoryByCompanies_throwsIllegalArgumentException_whenInvalidToken() {
 
         String token = "invalid-token-companies";
 
