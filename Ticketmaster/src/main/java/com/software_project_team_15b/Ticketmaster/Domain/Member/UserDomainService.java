@@ -379,6 +379,7 @@ public class UserDomainService {
                         && role.belongsToCompany(companyId));
     }
 
+    @Transactional(readOnly = true)
     public void isLegalEventManager(
             UUID eventId,
             UUID managerId,
