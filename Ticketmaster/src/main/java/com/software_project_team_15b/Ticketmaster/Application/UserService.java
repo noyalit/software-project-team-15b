@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
@@ -466,7 +467,7 @@ public class UserService {
      public boolean cancelMemberAccountBySystemAdmin(String token, UUID memberIdToCancel) {
         try{
             if (!auth.isTokenValid(token) || !auth.isSystemAdmin(token)) {
-                throw new IllegalArgumentException("Only a system admin can cancel member accounts");
+                throw new InvalidTokenException("Only a system admin can cancel member accounts");
             }
             UUID systemAdminId = auth.extractUserId(token);
             boolean result = userDomainService.cancelMemberAccount(memberIdToCancel);
@@ -482,11 +483,11 @@ public class UserService {
 
     private UUID getAuthenticatedMemberId(String token) {
         if (!auth.isTokenValid(token)) {
-            throw new IllegalArgumentException("Invalid or expired token");
+            throw new InvalidTokenException("Invalid or expired token");
         }
 
         if (!auth.isMember(token)) {
-            throw new IllegalArgumentException("Only members can perform this action");
+            throw new InvalidTokenException("Only members can perform this action");
         }
 
         return auth.extractUserId(token);
@@ -494,11 +495,11 @@ public class UserService {
 
     private void validateEntranceToken(String token) {
         if (!auth.isTokenValid(token)) {
-            throw new IllegalArgumentException("Invalid or expired token");
+            throw new InvalidTokenException("Invalid or expired token");
         }
 
         if (!(auth.isGuest(token))) {
-            throw new IllegalArgumentException("Only guest or temporary token can perform this action");
+            throw new InvalidTokenException("Only guest or temporary token can perform this action");
         }
     }
 
