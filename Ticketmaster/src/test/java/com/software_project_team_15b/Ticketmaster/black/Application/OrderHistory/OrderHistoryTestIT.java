@@ -2,8 +2,12 @@ package com.software_project_team_15b.Ticketmaster.black.Application.OrderHistor
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -495,6 +499,182 @@ void generateSalesReport_excludes_cancelled_orders_from_totals() {
     verify(ticketProvider, never())
             .cancelTickets(any(), any(), any());
     }
+
+    // =========================================================
+    // getGlobalPurchaseHistoryByBuyers
+    // =========================================================
+
+    @Test
+    void getGlobalPurchaseHistoryByBuyers_returnsGroupedOrders() {
+
+        UUID user1 = UUID.randomUUID();
+        UUID user2 = UUID.randomUUID();
+
+        String token = "admin-token";
+
+        OrderHistory order1 = mock(OrderHistory.class);
+        OrderHistory order2 = mock(OrderHistory.class);
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isSystemAdmin(token)).thenReturn(true);
+
+        when(order1.getUserId()).thenReturn(user1);
+        when(order2.getUserId()).thenReturn(user2);
+
+        when(orderHistoryRepository.findAll())
+                .thenReturn(List.of(order1, order2));
+
+        Map<UUID, List<OrderHistoryDTO>> result =
+                service.getGlobalPurchaseHistoryByBuyers(token);
+
+        assertEquals(2, result.size());
+        assertTrue(result.containsKey(user1));
+        assertTrue(result.containsKey(user2));
+    }
+
+    @Test
+    void getGlobalPurchaseHistoryByBuyers_nonAdmin_throwsException() {
+
+        String token = "member-token";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isSystemAdmin(token)).thenReturn(false);
+
+        assertThrows(
+                UnauthorizedCompanyActionException.class,
+                () -> service.getGlobalPurchaseHistoryByBuyers(token)
+        );
+    }
+
+    @Test
+    void getGlobalPurchaseHistoryByBuyers_invalidToken_throwsException() {
+
+        String token = "invalid-token";
+
+        when(auth.isTokenValid(token)).thenReturn(false);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.getGlobalPurchaseHistoryByBuyers(token)
+        );
+    }
+
+    // =========================================================
+    // getGlobalPurchaseHistoryByEvents
+    // =========================================================
+
+    @Test
+    void getGlobalPurchaseHistoryByEvents_returnsGroupedOrders() {
+
+        UUID event1 = UUID.randomUUID();
+        UUID event2 = UUID.randomUUID();
+        String token = "admin-token-events";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isSystemAdmin(token)).thenReturn(true);
+
+        orderHistoryRepository.save(createOrder(userId, event1, 2, "10.00"));
+        orderHistoryRepository.save(createOrder(userId, event1, 1, "15.00"));
+        orderHistoryRepository.save(createOrder(userId, event2, 1, "20.00"));
+
+        Map<UUID, List<OrderHistoryDTO>> result = service.getGlobalPurchaseHistoryByEvents(token);
+
+        assertTrue(result.containsKey(event1));
+        assertTrue(result.containsKey(event2));
+        assertEquals(2, result.get(event1).size());
+        assertEquals(1, result.get(event2).size());
+    }
+
+    @Test
+    void getGlobalPurchaseHistoryByEvents_nonAdmin_throwsException() {
+
+        String token = "member-token-events";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isSystemAdmin(token)).thenReturn(false);
+
+        assertThrows(
+                UnauthorizedCompanyActionException.class,
+                () -> service.getGlobalPurchaseHistoryByEvents(token)
+        );
+    }
+
+    @Test
+    void getGlobalPurchaseHistoryByEvents_invalidToken_throwsException() {
+
+        String token = "invalid-token-events";
+
+        when(auth.isTokenValid(token)).thenReturn(false);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.getGlobalPurchaseHistoryByEvents(token)
+        );
+    }
+
+    // =========================================================
+    // getGlobalPurchaseHistoryByCompanies
+    // =========================================================
+
+    @Test
+    void getGlobalPurchaseHistoryByCompanies_returnsGroupedOrders() {
+
+        UUID company1 = UUID.randomUUID();
+        UUID company2 = UUID.randomUUID();
+        String token = "admin-token-companies";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isSystemAdmin(token)).thenReturn(true);
+
+        Event event1 = createEvent(company1);
+        Event event2 = createEvent(company2);
+        eventsRepository.save(event1);
+        eventsRepository.save(event2);
+
+        orderHistoryRepository.save(createOrder(userId, event1.eventId(), 2, "10.00"));
+        orderHistoryRepository.save(createOrder(userId, event1.eventId(), 1, "12.00"));
+        orderHistoryRepository.save(createOrder(userId, event2.eventId(), 1, "20.00"));
+
+        Map<UUID, List<OrderHistoryDTO>> result = service.getGlobalPurchaseHistoryByCompanies(token);
+
+        assertEquals(2, result.size());
+        assertTrue(result.containsKey(company1));
+        assertTrue(result.containsKey(company2));
+        assertEquals(2, result.get(company1).size());
+        assertEquals(1, result.get(company2).size());
+    }
+
+    @Test
+    void getGlobalPurchaseHistoryByCompanies_nonAdmin_throwsException() {
+
+        String token = "member-token-companies";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isSystemAdmin(token)).thenReturn(false);
+
+        assertThrows(
+                UnauthorizedCompanyActionException.class,
+                () -> service.getGlobalPurchaseHistoryByCompanies(token)
+        );
+    }
+
+    @Test
+    void getGlobalPurchaseHistoryByCompanies_invalidToken_throwsException() {
+
+        String token = "invalid-token-companies";
+
+        when(auth.isTokenValid(token)).thenReturn(false);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.getGlobalPurchaseHistoryByCompanies(token)
+        );
+    }
+
+
+
+
+
 
     // =========================================================
     // helpers

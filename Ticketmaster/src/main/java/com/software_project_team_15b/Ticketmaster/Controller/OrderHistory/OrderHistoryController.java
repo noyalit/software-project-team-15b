@@ -94,6 +94,75 @@ public class OrderHistoryController {
         }
     }
 
+    @Operation(summary = "Get global purchase history grouped by buyers")
+    @GetMapping("/admin/history/buyers")
+    public ResponseEntity<ApiResponse<Map<UUID, List<OrderHistoryDTO>>>> getGlobalHistoryByBuyers(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+    ) {
+        try {
+
+            Map<UUID, List<OrderHistoryDTO>> history =
+                    orderHistoryService.getGlobalPurchaseHistoryByBuyers(token);
+
+            return ResponseEntity.ok(new ApiResponse<>(history, null));
+
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
+
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Get global purchase history grouped by events")
+    @GetMapping("/admin/history/events")
+    public ResponseEntity<ApiResponse<Map<UUID, List<OrderHistoryDTO>>>> getGlobalHistoryByEvents(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+    ) {
+        try {
+
+            Map<UUID, List<OrderHistoryDTO>> history =
+                    orderHistoryService.getGlobalPurchaseHistoryByEvents(token);
+
+            return ResponseEntity.ok(new ApiResponse<>(history, null));
+
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
+
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Get global purchase history grouped by companies")
+    @GetMapping("/admin/history/companies")
+    public ResponseEntity<ApiResponse<Map<UUID, List<OrderHistoryDTO>>>> getGlobalHistoryByCompanies(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+    ) {
+        try {
+
+            Map<UUID, List<OrderHistoryDTO>> history =
+                    orderHistoryService.getGlobalPurchaseHistoryByCompanies(token);
+
+            return ResponseEntity.ok(new ApiResponse<>(history, null));
+
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
+
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     private <T> ResponseEntity<ApiResponse<T>> badRequest(Exception ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(new ApiResponse<>(null, ex.getMessage()));

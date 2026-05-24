@@ -214,52 +214,153 @@ public class OrderHistoryService implements EventSubscriber{
         return Collections.unmodifiableMap(report);
     }
 
-    private void cancelOrderHistory(OrderHistory orderHistory) {
-    if (orderHistory == null) {
-        throw new IllegalArgumentException("Order history cannot be null");
-    }
-    AUDIT.info("op=cancelOrderHistory orderId={} eventId={} userId={} refund={}", orderHistory.getOrderId(), orderHistory.getEventId(), orderHistory.getUserId(), orderHistory.getTotalPrice());
-    try {
-        paymentGateway.refundPayment(orderHistory.getUserId(), orderHistory.getTotalPrice());
+    @Transactional(readOnly = true)
+    public Map<UUID, List<OrderHistoryDTO>> getGlobalPurchaseHistoryByBuyers(String token) {
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
+        }
+
+        validateUser(token);
         
-        AUDIT.info(
-        "op=cancelOrderHistory orderId={} result=refund_ok",
+        if (!auth.isSystemAdmin(token)) {
+            AUDIT.warn("op=getGlobalPurchaseHistoryByBuyers callerId={} result=rejected reason=unauthorized", auth.extractUserId(token));
+            throw new UnauthorizedCompanyActionException(
+                "Only system admin can view global purchase history"
+            );
+        }
+        
+        List<OrderHistory> orders = orderHistoryRepository.findAll();
+
+        Map<UUID, List<OrderHistoryDTO>> result = new LinkedHashMap<>();
+
+        for (OrderHistory order : orders) {
+            result.computeIfAbsent(order.getUserId(), ignored -> new ArrayList<>())
+                    .add(toOrderHistoryDTO(order));
+        }
+
+        result.replaceAll((userId, histories) -> List.copyOf(histories));
+
+        return Collections.unmodifiableMap(result);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<UUID, List<OrderHistoryDTO>> getGlobalPurchaseHistoryByEvents(String token) {
+
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
+        }
+
+        validateUser(token);
+
+        if (!auth.isSystemAdmin(token)) {
+            AUDIT.warn("op=getGlobalPurchaseHistoryByEvents callerId={} result=rejected reason=unauthorized", auth.extractUserId(token));
+            throw new UnauthorizedCompanyActionException(
+                "Only system admin can view global purchase history"
+            );
+        }
+
+        List<OrderHistory> orders = orderHistoryRepository.findAll();
+
+        Map<UUID, List<OrderHistoryDTO>> result = new LinkedHashMap<>();
+
+        for (OrderHistory order : orders) {
+            result.computeIfAbsent(order.getEventId(), ignored -> new ArrayList<>())
+                .add(toOrderHistoryDTO(order));
+        }
+
+        result.replaceAll((eventId, histories) -> List.copyOf(histories));
+
+        return Collections.unmodifiableMap(result);
+    }
+
+    @Transactional(readOnly = true)
+    public Map<UUID, List<OrderHistoryDTO>> getGlobalPurchaseHistoryByCompanies(String token) {
+
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
+        }
+
+        validateUser(token);
+
+        if (!auth.isSystemAdmin(token)) {
+            AUDIT.warn("op=getGlobalPurchaseHistoryByCompanies callerId={} result=rejected reason=unauthorized", auth.extractUserId(token));
+            throw new UnauthorizedCompanyActionException(
+                    "Only system admin can view global purchase history"
+            );
+        }
+
+        List<OrderHistory> orders = orderHistoryRepository.findAll();
+
+        Map<UUID, List<OrderHistoryDTO>> result = new LinkedHashMap<>();
+
+        for (OrderHistory order : orders) {
+
+            Event event = eventsRepository.findById(order.getEventId())
+                    .orElseThrow(() ->
+                            new IllegalStateException(
+                                    "Event not found: " + order.getEventId()
+                            )
+                    );
+
+            UUID companyId = event.companyId();
+
+            result.computeIfAbsent(companyId, ignored -> new ArrayList<>())
+                    .add(toOrderHistoryDTO(order));
+        }
+
+        result.replaceAll((companyId, histories) -> List.copyOf(histories));
+
+        return Collections.unmodifiableMap(result);
+    }
+
+
+
+    private void cancelOrderHistory(OrderHistory orderHistory) {
+        if (orderHistory == null) {
+            throw new IllegalArgumentException("Order history cannot be null");
+        }
+        AUDIT.info("op=cancelOrderHistory orderId={} eventId={} userId={} refund={}", orderHistory.getOrderId(), orderHistory.getEventId(), orderHistory.getUserId(), orderHistory.getTotalPrice());
+        try {
+            paymentGateway.refundPayment(orderHistory.getUserId(), orderHistory.getTotalPrice());
+            
+            AUDIT.info(
+            "op=cancelOrderHistory orderId={} result=refund_ok",
+                    orderHistory.getOrderId()
+            );
+        } catch (Exception ex) {
+            AUDIT.error(
+                "op=cancelOrderHistory orderId={} eventId={} userId={} amount={} result=failed reason=refund_error",
+                orderHistory.getOrderId(),
+                orderHistory.getEventId(),
+                orderHistory.getUserId(),
+                orderHistory.getTotalPrice(),
+                ex
+            );
+                throw new RuntimeException(ex);
+        }
+
+        Set<UUID> seatIds = orderHistory.getTickets().stream().map(ticket -> ticket.getSeatId()).collect(Collectors.toSet());
+        try {
+            ticketProvider.cancelTickets(orderHistory.getEventId(), orderHistory.getAreaId(), seatIds);
+            AUDIT.info(
+        "op=cancelOrderHistory orderId={} result=cancel_tickets_ok",
                 orderHistory.getOrderId()
-        );
-    } catch (Exception ex) {
-        AUDIT.error(
-            "op=cancelOrderHistory orderId={} eventId={} userId={} amount={} result=failed reason=refund_error",
+                );
+        } catch (Exception ex) {
+            AUDIT.error(
+            "op=cancelOrderHistory orderId={} eventId={} areaId={} result=failed reason=cancel_tickets_error",
             orderHistory.getOrderId(),
             orderHistory.getEventId(),
-            orderHistory.getUserId(),
-            orderHistory.getTotalPrice(),
+            orderHistory.getAreaId(),
             ex
         );
-            throw new RuntimeException(ex);
-    }
+                throw new RuntimeException(ex);
+        }
 
-    Set<UUID> seatIds = orderHistory.getTickets().stream().map(ticket -> ticket.getSeatId()).collect(Collectors.toSet());
-    try {
-        ticketProvider.cancelTickets(orderHistory.getEventId(), orderHistory.getAreaId(), seatIds);
-        AUDIT.info(
-    "op=cancelOrderHistory orderId={} result=cancel_tickets_ok",
-            orderHistory.getOrderId()
-            );
-    } catch (Exception ex) {
-        AUDIT.error(
-        "op=cancelOrderHistory orderId={} eventId={} areaId={} result=failed reason=cancel_tickets_error",
-        orderHistory.getOrderId(),
-        orderHistory.getEventId(),
-        orderHistory.getAreaId(),
-        ex
-    );
-            throw new RuntimeException(ex);
-    }
-
-    orderHistory.cancel();
-    orderHistoryRepository.save(orderHistory);
-    AUDIT.info("op=cancelOrderHistory orderId={} result=ok", orderHistory.getOrderId());
-    }
+        orderHistory.cancel();
+        orderHistoryRepository.save(orderHistory);
+        AUDIT.info("op=cancelOrderHistory orderId={} result=ok", orderHistory.getOrderId());
+        }
 
     private Money calculateTotalRevenue(List<OrderHistory> orders) {
         if (orders.isEmpty()) {
