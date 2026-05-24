@@ -144,11 +144,11 @@ public class UserService {
      */
     public String tryEnterFromQueue(String tempToken) {
         if (!auth.isTokenValid(tempToken)) {
-            throw new IllegalArgumentException("Invalid or expired token");
+            throw new InvalidTokenException("Invalid or expired token");
         }
 
         if (!auth.isTemp(tempToken)) {
-            throw new IllegalArgumentException("Token is not a temporary queue token");
+            throw new InvalidTokenException("Token is not a temporary queue token");
         }
 
         auth.exitSystem(tempToken);
@@ -198,7 +198,7 @@ public class UserService {
      */
     public String logout(String token) {
         if (!auth.isTokenValid(token)) {
-            throw new IllegalArgumentException("Invalid or expired token");
+            throw new InvalidTokenException("Invalid or expired token");
         }
 
         if (auth.isGuest(token)) {
