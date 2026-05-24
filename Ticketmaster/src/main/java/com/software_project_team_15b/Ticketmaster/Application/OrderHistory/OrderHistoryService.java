@@ -295,14 +295,13 @@ public class OrderHistoryService implements EventSubscriber{
 
         for (OrderHistory order : orders) {
 
-            Event event = eventsRepository.findById(order.getEventId())
-                    .orElseThrow(() ->
-                            new IllegalStateException(
-                                    "Event not found: " + order.getEventId()
-                            )
-                    );
+                Event event = eventsRepository.findById(order.getEventId()).orElse(null);
+                if (event == null) {
+                AUDIT.warn("op=getGlobalPurchaseHistoryByCompanies skipped orderId={} missingEventId={}", order.getOrderId(), order.getEventId());
+                continue;
+                }
 
-            UUID companyId = event.companyId();
+                UUID companyId = event.companyId();
 
             result.computeIfAbsent(companyId, ignored -> new ArrayList<>())
                     .add(toOrderHistoryDTO(order));
