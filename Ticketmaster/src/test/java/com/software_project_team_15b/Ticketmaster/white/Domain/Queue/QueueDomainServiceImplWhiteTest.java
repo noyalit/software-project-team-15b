@@ -120,6 +120,21 @@ class QueueDomainServiceImplWhiteTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void canAccessWebsite_returnsTrueWhenAcceptedSetIsEmpty() {
+        assertThat(service.canAccessWebsite()).isTrue();
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void canAccessWebsite_returnsFalseWhenAcceptedSetIsAtCap() {
+        Set<String> acceptedTokens = (Set<String>) ReflectionTestUtils.getField(service, "acceptedTokens");
+        for (int i = 0; i < 100; i++) {
+            acceptedTokens.add("tok-" + i);
+        }
+        assertThat(service.canAccessWebsite()).isFalse();
+    }
+
     // =========================================================================
     // getPositionInEventQueue — verify-based negative
     // =========================================================================

@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Lottery;
 
+import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.UUID;
 
@@ -45,9 +46,10 @@ public interface ILotteryDomainService {
      *
      * @param eventId the unique identifier of the event; must not be null
      * @param count   the maximum number of winners to select; must not be negative
+     * @param expirationTime the timestamp at which winner access should expire; must not be null and must be in the future
      * @return the set of selected winner UUIDs
      */
-    Set<UUID> runEventLottery(UUID eventId, int count);
+    Set<UUID> runEventLottery(UUID eventId, int count, LocalDateTime expirationTime);
 
     /**
      * Returns {@code true} if the user currently has an active lottery-winner access window

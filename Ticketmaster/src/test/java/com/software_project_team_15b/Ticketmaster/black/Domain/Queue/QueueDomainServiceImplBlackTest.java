@@ -119,6 +119,20 @@ class QueueDomainServiceImplBlackTest {
                 .isInstanceOf(InvalidTokenException.class);
     }
 
+    @Test
+    void canAccessWebsite_positive_returnsTrueWhenNobodyAdmitted() {
+        assertThat(domainService.canAccessWebsite()).isTrue();
+    }
+
+    @Test
+    void canAccessWebsite_negative_returnsFalseWhenSiteCapReached() {
+        for (int i = 0; i < 100; i++) {
+            domainService.addUserToSiteQueue("site-tok-" + i);
+        }
+        domainService.acceptUsersFromSiteQueue();
+        assertThat(domainService.canAccessWebsite()).isFalse();
+    }
+
     // =========================================================================
     // createEventQueue
     // =========================================================================

@@ -27,9 +27,8 @@ import static org.mockito.Mockito.*;
  * <ul>
  *   <li>Token validation via {@link IAuth} occurs before any event-queue domain service
  *       call, and invalid or null tokens short-circuit execution.</li>
- *   <li>Event-queue operations ({@code getQueueAccessView}, {@code pushToEventQueue})
- *       are forwarded to the domain service after token validation, without mutating
- *       or substituting arguments.</li>
+ *   <li>{@code getQueueAccessView} is forwarded to the domain service after token
+ *       validation, without mutating or substituting arguments.</li>
  *   <li>{@code createEventQueue} and {@code deleteEventQueue} check authorization via
  *       {@link com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService}
  *       then delegate to the domain service without touching the auth token.</li>
@@ -62,7 +61,6 @@ class QueueServiceWhiteTest {
     @Test
     void getQueueAccessView_validatesToken_thenDelegates() {
         when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
         QueueAccessDTO expected = new QueueAccessDTO(EVENT_ID, QueueAccessStatus.WAITING, 0, null);
         when(queueDomainService.getQueueAccessView("token-a", EVENT_ID)).thenReturn(expected);
 
@@ -72,20 +70,6 @@ class QueueServiceWhiteTest {
         var inOrder = inOrder(auth, queueDomainService);
         inOrder.verify(auth).isTokenValid("token-a");
         inOrder.verify(queueDomainService).getQueueAccessView("token-a", EVENT_ID);
-        verify(auth).extractUserId("token-a");
-    }
-
-    @Test
-    void pushToEventQueue_validatesToken_thenDelegates() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-
-        service.pushToEventQueue(EVENT_ID, "token-a");
-
-        var inOrder = inOrder(auth, queueDomainService);
-        inOrder.verify(auth).isTokenValid("token-a");
-        inOrder.verify(queueDomainService).pushToEventQueue(EVENT_ID, "token-a");
-        verify(auth).extractUserId("token-a");
     }
 
     // =========================================================================
@@ -133,24 +117,11 @@ class QueueServiceWhiteTest {
     // =========================================================================
 
     @Test
-    void pushToEventQueue_forwardsExactArgumentsWithoutMutation() {
-        UUID eid = UUID.randomUUID();
-        String tok = "token-xyz";
-        when(auth.isTokenValid(tok)).thenReturn(true);
-        when(auth.extractUserId(tok)).thenReturn(USER_ID);
-
-        service.pushToEventQueue(eid, tok);
-
-        verify(queueDomainService).pushToEventQueue(eid, tok);
-    }
-
-    @Test
     void getQueueAccessView_forwardsExactArgumentsWithoutMutation() {
         UUID eid = UUID.randomUUID();
         String tok = "tok";
         QueueAccessDTO out = new QueueAccessDTO(eid, QueueAccessStatus.NO_QUEUE, null, null);
         when(auth.isTokenValid(tok)).thenReturn(true);
-        when(auth.extractUserId(tok)).thenReturn(USER_ID);
         when(queueDomainService.getQueueAccessView(tok, eid)).thenReturn(out);
 
         assertThat(service.getQueueAccessView(tok, eid)).isSameAs(out);

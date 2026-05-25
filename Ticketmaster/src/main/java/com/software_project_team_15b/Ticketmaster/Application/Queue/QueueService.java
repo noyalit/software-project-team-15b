@@ -15,10 +15,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.Objects;
-import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -26,10 +23,10 @@ import java.util.concurrent.TimeUnit;
 /**
  * Application-layer facade over the queue domain.
  *
- * <p>Owns the site-wide waiting queue and the set of admitted tokens. All token
- * validation and admission scheduling live here so that the domain service remains
- * free of auth dependencies. Per-event queue state, repository access, transactions
- * and retry policy live in the domain service.
+ * <p>Coordinates auth-dependent site-queue eviction: on each scheduled tick, expired
+ * tokens are removed from the domain service's admitted set and the domain service
+ * fills vacated slots from the site queue. Per-event queue state, site-queue state,
+ * repository access, transactions, and retry policy all live in the domain service.
  */
 @Service
 public class QueueService {
@@ -88,9 +85,8 @@ public class QueueService {
             if (token == null) throw new IllegalArgumentException("token cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             validateToken(token);
-            UUID callerId = auth.extractUserId(token);
             QueueAccessDTO view = queueDomainService.getQueueAccessView(token, eventId);
-            AUDIT.info("op=getQueueAccessView callerId={} eventId={} status={}", callerId, eventId, view.status());
+            AUDIT.info("op=getQueueAccessView token={} eventId={} status={}", token, eventId, view.status());
             return view;
         } catch (RuntimeException e) {
             AUDIT.warn("op=getQueueAccessView eventId={} result=error error={}", eventId, e.getMessage());
@@ -139,30 +135,6 @@ public class QueueService {
             AUDIT.info("op=deleteEventQueue userId={} eventId={} result=ok", userId, eventId);
         } catch (RuntimeException e) {
             AUDIT.warn("op=deleteEventQueue userId={} eventId={} result=error error={}", userId, eventId, e.getMessage());
-            throw e;
-        }
-    }
-
-    /**
-     * Appends the given user to the back of the event's queue.
-     *
-     * @param eventId the unique identifier of the event; must not be null
-     * @param token   the user's auth token; must not be null
-     * @throws IllegalArgumentException  if {@code eventId} or {@code token} is null
-     * @throws QueueNotFoundException    if no queue exists for the given event
-     * @throws QueueIsFullException      if the queue has reached its capacity
-     * @throws AlreadyInQueueException   if the token is already waiting in the queue
-     */
-    public void pushToEventQueue(UUID eventId, String token) {
-        try {
-            if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-            if (token == null) throw new IllegalArgumentException("token cannot be null");
-            validateToken(token);
-            UUID callerId = auth.extractUserId(token);
-            queueDomainService.pushToEventQueue(eventId, token);
-            AUDIT.info("op=pushToEventQueue callerId={} eventId={} result=ok", callerId, eventId);
-        } catch (RuntimeException e) {
-            AUDIT.warn("op=pushToEventQueue eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
         }
     }

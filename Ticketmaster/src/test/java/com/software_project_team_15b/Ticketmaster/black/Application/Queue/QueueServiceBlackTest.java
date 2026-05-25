@@ -1,8 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.black.Application.Queue;
 
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyInQueueException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIsFullException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
@@ -63,14 +61,6 @@ class QueueServiceBlackTest {
         assertThatCode(() -> service.deleteEventQueue(USER_ID, COMPANY_ID, EVENT_ID)).doesNotThrowAnyException();
     }
 
-    @Test
-    void pushToEventQueue_positive_returnsNormally() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-
-        assertThatCode(() -> service.pushToEventQueue(EVENT_ID, "token-a")).doesNotThrowAnyException();
-    }
-
     // =========================================================================
     // Event-queue CRUD — negative
     // =========================================================================
@@ -111,36 +101,6 @@ class QueueServiceBlackTest {
                 .isInstanceOf(UnauthorizedException.class);
     }
 
-    @Test
-    void pushToEventQueue_negative_throwsInvalidTokenException_forInvalidToken() {
-        when(auth.isTokenValid("bad")).thenReturn(false);
-
-        assertThatThrownBy(() -> service.pushToEventQueue(EVENT_ID, "bad"))
-                .isInstanceOf(InvalidTokenException.class);
-    }
-
-    @Test
-    void pushToEventQueue_negative_propagatesQueueIsFull() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-        doThrow(new QueueIsFullException("full"))
-                .when(queueDomainService).pushToEventQueue(EVENT_ID, "token-a");
-
-        assertThatThrownBy(() -> service.pushToEventQueue(EVENT_ID, "token-a"))
-                .isInstanceOf(QueueIsFullException.class);
-    }
-
-    @Test
-    void pushToEventQueue_negative_propagatesAlreadyInQueue() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-        doThrow(new AlreadyInQueueException("dup"))
-                .when(queueDomainService).pushToEventQueue(EVENT_ID, "token-a");
-
-        assertThatThrownBy(() -> service.pushToEventQueue(EVENT_ID, "token-a"))
-                .isInstanceOf(AlreadyInQueueException.class);
-    }
-
     // =========================================================================
     // getQueueAccessView
     // =========================================================================
@@ -148,7 +108,6 @@ class QueueServiceBlackTest {
     @Test
     void getQueueAccessView_positive_returnsNoQueueDTOFromDomain() {
         when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
         QueueAccessDTO expected = new QueueAccessDTO(EVENT_ID, QueueAccessStatus.NO_QUEUE, null, null);
         when(queueDomainService.getQueueAccessView("token-a", EVENT_ID)).thenReturn(expected);
 
@@ -163,7 +122,6 @@ class QueueServiceBlackTest {
     @Test
     void getQueueAccessView_positive_returnsAdmittedDTOFromDomain() {
         when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
         QueueAccessDTO expected = new QueueAccessDTO(EVENT_ID, QueueAccessStatus.ADMITTED, null, LocalDateTime.now().plusSeconds(100));
         when(queueDomainService.getQueueAccessView("token-a", EVENT_ID)).thenReturn(expected);
 
@@ -177,7 +135,6 @@ class QueueServiceBlackTest {
     @Test
     void getQueueAccessView_positive_returnsWaitingDTOFromDomain() {
         when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
         QueueAccessDTO expected = new QueueAccessDTO(EVENT_ID, QueueAccessStatus.WAITING, 5, null);
         when(queueDomainService.getQueueAccessView("token-a", EVENT_ID)).thenReturn(expected);
 

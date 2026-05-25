@@ -1,13 +1,10 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Lottery;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyLotteryException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
@@ -18,35 +15,29 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Domain service for managing event lotteries.
  *
- * <p>Owns the persistent {@link ILotteryRepository} aggregate, the in-memory
- * winners map (eventId → winnerId → access-expiry timestamp), and the
- * lifecycle: create → users enter → organizer triggers draw → winners receive
- * a timed access window → window expires. Once drawn, no further drawing
- * occurs on that lottery.
+ * <p>Owns the persistent {@link ILotteryRepository} aggregate and the lifecycle:
+ * create → users enter → organizer triggers draw → winners receive a timed access
+ * window → window expires. Winner state and expiry timestamps are stored inside the
+ * {@link Lottery} entity. Multiple draws are permitted; each call to
+ * {@link #runEventLottery} selects from whatever entries remain and resets the
+ * access window.
  *
  * <p>Auth validation and audit logging are intentionally absent here — those
  * responsibilities belong to the application-layer {@code LotteryService}, which
  * holds the {@code IAuth} dependency.
  *
  * <p>Mutating operations that touch the database are transactional. Read-then-write
- * operations are also annotated with {@link Retryable} so that transient
+ * operations are additionally annotated with {@link Retryable} so that transient
  * optimistic-lock conflicts are transparently retried before propagating to the caller.
  */
 @Service
 public class LotteryDomainServiceImpl implements ILotteryDomainService {
 
-    private static final int WINNER_ACCESS_TIME = 600; // seconds
-
     private final ILotteryRepository lotteryRepository;
-    private final ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>> winners = new ConcurrentHashMap<>();
-    // Self-reference through the Spring proxy so that @Retryable and @Transactional
-    // on drawWinnersTransactional take effect when called from runEventLottery.
-    @Autowired @Lazy private LotteryDomainServiceImpl self;
 
     public LotteryDomainServiceImpl(ILotteryRepository lotteryRepository) {
         this.lotteryRepository = Objects.requireNonNull(lotteryRepository);
@@ -118,10 +109,8 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
     }
 
     /**
-     * Draws one random entry from the event's lottery pool, removing it.
-     *
-     * <p>If a concurrent update causes an optimistic-lock conflict the operation is
-     * retried up to 3 times with a short backoff before the exception propagates.
+     * Draws one random entry from the event's lottery pool, removing it and recording
+     * it as a winner in the {@link Lottery} entity.
      *
      * @param eventId the unique identifier of the event; must not be null
      * @return the UUID of the randomly selected entry
@@ -129,8 +118,6 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
      * @throws LotteryNotFoundException if no lottery exists for the given event
      * @throws EmptyLotteryException    if the lottery contains no entries
      */
-    @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
-    @Transactional
     protected UUID popRandomFromEventLottery(UUID eventId) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
@@ -148,10 +135,8 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
     }
 
     /**
-     * Draws up to {@code count} random entries from the event's lottery pool, removing each.
-     *
-     * <p>If a concurrent update causes an optimistic-lock conflict the operation is
-     * retried up to 3 times with a short backoff before the exception propagates.
+     * Draws up to {@code count} random entries from the event's lottery pool, removing each
+     * and recording them as winners in the {@link Lottery} entity.
      *
      * @param eventId the unique identifier of the event; must not be null
      * @param count   the maximum number of entries to draw; must not be negative
@@ -160,8 +145,6 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
      * @throws LotteryNotFoundException if no lottery exists for the given event
      * @throws EmptyLotteryException    if the lottery contains no entries
      */
-    @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
-    @Transactional
     protected Set<UUID> popRandomFromEventLottery(UUID eventId, int count) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
@@ -184,72 +167,32 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
     /**
      * Runs the lottery for the given event, selecting up to {@code count} winners.
      *
-     * <p>Winners are granted a {@link #WINNER_ACCESS_TIME}-second window to purchase
-     * tickets. The lottery may be run at most once per event — subsequent calls
-     * throw {@link LotteryAlreadyDrawnException}.
-     *
-     * <p>If the lottery pool has fewer than {@code count} entries all remaining
-     * entries are selected. An empty pool results in zero winners; the lottery is
-     * still marked as drawn so it cannot be triggered again.
-     *
-     * <p>Uses {@code self} (the Spring proxy) to invoke {@link #drawWinnersTransactional}
-     * so that {@link Retryable} and {@link Transactional} take effect.
+     * <p>If the pool has fewer than {@code count} entries all remaining entries are
+     * selected. An empty pool results in zero winners but still resets the access window.
      *
      * @param eventId the unique identifier of the event; must not be null
      * @param count   the maximum number of winners to select; must not be negative
+     * @param expirationTime the timestamp at which winner access should expire; must not be null and must be in the future
      * @return the set of selected winner UUIDs (may be empty if pool was empty)
-     * @throws IllegalArgumentException     if {@code eventId} is null or {@code count} is negative
-     * @throws LotteryNotFoundException     if no lottery exists for the given event
-     * @throws LotteryAlreadyDrawnException if the lottery for this event has already been drawn
-     */
-    @Override
-    public Set<UUID> runEventLottery(UUID eventId, int count) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
-        }
-        if (count < 0) {
-            throw new IllegalArgumentException("count cannot be negative");
-        }
-
-        // Claim the draw slot atomically before drawing. putIfAbsent returns null only for
-        // the first caller — all subsequent callers for the same event are rejected here,
-        // ensuring exactly one thread ever reaches drawWinnersTransactional.
-        ConcurrentHashMap<UUID, LocalDateTime> eventWinners = new ConcurrentHashMap<>();
-        if (winners.putIfAbsent(eventId, eventWinners) != null) {
-            throw new LotteryAlreadyDrawnException("Lottery for event " + eventId + " has already been drawn");
-        }
-
-        Set<UUID> drawn = self.drawWinnersTransactional(eventId, count);
-
-        LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(WINNER_ACCESS_TIME);
-        for (UUID winner : drawn) {
-            eventWinners.put(winner, expiresAt);
-        }
-
-        return drawn;
-    }
-
-    /**
-     * Internal transactional draw called through the Spring proxy so that
-     * {@link Retryable} and {@link Transactional} take effect.
-     *
-     * <p>Not part of {@link ILotteryDomainService} — intended only for internal
-     * self-invocation by {@link #runEventLottery}.
-     *
-     * @param eventId the unique identifier of the event
-     * @param count   maximum number of winners to draw
-     * @return the set of drawn winner UUIDs (may be empty)
+     * @throws IllegalArgumentException if {@code eventId} is null or {@code count} is negative
      * @throws LotteryNotFoundException if no lottery exists for the given event
      */
     @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
     @Transactional
-    protected Set<UUID> drawWinnersTransactional(UUID eventId, int count) {
+    @Override
+    public Set<UUID> runEventLottery(UUID eventId, int count, LocalDateTime expirationTime) {
+        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+        if (expirationTime == null) throw new IllegalArgumentException("expirationTime cannot be null");
+        if (expirationTime.isBefore(LocalDateTime.now())) throw new IllegalArgumentException("expirationTime must be in the future");
+
         Lottery lottery = lotteryRepository.getLottery(eventId);
         if (lottery == null) {
             throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
         }
         Set<UUID> drawn = lottery.popRandom(count);
+        lottery.setExpirationTime(expirationTime);
         lotteryRepository.updateLottery(lottery);
+
         return drawn;
     }
 
@@ -270,10 +213,16 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
-        ConcurrentHashMap<UUID, LocalDateTime> eventWinners = winners.get(eventId);
-        if (eventWinners == null) return false;
-        LocalDateTime expiresAt = eventWinners.get(userId);
-        return expiresAt != null && LocalDateTime.now().isBefore(expiresAt);
+        Lottery lottery = lotteryRepository.getLottery(eventId);
+        if (lottery == null) {
+            return false;
+        }
+        Set<UUID> winners = lottery.getWinners();
+        LocalDateTime expiresAt = lottery.getExpirationTime();
+        if (expiresAt == null) {
+            return false;
+        }
+        return winners.contains(userId) && LocalDateTime.now().isBefore(expiresAt);
     }
 
     /**
@@ -325,23 +274,17 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
             throw new IllegalArgumentException("eventId cannot be null");
         }
 
-        ConcurrentHashMap<UUID, LocalDateTime> eventWinners = winners.get(eventId);
+        Lottery lottery = lotteryRepository.getLottery(eventId);
+        if (lottery == null) {
+            return new LotteryEligibilityDTO(LotteryEligibilityStatus.NO_LOTTERY_REQUIRED);
+        }
 
-        if (eventWinners == null) {
-            // Lottery has not been drawn yet — check whether one even exists.
-            Lottery lottery = lotteryRepository.getLottery(eventId);
-            if (lottery == null) {
-                return new LotteryEligibilityDTO(LotteryEligibilityStatus.NO_LOTTERY_REQUIRED);
-            }
+        Set<UUID> eventWinners = lottery.getWinners();
+        if (!eventWinners.contains(userId)) {
             return new LotteryEligibilityDTO(LotteryEligibilityStatus.NOT_SELECTED);
         }
 
-        // Lottery was drawn — check whether this user won and whether their window is still open.
-        LocalDateTime expiresAt = eventWinners.get(userId);
-        if (expiresAt == null) {
-            return new LotteryEligibilityDTO(LotteryEligibilityStatus.NOT_SELECTED);
-        }
-        if (LocalDateTime.now().isBefore(expiresAt)) {
+        if (LocalDateTime.now().isBefore(lottery.getExpirationTime())) {
             return new LotteryEligibilityDTO(LotteryEligibilityStatus.WON_AND_ACCESS_VALID);
         }
         return new LotteryEligibilityDTO(LotteryEligibilityStatus.ACCESS_EXPIRED);

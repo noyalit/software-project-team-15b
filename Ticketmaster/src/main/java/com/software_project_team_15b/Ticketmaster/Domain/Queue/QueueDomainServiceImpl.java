@@ -398,6 +398,12 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
         advanceEventQueue(eventId);
     }
 
+    /**
+     * Returns {@code true} if the site currently has capacity for additional visitors,
+     * i.e. the number of admitted tokens is below {@link #MAX_VISITORS}.
+     *
+     * @return {@code true} if below the cap; {@code false} if at or above it
+     */
     @Override
     public boolean canAccessWebsite() {
         return acceptedTokens.size() < MAX_VISITORS;

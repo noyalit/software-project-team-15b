@@ -1,12 +1,26 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Lottery;
 
 import jakarta.persistence.*;
+
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
+/**
+ * JPA entity representing a lottery for a single event.
+ *
+ * <p>Tracks the pool of entered user UUIDs ({@code lotterySet}), the set of drawn
+ * winners ({@code winners}), the optional winner-access expiration timestamp, and
+ * the pool capacity. Lifecycle: users {@link #add enter} the pool → the organizer
+ * calls {@link #popRandom(int)} to draw winners (moving them from the pool into
+ * {@code winners}) → winners hold access until {@link #expirationTime}.
+ *
+ * <p>{@link #popRandom()} and {@link #popRandom(int)} are not thread-safe; callers
+ * that need concurrent safety must manage synchronization externally.
+ */
 @Entity
 @Table(name = "lottery")
 public class Lottery {
@@ -33,6 +47,9 @@ public class Lottery {
 
     @Column(name = "capacity", nullable = false)
     private int capacity;
+
+    @Column(name = "expiration_time")
+    private LocalDateTime expirationTime = null;
 
     @Version
     private long version;
@@ -187,5 +204,24 @@ public class Lottery {
         }
 
         return result;
+    }
+
+    /**
+     * Sets the timestamp after which drawn winners may no longer use their access.
+     *
+     * @param expirationTime the expiry instant; {@code null} means no expiration is set
+     */
+    public void setExpirationTime(LocalDateTime expirationTime) {
+        this.expirationTime = expirationTime;
+    }
+
+    /**
+     * Returns the timestamp after which drawn winners may no longer use their access,
+     * or {@code null} if the lottery has not been drawn yet.
+     *
+     * @return the expiry instant, or {@code null}
+     */
+    public LocalDateTime getExpirationTime() {
+        return expirationTime;
     }
 }

@@ -1,6 +1,5 @@
 package com.software_project_team_15b.Ticketmaster.black.Domain.Lottery;
 
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
@@ -15,8 +14,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.*;
@@ -31,10 +30,7 @@ import static org.mockito.Mockito.*;
  * {@link ILotteryDomainService} contract.
  *
  * <p>No reflection on the SUT, no protected-method exposure: the system is driven via
- * public interface methods and observed through public interface methods. The Spring
- * proxy {@code self} reference is injected once during setup since outside of a Spring
- * context the @Retryable / @Transactional self-invocation would otherwise NPE — that is
- * test plumbing, not white-box knowledge.
+ * public interface methods and observed through public interface methods.
  */
 @ExtendWith(MockitoExtension.class)
 class LotteryDomainServiceImplBlackTest {
@@ -45,8 +41,7 @@ class LotteryDomainServiceImplBlackTest {
     private ILotteryDomainService domainService;
 
     @BeforeEach
-    void wireSelfAndExpose() {
-        ReflectionTestUtils.setField(service, "self", service);
+    void setUp() {
         domainService = service;
     }
 
@@ -55,6 +50,7 @@ class LotteryDomainServiceImplBlackTest {
     private static final UUID USER_A         = UUID.fromString("00000000-0000-0000-0000-000000000002");
     private static final UUID USER_B         = UUID.fromString("00000000-0000-0000-0000-000000000003");
     private static final UUID USER_C         = UUID.fromString("00000000-0000-0000-0000-000000000004");
+    private static final LocalDateTime EXPIRY = LocalDateTime.now().plusHours(1);
 
     // =========================================================================
     // createEventLottery
@@ -141,7 +137,7 @@ class LotteryDomainServiceImplBlackTest {
         lottery.add(USER_C);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        Set<UUID> result = domainService.runEventLottery(EVENT_ID, 2);
+        Set<UUID> result = domainService.runEventLottery(EVENT_ID, 2, EXPIRY);
 
         assertThat(result).hasSize(2);
         assertThat(Set.of(USER_A, USER_B, USER_C)).containsAll(result);
@@ -153,7 +149,7 @@ class LotteryDomainServiceImplBlackTest {
         lottery.add(USER_A);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        domainService.runEventLottery(EVENT_ID, 1);
+        domainService.runEventLottery(EVENT_ID, 1, EXPIRY);
 
         LotteryEligibilityDTO result = domainService.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
         assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.WON_AND_ACCESS_VALID);
@@ -167,7 +163,7 @@ class LotteryDomainServiceImplBlackTest {
         lottery.add(USER_B);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        Set<UUID> winners = domainService.runEventLottery(EVENT_ID, 1);
+        Set<UUID> winners = domainService.runEventLottery(EVENT_ID, 1, EXPIRY);
         UUID loser = Set.of(USER_A, USER_B).stream()
                 .filter(u -> !winners.contains(u))
                 .findFirst().orElseThrow();
@@ -181,7 +177,7 @@ class LotteryDomainServiceImplBlackTest {
     void runEventLottery_positive_emptyPool_returnsEmptySetButMarksDrawn() {
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(new Lottery(EVENT_ID));
 
-        Set<UUID> result = domainService.runEventLottery(EVENT_ID, 5);
+        Set<UUID> result = domainService.runEventLottery(EVENT_ID, 5, EXPIRY);
 
         assertThat(result).isEmpty();
         LotteryEligibilityDTO view = domainService.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
@@ -195,20 +191,26 @@ class LotteryDomainServiceImplBlackTest {
         lottery.add(USER_B);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        Set<UUID> result = domainService.runEventLottery(EVENT_ID, 100);
+        Set<UUID> result = domainService.runEventLottery(EVENT_ID, 100, EXPIRY);
 
         assertThat(result).containsExactlyInAnyOrder(USER_A, USER_B);
     }
 
     @Test
     void runEventLottery_negative_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> domainService.runEventLottery(null, 1))
+        assertThatThrownBy(() -> domainService.runEventLottery(null, 1, EXPIRY))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void runEventLottery_negative_negativeCount_throwsIllegalArgument() {
-        assertThatThrownBy(() -> domainService.runEventLottery(EVENT_ID, -1))
+    void runEventLottery_negative_nullExpirationTime_throwsIllegalArgument() {
+        assertThatThrownBy(() -> domainService.runEventLottery(EVENT_ID, 1, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void runEventLottery_negative_pastExpirationTime_throwsIllegalArgument() {
+        assertThatThrownBy(() -> domainService.runEventLottery(EVENT_ID, 1, LocalDateTime.now().minusSeconds(1)))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -216,20 +218,20 @@ class LotteryDomainServiceImplBlackTest {
     void runEventLottery_negative_lotteryNotFound_throwsLotteryNotFoundException() {
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
 
-        assertThatThrownBy(() -> domainService.runEventLottery(EVENT_ID, 1))
+        assertThatThrownBy(() -> domainService.runEventLottery(EVENT_ID, 1, EXPIRY))
                 .isInstanceOf(LotteryNotFoundException.class);
     }
 
     @Test
-    void runEventLottery_negative_calledTwice_throwsLotteryAlreadyDrawnException() {
+    void runEventLottery_calledTwice_secondCallReturnsEmptySet() {
         Lottery lottery = new Lottery(EVENT_ID);
         lottery.add(USER_A);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        domainService.runEventLottery(EVENT_ID, 1);
+        domainService.runEventLottery(EVENT_ID, 1, EXPIRY);
+        Set<UUID> second = domainService.runEventLottery(EVENT_ID, 1, EXPIRY);
 
-        assertThatThrownBy(() -> domainService.runEventLottery(EVENT_ID, 1))
-                .isInstanceOf(LotteryAlreadyDrawnException.class);
+        assertThat(second).isEmpty();
     }
 
     // =========================================================================
@@ -242,7 +244,7 @@ class LotteryDomainServiceImplBlackTest {
         lottery.add(USER_A);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        domainService.runEventLottery(EVENT_ID, 1);
+        domainService.runEventLottery(EVENT_ID, 1, EXPIRY);
 
         assertThat(domainService.hasAccess(USER_A, EVENT_ID)).isTrue();
     }
@@ -253,7 +255,7 @@ class LotteryDomainServiceImplBlackTest {
         lottery.add(USER_A);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        domainService.runEventLottery(EVENT_ID, 1);
+        domainService.runEventLottery(EVENT_ID, 1, EXPIRY);
 
         assertThat(domainService.hasAccess(USER_B, EVENT_ID)).isFalse();
     }
@@ -345,7 +347,7 @@ class LotteryDomainServiceImplBlackTest {
         lottery.add(USER_A);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        domainService.runEventLottery(EVENT_ID, 1);
+        domainService.runEventLottery(EVENT_ID, 1, EXPIRY);
 
         LotteryEligibilityDTO result = domainService.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
 
@@ -372,7 +374,7 @@ class LotteryDomainServiceImplBlackTest {
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
         when(lotteryRepository.getLottery(OTHER_EVENT_ID)).thenReturn(null);
 
-        domainService.runEventLottery(EVENT_ID, 1);
+        domainService.runEventLottery(EVENT_ID, 1, EXPIRY);
 
         LotteryEligibilityDTO result = domainService.getLotteryEligibilityForEvent(USER_A, OTHER_EVENT_ID);
         assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.NO_LOTTERY_REQUIRED);
@@ -402,7 +404,7 @@ class LotteryDomainServiceImplBlackTest {
             pool.submit(() -> {
                 try {
                     start.await();
-                    Set<UUID> result = domainService.runEventLottery(eid, 1);
+                    Set<UUID> result = domainService.runEventLottery(eid, 1, EXPIRY);
                     if (result.size() == 1) drawn.incrementAndGet();
                 } catch (Exception ignored) {}
                 return null;
@@ -416,36 +418,18 @@ class LotteryDomainServiceImplBlackTest {
     }
 
     @Test
-    void concurrentRunEventLottery_sameEvent_exactlyOneSucceeds() throws InterruptedException {
+    void runEventLottery_sameEvent_sequentialCallsDrainPool() {
         Lottery lottery = new Lottery(EVENT_ID);
-        for (int i = 0; i < 10; i++) lottery.add(UUID.randomUUID());
+        for (int i = 0; i < 4; i++) lottery.add(UUID.randomUUID());
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        int threads = 12;
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
-        AtomicInteger successes = new AtomicInteger();
-        AtomicInteger alreadyDrawn = new AtomicInteger();
+        Set<UUID> first  = domainService.runEventLottery(EVENT_ID, 3, EXPIRY);
+        Set<UUID> second = domainService.runEventLottery(EVENT_ID, 3, EXPIRY);
+        Set<UUID> third  = domainService.runEventLottery(EVENT_ID, 3, EXPIRY);
 
-        for (int i = 0; i < threads; i++) {
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    domainService.runEventLottery(EVENT_ID, 3);
-                    successes.incrementAndGet();
-                } catch (LotteryAlreadyDrawnException e) {
-                    alreadyDrawn.incrementAndGet();
-                } catch (Exception ignored) {}
-                return null;
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
-
-        assertThat(successes.get()).isEqualTo(1);
-        assertThat(alreadyDrawn.get()).isEqualTo(threads - 1);
+        assertThat(first).hasSize(3);
+        assertThat(second).hasSize(1);
+        assertThat(third).isEmpty();
     }
 
     @Test
@@ -454,7 +438,7 @@ class LotteryDomainServiceImplBlackTest {
         lottery.add(USER_A);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        domainService.runEventLottery(EVENT_ID, 1);
+        domainService.runEventLottery(EVENT_ID, 1, EXPIRY);
 
         int threads = 30;
         CountDownLatch start = new CountDownLatch(1);

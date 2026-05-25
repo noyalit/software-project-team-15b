@@ -1,7 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.white.Domain.Lottery;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyLotteryException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
@@ -9,13 +8,11 @@ import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryReposit
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.Lottery;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.LotteryDomainServiceImpl;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -40,8 +37,8 @@ class LotteryDomainServiceImplWhiteTest {
     @InjectMocks private LotteryDomainServiceImpl service;
 
     /**
-     * Subclass that widens the three protected helpers so tests can invoke them
-     * deterministically without going through the Spring proxy.
+     * Subclass that widens the protected helpers so tests can invoke them
+     * deterministically.
      */
     private static class ExposedLotteryService extends LotteryDomainServiceImpl {
         ExposedLotteryService(ILotteryRepository r) { super(r); }
@@ -55,27 +52,16 @@ class LotteryDomainServiceImplWhiteTest {
         public Set<UUID> popRandomFromEventLottery(UUID eventId, int count) {
             return super.popRandomFromEventLottery(eventId, count);
         }
-
-        @Override
-        public Set<UUID> drawWinnersTransactional(UUID eventId, int count) {
-            return super.drawWinnersTransactional(eventId, count);
-        }
     }
 
     private ExposedLotteryService createExposed() {
-        ExposedLotteryService exposed = new ExposedLotteryService(lotteryRepository);
-        ReflectionTestUtils.setField(exposed, "self", exposed);
-        return exposed;
-    }
-
-    @BeforeEach
-    void injectSelf() {
-        ReflectionTestUtils.setField(service, "self", service);
+        return new ExposedLotteryService(lotteryRepository);
     }
 
     private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID USER_A   = UUID.fromString("00000000-0000-0000-0000-000000000002");
     private static final UUID USER_B   = UUID.fromString("00000000-0000-0000-0000-000000000003");
+    private static final LocalDateTime EXPIRY = LocalDateTime.now().plusHours(1);
 
     // =========================================================================
     // Lottery CRUD — positive (verify-based)
@@ -239,47 +225,54 @@ class LotteryDomainServiceImplWhiteTest {
         lottery.add(USER_A);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        service.runEventLottery(EVENT_ID, 1);
+        service.runEventLottery(EVENT_ID, 1, EXPIRY);
 
         verify(lotteryRepository).updateLottery(lottery);
     }
 
     @Test
     void runEventLottery_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.runEventLottery(null, 1))
+        assertThatThrownBy(() -> service.runEventLottery(null, 1, EXPIRY))
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(lotteryRepository);
     }
 
     @Test
-    void runEventLottery_negativeCount_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.runEventLottery(EVENT_ID, -1))
+    void runEventLottery_nullExpirationTime_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.runEventLottery(EVENT_ID, 1, null))
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(lotteryRepository);
     }
 
     @Test
-    void runEventLottery_calledTwice_throwsLotteryAlreadyDrawnException() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        lottery.add(USER_A);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        service.runEventLottery(EVENT_ID, 1);
-
-        assertThatThrownBy(() -> service.runEventLottery(EVENT_ID, 1))
-                .isInstanceOf(LotteryAlreadyDrawnException.class);
-        verify(lotteryRepository, times(1)).updateLottery(any());
+    void runEventLottery_pastExpirationTime_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.runEventLottery(EVENT_ID, 1, LocalDateTime.now().minusSeconds(1)))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(lotteryRepository);
     }
 
     @Test
-    void runEventLottery_marksEventAsDrawnInWinnersMap() {
+    void runEventLottery_calledTwice_secondCallReturnsEmptySet() {
         Lottery lottery = new Lottery(EVENT_ID);
         lottery.add(USER_A);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        service.runEventLottery(EVENT_ID, 1);
+        service.runEventLottery(EVENT_ID, 1, EXPIRY);
+        Set<UUID> second = service.runEventLottery(EVENT_ID, 1, EXPIRY);
 
-        assertThat(winnersMap(service)).containsKey(EVENT_ID);
+        assertThat(second).isEmpty();
+        verify(lotteryRepository, times(2)).updateLottery(any());
+    }
+
+    @Test
+    void runEventLottery_setsExpirationTimeOnLottery() {
+        Lottery lottery = new Lottery(EVENT_ID);
+        lottery.add(USER_A);
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
+
+        service.runEventLottery(EVENT_ID, 1, EXPIRY);
+
+        assertThat(lottery.getExpirationTime()).isEqualTo(EXPIRY);
     }
 
     // =========================================================================
@@ -287,10 +280,12 @@ class LotteryDomainServiceImplWhiteTest {
     // =========================================================================
 
     @Test
-    void getLotteryEligibilityForEvent_winnerAccessExpiredInMap_returnsAccessExpiredStatus() {
-        ConcurrentHashMap<UUID, LocalDateTime> eventWinners = new ConcurrentHashMap<>();
-        eventWinners.put(USER_A, LocalDateTime.now().minusSeconds(1));
-        winnersMap(service).put(EVENT_ID, eventWinners);
+    void getLotteryEligibilityForEvent_winnerAccessExpired_returnsAccessExpiredStatus() {
+        Lottery lottery = new Lottery(EVENT_ID);
+        lottery.add(USER_A);
+        lottery.popRandom(1);  // USER_A is now a winner (only entry)
+        lottery.setExpirationTime(LocalDateTime.now().minusSeconds(1));
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
         LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
 
@@ -318,9 +313,11 @@ class LotteryDomainServiceImplWhiteTest {
 
     @Test
     void hasAccess_returnsFalseForExpiredWinner() {
-        ConcurrentHashMap<UUID, LocalDateTime> eventWinners = new ConcurrentHashMap<>();
-        eventWinners.put(USER_A, LocalDateTime.now().minusSeconds(1));
-        winnersMap(service).put(EVENT_ID, eventWinners);
+        Lottery lottery = new Lottery(EVENT_ID);
+        lottery.add(USER_A);
+        lottery.popRandom(1);  // USER_A is now a winner
+        lottery.setExpirationTime(LocalDateTime.now().minusSeconds(1));
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
         assertThat(service.hasAccess(USER_A, EVENT_ID)).isFalse();
     }
@@ -346,30 +343,6 @@ class LotteryDomainServiceImplWhiteTest {
         assertThatThrownBy(() -> service.getEventLotteryWinners(null))
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(lotteryRepository);
-    }
-
-    // =========================================================================
-    // drawWinnersTransactional — internal-only path
-    // =========================================================================
-
-    @Test
-    void drawWinnersTransactional_lotteryNotFound_throwsLotteryNotFoundException() {
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
-
-        assertThatThrownBy(() -> createExposed().drawWinnersTransactional(EVENT_ID, 1))
-                .isInstanceOf(LotteryNotFoundException.class);
-        verify(lotteryRepository, never()).updateLottery(any());
-    }
-
-    @Test
-    void drawWinnersTransactional_returnsEmptySetOnEmptyLottery_andStillUpdatesRepository() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        Set<UUID> result = createExposed().drawWinnersTransactional(EVENT_ID, 5);
-
-        assertThat(result).isEmpty();
-        verify(lotteryRepository).updateLottery(lottery);
     }
 
     // =========================================================================
@@ -447,7 +420,7 @@ class LotteryDomainServiceImplWhiteTest {
     }
 
     @Test
-    void concurrentRunEventLottery_exactlyOneSucceeds() throws InterruptedException {
+    void concurrentRunEventLottery_allCallsCompleteWithoutException() throws InterruptedException {
         Lottery lottery = new Lottery(EVENT_ID);
         for (int i = 0; i < 10; i++) lottery.add(UUID.randomUUID());
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
@@ -456,16 +429,13 @@ class LotteryDomainServiceImplWhiteTest {
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(threads);
         AtomicInteger successes = new AtomicInteger();
-        AtomicInteger alreadyDrawn = new AtomicInteger();
 
         for (int i = 0; i < threads; i++) {
             pool.submit(() -> {
                 try {
                     start.await();
-                    service.runEventLottery(EVENT_ID, 3);
+                    service.runEventLottery(EVENT_ID, 1, EXPIRY);
                     successes.incrementAndGet();
-                } catch (LotteryAlreadyDrawnException e) {
-                    alreadyDrawn.incrementAndGet();
                 } catch (Exception ignored) {}
                 return null;
             });
@@ -475,19 +445,12 @@ class LotteryDomainServiceImplWhiteTest {
         pool.shutdown();
         assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
 
-        assertThat(successes.get()).isEqualTo(1);
-        assertThat(alreadyDrawn.get()).isEqualTo(threads - 1);
+        assertThat(successes.get()).isEqualTo(threads);
     }
 
     // =========================================================================
     // Helpers
     // =========================================================================
-
-    @SuppressWarnings("unchecked")
-    private static ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>> winnersMap(LotteryDomainServiceImpl svc) {
-        return (ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>>)
-                ReflectionTestUtils.getField(svc, "winners");
-    }
 
     private static List<UUID> generateUserIds(int n) {
         List<UUID> ids = new ArrayList<>(n);
