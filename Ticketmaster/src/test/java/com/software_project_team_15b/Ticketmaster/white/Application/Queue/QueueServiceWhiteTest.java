@@ -1,5 +1,8 @@
 package com.software_project_team_15b.Ticketmaster.white.Application.Queue;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
@@ -19,160 +22,241 @@ import java.util.concurrent.atomic.*;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
  * White-box tests for the {@link QueueService} application facade.
  *
- * <p>These tests verify the wiring contract of the facade: every public method
- * must forward its arguments to the same-named method on the injected
- * {@link IQueueDomainService}, and the facade must not perform any work beyond
- * that delegation. After each test the mock is checked for {@code noMoreInteractions}
- * to guard against accidental side effects.
+ * <p>These tests verify the internal wiring of the facade:
+ * <ul>
+ *   <li>Token validation via {@link IAuth} occurs before any event-queue domain service
+ *       call, and invalid or null tokens short-circuit execution.</li>
+ *   <li>Site-queue operations ({@code addUserToSiteQueue}, {@code validateAndExitQueue},
+ *       {@code canAccessWebsite}) are managed locally within this service and never
+ *       delegated to {@link IQueueDomainService}.</li>
+ *   <li>Event-queue operations ({@code getPositionInEventQueue}, {@code isUserAdmitted},
+ *       {@code getQueueAccessView}, {@code requestAccess}, {@code hasAccess},
+ *       {@code pushToEventQueue}) are forwarded to the domain service after token
+ *       validation, without mutating or substituting arguments.</li>
+ *   <li>{@code requestAccess} additionally enforces a membership check via
+ *       {@link IAuth#isMember} before delegating.</li>
+ *   <li>{@code createEventQueue}, {@code deleteEventQueue}, and {@code popFromEventQueue}
+ *       delegate directly without token validation.</li>
+ * </ul>
+ *
+ * <p>After each test, {@code verifyNoMoreInteractions} on the domain service mock guards
+ * against accidental extra delegations.
  */
 @ExtendWith(MockitoExtension.class)
 class QueueServiceWhiteTest {
 
     @Mock private IQueueDomainService queueDomainService;
+    @Mock private IAuth auth;
     @InjectMocks private QueueService service;
 
     private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID USER_ID  = UUID.fromString("00000000-0000-0000-0000-000000000002");
 
     @AfterEach
-    void verifyNoUnexpectedInteractions() {
+    void verifyNoUnexpectedDomainServiceInteractions() {
         verifyNoMoreInteractions(queueDomainService);
     }
 
     // =========================================================================
-    // Single-method delegation tests — exactly one call, no extras
+    // Site-queue methods — managed locally, NOT delegated to domain service
     // =========================================================================
 
     @Test
-    void addUserToSiteQueue_delegates_andDoesNothingElse() {
+    void addUserToSiteQueue_validatesToken_andNeverCallsDomainService() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
+
         service.addUserToSiteQueue("token-a");
 
-        verify(queueDomainService).addUserToSiteQueue("token-a");
+        verifyNoInteractions(queueDomainService);
     }
 
     @Test
-    void validateAndExitQueue_delegates_andReturnsDomainServiceResult() {
-        when(queueDomainService.validateAndExitQueue("token-a")).thenReturn(true);
+    void validateAndExitQueue_validatesToken_andNeverCallsDomainService() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
 
-        boolean result = service.validateAndExitQueue("token-a");
+        service.validateAndExitQueue("token-a");
 
-        assertThat(result).isTrue();
-        verify(queueDomainService).validateAndExitQueue("token-a");
+        verifyNoInteractions(queueDomainService);
     }
 
     @Test
-    void canAccessWebsite_delegates_andReturnsDomainServiceResult() {
-        when(queueDomainService.canAccessWebsite()).thenReturn(true);
+    void canAccessWebsite_neitherValidatesToken_norCallsDomainService() {
+        service.canAccessWebsite();
 
-        boolean result = service.canAccessWebsite();
-
-        assertThat(result).isTrue();
-        verify(queueDomainService).canAccessWebsite();
+        verifyNoInteractions(queueDomainService, auth);
     }
 
+    // =========================================================================
+    // Event-queue methods — validate token, then delegate to domain service
+    // =========================================================================
+
     @Test
-    void getPositionInEventQueue_delegates_andReturnsDomainServiceResult() {
+    void getPositionInEventQueue_validatesToken_thenDelegates() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
         when(queueDomainService.getPositionInEventQueue("token-a", EVENT_ID)).thenReturn(3);
 
         int result = service.getPositionInEventQueue("token-a", EVENT_ID);
 
         assertThat(result).isEqualTo(3);
-        verify(queueDomainService).getPositionInEventQueue("token-a", EVENT_ID);
+        var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isTokenValid("token-a");
+        inOrder.verify(queueDomainService).getPositionInEventQueue("token-a", EVENT_ID);
+        verify(auth).extractUserId("token-a");
     }
 
     @Test
-    void isUserAdmitted_delegates_andReturnsDomainServiceResult() {
-        when(queueDomainService.isUserAdmitted(USER_ID, EVENT_ID)).thenReturn(true);
+    void isUserAdmitted_validatesToken_thenDelegates() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
+        when(queueDomainService.isUserAdmitted("token-a", EVENT_ID)).thenReturn(true);
 
-        boolean result = service.isUserAdmitted(USER_ID, EVENT_ID);
+        boolean result = service.isUserAdmitted("token-a", EVENT_ID);
 
         assertThat(result).isTrue();
-        verify(queueDomainService).isUserAdmitted(USER_ID, EVENT_ID);
+        var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isTokenValid("token-a");
+        inOrder.verify(queueDomainService).isUserAdmitted("token-a", EVENT_ID);
+        verify(auth).extractUserId("token-a");
     }
 
     @Test
-    void getQueueAccessView_delegates_andReturnsDomainServiceResult() {
+    void getQueueAccessView_validatesToken_thenDelegates() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
         QueueAccessDTO expected = new QueueAccessDTO(EVENT_ID, QueueAccessStatus.WAITING, 0, null);
         when(queueDomainService.getQueueAccessView("token-a", EVENT_ID)).thenReturn(expected);
 
         QueueAccessDTO result = service.getQueueAccessView("token-a", EVENT_ID);
 
         assertThat(result).isSameAs(expected);
-        verify(queueDomainService).getQueueAccessView("token-a", EVENT_ID);
+        var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isTokenValid("token-a");
+        inOrder.verify(queueDomainService).getQueueAccessView("token-a", EVENT_ID);
+        verify(auth).extractUserId("token-a");
     }
 
     @Test
-    void requestAccess_delegates_andReturnsDomainServiceResult() {
+    void requestAccess_validatesThenChecksMembership_thenDelegates() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
+        when(auth.isMember("token-a")).thenReturn(true);
         QueueAccessDTO expected = new QueueAccessDTO(EVENT_ID, QueueAccessStatus.ADMITTED, null, LocalDateTime.now().plusSeconds(100));
         when(queueDomainService.requestAccess("token-a", EVENT_ID)).thenReturn(expected);
 
         QueueAccessDTO result = service.requestAccess("token-a", EVENT_ID);
 
         assertThat(result).isSameAs(expected);
-        verify(queueDomainService).requestAccess("token-a", EVENT_ID);
+        var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isTokenValid("token-a");
+        inOrder.verify(auth).extractUserId("token-a");
+        inOrder.verify(auth).isMember("token-a");
+        inOrder.verify(queueDomainService).requestAccess("token-a", EVENT_ID);
     }
 
     @Test
-    void hasAccess_delegates_andReturnsDomainServiceResult() {
+    void requestAccess_nonMember_throwsIllegalArgument_andSkipsDomainService() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
+        when(auth.isMember("token-a")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.requestAccess("token-a", EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(queueDomainService);
+    }
+
+    @Test
+    void hasAccess_validatesToken_thenDelegates() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
         when(queueDomainService.hasAccess("token-a", EVENT_ID)).thenReturn(true);
 
         boolean result = service.hasAccess("token-a", EVENT_ID);
 
         assertThat(result).isTrue();
-        verify(queueDomainService).hasAccess("token-a", EVENT_ID);
+        var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isTokenValid("token-a");
+        inOrder.verify(queueDomainService).hasAccess("token-a", EVENT_ID);
+        verify(auth).extractUserId("token-a");
     }
+
+    @Test
+    void pushToEventQueue_validatesToken_thenDelegates() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
+
+        service.pushToEventQueue(EVENT_ID, "token-a");
+
+        var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isTokenValid("token-a");
+        inOrder.verify(queueDomainService).pushToEventQueue(EVENT_ID, "token-a");
+        verify(auth).extractUserId("token-a");
+    }
+
+    // =========================================================================
+    // Methods that delegate without token validation
+    // =========================================================================
 
     @Test
     void createEventQueue_delegates_andDoesNothingElse() {
         service.createEventQueue(EVENT_ID);
+
         verify(queueDomainService).createEventQueue(EVENT_ID);
+        verifyNoInteractions(auth);
     }
 
     @Test
     void deleteEventQueue_delegates_andDoesNothingElse() {
         service.deleteEventQueue(EVENT_ID);
+
         verify(queueDomainService).deleteEventQueue(EVENT_ID);
+        verifyNoInteractions(auth);
     }
 
     @Test
-    void popFromEventQueue_delegates_andReturnsDomainServiceResult() {
+    void popFromEventQueue_delegates_withoutTokenValidation() {
         when(queueDomainService.popFromEventQueue(EVENT_ID)).thenReturn("token-a");
 
         String result = service.popFromEventQueue(EVENT_ID);
 
         assertThat(result).isEqualTo("token-a");
         verify(queueDomainService).popFromEventQueue(EVENT_ID);
-    }
-
-    @Test
-    void pushToEventQueue_delegates_andDoesNothingElse() {
-        service.pushToEventQueue(EVENT_ID, "token-a");
-        verify(queueDomainService).pushToEventQueue(EVENT_ID, "token-a");
+        verifyNoInteractions(auth);
     }
 
     // =========================================================================
-    // Exception propagation — facade does NOT swallow or wrap exceptions
+    // Exception propagation — service does NOT swallow or wrap exceptions
     // =========================================================================
 
     @Test
-    void addUserToSiteQueue_propagatesDomainServiceException() {
-        doThrow(new IllegalArgumentException("boom")).when(queueDomainService).addUserToSiteQueue("token-a");
+    void addUserToSiteQueue_nullToken_throwsBeforeAuth() {
+        assertThatThrownBy(() -> service.addUserToSiteQueue(null))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(auth, queueDomainService);
+    }
 
-        assertThatThrownBy(() -> service.addUserToSiteQueue("token-a"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("boom");
-        verify(queueDomainService).addUserToSiteQueue("token-a");
+    @Test
+    void addUserToSiteQueue_invalidToken_throwsInvalidTokenException() {
+        when(auth.isTokenValid("bad-token")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.addUserToSiteQueue("bad-token"))
+                .isInstanceOf(InvalidTokenException.class);
+        verifyNoInteractions(queueDomainService);
     }
 
     @Test
     void requestAccess_propagatesDomainServiceException() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
+        when(auth.isMember("token-a")).thenReturn(true);
         doThrow(new RuntimeException("downstream")).when(queueDomainService).requestAccess(anyString(), any());
 
         assertThatThrownBy(() -> service.requestAccess("token-a", EVENT_ID))
@@ -189,16 +273,29 @@ class QueueServiceWhiteTest {
                 .isInstanceOf(RuntimeException.class)
                 .hasMessage("empty");
         verify(queueDomainService).popFromEventQueue(EVENT_ID);
+        verifyNoInteractions(auth);
+    }
+
+    @Test
+    void deleteEventQueue_propagatesDomainServiceException() {
+        doThrow(new QueueNotFoundException("missing")).when(queueDomainService).deleteEventQueue(EVENT_ID);
+
+        assertThatThrownBy(() -> service.deleteEventQueue(EVENT_ID))
+                .isInstanceOf(QueueNotFoundException.class);
+        verify(queueDomainService).deleteEventQueue(EVENT_ID);
+        verifyNoInteractions(auth);
     }
 
     // =========================================================================
-    // Argument pass-through — verify the facade does not mutate or substitute args
+    // Argument pass-through — verify args are not mutated or substituted
     // =========================================================================
 
     @Test
     void pushToEventQueue_forwardsExactArgumentsWithoutMutation() {
         UUID eid = UUID.randomUUID();
         String tok = "token-xyz";
+        when(auth.isTokenValid(tok)).thenReturn(true);
+        when(auth.extractUserId(tok)).thenReturn(USER_ID);
 
         service.pushToEventQueue(eid, tok);
 
@@ -208,29 +305,36 @@ class QueueServiceWhiteTest {
     @Test
     void getQueueAccessView_forwardsExactArgumentsWithoutMutation() {
         UUID eid = UUID.randomUUID();
+        String tok = "tok";
         QueueAccessDTO out = new QueueAccessDTO(eid, QueueAccessStatus.NO_QUEUE, null, null);
-        when(queueDomainService.getQueueAccessView("tok", eid)).thenReturn(out);
+        when(auth.isTokenValid(tok)).thenReturn(true);
+        when(auth.extractUserId(tok)).thenReturn(USER_ID);
+        when(queueDomainService.getQueueAccessView(tok, eid)).thenReturn(out);
 
-        assertThat(service.getQueueAccessView("tok", eid)).isSameAs(out);
-        verify(queueDomainService).getQueueAccessView("tok", eid);
+        assertThat(service.getQueueAccessView(tok, eid)).isSameAs(out);
+        verify(queueDomainService).getQueueAccessView(tok, eid);
     }
 
     // =========================================================================
-    // Concurrency — facade is stateless; concurrent delegation must not corrupt counts
+    // Concurrency — site queue is stateful; concurrent calls must be safe
     // =========================================================================
 
     @Test
-    void concurrentDelegation_eachCallForwardsExactlyOnce() throws InterruptedException {
+    void concurrentAddUserToSiteQueue_distinctTokens_neverCallsDomainService() throws InterruptedException {
+        when(auth.isTokenValid(anyString())).thenReturn(true);
+        when(auth.extractUserId(anyString())).thenReturn(USER_ID);
+
         int threads = 50;
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(threads);
         AtomicInteger completed = new AtomicInteger();
 
         for (int i = 0; i < threads; i++) {
+            final String tok = "token-" + i;
             pool.submit(() -> {
                 try {
                     start.await();
-                    service.addUserToSiteQueue("token-x");
+                    service.addUserToSiteQueue(tok);
                     completed.incrementAndGet();
                 } catch (Exception ignored) {}
                 return null;
@@ -242,6 +346,6 @@ class QueueServiceWhiteTest {
         assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
 
         assertThat(completed.get()).isEqualTo(threads);
-        verify(queueDomainService, times(threads)).addUserToSiteQueue("token-x");
+        verifyNoInteractions(queueDomainService);
     }
 }

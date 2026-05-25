@@ -122,7 +122,7 @@ class UserServiceConcurrencyTest {
         }
 
         @Override
-        public boolean isUserAdmitted(UUID userId, UUID eventId) {
+        public boolean isUserAdmitted(String token, UUID eventId) {
             return true;
         }
 

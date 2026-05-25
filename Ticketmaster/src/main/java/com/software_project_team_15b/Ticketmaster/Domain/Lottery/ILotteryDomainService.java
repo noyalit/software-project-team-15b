@@ -10,9 +10,9 @@ import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
  *
  * <p>Owns the {@link ILotteryRepository} aggregate, the in-memory winners map,
  * and the lifecycle (create → enter → draw → access window). All lottery
- * functionality consumed by application services is exposed through this
- * interface so that no application service needs to hold another application
- * service to access lottery behavior.
+ * state, repository access, transactions and retry policy live in the
+ * implementation. Auth validation and audit logging are the responsibility of
+ * the application-layer {@code LotteryService}.
  */
 public interface ILotteryDomainService {
 
@@ -66,13 +66,17 @@ public interface ILotteryDomainService {
     Set<UUID> runEventLottery(UUID eventId, int count);
 
     /**
-     * Checks whether the authenticated user currently has active lottery-winner access for the event.
+     * Returns {@code true} if the user currently has an active lottery-winner access window
+     * for the given event.
      *
-     * @param token   the user's auth token; must not be null
+     * <p>Auth validation is the caller's responsibility; this method receives an already-resolved
+     * user identity.
+     *
+     * @param userId  the unique identifier of the user; must not be null
      * @param eventId the unique identifier of the event; must not be null
-     * @return {@code true} if the user won and their access window is still open
+     * @return {@code true} if the user won and their access window has not yet expired
      */
-    boolean hasAccess(String token, UUID eventId);
+    boolean hasAccess(UUID userId, UUID eventId);
 
     /**
      * Returns the set of all winners drawn for the given event.

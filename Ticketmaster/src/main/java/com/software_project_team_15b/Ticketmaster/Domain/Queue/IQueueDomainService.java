@@ -5,13 +5,16 @@ import java.util.UUID;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 
 /**
- * Domain service for managing site-wide and per-event virtual queues.
+ * Domain service for managing per-event virtual queues.
  *
- * <p>Owns the in-memory site queue, the per-event admission map, the persistent
- * event-queue repository, and the scheduler that advances both. All queue
- * functionality consumed by application services is exposed through this
- * interface so that no application service needs to hold another application
- * service to access queue behavior.
+ * <p>Owns the per-event admission map, the persistent event-queue repository,
+ * and the scheduler that advances event queues. Site-wide queue management
+ * (site queue, admitted-token set, auth-dependent eviction) is the responsibility
+ * of the application-layer {@code QueueService}, which holds the {@code IAuth}
+ * dependency. The site-queue methods defined here ({@link #addUserToSiteQueue},
+ * {@link #validateAndExitQueue}, {@link #canAccessWebsite}) are therefore not
+ * supported by the standard implementation and will throw
+ * {@link UnsupportedOperationException} if called directly.
  */
 public interface IQueueDomainService {
 
@@ -19,11 +22,11 @@ public interface IQueueDomainService {
      * Enters the user into the waiting queue for the given event and returns a snapshot
      * of their current access state.
      *
-     * @param accessToken the user's auth token; must not be null
+     * @param token the user's auth token; must not be null
      * @param eventId     the unique identifier of the event; must not be null
      * @return a {@link QueueAccessDTO} describing the user's current access state
      */
-    QueueAccessDTO requestAccess(String accessToken, UUID eventId);
+    QueueAccessDTO requestAccess(String token, UUID eventId);
 
     /**
      * Returns {@code true} if the user identified by the given token currently holds
@@ -80,11 +83,11 @@ public interface IQueueDomainService {
      * Returns {@code true} if {@code userId} is currently in the admitted window for {@code eventId},
      * without performing any token validation.
      *
-     * @param userId  the user to check; must not be null
+     * @param token  the user's auth token; must not be null
      * @param eventId the unique identifier of the event; must not be null
      * @return {@code true} if the user is currently admitted
      */
-    boolean isUserAdmitted(UUID userId, UUID eventId);
+    boolean isUserAdmitted(String token, UUID eventId);
 
     /**
      * Creates a new, empty virtual queue for the given event.

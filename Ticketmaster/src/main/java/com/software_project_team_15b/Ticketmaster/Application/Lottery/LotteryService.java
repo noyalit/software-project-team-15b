@@ -4,9 +4,12 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyLo
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.Objects;
@@ -16,19 +19,29 @@ import java.util.UUID;
 /**
  * Application-layer facade over the lottery domain.
  *
- * <p>Holds only the {@link ILotteryDomainService} and forwards every call to it.
- * All lottery state, repository access, scheduling, transactions and retry policy
- * live in the domain service; this class exists as the application-layer entry
- * point for lottery operations so that callers in the application layer never
- * need to depend on another application service to use lottery functionality.
+ * <p>Owns auth validation and audit logging. All lottery state, repository
+ * access, transactions and retry policy live in the domain service; this class
+ * validates inputs, resolves the caller identity via {@link IAuth}, logs each
+ * operation, and delegates to {@link ILotteryDomainService}.
  */
 @Service
 public class LotteryService {
 
-    private final ILotteryDomainService lotteryDomainService;
+    private static final Logger AUDIT = LoggerFactory.getLogger("audit.lottery");
 
-    public LotteryService(ILotteryDomainService lotteryDomainService) {
+    private final ILotteryDomainService lotteryDomainService;
+    private final IAuth auth;
+
+    public LotteryService(ILotteryDomainService lotteryDomainService, IAuth auth) {
         this.lotteryDomainService = Objects.requireNonNull(lotteryDomainService);
+        this.auth = Objects.requireNonNull(auth);
+    }
+
+    private void validateToken(String token) {
+        if (!auth.isTokenValid(token)) {
+            AUDIT.warn("op=validateToken result=rejected reason=invalid_token");
+            throw new InvalidTokenException("Invalid token");
+        }
     }
 
     /**
@@ -38,7 +51,10 @@ public class LotteryService {
      * @throws IllegalArgumentException if {@code eventId} is null
      */
     public void createEventLottery(UUID eventId) {
+        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+        AUDIT.info("op=createEventLottery eventId={}", eventId);
         lotteryDomainService.createEventLottery(eventId);
+        AUDIT.info("op=createEventLottery eventId={} result=ok", eventId);
     }
 
     /**
@@ -49,7 +65,10 @@ public class LotteryService {
      * @throws LotteryNotFoundException if no lottery exists for the given event
      */
     public void deleteEventLottery(UUID eventId) {
+        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+        AUDIT.info("op=deleteEventLottery eventId={}", eventId);
         lotteryDomainService.deleteEventLottery(eventId);
+        AUDIT.info("op=deleteEventLottery eventId={} result=ok", eventId);
     }
 
     /**
@@ -61,7 +80,11 @@ public class LotteryService {
      * @throws LotteryNotFoundException if no lottery exists for the given event
      */
     public void addToEventLottery(UUID eventId, UUID userId) {
+        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+        if (userId == null) throw new IllegalArgumentException("userId cannot be null");
+        AUDIT.info("op=addToEventLottery eventId={} userId={}", eventId, userId);
         lotteryDomainService.addToEventLottery(eventId, userId);
+        AUDIT.info("op=addToEventLottery eventId={} userId={} result=ok", eventId, userId);
     }
 
     /**
@@ -74,7 +97,11 @@ public class LotteryService {
      * @throws EmptyLotteryException    if the lottery contains no entries
      */
     public UUID popRandomFromEventLottery(UUID eventId) {
-        return lotteryDomainService.popRandomFromEventLottery(eventId);
+        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+        AUDIT.info("op=popRandomFromEventLottery eventId={}", eventId);
+        UUID result = lotteryDomainService.popRandomFromEventLottery(eventId);
+        AUDIT.info("op=popRandomFromEventLottery eventId={} result=ok", eventId);
+        return result;
     }
 
     /**
@@ -88,7 +115,12 @@ public class LotteryService {
      * @throws EmptyLotteryException    if the lottery contains no entries
      */
     public Set<UUID> popRandomFromEventLottery(UUID eventId, int count) {
-        return lotteryDomainService.popRandomFromEventLottery(eventId, count);
+        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+        if (count < 0) throw new IllegalArgumentException("count cannot be negative");
+        AUDIT.info("op=popRandomFromEventLottery eventId={} count={}", eventId, count);
+        Set<UUID> results = lotteryDomainService.popRandomFromEventLottery(eventId, count);
+        AUDIT.info("op=popRandomFromEventLottery eventId={} count={} result=ok", eventId, count);
+        return results;
     }
 
     /**
@@ -97,12 +129,17 @@ public class LotteryService {
      * @param eventId the unique identifier of the event; must not be null
      * @param count   the maximum number of winners to select; must not be negative
      * @return the set of selected winner UUIDs (may be empty if pool was empty)
-     * @throws IllegalArgumentException    if {@code eventId} is null or {@code count} is negative
-     * @throws LotteryNotFoundException    if no lottery exists for the given event
+     * @throws IllegalArgumentException     if {@code eventId} is null or {@code count} is negative
+     * @throws LotteryNotFoundException     if no lottery exists for the given event
      * @throws LotteryAlreadyDrawnException if the lottery for this event has already been drawn
      */
     public Set<UUID> runEventLottery(UUID eventId, int count) {
-        return lotteryDomainService.runEventLottery(eventId, count);
+        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+        if (count < 0) throw new IllegalArgumentException("count cannot be negative");
+        AUDIT.info("op=runEventLottery eventId={} count={}", eventId, count);
+        Set<UUID> drawn = lotteryDomainService.runEventLottery(eventId, count);
+        AUDIT.info("op=runEventLottery eventId={} count={} winnersDrawn={} result=ok", eventId, count, drawn.size());
+        return drawn;
     }
 
     /**
@@ -115,7 +152,14 @@ public class LotteryService {
      * @throws InvalidTokenException    if the token is invalid
      */
     public boolean hasAccess(String token, UUID eventId) {
-        return lotteryDomainService.hasAccess(token, eventId);
+        if (token == null) throw new IllegalArgumentException("token cannot be null");
+        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+        validateToken(token);
+        UUID userId = auth.extractUserId(token);
+        AUDIT.info("op=hasAccess userId={} eventId={}", userId, eventId);
+        boolean result = lotteryDomainService.hasAccess(userId, eventId);
+        AUDIT.info("op=hasAccess userId={} eventId={} result={}", userId, eventId, result);
+        return result;
     }
 
     /**
@@ -127,7 +171,11 @@ public class LotteryService {
      * @throws LotteryNotFoundException if no lottery exists for the given event
      */
     public Set<UUID> getEventLotteryWinners(UUID eventId) {
-        return lotteryDomainService.getEventLotteryWinners(eventId);
+        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+        AUDIT.info("op=getEventLotteryWinners eventId={}", eventId);
+        Set<UUID> winners = lotteryDomainService.getEventLotteryWinners(eventId);
+        AUDIT.info("op=getEventLotteryWinners eventId={} result=ok", eventId);
+        return winners;
     }
 
     /**
@@ -138,7 +186,10 @@ public class LotteryService {
      * @throws LotteryNotFoundException if no lottery exists for the given event
      */
     public void clearEventLotteryWinners(UUID eventId) {
+        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+        AUDIT.info("op=clearEventLotteryWinners eventId={}", eventId);
         lotteryDomainService.clearEventLotteryWinners(eventId);
+        AUDIT.info("op=clearEventLotteryWinners eventId={} result=ok", eventId);
     }
 
     /**
@@ -150,6 +201,11 @@ public class LotteryService {
      * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
      */
     public LotteryEligibilityDTO getLotteryEligibilityForEvent(UUID userId, UUID eventId) {
-        return lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId);
+        if (userId == null) throw new IllegalArgumentException("userId cannot be null");
+        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+        AUDIT.info("op=getLotteryEligibilityForEvent userId={} eventId={}", userId, eventId);
+        LotteryEligibilityDTO dto = lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId);
+        AUDIT.info("op=getLotteryEligibilityForEvent userId={} eventId={} status={}", userId, eventId, dto.status());
+        return dto;
     }
 }

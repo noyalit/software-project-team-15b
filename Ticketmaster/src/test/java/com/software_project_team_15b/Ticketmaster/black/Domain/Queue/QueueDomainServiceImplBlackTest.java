@@ -2,10 +2,8 @@ package com.software_project_team_15b.Ticketmaster.black.Domain.Queue;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyInQueueException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyQueueException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIsFullException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
-import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
@@ -40,12 +38,15 @@ import static org.mockito.Mockito.*;
  * proxy {@code self} reference is injected once during setup since outside of a Spring
  * context the @Retryable / @Transactional self-invocation would otherwise NPE — that is
  * test plumbing, not white-box knowledge.
+ *
+ * <p>Site-queue operations ({@code addUserToSiteQueue}, {@code validateAndExitQueue},
+ * {@code canAccessWebsite}) are delegated to the application layer; calling them on the
+ * domain service throws {@link UnsupportedOperationException}.
  */
 @ExtendWith(MockitoExtension.class)
 class QueueDomainServiceImplBlackTest {
 
     @Mock private IQueueRepository queueRepository;
-    @Mock private IAuth auth;
     @InjectMocks private QueueDomainServiceImpl service;
 
     private IQueueDomainService domainService;
@@ -56,54 +57,29 @@ class QueueDomainServiceImplBlackTest {
         domainService = service;
     }
 
-    private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID EVENT_ID       = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID OTHER_EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000099");
-    private static final UUID USER_A   = UUID.fromString("00000000-0000-0000-0000-000000000002");
-    private static final UUID USER_B   = UUID.fromString("00000000-0000-0000-0000-000000000003");
 
     // =========================================================================
-    // addUserToSiteQueue / validateAndExitQueue / canAccessWebsite
+    // Site-queue stubs — delegated to application layer, throws here
     // =========================================================================
 
     @Test
-    void addUserToSiteQueue_positive_userAdmittedAfterValidationPasses_andCanExit() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        domainService.addUserToSiteQueue("token-a");
-
-        // simulate scheduler tick by invoking the same path the scheduler would
-        invokeAcceptUsers();
-
-        assertThat(domainService.validateAndExitQueue("token-a")).isTrue();
-    }
-
-    @Test
-    void addUserToSiteQueue_negative_nullToken_throwsIllegalArgument() {
-        assertThatThrownBy(() -> domainService.addUserToSiteQueue(null))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void addUserToSiteQueue_negative_duplicateToken_throwsIllegalArgument() {
-        domainService.addUserToSiteQueue("token-a");
+    void addUserToSiteQueue_throwsUnsupportedOperationException() {
         assertThatThrownBy(() -> domainService.addUserToSiteQueue("token-a"))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
-    void validateAndExitQueue_positive_returnsFalseBeforeAdmission() {
-        domainService.addUserToSiteQueue("token-a");
-        assertThat(domainService.validateAndExitQueue("token-a")).isFalse();
+    void validateAndExitQueue_throwsUnsupportedOperationException() {
+        assertThatThrownBy(() -> domainService.validateAndExitQueue("token-a"))
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 
     @Test
-    void validateAndExitQueue_negative_nullToken_throwsIllegalArgument() {
-        assertThatThrownBy(() -> domainService.validateAndExitQueue(null))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void canAccessWebsite_positive_returnsTrueOnEmptyService() {
-        assertThat(domainService.canAccessWebsite()).isTrue();
+    void canAccessWebsite_throwsUnsupportedOperationException() {
+        assertThatThrownBy(() -> domainService.canAccessWebsite())
+                .isInstanceOf(UnsupportedOperationException.class);
     }
 
     // =========================================================================
@@ -115,11 +91,10 @@ class QueueDomainServiceImplBlackTest {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         domainService.createEventQueue(EVENT_ID);
 
-        assertThat(domainService.isUserAdmitted(USER_A, EVENT_ID)).isTrue();
+        assertThat(domainService.isUserAdmitted("token-a", EVENT_ID)).isTrue();
     }
 
     @Test
@@ -137,13 +112,12 @@ class QueueDomainServiceImplBlackTest {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         domainService.createEventQueue(EVENT_ID);
-        assertThat(domainService.isUserAdmitted(USER_A, EVENT_ID)).isTrue();
+        assertThat(domainService.isUserAdmitted("token-a", EVENT_ID)).isTrue();
 
         domainService.deleteEventQueue(EVENT_ID);
-        assertThat(domainService.isUserAdmitted(USER_A, EVENT_ID)).isFalse();
+        assertThat(domainService.isUserAdmitted("token-a", EVENT_ID)).isFalse();
     }
 
     @Test
@@ -167,12 +141,11 @@ class QueueDomainServiceImplBlackTest {
     void pushToEventQueue_positive_userBecomesAdmittedWhenSlotAvailable() {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         domainService.createEventQueue(EVENT_ID);
         domainService.pushToEventQueue(EVENT_ID, "token-a");
 
-        assertThat(domainService.isUserAdmitted(USER_A, EVENT_ID)).isTrue();
+        assertThat(domainService.isUserAdmitted("token-a", EVENT_ID)).isTrue();
     }
 
     @Test
@@ -293,16 +266,15 @@ class QueueDomainServiceImplBlackTest {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         domainService.createEventQueue(EVENT_ID);
 
-        assertThat(domainService.isUserAdmitted(USER_A, EVENT_ID)).isTrue();
+        assertThat(domainService.isUserAdmitted("token-a", EVENT_ID)).isTrue();
     }
 
     @Test
     void isUserAdmitted_negative_returnsFalse_whenNoQueueExists() {
-        assertThat(domainService.isUserAdmitted(USER_A, EVENT_ID)).isFalse();
+        assertThat(domainService.isUserAdmitted("token-a", EVENT_ID)).isFalse();
     }
 
     @Test
@@ -312,7 +284,7 @@ class QueueDomainServiceImplBlackTest {
 
         domainService.createEventQueue(EVENT_ID);
 
-        assertThat(domainService.isUserAdmitted(USER_A, EVENT_ID)).isFalse();
+        assertThat(domainService.isUserAdmitted("token-a", EVENT_ID)).isFalse();
     }
 
     @Test
@@ -320,11 +292,10 @@ class QueueDomainServiceImplBlackTest {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         domainService.createEventQueue(EVENT_ID);
 
-        assertThat(domainService.isUserAdmitted(USER_A, OTHER_EVENT_ID)).isFalse();
+        assertThat(domainService.isUserAdmitted("token-a", OTHER_EVENT_ID)).isFalse();
     }
 
     // =========================================================================
@@ -333,9 +304,6 @@ class QueueDomainServiceImplBlackTest {
 
     @Test
     void getQueueAccessView_positive_returnsNoQueue_whenEventHasNoQueue() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
         QueueAccessDTO view = domainService.getQueueAccessView("token-a", EVENT_ID);
 
         assertThat(view.status()).isEqualTo(QueueAccessStatus.NO_QUEUE);
@@ -349,8 +317,6 @@ class QueueDomainServiceImplBlackTest {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         domainService.createEventQueue(EVENT_ID);
 
@@ -363,16 +329,13 @@ class QueueDomainServiceImplBlackTest {
 
     @Test
     void getQueueAccessView_positive_returnsWaiting_withPositionWhenAdmissionSlotsFull() {
-        // create a separate queue (empty for advance), then return a queue containing
-        // the user for the subsequent position lookup
+        // First call (advance) sees empty queue; second call (position lookup) sees the user
         VirtualQueue emptyForAdvance = new VirtualQueue(EVENT_ID);
         VirtualQueue withUserForPosition = new VirtualQueue(EVENT_ID);
         withUserForPosition.push("token-a");
         when(queueRepository.getQueue(EVENT_ID))
                 .thenReturn(emptyForAdvance)
                 .thenReturn(withUserForPosition);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         domainService.createEventQueue(EVENT_ID);
 
@@ -385,22 +348,9 @@ class QueueDomainServiceImplBlackTest {
     }
 
     @Test
-    void getQueueAccessView_negative_nullToken_throwsIllegalArgument() {
-        assertThatThrownBy(() -> domainService.getQueueAccessView(null, EVENT_ID))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
     void getQueueAccessView_negative_nullEventId_throwsIllegalArgument() {
         assertThatThrownBy(() -> domainService.getQueueAccessView("token-a", null))
                 .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void getQueueAccessView_negative_invalidToken_throwsInvalidTokenException() {
-        when(auth.isTokenValid("bad")).thenReturn(false);
-        assertThatThrownBy(() -> domainService.getQueueAccessView("bad", EVENT_ID))
-                .isInstanceOf(InvalidTokenException.class);
     }
 
     // =========================================================================
@@ -411,8 +361,6 @@ class QueueDomainServiceImplBlackTest {
     void requestAccess_positive_admittedImmediately_whenSlotsAvailable() {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         domainService.createEventQueue(EVENT_ID);
         QueueAccessDTO view = domainService.requestAccess("token-a", EVENT_ID);
@@ -426,11 +374,9 @@ class QueueDomainServiceImplBlackTest {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         domainService.createEventQueue(EVENT_ID);
-        QueueAccessDTO first = domainService.requestAccess("token-a", EVENT_ID);
+        QueueAccessDTO first  = domainService.requestAccess("token-a", EVENT_ID);
         QueueAccessDTO second = domainService.requestAccess("token-a", EVENT_ID);
 
         assertThat(first.status()).isEqualTo(QueueAccessStatus.ADMITTED);
@@ -449,14 +395,6 @@ class QueueDomainServiceImplBlackTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    @Test
-    void requestAccess_negative_invalidToken_throwsInvalidTokenException() {
-        when(auth.isTokenValid("bad-token")).thenReturn(false);
-
-        assertThatThrownBy(() -> domainService.requestAccess("bad-token", EVENT_ID))
-                .isInstanceOf(InvalidTokenException.class);
-    }
-
     // =========================================================================
     // hasAccess
     // =========================================================================
@@ -466,8 +404,6 @@ class QueueDomainServiceImplBlackTest {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         domainService.createEventQueue(EVENT_ID);
 
@@ -476,9 +412,6 @@ class QueueDomainServiceImplBlackTest {
 
     @Test
     void hasAccess_positive_returnsFalse_whenUserNotAdmitted() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
         assertThat(domainService.hasAccess("token-a", EVENT_ID)).isFalse();
     }
 
@@ -494,23 +427,14 @@ class QueueDomainServiceImplBlackTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    @Test
-    void hasAccess_negative_invalidToken_throwsInvalidTokenException() {
-        when(auth.isTokenValid("bad")).thenReturn(false);
-        assertThatThrownBy(() -> domainService.hasAccess("bad", EVENT_ID))
-                .isInstanceOf(InvalidTokenException.class);
-    }
-
     // =========================================================================
     // Concurrency
     // =========================================================================
 
     @Test
     void concurrentRequestAccess_independentEvents_allThreadsBecomeAdmitted() throws InterruptedException {
-        // Each thread operates on its own event/queue so the test does not rely on
-        // JPA-level optimistic locking (which @Transactional + @Retryable provide in
-        // production but is absent in unit tests). This isolates the domain service's
-        // own concurrency behavior on independent aggregates.
+        // Each thread operates on its own event/queue so the test isolates the domain
+        // service's concurrency behavior on independent aggregates.
         int n = 15;
         UUID[] eventIds = new UUID[n];
         VirtualQueue[] queues = new VirtualQueue[n];
@@ -520,11 +444,6 @@ class QueueDomainServiceImplBlackTest {
             when(queueRepository.getQueue(eventIds[i])).thenReturn(queues[i]);
             domainService.createEventQueue(eventIds[i]);
         }
-        when(auth.isTokenValid(anyString())).thenReturn(true);
-        when(auth.extractUserId(anyString())).thenAnswer(inv -> {
-            String tok = inv.getArgument(0);
-            return UUID.nameUUIDFromBytes(tok.getBytes());
-        });
 
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(n);
@@ -556,8 +475,6 @@ class QueueDomainServiceImplBlackTest {
         VirtualQueue queue = new VirtualQueue(EVENT_ID);
         queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid(anyString())).thenReturn(true);
-        when(auth.extractUserId(anyString())).thenReturn(USER_A);
 
         domainService.createEventQueue(EVENT_ID);
 
@@ -580,77 +497,5 @@ class QueueDomainServiceImplBlackTest {
         pool.shutdown();
         assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
         assertThat(trueCount.get()).isEqualTo(threads);
-    }
-
-    @Test
-    void concurrentAddUserToSiteQueue_distinctTokens_allEventuallyAdmitted() throws InterruptedException {
-        int n = 30;
-        when(auth.isTokenValid(anyString())).thenReturn(true);
-
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(n);
-        AtomicInteger added = new AtomicInteger();
-
-        for (int i = 0; i < n; i++) {
-            final String tok = "site-token-" + i;
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    domainService.addUserToSiteQueue(tok);
-                    added.incrementAndGet();
-                } catch (Exception ignored) {}
-                return null;
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
-        invokeAcceptUsers();
-
-        AtomicInteger admittedCount = new AtomicInteger();
-        for (int i = 0; i < n; i++) {
-            if (domainService.validateAndExitQueue("site-token-" + i)) {
-                admittedCount.incrementAndGet();
-            }
-        }
-        assertThat(added.get()).isEqualTo(n);
-        assertThat(admittedCount.get()).isEqualTo(n);
-    }
-
-    @Test
-    void concurrentDuplicateAddUserToSiteQueue_exactlyOneSucceeds() throws InterruptedException {
-        int threads = 20;
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
-        AtomicInteger successes = new AtomicInteger();
-        AtomicInteger duplicates = new AtomicInteger();
-
-        for (int i = 0; i < threads; i++) {
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    domainService.addUserToSiteQueue("shared-token");
-                    successes.incrementAndGet();
-                } catch (IllegalArgumentException e) {
-                    duplicates.incrementAndGet();
-                } catch (Exception ignored) {}
-                return null;
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
-
-        assertThat(successes.get()).isEqualTo(1);
-        assertThat(duplicates.get()).isEqualTo(threads - 1);
-    }
-
-    // The acceptUsersFromSiteQueue method is private; the scheduler triggers it in
-    // production. For tests we drive it via reflection — this is plumbing required to
-    // step the scheduler deterministically, not an inspection of internal state.
-    private void invokeAcceptUsers() {
-        ReflectionTestUtils.invokeMethod(service, "acceptUsersFromSiteQueue");
     }
 }
