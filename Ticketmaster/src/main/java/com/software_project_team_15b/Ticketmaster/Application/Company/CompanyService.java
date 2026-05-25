@@ -105,6 +105,7 @@ public class CompanyService {
      */
     @Transactional(readOnly = true)
     public List<Company> findCompaniesByFounder(String token, UUID founderId) {
+        requireValidToken(token);
         requireNonNull(founderId, "Founder ID");
         List<Company> result = companyRepository.findByFounder(founderId);
         if (result == null) {
