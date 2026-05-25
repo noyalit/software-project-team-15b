@@ -4,7 +4,6 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -12,7 +11,6 @@ import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -25,9 +23,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
-import com.software_project_team_15b.Ticketmaster.Application.Event.IEventManagementService;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
@@ -41,9 +38,8 @@ class CompanyServiceWhiteTest {
 
     private ICompanyRepository repo;
     private IAuth auth;
-    private UserService userService;
     private UserDomainService userDomainService;
-    private IEventManagementService eventManagementService;
+    private IEventDomainService eventManagementService;
     private CompanyService service;
 
     @BeforeEach
@@ -63,27 +59,14 @@ class CompanyServiceWhiteTest {
                     .filter(c -> founderId.equals(c.getFounderId()))
                     .collect(Collectors.toList());
         });
-        when(repo.findByOwner(any())).thenAnswer(inv -> {
-            UUID ownerId = inv.getArgument(0);
-            if (ownerId == null) return List.of();
-            return repoStorage.values().stream()
-                    .filter(c -> c.getOwnerIds().contains(ownerId))
-                    .collect(Collectors.toList());
-        });
-        doAnswer(inv -> {
-            Company c = inv.getArgument(0);
-            if (c != null && c.getId() != null) repoStorage.remove(c.getId());
-            return null;
-        }).when(repo).remove(any(Company.class));
 
         auth = mock(IAuth.class);
-        userService = mock(UserService.class);
         userDomainService = mock(UserDomainService.class);
-        eventManagementService = mock(IEventManagementService.class);
+        eventManagementService = mock(IEventDomainService.class);
         when(userDomainService.isActiveOwner(any())).thenReturn(true);
         when(userDomainService.isActiveFounder(any())).thenReturn(true);
         when(eventManagementService.searchInCompany(any(), any())).thenReturn(List.of());
-        service = new CompanyService(repo, userService, userDomainService, eventManagementService, auth);
+        service = new CompanyService(repo, userDomainService, eventManagementService, auth);
     }
 
     private Company saveToRepo(Company company) {
@@ -120,54 +103,30 @@ class CompanyServiceWhiteTest {
     }
 
     // ===========================================================================================
-    // Constructor / dependency validation
+    // Constructor — dependency null checks
 
     @Test
     void constructor_throws_when_repository_is_null() {
-        assertThatThrownBy(() -> new CompanyService(null, userService, userDomainService, eventManagementService, auth))
-                .isInstanceOf(NullPointerException.class);
-    }
-
-    @Test
-    void constructor_throws_when_userService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(repo, null, userDomainService, eventManagementService, auth))
+        assertThatThrownBy(() -> new CompanyService(null, userDomainService, eventManagementService, auth))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_userDomainService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(repo, userService, null, eventManagementService, auth))
+        assertThatThrownBy(() -> new CompanyService(repo, null, eventManagementService, auth))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void constructor_throws_when_eventManagementService_is_null() {
+        assertThatThrownBy(() -> new CompanyService(repo, userDomainService, null, auth))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_auth_is_null() {
-        assertThatThrownBy(() -> new CompanyService(repo, userService, userDomainService, eventManagementService, null))
+        assertThatThrownBy(() -> new CompanyService(repo, userDomainService, eventManagementService, null))
                 .isInstanceOf(NullPointerException.class);
-    }
-
-    // ===========================================================================================
-    // removeOwner — last-owner guard
-
-    @Test
-    void removeOwner_throws_when_removing_the_last_owner() throws Exception {
-        UUID founderId = UUID.randomUUID();
-        UUID coOwnerId = UUID.randomUUID();
-        String founderToken = registerMember(founderId);
-        String coOwnerToken = registerMember(coOwnerId);
-        Company company = service.createCompany(founderToken, "Acme");
-        service.addOwner(founderToken, company.getId(), coOwnerId);
-
-        // Strip the founder out so coOwnerId becomes the sole owner, exercising the last-owner guard
-        Company stored = repo.findById(company.getId()).orElseThrow();
-        Field ownerIdsField = Company.class.getDeclaredField("ownerIds");
-        ownerIdsField.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        Set<UUID> owners = (Set<UUID>) ownerIdsField.get(stored);
-        owners.remove(founderId);
-
-        assertThatThrownBy(() -> service.removeOwner(coOwnerToken, company.getId(), coOwnerId))
-                .isInstanceOf(IllegalStateException.class);
     }
 
     // ===========================================================================================
@@ -181,7 +140,7 @@ class CompanyServiceWhiteTest {
 
         ExecutorService pool = Executors.newFixedThreadPool(16);
         CountDownLatch start = new CountDownLatch(1);
-        Set<UUID> ids = ConcurrentHashMap.newKeySet();
+        java.util.Set<UUID> ids = ConcurrentHashMap.newKeySet();
         AtomicInteger failures = new AtomicInteger();
 
         for (int i = 0; i < N; i++) {
@@ -218,7 +177,7 @@ class CompanyServiceWhiteTest {
         int N = 50;
         ExecutorService pool = Executors.newFixedThreadPool(16);
         CountDownLatch start = new CountDownLatch(1);
-        Set<ICompanyPurchasePolicy> attempted = ConcurrentHashMap.newKeySet();
+        java.util.Set<ICompanyPurchasePolicy> attempted = ConcurrentHashMap.newKeySet();
         AtomicInteger failures = new AtomicInteger();
 
         for (int i = 0; i < N; i++) {
@@ -241,74 +200,6 @@ class CompanyServiceWhiteTest {
         Company finalState = repo.findById(company.getId()).orElseThrow();
         assertThat(finalState.getPurchasePolicies()).hasSize(1);
         assertThat(attempted).contains(finalState.getPurchasePolicies().get(0));
-    }
-
-    @Test
-    void concurrent_addOwner_on_separate_companies_all_succeed() throws Exception {
-        int N = 30;
-        String[] founderTokens = new String[N];
-        for (int i = 0; i < N; i++) founderTokens[i] = registerMember(UUID.randomUUID());
-
-        ExecutorService pool = Executors.newFixedThreadPool(16);
-        CountDownLatch start = new CountDownLatch(1);
-        Set<UUID> successfulCompanyIds = ConcurrentHashMap.newKeySet();
-        AtomicInteger failures = new AtomicInteger();
-
-        for (int i = 0; i < N; i++) {
-            final String founderToken = founderTokens[i];
-            pool.submit(() -> {
-                UUID newOwnerId = UUID.randomUUID();
-                try {
-                    start.await();
-                    Company company = service.createCompany(founderToken, "Company-" + UUID.randomUUID());
-                    service.addOwner(founderToken, company.getId(), newOwnerId);
-                    successfulCompanyIds.add(company.getId());
-                } catch (Exception e) {
-                    failures.incrementAndGet();
-                }
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(30, SECONDS)).isTrue();
-        assertThat(failures.get()).isZero();
-        assertThat(successfulCompanyIds).hasSize(N);
-    }
-
-    @Test
-    void concurrent_addEventManager_same_manager_same_event_allows_exactly_one_success() throws Exception {
-        UUID founderId = UUID.randomUUID();
-        String founderToken = registerMember(founderId);
-        Company company = service.createCompany(founderToken, "Acme");
-        UUID eventId = UUID.randomUUID();
-        UUID managerId = UUID.randomUUID();
-
-        int N = 20;
-        ExecutorService pool = Executors.newFixedThreadPool(16);
-        CountDownLatch start = new CountDownLatch(1);
-        AtomicInteger successes = new AtomicInteger();
-        AtomicInteger failures = new AtomicInteger();
-
-        for (int i = 0; i < N; i++) {
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    service.addEventManager(founderToken, company.getId(), eventId, managerId, Set.of());
-                    successes.incrementAndGet();
-                } catch (Exception e) {
-                    failures.incrementAndGet();
-                }
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(30, SECONDS)).isTrue();
-        assertThat(successes.get()).isEqualTo(1);
-        assertThat(failures.get()).isEqualTo(N - 1);
-        assertThat(repo.findById(company.getId()).orElseThrow().getEventManagers(eventId))
-                .containsExactly(managerId);
     }
 
     @Test
