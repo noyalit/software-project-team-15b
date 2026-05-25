@@ -39,6 +39,35 @@ class LotteryDomainServiceImplWhiteTest {
     @Mock private ILotteryRepository lotteryRepository;
     @InjectMocks private LotteryDomainServiceImpl service;
 
+    /**
+     * Subclass that widens the three protected helpers so tests can invoke them
+     * deterministically without going through the Spring proxy.
+     */
+    private static class ExposedLotteryService extends LotteryDomainServiceImpl {
+        ExposedLotteryService(ILotteryRepository r) { super(r); }
+
+        @Override
+        public UUID popRandomFromEventLottery(UUID eventId) {
+            return super.popRandomFromEventLottery(eventId);
+        }
+
+        @Override
+        public Set<UUID> popRandomFromEventLottery(UUID eventId, int count) {
+            return super.popRandomFromEventLottery(eventId, count);
+        }
+
+        @Override
+        public Set<UUID> drawWinnersTransactional(UUID eventId, int count) {
+            return super.drawWinnersTransactional(eventId, count);
+        }
+    }
+
+    private ExposedLotteryService createExposed() {
+        ExposedLotteryService exposed = new ExposedLotteryService(lotteryRepository);
+        ReflectionTestUtils.setField(exposed, "self", exposed);
+        return exposed;
+    }
+
     @BeforeEach
     void injectSelf() {
         ReflectionTestUtils.setField(service, "self", service);
@@ -86,7 +115,7 @@ class LotteryDomainServiceImplWhiteTest {
         lottery.add(USER_A);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        UUID result = service.popRandomFromEventLottery(EVENT_ID);
+        UUID result = createExposed().popRandomFromEventLottery(EVENT_ID);
 
         assertThat(result).isEqualTo(USER_A);
         verify(lotteryRepository).updateLottery(lottery);
@@ -100,7 +129,7 @@ class LotteryDomainServiceImplWhiteTest {
         lottery.add(UUID.fromString("00000000-0000-0000-0000-000000000004"));
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        Set<UUID> result = service.popRandomFromEventLottery(EVENT_ID, 2);
+        Set<UUID> result = createExposed().popRandomFromEventLottery(EVENT_ID, 2);
 
         assertThat(result).hasSize(2);
         verify(lotteryRepository).updateLottery(lottery);
@@ -158,7 +187,8 @@ class LotteryDomainServiceImplWhiteTest {
 
     @Test
     void popRandomFromEventLottery_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.popRandomFromEventLottery(null))
+        ExposedLotteryService exposed = createExposed();
+        assertThatThrownBy(() -> exposed.popRandomFromEventLottery(null))
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(lotteryRepository);
     }
@@ -168,21 +198,23 @@ class LotteryDomainServiceImplWhiteTest {
         Lottery lottery = new Lottery(EVENT_ID);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        assertThatThrownBy(() -> service.popRandomFromEventLottery(EVENT_ID))
+        assertThatThrownBy(() -> createExposed().popRandomFromEventLottery(EVENT_ID))
                 .isInstanceOf(EmptyLotteryException.class);
         verify(lotteryRepository, never()).updateLottery(any());
     }
 
     @Test
     void popRandomFromEventLottery_withCount_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.popRandomFromEventLottery(null, 1))
+        ExposedLotteryService exposed = createExposed();
+        assertThatThrownBy(() -> exposed.popRandomFromEventLottery(null, 1))
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(lotteryRepository);
     }
 
     @Test
     void popRandomFromEventLottery_withCount_negativeCount_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.popRandomFromEventLottery(EVENT_ID, -1))
+        ExposedLotteryService exposed = createExposed();
+        assertThatThrownBy(() -> exposed.popRandomFromEventLottery(EVENT_ID, -1))
                 .isInstanceOf(IllegalArgumentException.class);
         verifyNoInteractions(lotteryRepository);
     }
@@ -192,7 +224,7 @@ class LotteryDomainServiceImplWhiteTest {
         Lottery lottery = new Lottery(EVENT_ID);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        assertThatThrownBy(() -> service.popRandomFromEventLottery(EVENT_ID, 3))
+        assertThatThrownBy(() -> createExposed().popRandomFromEventLottery(EVENT_ID, 3))
                 .isInstanceOf(EmptyLotteryException.class);
         verify(lotteryRepository, never()).updateLottery(any());
     }
@@ -368,7 +400,7 @@ class LotteryDomainServiceImplWhiteTest {
     void drawWinnersTransactional_lotteryNotFound_throwsLotteryNotFoundException() {
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
 
-        assertThatThrownBy(() -> service.drawWinnersTransactional(EVENT_ID, 1))
+        assertThatThrownBy(() -> createExposed().drawWinnersTransactional(EVENT_ID, 1))
                 .isInstanceOf(LotteryNotFoundException.class);
         verify(lotteryRepository, never()).updateLottery(any());
     }
@@ -378,7 +410,7 @@ class LotteryDomainServiceImplWhiteTest {
         Lottery lottery = new Lottery(EVENT_ID);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        Set<UUID> result = service.drawWinnersTransactional(EVENT_ID, 5);
+        Set<UUID> result = createExposed().drawWinnersTransactional(EVENT_ID, 5);
 
         assertThat(result).isEmpty();
         verify(lotteryRepository).updateLottery(lottery);
@@ -432,6 +464,7 @@ class LotteryDomainServiceImplWhiteTest {
         when(mockLottery.popRandom()).thenAnswer(inv -> deque.poll());
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(mockLottery);
 
+        ExposedLotteryService exposed = createExposed();
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(threads);
         Set<UUID> results = ConcurrentHashMap.newKeySet();
@@ -441,7 +474,7 @@ class LotteryDomainServiceImplWhiteTest {
             pool.submit(() -> {
                 try {
                     start.await();
-                    UUID popped = service.popRandomFromEventLottery(EVENT_ID);
+                    UUID popped = exposed.popRandomFromEventLottery(EVENT_ID);
                     results.add(popped);
                     successes.incrementAndGet();
                 } catch (Exception ignored) {}

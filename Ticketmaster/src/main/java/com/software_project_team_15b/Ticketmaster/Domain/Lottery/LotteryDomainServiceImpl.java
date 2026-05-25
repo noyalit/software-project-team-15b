@@ -129,10 +129,9 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
      * @throws LotteryNotFoundException if no lottery exists for the given event
      * @throws EmptyLotteryException    if the lottery contains no entries
      */
-    @Override
     @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
     @Transactional
-    public UUID popRandomFromEventLottery(UUID eventId) {
+    protected UUID popRandomFromEventLottery(UUID eventId) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
@@ -161,10 +160,9 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
      * @throws LotteryNotFoundException if no lottery exists for the given event
      * @throws EmptyLotteryException    if the lottery contains no entries
      */
-    @Override
     @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
     @Transactional
-    public Set<UUID> popRandomFromEventLottery(UUID eventId, int count) {
+    protected Set<UUID> popRandomFromEventLottery(UUID eventId, int count) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
@@ -204,7 +202,6 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
      * @throws LotteryNotFoundException     if no lottery exists for the given event
      * @throws LotteryAlreadyDrawnException if the lottery for this event has already been drawn
      */
-    //TODO: Only event manager/owner can run
     @Override
     public synchronized Set<UUID> runEventLottery(UUID eventId, int count) {
         if (eventId == null) {
@@ -245,7 +242,7 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
      */
     @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
     @Transactional
-    public Set<UUID> drawWinnersTransactional(UUID eventId, int count) {
+    protected Set<UUID> drawWinnersTransactional(UUID eventId, int count) {
         Lottery lottery = lotteryRepository.getLottery(eventId);
         if (lottery == null) {
             throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);

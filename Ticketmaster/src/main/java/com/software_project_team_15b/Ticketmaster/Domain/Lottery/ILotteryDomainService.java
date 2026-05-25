@@ -38,22 +38,6 @@ public interface ILotteryDomainService {
      */
     void addToEventLottery(UUID eventId, UUID userId);
 
-    /**
-     * Draws one random entry from the event's lottery pool, removing it.
-     *
-     * @param eventId the unique identifier of the event; must not be null
-     * @return the UUID of the randomly selected entry
-     */
-    UUID popRandomFromEventLottery(UUID eventId);
-
-    /**
-     * Draws up to {@code count} random entries from the event's lottery pool, removing each.
-     *
-     * @param eventId the unique identifier of the event; must not be null
-     * @param count   the maximum number of entries to draw; must not be negative
-     * @return a set of randomly selected UUIDs (size &le; {@code count})
-     */
-    Set<UUID> popRandomFromEventLottery(UUID eventId, int count);
 
     /**
      * Runs the lottery for the given event, selecting up to {@code count} winners and

@@ -54,16 +54,12 @@ public class QueueService {
      */
     @Scheduled(fixedRate = SITE_QUEUE_INTERVAL, timeUnit = TimeUnit.SECONDS)
     private synchronized void acceptUsersFromSiteQueue() {
-        try {
-            acceptedTokens.removeIf(token -> !auth.isTokenValid(token));
-            while (!siteQueue.isEmpty() && acceptedTokens.size() < MAX_VISITORS) {
-                String token = siteQueue.poll();
-                if (auth.isTokenValid(token)) {
-                    acceptedTokens.add(token);
-                }
+        acceptedTokens.removeIf(token -> !auth.isTokenValid(token));
+        while (!siteQueue.isEmpty() && acceptedTokens.size() < MAX_VISITORS) {
+            String token = siteQueue.poll();
+            if (auth.isTokenValid(token)) {
+                acceptedTokens.add(token);
             }
-        } catch (Exception e) {
-            AUDIT.warn("op=acceptUsersFromSiteQueue result=error error={}", e.getMessage());
         }
     }
 

@@ -1,6 +1,5 @@
 package com.software_project_team_15b.Ticketmaster.black.Domain.Lottery;
 
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyLotteryException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
@@ -128,114 +127,6 @@ class LotteryDomainServiceImplBlackTest {
 
         assertThatThrownBy(() -> domainService.addToEventLottery(EVENT_ID, USER_A))
                 .isInstanceOf(LotteryNotFoundException.class);
-    }
-
-    // =========================================================================
-    // popRandomFromEventLottery (single)
-    // =========================================================================
-
-    @Test
-    void popRandomFromEventLottery_positive_returnsAndRemovesEntry() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        lottery.add(USER_A);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        UUID result = domainService.popRandomFromEventLottery(EVENT_ID);
-
-        assertThat(result).isEqualTo(USER_A);
-        assertThat(lottery.pop(USER_A)).isNull();
-    }
-
-    @Test
-    void popRandomFromEventLottery_positive_returnedValueIsFromPool() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        lottery.add(USER_A);
-        lottery.add(USER_B);
-        lottery.add(USER_C);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        UUID result = domainService.popRandomFromEventLottery(EVENT_ID);
-
-        assertThat(Set.of(USER_A, USER_B, USER_C)).contains(result);
-    }
-
-    @Test
-    void popRandomFromEventLottery_negative_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> domainService.popRandomFromEventLottery(null))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void popRandomFromEventLottery_negative_lotteryNotFound_throwsLotteryNotFoundException() {
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
-
-        assertThatThrownBy(() -> domainService.popRandomFromEventLottery(EVENT_ID))
-                .isInstanceOf(LotteryNotFoundException.class);
-    }
-
-    @Test
-    void popRandomFromEventLottery_negative_emptyLottery_throwsEmptyLotteryException() {
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(new Lottery(EVENT_ID));
-
-        assertThatThrownBy(() -> domainService.popRandomFromEventLottery(EVENT_ID))
-                .isInstanceOf(EmptyLotteryException.class);
-    }
-
-    // =========================================================================
-    // popRandomFromEventLottery (count)
-    // =========================================================================
-
-    @Test
-    void popRandomFromEventLotteryWithCount_positive_returnsExactlyRequested() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        lottery.add(USER_A);
-        lottery.add(USER_B);
-        lottery.add(USER_C);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        Set<UUID> result = domainService.popRandomFromEventLottery(EVENT_ID, 2);
-
-        assertThat(result).hasSize(2);
-    }
-
-    @Test
-    void popRandomFromEventLotteryWithCount_positive_capsAtPoolSize() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        lottery.add(USER_A);
-        lottery.add(USER_B);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        Set<UUID> result = domainService.popRandomFromEventLottery(EVENT_ID, 10);
-
-        assertThat(result).containsExactlyInAnyOrder(USER_A, USER_B);
-    }
-
-    @Test
-    void popRandomFromEventLotteryWithCount_negative_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> domainService.popRandomFromEventLottery(null, 1))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void popRandomFromEventLotteryWithCount_negative_negativeCount_throwsIllegalArgument() {
-        assertThatThrownBy(() -> domainService.popRandomFromEventLottery(EVENT_ID, -1))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void popRandomFromEventLotteryWithCount_negative_lotteryNotFound_throwsLotteryNotFoundException() {
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
-
-        assertThatThrownBy(() -> domainService.popRandomFromEventLottery(EVENT_ID, 2))
-                .isInstanceOf(LotteryNotFoundException.class);
-    }
-
-    @Test
-    void popRandomFromEventLotteryWithCount_negative_emptyLottery_throwsEmptyLotteryException() {
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(new Lottery(EVENT_ID));
-
-        assertThatThrownBy(() -> domainService.popRandomFromEventLottery(EVENT_ID, 3))
-                .isInstanceOf(EmptyLotteryException.class);
     }
 
     // =========================================================================
