@@ -17,26 +17,24 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Objects;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Domain service for managing virtual queues associated with events.
+ * Domain service for managing virtual queues associated with events and the site-wide
+ * waiting queue.
  *
  * <p>Owns the persistent {@link IQueueRepository} aggregate, the per-event admission
- * map, and the scheduler that drains event queues and expires per-event access windows.
- * Each event may have at most one queue, keyed by the event's UUID.
+ * map, the in-memory site queue ({@link #siteQueue}), the admitted-token set
+ * ({@link #acceptedTokens}), and the scheduler that drains event queues and expires
+ * per-event access windows. Each event may have at most one queue, keyed by the event's UUID.
  *
- * <p>Site-wide queue management (site queue, admitted-token set, auth-dependent eviction)
- * is intentionally absent here — that responsibility belongs to the application-layer
- * {@code QueueService}, which holds the {@code IAuth} dependency. The interface methods
- * {@link #addUserToSiteQueue}, {@link #validateAndExitQueue}, and {@link #canAccessWebsite}
- * are therefore not supported by this implementation and will throw
- * {@link UnsupportedOperationException} if called directly.
+ * <p>Auth-dependent eviction (validating token freshness before admitting users from the
+ * site queue) is handled by the application-layer {@code QueueService}, which calls
+ * {@link #removeAcceptedToken} and {@link #acceptUsersFromSiteQueue} on a schedule.
  *
  * <p>Mutating operations on persistent queues are transactional. Methods that perform a
  * read-then-write are additionally annotated with {@link Retryable} so that transient
@@ -46,6 +44,7 @@ import java.util.concurrent.TimeUnit;
 public class QueueDomainServiceImpl implements IQueueDomainService {
 
     private final int ACCESS_TIME = 100;
+    private static final int MAX_VISITORS = 100;
 
     private final IQueueRepository queueRepository;
     // Self-reference through the Spring proxy so that @Retryable and @Transactional
@@ -54,38 +53,11 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
     private final ConcurrentHashMap<UUID, ConcurrentHashMap<String, LocalDateTime>> eventAccess = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
+    private final Queue<String> siteQueue = new LinkedList<>();
+    private final Set<String> acceptedTokens = new HashSet<>();
+
     public QueueDomainServiceImpl(IQueueRepository queueRepository) {
         this.queueRepository = Objects.requireNonNull(queueRepository);
-    }
-
-    /**
-     * Not supported — site queue is managed by the application-layer {@code QueueService}.
-     *
-     * @throws UnsupportedOperationException always
-     */
-    @Override
-    public void addUserToSiteQueue(String token) {
-        throw new UnsupportedOperationException("Site queue is managed by QueueService");
-    }
-
-    /**
-     * Not supported — site queue admission is managed by the application-layer {@code QueueService}.
-     *
-     * @throws UnsupportedOperationException always
-     */
-    @Override
-    public boolean validateAndExitQueue(String token) {
-        throw new UnsupportedOperationException("Site queue is managed by QueueService");
-    }
-
-    /**
-     * Not supported — site capacity is managed by the application-layer {@code QueueService}.
-     *
-     * @throws UnsupportedOperationException always
-     */
-    @Override
-    public boolean canAccessWebsite() {
-        throw new UnsupportedOperationException("Site queue is managed by QueueService");
     }
 
     /**
@@ -111,6 +83,57 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
             throw new QueueNotFoundException("Queue with id " + eventId + " not found");
         }
         return queue.getPosition(token);
+    }
+
+    /**
+     * Returns an unmodifiable snapshot of the tokens that are currently admitted to
+     * the site (i.e. past the site queue and within their access window).
+     *
+     * @return an unmodifiable view of the admitted-token set
+     */
+    public Set<String> getAcceptedTokens() {
+        return Collections.unmodifiableSet(acceptedTokens);
+    }
+
+    /**
+     * Removes the given token from the admitted set.
+     *
+     * @param token the user's auth token; must not be null
+     * @throws IllegalArgumentException if {@code token} is null
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException if {@code token} is not present in the admitted set
+     */
+    public void removeAcceptedToken(String token) {
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
+        }
+        if (!acceptedTokens.contains(token)) {
+            throw new InvalidTokenException("token " + token + " not found in accepted tokens");
+        }
+        acceptedTokens.remove(token);
+    }
+
+    /**
+     * Drains the front of the site queue into the admitted set until
+     * {@link #MAX_VISITORS} concurrent visitors are admitted or the queue is empty.
+     */
+    public synchronized void acceptUsersFromSiteQueue() {
+        while (!siteQueue.isEmpty() && acceptedTokens.size() < MAX_VISITORS) {
+            acceptedTokens.add(siteQueue.poll());
+        }
+    }
+
+    /**
+     * Appends the given token to the back of the site-wide waiting queue.
+     *
+     * @param token the user's auth token; must not be null
+     * @throws IllegalArgumentException if {@code token} is null or is already present in the queue
+     */
+    public synchronized void addUserToSiteQueue(String token) {
+        if (token == null) throw new IllegalArgumentException("token cannot be null");
+        if (siteQueue.contains(token)) {
+            throw new IllegalArgumentException("User is already in the site queue");
+        }
+        siteQueue.add(token);
     }
 
     /**
@@ -373,5 +396,10 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
         queue.push(token);
         queueRepository.updateQueue(queue);
         advanceEventQueue(eventId);
+    }
+
+    @Override
+    public boolean canAccessWebsite() {
+        return acceptedTokens.size() < MAX_VISITORS;
     }
 }

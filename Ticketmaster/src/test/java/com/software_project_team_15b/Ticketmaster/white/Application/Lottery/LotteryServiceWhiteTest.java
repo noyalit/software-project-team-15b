@@ -91,11 +91,13 @@ class LotteryServiceWhiteTest {
     @Test
     void getEventLotteryWinners_delegates_andReturnsDomainServiceResult() {
         Set<UUID> expected = Set.of(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.getEventLotteryWinners(EVENT_ID)).thenReturn(expected);
 
-        Set<UUID> result = service.getEventLotteryWinners(EVENT_ID);
+        Set<UUID> result = service.getEventLotteryWinners(USER_A, COMPANY_ID, EVENT_ID);
 
         assertThat(result).isSameAs(expected);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).getEventLotteryWinners(EVENT_ID);
     }
 

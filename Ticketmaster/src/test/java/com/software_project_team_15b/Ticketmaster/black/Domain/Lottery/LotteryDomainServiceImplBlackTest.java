@@ -316,36 +316,6 @@ class LotteryDomainServiceImplBlackTest {
     }
 
     // =========================================================================
-    // clearEventLotteryWinners
-    // =========================================================================
-
-    @Test
-    void clearEventLotteryWinners_positive_emptiesDrawnSet() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        lottery.add(USER_A);
-        lottery.popRandom();
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        domainService.clearEventLotteryWinners(EVENT_ID);
-
-        assertThat(lottery.getWinners()).isEmpty();
-    }
-
-    @Test
-    void clearEventLotteryWinners_negative_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> domainService.clearEventLotteryWinners(null))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void clearEventLotteryWinners_negative_lotteryNotFound_throwsLotteryNotFoundException() {
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
-
-        assertThatThrownBy(() -> domainService.clearEventLotteryWinners(EVENT_ID))
-                .isInstanceOf(LotteryNotFoundException.class);
-    }
-
-    // =========================================================================
     // getLotteryEligibilityForEvent
     // =========================================================================
 

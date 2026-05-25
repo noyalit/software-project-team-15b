@@ -1,6 +1,5 @@
 package com.software_project_team_15b.Ticketmaster.white.Application.Queue;
 
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
@@ -17,12 +16,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.UUID;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.*;
 
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -32,13 +27,12 @@ import static org.mockito.Mockito.*;
  * <ul>
  *   <li>Token validation via {@link IAuth} occurs before any event-queue domain service
  *       call, and invalid or null tokens short-circuit execution.</li>
- *   <li>Site-queue operations ({@code addUserToSiteQueue}) are managed locally within
- *       this service and never delegated to {@link IQueueDomainService}.</li>
  *   <li>Event-queue operations ({@code getQueueAccessView}, {@code pushToEventQueue})
  *       are forwarded to the domain service after token validation, without mutating
  *       or substituting arguments.</li>
- *   <li>{@code createEventQueue} and {@code deleteEventQueue} delegate directly without
- *       token validation.</li>
+ *   <li>{@code createEventQueue} and {@code deleteEventQueue} check authorization via
+ *       {@link com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService}
+ *       then delegate to the domain service without touching the auth token.</li>
  * </ul>
  *
  * <p>After each test, {@code verifyNoMoreInteractions} on the domain service mock guards
@@ -59,20 +53,6 @@ class QueueServiceWhiteTest {
     @AfterEach
     void verifyNoUnexpectedDomainServiceInteractions() {
         verifyNoMoreInteractions(queueDomainService, userDomainService);
-    }
-
-    // =========================================================================
-    // Site-queue methods — managed locally, NOT delegated to domain service
-    // =========================================================================
-
-    @Test
-    void addUserToSiteQueue_validatesToken_andNeverCallsDomainService() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-
-        service.addUserToSiteQueue("token-a");
-
-        verifyNoInteractions(queueDomainService);
     }
 
     // =========================================================================
@@ -137,22 +117,6 @@ class QueueServiceWhiteTest {
     // =========================================================================
 
     @Test
-    void addUserToSiteQueue_nullToken_throwsBeforeAuth() {
-        assertThatThrownBy(() -> service.addUserToSiteQueue(null))
-                .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(auth, queueDomainService);
-    }
-
-    @Test
-    void addUserToSiteQueue_invalidToken_throwsInvalidTokenException() {
-        when(auth.isTokenValid("bad-token")).thenReturn(false);
-
-        assertThatThrownBy(() -> service.addUserToSiteQueue("bad-token"))
-                .isInstanceOf(InvalidTokenException.class);
-        verifyNoInteractions(queueDomainService);
-    }
-
-    @Test
     void deleteEventQueue_propagatesDomainServiceException() {
         when(userDomainService.isActiveManager(USER_ID, COMPANY_ID, EVENT_ID)).thenReturn(true);
         doThrow(new QueueNotFoundException("missing")).when(queueDomainService).deleteEventQueue(EVENT_ID);
@@ -193,37 +157,4 @@ class QueueServiceWhiteTest {
         verify(queueDomainService).getQueueAccessView(tok, eid);
     }
 
-    // =========================================================================
-    // Concurrency — site queue is stateful; concurrent calls must be safe
-    // =========================================================================
-
-    @Test
-    void concurrentAddUserToSiteQueue_distinctTokens_neverCallsDomainService() throws InterruptedException {
-        when(auth.isTokenValid(anyString())).thenReturn(true);
-        when(auth.extractUserId(anyString())).thenReturn(USER_ID);
-
-        int threads = 50;
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
-        AtomicInteger completed = new AtomicInteger();
-
-        for (int i = 0; i < threads; i++) {
-            final String tok = "token-" + i;
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    service.addUserToSiteQueue(tok);
-                    completed.incrementAndGet();
-                } catch (Exception ignored) {}
-                return null;
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
-
-        assertThat(completed.get()).isEqualTo(threads);
-        verifyNoInteractions(queueDomainService);
-    }
 }

@@ -173,24 +173,38 @@ class LotteryServiceBlackTest {
     @Test
     void getEventLotteryWinners_positive_returnsDomainProvidedSet() {
         Set<UUID> expected = Set.of(USER_A, USER_B);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.getEventLotteryWinners(EVENT_ID)).thenReturn(expected);
 
-        assertThat(service.getEventLotteryWinners(EVENT_ID)).containsExactlyInAnyOrderElementsOf(expected);
+        assertThat(service.getEventLotteryWinners(USER_A, COMPANY_ID, EVENT_ID))
+                .containsExactlyInAnyOrderElementsOf(expected);
     }
 
     @Test
     void getEventLotteryWinners_positive_returnsEmptySetWhenNobodyDrawn() {
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.getEventLotteryWinners(EVENT_ID)).thenReturn(Set.of());
 
-        assertThat(service.getEventLotteryWinners(EVENT_ID)).isEmpty();
+        assertThat(service.getEventLotteryWinners(USER_A, COMPANY_ID, EVENT_ID)).isEmpty();
+    }
+
+    @Test
+    void getEventLotteryWinners_negative_userNotAuthorized_throwsUnauthorized() {
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(false);
+        when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getEventLotteryWinners(USER_A, COMPANY_ID, EVENT_ID))
+                .isInstanceOf(UnauthorizedException.class);
     }
 
     @Test
     void getEventLotteryWinners_negative_propagatesLotteryNotFound() {
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         doThrow(new LotteryNotFoundException("missing"))
                 .when(lotteryDomainService).getEventLotteryWinners(EVENT_ID);
 
-        assertThatThrownBy(() -> service.getEventLotteryWinners(EVENT_ID))
+        assertThatThrownBy(() -> service.getEventLotteryWinners(USER_A, COMPANY_ID, EVENT_ID))
                 .isInstanceOf(LotteryNotFoundException.class);
     }
 

@@ -33,17 +33,14 @@ import java.util.concurrent.TimeUnit;
  */
 @Service
 public class QueueService {
-    private static final Logger AUDIT = LoggerFactory.getLogger("audit.queue");
-
-    private static final int MAX_VISITORS = 100;
     private static final int SITE_QUEUE_INTERVAL = 10;
+
+
+    private static final Logger AUDIT = LoggerFactory.getLogger("audit.queue");
 
     private final IAuth auth;
     private final IQueueDomainService queueDomainService;
     private final UserDomainService userDomainService;
-
-    private final Queue<String> siteQueue = new LinkedList<>();
-    private final Set<String> acceptedTokens = new HashSet<>();
 
     public QueueService(IQueueDomainService queueDomainService, IAuth auth, UserDomainService userDomainService) {
         this.queueDomainService = Objects.requireNonNull(queueDomainService);
@@ -52,46 +49,27 @@ public class QueueService {
     }
 
     /**
-     * Evicts expired tokens from the admitted set, then drains the front of the
-     * site queue into the admitted set until it reaches {@link #MAX_VISITORS}.
-     * Tokens that have since expired while waiting in the queue are discarded.
+     * Evicts expired tokens from the admitted set, then delegates to the domain
+     * service to fill the vacated slots from the front of the site queue.
+     *
+     * <p>Runs on a fixed schedule every {@link #SITE_QUEUE_INTERVAL} seconds.
+     * Token-validity checks are performed here (via {@link IAuth}) so that the
+     * domain service stays free of auth dependencies.
      */
     @Scheduled(fixedRate = SITE_QUEUE_INTERVAL, timeUnit = TimeUnit.SECONDS)
     private synchronized void acceptUsersFromSiteQueue() {
-        acceptedTokens.removeIf(token -> !auth.isTokenValid(token));
-        while (!siteQueue.isEmpty() && acceptedTokens.size() < MAX_VISITORS) {
-            String token = siteQueue.poll();
-            if (auth.isTokenValid(token)) {
-                acceptedTokens.add(token);
+        Set<String> acceptedTokens = queueDomainService.getAcceptedTokens();
+        for (String token : acceptedTokens) {
+            if (!auth.isTokenValid(token)) {
+                queueDomainService.removeAcceptedToken(token);
             }
         }
+        queueDomainService.acceptUsersFromSiteQueue();
     }
 
     private void validateToken(String token) {
         if (!auth.isTokenValid(token)) {
             throw new InvalidTokenException("Invalid token");
-        }
-    }
-
-    /**
-     * Appends the given token to the back of the site-wide waiting queue.
-     *
-     * @param token the user's auth token; must not be null
-     * @throws IllegalArgumentException if {@code token} is null or is already present in the queue
-     */
-    public synchronized void addUserToSiteQueue(String token) {
-        try {
-            if (token == null) throw new IllegalArgumentException("token cannot be null");
-            validateToken(token);
-            UUID callerId = auth.extractUserId(token);
-            if (siteQueue.contains(token)) {
-                throw new IllegalArgumentException("User is already in the site queue");
-            }
-            siteQueue.add(token);
-            AUDIT.info("op=addUserToSiteQueue callerId={} result=ok", callerId);
-        } catch (RuntimeException e) {
-            AUDIT.warn("op=addUserToSiteQueue result=error error={}", e.getMessage());
-            throw e;
         }
     }
 

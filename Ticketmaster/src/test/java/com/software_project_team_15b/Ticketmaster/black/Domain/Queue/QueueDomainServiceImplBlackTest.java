@@ -2,6 +2,7 @@ package com.software_project_team_15b.Ticketmaster.black.Domain.Queue;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyInQueueException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyQueueException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIsFullException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
@@ -39,9 +40,10 @@ import static org.mockito.Mockito.*;
  * context the @Retryable / @Transactional self-invocation would otherwise NPE — that is
  * test plumbing, not white-box knowledge.
  *
- * <p>Site-queue operations ({@code addUserToSiteQueue}, {@code validateAndExitQueue},
- * {@code canAccessWebsite}) are delegated to the application layer; calling them on the
- * domain service throws {@link UnsupportedOperationException}.
+ * <p>Site-queue operations ({@code addUserToSiteQueue}, {@code acceptUsersFromSiteQueue},
+ * {@code getAcceptedTokens}, {@code removeAcceptedToken}) are implemented by the domain
+ * service. Auth-dependent token eviction is performed by the application-layer
+ * {@code QueueService} on a schedule.
  */
 @ExtendWith(MockitoExtension.class)
 class QueueDomainServiceImplBlackTest {
@@ -61,25 +63,60 @@ class QueueDomainServiceImplBlackTest {
     private static final UUID OTHER_EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000099");
 
     // =========================================================================
-    // Site-queue stubs — delegated to application layer, throws here
+    // Site-queue operations
     // =========================================================================
 
     @Test
-    void addUserToSiteQueue_throwsUnsupportedOperationException() {
+    void addUserToSiteQueue_positive_addsTokenSuccessfully() {
+        assertThatCode(() -> domainService.addUserToSiteQueue("token-a"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void addUserToSiteQueue_negative_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> domainService.addUserToSiteQueue(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void addUserToSiteQueue_negative_duplicate_throwsIllegalArgument() {
+        domainService.addUserToSiteQueue("token-a");
         assertThatThrownBy(() -> domainService.addUserToSiteQueue("token-a"))
-                .isInstanceOf(UnsupportedOperationException.class);
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void validateAndExitQueue_throwsUnsupportedOperationException() {
-        assertThatThrownBy(() -> domainService.validateAndExitQueue("token-a"))
-                .isInstanceOf(UnsupportedOperationException.class);
+    void getAcceptedTokens_positive_returnsAdmittedTokensAfterAccept() {
+        domainService.addUserToSiteQueue("token-a");
+        domainService.acceptUsersFromSiteQueue();
+        assertThat(domainService.getAcceptedTokens()).contains("token-a");
     }
 
     @Test
-    void canAccessWebsite_throwsUnsupportedOperationException() {
-        assertThatThrownBy(() -> domainService.canAccessWebsite())
-                .isInstanceOf(UnsupportedOperationException.class);
+    void acceptUsersFromSiteQueue_positive_movesWaitingTokenIntoAdmittedSet() {
+        domainService.addUserToSiteQueue("token-a");
+        domainService.acceptUsersFromSiteQueue();
+        assertThat(domainService.getAcceptedTokens()).contains("token-a");
+    }
+
+    @Test
+    void removeAcceptedToken_positive_removesTokenFromAdmittedSet() {
+        domainService.addUserToSiteQueue("token-a");
+        domainService.acceptUsersFromSiteQueue();
+        domainService.removeAcceptedToken("token-a");
+        assertThat(domainService.getAcceptedTokens()).doesNotContain("token-a");
+    }
+
+    @Test
+    void removeAcceptedToken_negative_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> domainService.removeAcceptedToken(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void removeAcceptedToken_negative_tokenNotAdmitted_throwsInvalidToken() {
+        assertThatThrownBy(() -> domainService.removeAcceptedToken("not-admitted"))
+                .isInstanceOf(InvalidTokenException.class);
     }
 
     // =========================================================================
@@ -468,6 +505,31 @@ class QueueDomainServiceImplBlackTest {
         pool.shutdown();
         assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
         assertThat(admitted.get()).isEqualTo(n);
+    }
+
+    @Test
+    void concurrentAddUserToSiteQueue_distinctTokens_allSucceed() throws InterruptedException {
+        int n = 20;
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(n);
+        AtomicInteger successes = new AtomicInteger();
+
+        for (int i = 0; i < n; i++) {
+            final String tok = "site-token-" + i;
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    domainService.addUserToSiteQueue(tok);
+                    successes.incrementAndGet();
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
+        assertThat(successes.get()).isEqualTo(n);
     }
 
     @Test

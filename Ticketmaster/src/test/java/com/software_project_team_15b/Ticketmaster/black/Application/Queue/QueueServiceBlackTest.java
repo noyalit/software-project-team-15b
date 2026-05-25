@@ -19,10 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDateTime;
 import java.util.UUID;
-import java.util.concurrent.*;
-import java.util.concurrent.atomic.*;
 
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -34,9 +31,9 @@ import static org.mockito.Mockito.*;
  * is stubbed to drive each scenario; tests do not verify call ordering, count, or
  * argument forwarding — those concerns belong to the white-box suite.
  *
- * <p>The site-wide queue ({@code addUserToSiteQueue}) is managed locally within
- * {@link QueueService}: it requires {@link IAuth} validation and does not delegate
- * to {@link IQueueDomainService}.
+ * <p>Site-queue admission ({@code acceptUsersFromSiteQueue}) is a scheduled internal
+ * method that coordinates auth-based eviction with the domain service; it is not
+ * directly invokable through the public API and is therefore not tested here.
  */
 @ExtendWith(MockitoExtension.class)
 class QueueServiceBlackTest {
@@ -49,47 +46,6 @@ class QueueServiceBlackTest {
     private static final UUID EVENT_ID   = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID USER_ID    = UUID.fromString("00000000-0000-0000-0000-000000000002");
     private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-0000-0000-000000000010");
-
-    // =========================================================================
-    // Site queue / admission — positive
-    // =========================================================================
-
-    @Test
-    void addUserToSiteQueue_positive_returnsNormally() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-
-        assertThatCode(() -> service.addUserToSiteQueue("token-a")).doesNotThrowAnyException();
-    }
-
-    // =========================================================================
-    // Site queue — negative (exceptions thrown by service itself)
-    // =========================================================================
-
-    @Test
-    void addUserToSiteQueue_negative_propagatesIllegalArgumentForNullToken() {
-        assertThatThrownBy(() -> service.addUserToSiteQueue(null))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void addUserToSiteQueue_negative_throwsInvalidTokenException_forInvalidToken() {
-        when(auth.isTokenValid("bad")).thenReturn(false);
-
-        assertThatThrownBy(() -> service.addUserToSiteQueue("bad"))
-                .isInstanceOf(InvalidTokenException.class);
-    }
-
-    @Test
-    void addUserToSiteQueue_negative_propagatesIllegalArgumentForDuplicate() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-
-        service.addUserToSiteQueue("token-a");
-
-        assertThatThrownBy(() -> service.addUserToSiteQueue("token-a"))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
 
     // =========================================================================
     // Event-queue CRUD — positive

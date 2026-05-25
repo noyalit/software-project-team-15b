@@ -18,11 +18,7 @@ import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -103,10 +99,25 @@ class UserServiceConcurrencyTest {
         }
 
         @Override
+        public Set<String> getAcceptedTokens() {
+            return Set.of();
+        }
+
+        @Override
+        public void acceptUsersFromSiteQueue() {
+
+        }
+
+        @Override
         public void addUserToSiteQueue(String token) {
         }
 
         @Override
+        public void removeAcceptedToken(String token) {
+
+        }
+
+        // TODO: Remove?
         public boolean validateAndExitQueue(String token) {
             return true;
         }

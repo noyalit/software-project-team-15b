@@ -105,10 +105,13 @@ public class LotteryService {
     /**
      * Runs the lottery for the given event, selecting up to {@code count} winners.
      *
-     * @param eventId the unique identifier of the event; must not be null
-     * @param count   the maximum number of winners to select; must not be negative
+     * @param userId    the caller's user id; must not be null
+     * @param companyId the company that owns the event
+     * @param eventId   the unique identifier of the event; must not be null
+     * @param count     the maximum number of winners to select; must not be negative
      * @return the set of selected winner UUIDs (may be empty if pool was empty)
-     * @throws IllegalArgumentException     if {@code eventId} is null or {@code count} is negative
+     * @throws IllegalArgumentException     if {@code userId} or {@code eventId} is null, or {@code count} is negative
+     * @throws UnauthorizedException        if the caller is not a manager, owner, or founder of the event
      * @throws LotteryNotFoundException     if no lottery exists for the given event
      * @throws LotteryAlreadyDrawnException if the lottery for this event has already been drawn
      */
@@ -132,14 +135,20 @@ public class LotteryService {
     /**
      * Returns the set of all winners drawn for the given event.
      *
-     * @param eventId the unique identifier of the event; must not be null
+     * @param userId    the caller's user id; must not be null
+     * @param companyId the company that owns the event
+     * @param eventId   the unique identifier of the event; must not be null
      * @return an unmodifiable set of winner UUIDs
-     * @throws IllegalArgumentException if {@code eventId} is null
+     * @throws IllegalArgumentException if {@code userId}, {@code companyId}, or {@code eventId} is null
+     * @throws UnauthorizedException    if the caller is not a manager, owner, or founder of the event
      * @throws LotteryNotFoundException if no lottery exists for the given event
      */
-    public Set<UUID> getEventLotteryWinners(UUID eventId) {
+    public Set<UUID> getEventLotteryWinners(UUID userId, UUID companyId, UUID eventId) {
         try {
+            if (userId == null) throw new IllegalArgumentException("userId cannot be null");
+            if (companyId == null) throw new IllegalArgumentException("companyId cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            requireEventPermissions(userId, companyId, eventId);
             Set<UUID> winners = lotteryDomainService.getEventLotteryWinners(eventId);
             AUDIT.info("op=getEventLotteryWinners eventId={} result=ok", eventId);
             return winners;

@@ -349,50 +349,6 @@ class LotteryDomainServiceImplWhiteTest {
     }
 
     // =========================================================================
-    // clearEventLotteryWinners — verify-based
-    // =========================================================================
-
-    @Test
-    void clearEventLotteryWinners_clearsWinnersAndUpdatesRepository() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        lottery.add(USER_A);
-        lottery.popRandom();
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        service.clearEventLotteryWinners(EVENT_ID);
-
-        assertThat(lottery.getWinners()).isEmpty();
-        verify(lotteryRepository).updateLottery(lottery);
-    }
-
-    @Test
-    void clearEventLotteryWinners_idempotentOnAlreadyEmptyWinners() {
-        Lottery lottery = new Lottery(EVENT_ID);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        service.clearEventLotteryWinners(EVENT_ID);
-
-        assertThat(lottery.getWinners()).isEmpty();
-        verify(lotteryRepository).updateLottery(lottery);
-    }
-
-    @Test
-    void clearEventLotteryWinners_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.clearEventLotteryWinners(null))
-                .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(lotteryRepository);
-    }
-
-    @Test
-    void clearEventLotteryWinners_lotteryNotFound_throwsLotteryNotFoundException() {
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
-
-        assertThatThrownBy(() -> service.clearEventLotteryWinners(EVENT_ID))
-                .isInstanceOf(LotteryNotFoundException.class);
-        verify(lotteryRepository, never()).updateLottery(any());
-    }
-
-    // =========================================================================
     // drawWinnersTransactional — internal-only path
     // =========================================================================
 

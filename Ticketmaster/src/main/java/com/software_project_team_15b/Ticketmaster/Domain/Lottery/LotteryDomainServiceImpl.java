@@ -298,28 +298,6 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
     }
 
     /**
-     * Clears the persistent winners set on the domain entity for the given event.
-     *
-     * @param eventId the unique identifier of the event; must not be null
-     * @throws IllegalArgumentException if {@code eventId} is null
-     * @throws LotteryNotFoundException if no lottery exists for the given event
-     */
-    @Override
-    @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
-    @Transactional
-    public void clearEventLotteryWinners(UUID eventId) {
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
-        }
-        Lottery lottery = lotteryRepository.getLottery(eventId);
-        if (lottery == null) {
-            throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
-        }
-        lottery.clearWinners();
-        lotteryRepository.updateLottery(lottery);
-    }
-
-    /**
      * Returns the lottery eligibility status for the given user and event.
      *
      * <ul>

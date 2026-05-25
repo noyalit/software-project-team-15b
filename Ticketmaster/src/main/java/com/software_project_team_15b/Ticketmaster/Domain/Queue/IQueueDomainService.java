@@ -1,22 +1,53 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Queue;
 
+import java.util.Queue;
+import java.util.Set;
 import java.util.UUID;
 
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 
 /**
- * Domain service for managing per-event virtual queues.
+ * Domain service for managing per-event virtual queues and the site-wide waiting queue.
  *
- * <p>Owns the per-event admission map, the persistent event-queue repository,
- * and the scheduler that advances event queues. Site-wide queue management
- * (site queue, admitted-token set, auth-dependent eviction) is the responsibility
- * of the application-layer {@code QueueService}, which holds the {@code IAuth}
- * dependency. The site-queue methods defined here ({@link #addUserToSiteQueue},
- * {@link #validateAndExitQueue}, {@link #canAccessWebsite}) are therefore not
- * supported by the standard implementation and will throw
- * {@link UnsupportedOperationException} if called directly.
+ * <p>Owns the per-event admission map, the persistent event-queue repository, the
+ * scheduler that advances event queues, and the in-memory site queue together with its
+ * admitted-token set. Auth-dependent eviction (checking token validity before admitting
+ * a user) is the responsibility of the application-layer {@code QueueService}, which
+ * holds the {@code IAuth} dependency and calls {@link #removeAcceptedToken} and
+ * {@link #acceptUsersFromSiteQueue} on a schedule.
  */
 public interface IQueueDomainService {
+
+    /**
+     * Returns an unmodifiable snapshot of the tokens that are currently admitted to
+     * the site (i.e. past the site queue and within their access window).
+     *
+     * @return an unmodifiable view of the admitted-token set
+     */
+    Set<String> getAcceptedTokens();
+
+    /**
+     * Drains the front of the site queue into the admitted set until the maximum
+     * concurrent-visitor cap is reached.
+     */
+    void acceptUsersFromSiteQueue();
+
+    /**
+     * Appends the given token to the back of the site-wide waiting queue.
+     *
+     * @param token the user's auth token; must not be null and must not already be waiting
+     * @throws IllegalArgumentException if {@code token} is null or already in the queue
+     */
+    void addUserToSiteQueue(String token);
+
+    /**
+     * Removes the given token from the admitted set.
+     *
+     * @param token the user's auth token to remove; must not be null
+     * @throws IllegalArgumentException if {@code token} is null
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException if {@code token} is not present in the admitted set
+     */
+    void removeAcceptedToken(String token);
 
     /**
      * Enters the user into the waiting queue for the given event and returns a snapshot
@@ -39,29 +70,6 @@ public interface IQueueDomainService {
     boolean hasAccess(String accessToken, UUID eventId);
 
     /**
-     * Returns {@code true} if the site currently has capacity for additional visitors.
-     *
-     * @return {@code true} if the number of currently admitted users is below the site cap
-     */
-    boolean canAccessWebsite();
-
-    /**
-     * Appends the given token to the back of the site-wide waiting queue.
-     *
-     * @param token the user's auth token; must not be null
-     */
-    void addUserToSiteQueue(String token);
-
-    /**
-     * Returns {@code true} if the given token has been admitted from the site queue and
-     * may proceed to access the website.
-     *
-     * @param token the user's auth token; must not be null
-     * @return {@code true} if the token is currently in the admitted set
-     */
-    boolean validateAndExitQueue(String token);
-
-    /**
      * Returns a snapshot of the user's current access state for the given event.
      *
      * @param token   the user's auth token; must not be null
@@ -80,10 +88,10 @@ public interface IQueueDomainService {
     int getPositionInEventQueue(String token, UUID eventId);
 
     /**
-     * Returns {@code true} if {@code userId} is currently in the admitted window for {@code eventId},
+     * Returns {@code true} if {@code token} is currently in the admitted window for {@code eventId},
      * without performing any token validation.
      *
-     * @param token  the user's auth token; must not be null
+     * @param token   the user's auth token; must not be null
      * @param eventId the unique identifier of the event; must not be null
      * @return {@code true} if the user is currently admitted
      */
@@ -118,4 +126,11 @@ public interface IQueueDomainService {
      * @param token   the user's auth token; must not be null
      */
     void pushToEventQueue(UUID eventId, String token);
+
+    /**
+     * Returns {@code true} if the site currently has capacity for additional visitors.
+     *
+     * @return {@code true} if the number of currently admitted users is below the site cap
+     */
+    boolean canAccessWebsite();
 }

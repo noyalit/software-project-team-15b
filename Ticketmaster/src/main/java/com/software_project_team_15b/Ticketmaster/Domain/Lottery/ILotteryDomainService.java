@@ -71,13 +71,6 @@ public interface ILotteryDomainService {
     Set<UUID> getEventLotteryWinners(UUID eventId);
 
     /**
-     * Clears the persistent winners set on the domain entity for the given event.
-     *
-     * @param eventId the unique identifier of the event; must not be null
-     */
-    void clearEventLotteryWinners(UUID eventId);
-
-    /**
      * Returns the lottery eligibility status for the given user and event.
      *
      * @param userId  the unique identifier of the user; must not be null

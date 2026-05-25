@@ -37,10 +37,9 @@ import static org.mockito.Mockito.*;
  * subclass widens access to the protected {@code clearEventAccess} method so that the
  * scheduler-driven code paths can be exercised deterministically.
  *
- * <p>Site-queue operations ({@code addUserToSiteQueue}, {@code validateAndExitQueue},
- * {@code canAccessWebsite}) are managed by the application-layer {@code QueueService} and are
- * not implemented by this domain service; tests for those paths verify that
- * {@link UnsupportedOperationException} is thrown.
+ * <p>Site-queue operations ({@code addUserToSiteQueue}, {@code acceptUsersFromSiteQueue},
+ * {@code getAcceptedTokens}, {@code removeAcceptedToken}) are implemented by the domain
+ * service; verify-based tests assert the expected repository interactions and state transitions.
  */
 @ExtendWith(MockitoExtension.class)
 class QueueDomainServiceImplWhiteTest {
@@ -77,25 +76,48 @@ class QueueDomainServiceImplWhiteTest {
     }
 
     // =========================================================================
-    // Site-queue stubs — these operations are unsupported in this implementation
+    // Site-queue operations — verify-based
     // =========================================================================
 
     @Test
-    void addUserToSiteQueue_throwsUnsupportedOperationException() {
+    void addUserToSiteQueue_positive_succeeds() {
+        assertThatCode(() -> service.addUserToSiteQueue("token-a"))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void addUserToSiteQueue_negative_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.addUserToSiteQueue(null))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(queueRepository);
+    }
+
+    @Test
+    void addUserToSiteQueue_negative_duplicate_throwsIllegalArgument() {
+        service.addUserToSiteQueue("token-a");
         assertThatThrownBy(() -> service.addUserToSiteQueue("token-a"))
-                .isInstanceOf(UnsupportedOperationException.class);
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void validateAndExitQueue_throwsUnsupportedOperationException() {
-        assertThatThrownBy(() -> service.validateAndExitQueue("token-a"))
-                .isInstanceOf(UnsupportedOperationException.class);
+    void acceptUsersFromSiteQueue_positive_movesTokenIntoAcceptedSet() {
+        service.addUserToSiteQueue("token-a");
+        service.acceptUsersFromSiteQueue();
+        assertThat(service.getAcceptedTokens()).contains("token-a");
     }
 
     @Test
-    void canAccessWebsite_throwsUnsupportedOperationException() {
-        assertThatThrownBy(() -> service.canAccessWebsite())
-                .isInstanceOf(UnsupportedOperationException.class);
+    void removeAcceptedToken_positive_removesFromAcceptedSet() {
+        service.addUserToSiteQueue("token-a");
+        service.acceptUsersFromSiteQueue();
+        service.removeAcceptedToken("token-a");
+        assertThat(service.getAcceptedTokens()).doesNotContain("token-a");
+    }
+
+    @Test
+    void removeAcceptedToken_negative_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.removeAcceptedToken(null))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     // =========================================================================
