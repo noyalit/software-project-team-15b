@@ -4,10 +4,12 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Already
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIsFullException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 
 import org.junit.jupiter.api.Test;
@@ -41,10 +43,12 @@ class QueueServiceBlackTest {
 
     @Mock private IQueueDomainService queueDomainService;
     @Mock private IAuth auth;
+    @Mock private UserDomainService userDomainService;
     @InjectMocks private QueueService service;
 
-    private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    private static final UUID USER_ID  = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private static final UUID EVENT_ID   = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID USER_ID    = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-0000-0000-000000000010");
 
     // =========================================================================
     // Site queue / admission — positive
@@ -93,12 +97,14 @@ class QueueServiceBlackTest {
 
     @Test
     void createEventQueue_positive_returnsNormally() {
-        assertThatCode(() -> service.createEventQueue(EVENT_ID)).doesNotThrowAnyException();
+        when(userDomainService.isActiveManager(USER_ID, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        assertThatCode(() -> service.createEventQueue(USER_ID, COMPANY_ID, EVENT_ID)).doesNotThrowAnyException();
     }
 
     @Test
     void deleteEventQueue_positive_returnsNormally() {
-        assertThatCode(() -> service.deleteEventQueue(EVENT_ID)).doesNotThrowAnyException();
+        when(userDomainService.isActiveManager(USER_ID, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        assertThatCode(() -> service.deleteEventQueue(USER_ID, COMPANY_ID, EVENT_ID)).doesNotThrowAnyException();
     }
 
     @Test
@@ -115,17 +121,38 @@ class QueueServiceBlackTest {
 
     @Test
     void createEventQueue_negative_propagatesIllegalArgument() {
-        assertThatThrownBy(() -> service.createEventQueue(null))
+        assertThatThrownBy(() -> service.createEventQueue(USER_ID, COMPANY_ID, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
+    void createEventQueue_negative_userNotAuthorized_throwsUnauthorized() {
+        when(userDomainService.isActiveManager(USER_ID, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveOwner(USER_ID, COMPANY_ID)).thenReturn(false);
+        when(userDomainService.isActiveFounder(USER_ID, COMPANY_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.createEventQueue(USER_ID, COMPANY_ID, EVENT_ID))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
     void deleteEventQueue_negative_propagatesQueueNotFound() {
+        when(userDomainService.isActiveManager(USER_ID, COMPANY_ID, EVENT_ID)).thenReturn(true);
         doThrow(new QueueNotFoundException("missing"))
                 .when(queueDomainService).deleteEventQueue(EVENT_ID);
 
-        assertThatThrownBy(() -> service.deleteEventQueue(EVENT_ID))
+        assertThatThrownBy(() -> service.deleteEventQueue(USER_ID, COMPANY_ID, EVENT_ID))
                 .isInstanceOf(QueueNotFoundException.class);
+    }
+
+    @Test
+    void deleteEventQueue_negative_userNotAuthorized_throwsUnauthorized() {
+        when(userDomainService.isActiveManager(USER_ID, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveOwner(USER_ID, COMPANY_ID)).thenReturn(false);
+        when(userDomainService.isActiveFounder(USER_ID, COMPANY_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.deleteEventQueue(USER_ID, COMPANY_ID, EVENT_ID))
+                .isInstanceOf(UnauthorizedException.class);
     }
 
     @Test

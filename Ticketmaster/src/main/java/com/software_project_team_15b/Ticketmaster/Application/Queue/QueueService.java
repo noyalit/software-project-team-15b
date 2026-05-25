@@ -4,8 +4,10 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Already
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIsFullException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 
 import org.slf4j.Logger;
@@ -38,13 +40,15 @@ public class QueueService {
 
     private final IAuth auth;
     private final IQueueDomainService queueDomainService;
+    private final UserDomainService userDomainService;
 
     private final Queue<String> siteQueue = new LinkedList<>();
     private final Set<String> acceptedTokens = new HashSet<>();
 
-    public QueueService(IQueueDomainService queueDomainService, IAuth auth) {
+    public QueueService(IQueueDomainService queueDomainService, IAuth auth, UserDomainService userDomainService) {
         this.queueDomainService = Objects.requireNonNull(queueDomainService);
         this.auth = auth;
+        this.userDomainService = Objects.requireNonNull(userDomainService);
     }
 
     /**
@@ -119,16 +123,21 @@ public class QueueService {
     /**
      * Creates a new, empty virtual queue for the given event.
      *
-     * @param eventId the unique identifier of the event; must not be null
-     * @throws IllegalArgumentException if {@code eventId} is null
+     * @param userId    the caller's user id; must not be null
+     * @param companyId the company that owns the event
+     * @param eventId   the unique identifier of the event; must not be null
+     * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
+     * @throws UnauthorizedException    if the caller is not a manager, owner, or founder of the event
      */
-    public void createEventQueue(UUID eventId) {
+    public void createEventQueue(UUID userId, UUID companyId, UUID eventId) {
         try {
+            if (userId == null) throw new IllegalArgumentException("userId cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            requireEventPermissions(userId, companyId, eventId);
             queueDomainService.createEventQueue(eventId);
-            AUDIT.info("op=createEventQueue eventId={} result=ok", eventId);
+            AUDIT.info("op=createEventQueue userId={} eventId={} result=ok", userId, eventId);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=createEventQueue eventId={} result=error error={}", eventId, e.getMessage());
+            AUDIT.warn("op=createEventQueue userId={} eventId={} result=error error={}", userId, eventId, e.getMessage());
             throw e;
         }
     }
@@ -136,17 +145,22 @@ public class QueueService {
     /**
      * Deletes the virtual queue associated with the given event.
      *
-     * @param eventId the unique identifier of the event; must not be null
-     * @throws IllegalArgumentException if {@code eventId} is null
+     * @param userId    the caller's user id; must not be null
+     * @param companyId the company that owns the event
+     * @param eventId   the unique identifier of the event; must not be null
+     * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
+     * @throws UnauthorizedException    if the caller is not a manager, owner, or founder of the event
      * @throws QueueNotFoundException   if no queue exists for the given event
      */
-    public void deleteEventQueue(UUID eventId) {
+    public void deleteEventQueue(UUID userId, UUID companyId, UUID eventId) {
         try {
+            if (userId == null) throw new IllegalArgumentException("userId cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            requireEventPermissions(userId, companyId, eventId);
             queueDomainService.deleteEventQueue(eventId);
-            AUDIT.info("op=deleteEventQueue eventId={} result=ok", eventId);
+            AUDIT.info("op=deleteEventQueue userId={} eventId={} result=ok", userId, eventId);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=deleteEventQueue eventId={} result=error error={}", eventId, e.getMessage());
+            AUDIT.warn("op=deleteEventQueue userId={} eventId={} result=error error={}", userId, eventId, e.getMessage());
             throw e;
         }
     }
@@ -172,6 +186,14 @@ public class QueueService {
         } catch (RuntimeException e) {
             AUDIT.warn("op=pushToEventQueue eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
+        }
+    }
+
+    private void requireEventPermissions(UUID userId, UUID companyId, UUID eventId) {
+        if (!userDomainService.isActiveManager(userId, companyId, eventId) &&
+            !userDomainService.isActiveOwner(userId, companyId) &&
+            !userDomainService.isActiveFounder(userId, companyId)) {
+            throw new UnauthorizedException("user does not have permission to perform this action");
         }
     }
 }

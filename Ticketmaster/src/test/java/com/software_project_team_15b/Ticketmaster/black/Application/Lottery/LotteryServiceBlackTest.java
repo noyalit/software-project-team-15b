@@ -2,6 +2,7 @@ package com.software_project_team_15b.Ticketmaster.black.Application.Lottery;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
 import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryService;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
@@ -49,12 +50,14 @@ class LotteryServiceBlackTest {
 
     @Test
     void createEventLottery_positive_returnsNormally() {
-        assertThatCode(() -> service.createEventLottery(EVENT_ID)).doesNotThrowAnyException();
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        assertThatCode(() -> service.createEventLottery(USER_A, COMPANY_ID, EVENT_ID)).doesNotThrowAnyException();
     }
 
     @Test
     void deleteEventLottery_positive_returnsNormally() {
-        assertThatCode(() -> service.deleteEventLottery(EVENT_ID)).doesNotThrowAnyException();
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        assertThatCode(() -> service.deleteEventLottery(USER_A, COMPANY_ID, EVENT_ID)).doesNotThrowAnyException();
     }
 
     @Test
@@ -68,17 +71,38 @@ class LotteryServiceBlackTest {
 
     @Test
     void createEventLottery_negative_propagatesIllegalArgument() {
-        assertThatThrownBy(() -> service.createEventLottery(null))
+        assertThatThrownBy(() -> service.createEventLottery(USER_A, COMPANY_ID, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
+    void createEventLottery_negative_userNotAuthorized_throwsUnauthorized() {
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(false);
+        when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.createEventLottery(USER_A, COMPANY_ID, EVENT_ID))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
     void deleteEventLottery_negative_propagatesLotteryNotFound() {
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         doThrow(new LotteryNotFoundException("missing"))
                 .when(lotteryDomainService).deleteEventLottery(EVENT_ID);
 
-        assertThatThrownBy(() -> service.deleteEventLottery(EVENT_ID))
+        assertThatThrownBy(() -> service.deleteEventLottery(USER_A, COMPANY_ID, EVENT_ID))
                 .isInstanceOf(LotteryNotFoundException.class);
+    }
+
+    @Test
+    void deleteEventLottery_negative_userNotAuthorized_throwsUnauthorized() {
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(false);
+        when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.deleteEventLottery(USER_A, COMPANY_ID, EVENT_ID))
+                .isInstanceOf(UnauthorizedException.class);
     }
 
     @Test
@@ -113,13 +137,13 @@ class LotteryServiceBlackTest {
     }
 
     @Test
-    void runEventLottery_negative_userNotAuthorized_throwsIllegalArgument() {
+    void runEventLottery_negative_userNotAuthorized_throwsUnauthorized() {
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
         when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(false);
         when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(false);
 
         assertThatThrownBy(() -> service.runEventLottery(USER_A, COMPANY_ID, EVENT_ID, 1))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(UnauthorizedException.class);
     }
 
     @Test

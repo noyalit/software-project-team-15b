@@ -6,6 +6,7 @@ import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 
 import org.junit.jupiter.api.AfterEach;
@@ -48,14 +49,16 @@ class QueueServiceWhiteTest {
 
     @Mock private IQueueDomainService queueDomainService;
     @Mock private IAuth auth;
+    @Mock private UserDomainService userDomainService;
     @InjectMocks private QueueService service;
 
-    private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    private static final UUID USER_ID  = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private static final UUID EVENT_ID   = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID USER_ID    = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-0000-0000-000000000010");
 
     @AfterEach
     void verifyNoUnexpectedDomainServiceInteractions() {
-        verifyNoMoreInteractions(queueDomainService);
+        verifyNoMoreInteractions(queueDomainService, userDomainService);
     }
 
     // =========================================================================
@@ -111,16 +114,20 @@ class QueueServiceWhiteTest {
 
     @Test
     void createEventQueue_delegates_andDoesNothingElse() {
-        service.createEventQueue(EVENT_ID);
+        when(userDomainService.isActiveManager(USER_ID, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        service.createEventQueue(USER_ID, COMPANY_ID, EVENT_ID);
 
+        verify(userDomainService).isActiveManager(USER_ID, COMPANY_ID, EVENT_ID);
         verify(queueDomainService).createEventQueue(EVENT_ID);
         verifyNoInteractions(auth);
     }
 
     @Test
     void deleteEventQueue_delegates_andDoesNothingElse() {
-        service.deleteEventQueue(EVENT_ID);
+        when(userDomainService.isActiveManager(USER_ID, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        service.deleteEventQueue(USER_ID, COMPANY_ID, EVENT_ID);
 
+        verify(userDomainService).isActiveManager(USER_ID, COMPANY_ID, EVENT_ID);
         verify(queueDomainService).deleteEventQueue(EVENT_ID);
         verifyNoInteractions(auth);
     }
@@ -147,10 +154,12 @@ class QueueServiceWhiteTest {
 
     @Test
     void deleteEventQueue_propagatesDomainServiceException() {
+        when(userDomainService.isActiveManager(USER_ID, COMPANY_ID, EVENT_ID)).thenReturn(true);
         doThrow(new QueueNotFoundException("missing")).when(queueDomainService).deleteEventQueue(EVENT_ID);
 
-        assertThatThrownBy(() -> service.deleteEventQueue(EVENT_ID))
+        assertThatThrownBy(() -> service.deleteEventQueue(USER_ID, COMPANY_ID, EVENT_ID))
                 .isInstanceOf(QueueNotFoundException.class);
+        verify(userDomainService).isActiveManager(USER_ID, COMPANY_ID, EVENT_ID);
         verify(queueDomainService).deleteEventQueue(EVENT_ID);
         verifyNoInteractions(auth);
     }

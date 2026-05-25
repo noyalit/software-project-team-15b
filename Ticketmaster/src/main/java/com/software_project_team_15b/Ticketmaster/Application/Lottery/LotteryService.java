@@ -2,10 +2,9 @@ package com.software_project_team_15b.Ticketmaster.Application.Lottery;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.EventDomainServiceImpl;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
@@ -41,16 +40,21 @@ public class LotteryService {
     /**
      * Creates a new, empty lottery for the given event.
      *
-     * @param eventId the unique identifier of the event; must not be null
-     * @throws IllegalArgumentException if {@code eventId} is null
+     * @param userId    the caller's user id; must not be null
+     * @param companyId the company that owns the event
+     * @param eventId   the unique identifier of the event; must not be null
+     * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
+     * @throws UnauthorizedException    if the caller is not a manager, owner, or founder of the event
      */
-    public void createEventLottery(UUID eventId) {
+    public void createEventLottery(UUID userId, UUID companyId, UUID eventId) {
         try {
+            if (userId == null) throw new IllegalArgumentException("userId cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            requireEventPermissions(userId, companyId, eventId);
             lotteryDomainService.createEventLottery(eventId);
-            AUDIT.info("op=createEventLottery eventId={} result=ok", eventId);
+            AUDIT.info("op=createEventLottery userId={} eventId={} result=ok", userId, eventId);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=createEventLottery eventId={} result=error error={}", eventId, e.getMessage());
+            AUDIT.warn("op=createEventLottery userId={} eventId={} result=error error={}", userId, eventId, e.getMessage());
             throw e;
         }
     }
@@ -58,17 +62,22 @@ public class LotteryService {
     /**
      * Deletes the lottery associated with the given event.
      *
-     * @param eventId the unique identifier of the event; must not be null
-     * @throws IllegalArgumentException if {@code eventId} is null
+     * @param userId    the caller's user id; must not be null
+     * @param companyId the company that owns the event
+     * @param eventId   the unique identifier of the event; must not be null
+     * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
+     * @throws UnauthorizedException    if the caller is not a manager, owner, or founder of the event
      * @throws LotteryNotFoundException if no lottery exists for the given event
      */
-    public void deleteEventLottery(UUID eventId) {
+    public void deleteEventLottery(UUID userId, UUID companyId, UUID eventId) {
         try {
+            if (userId == null) throw new IllegalArgumentException("userId cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            requireEventPermissions(userId, companyId, eventId);
             lotteryDomainService.deleteEventLottery(eventId);
-            AUDIT.info("op=deleteEventLottery eventId={} result=ok", eventId);
+            AUDIT.info("op=deleteEventLottery userId={} eventId={} result=ok", userId, eventId);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=deleteEventLottery eventId={} result=error error={}", eventId, e.getMessage());
+            AUDIT.warn("op=deleteEventLottery userId={} eventId={} result=error error={}", userId, eventId, e.getMessage());
             throw e;
         }
     }
@@ -109,11 +118,7 @@ public class LotteryService {
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             if (count < 0) throw new IllegalArgumentException("count cannot be negative");
 
-            if(!userDomainService.isActiveManager(userId, companyId, eventId) &&
-                !userDomainService.isActiveOwner(userId, companyId) &&
-                !userDomainService.isActiveFounder(userId, companyId)) {
-                throw new IllegalArgumentException("user does not have permission to run this lottery");
-            }
+            requireEventPermissions(userId, companyId, eventId);
 
             Set<UUID> drawn = lotteryDomainService.runEventLottery(eventId, count);
             AUDIT.info("op=runEventLottery eventId={} count={} winnersDrawn={} result=ok", eventId, count, drawn.size());
@@ -162,6 +167,14 @@ public class LotteryService {
         } catch (RuntimeException e) {
             AUDIT.warn("op=getLotteryEligibilityForEvent userId={} eventId={} result=error error={}", userId, eventId, e.getMessage());
             throw e;
+        }
+    }
+
+    private void requireEventPermissions(UUID userId, UUID companyId, UUID eventId) {
+        if (!userDomainService.isActiveManager(userId, companyId, eventId) &&
+            !userDomainService.isActiveOwner(userId, companyId) &&
+            !userDomainService.isActiveFounder(userId, companyId)) {
+            throw new UnauthorizedException("user does not have permission to perform this action");
         }
     }
 }

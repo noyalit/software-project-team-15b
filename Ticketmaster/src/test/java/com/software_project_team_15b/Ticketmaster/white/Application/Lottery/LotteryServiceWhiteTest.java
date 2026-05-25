@@ -55,13 +55,17 @@ class LotteryServiceWhiteTest {
 
     @Test
     void createEventLottery_delegates_andDoesNothingElse() {
-        service.createEventLottery(EVENT_ID);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        service.createEventLottery(USER_A, COMPANY_ID, EVENT_ID);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).createEventLottery(EVENT_ID);
     }
 
     @Test
     void deleteEventLottery_delegates_andDoesNothingElse() {
-        service.deleteEventLottery(EVENT_ID);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        service.deleteEventLottery(USER_A, COMPANY_ID, EVENT_ID);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).deleteEventLottery(EVENT_ID);
     }
 
@@ -112,11 +116,13 @@ class LotteryServiceWhiteTest {
 
     @Test
     void createEventLottery_propagatesDomainServiceException() {
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         doThrow(new IllegalArgumentException("boom")).when(lotteryDomainService).createEventLottery(EVENT_ID);
 
-        assertThatThrownBy(() -> service.createEventLottery(EVENT_ID))
+        assertThatThrownBy(() -> service.createEventLottery(USER_A, COMPANY_ID, EVENT_ID))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("boom");
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).createEventLottery(EVENT_ID);
     }
 
@@ -163,6 +169,7 @@ class LotteryServiceWhiteTest {
 
     @Test
     void concurrentDelegation_eachCallForwardsExactlyOnce() throws InterruptedException {
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         int threads = 50;
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(threads);
@@ -172,7 +179,7 @@ class LotteryServiceWhiteTest {
             pool.submit(() -> {
                 try {
                     start.await();
-                    service.createEventLottery(EVENT_ID);
+                    service.createEventLottery(USER_A, COMPANY_ID, EVENT_ID);
                     completed.incrementAndGet();
                 } catch (Exception ignored) {}
                 return null;
@@ -184,6 +191,7 @@ class LotteryServiceWhiteTest {
         assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
 
         assertThat(completed.get()).isEqualTo(threads);
+        verify(userDomainService, times(threads)).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService, times(threads)).createEventLottery(EVENT_ID);
     }
 }
