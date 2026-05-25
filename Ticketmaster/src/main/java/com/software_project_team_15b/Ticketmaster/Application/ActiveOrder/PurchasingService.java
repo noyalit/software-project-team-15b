@@ -82,8 +82,9 @@ public class PurchasingService {
     }
 
     public QueueAccessDTO requestAccessToCreateActiveOrder(String token, UUID eventId) {
+        UUID userId = null;
         try {
-            UUID userId = requireValidUser(token);
+            userId = requireValidUser(token);
             requireEventId(eventId);
             QueueAccessDTO queueAccess = queueDomainService.requestAccess(token, eventId);
             AUDIT.info("op=requestAccessToCreateActiveOrder user={} event={} result=ok",
@@ -91,8 +92,8 @@ public class PurchasingService {
             return queueAccess;
         }
         catch (RuntimeException e) {
-            AUDIT.warn("op=requestAccessToCreateActiveOrder token={} event={} result=rejected reason={}",
-                    token, eventId, e.getMessage());
+            AUDIT.warn("op=requestAccessToCreateActiveOrder user={} event={} result=rejected reason={}",
+                    userId, eventId, e.getMessage());
             throw e;
         }
     }

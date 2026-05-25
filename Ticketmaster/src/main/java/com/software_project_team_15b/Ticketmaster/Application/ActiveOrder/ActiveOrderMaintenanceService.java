@@ -53,6 +53,8 @@ public class ActiveOrderMaintenanceService {
                     ordersToDelete.size());
         } catch (RuntimeException e) {
             AUDIT.warn("op=deleteNonActiveOrders result=error reason={}", e.getMessage(), e);
+
+            throw e; // Rethrow to trigger transaction rollback and ensure no orders are deleted without proper handling
         }
     }
 
@@ -81,6 +83,8 @@ public class ActiveOrderMaintenanceService {
                     expiredBefore);
         } catch (RuntimeException e) {
             AUDIT.warn("op=releaseAndDeleteExpiredActiveOrders result=error reason={}", e.getMessage(), e);
+
+            throw e; // Rethrow to trigger transaction rollback and ensure no orders are deleted without releasing seats
         }
     }
 
@@ -110,6 +114,8 @@ public class ActiveOrderMaintenanceService {
                 activeOrder != null ? activeOrder.getOrderId() : null,
                 activeOrder != null ? activeOrder.getEventId() : null,
                 e.getMessage(), e);
+
+                throw e; // Rethrow to trigger transaction rollback and ensure the order isn't deleted without releasing seats
         }
     }
 }
