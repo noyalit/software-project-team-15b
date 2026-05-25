@@ -1,11 +1,5 @@
 package com.software_project_team_15b.Ticketmaster.black.Application.Company;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
 import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
@@ -14,26 +8,31 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import static org.mockito.ArgumentMatchers.any;
 import org.mockito.Mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
-import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
 @ExtendWith(MockitoExtension.class)
@@ -67,8 +66,8 @@ class CompanyServiceBlackTest {
         });
 
         when(eventManagementService.searchInCompany(any(), any())).thenReturn(List.of());
-        when(userDomainService.isActiveOwner(any())).thenReturn(true);
-        when(userDomainService.isActiveFounder(any())).thenReturn(true);
+        when(userDomainService.isActiveOwner(any(), any())).thenReturn(true);
+        when(userDomainService.isActiveFounder(any(), any())).thenReturn(true);
         service = new CompanyService(repo, userDomainService, eventManagementService, auth);
     }
 
@@ -250,8 +249,8 @@ class CompanyServiceBlackTest {
         Company company = service.createCompany(founderToken, "Acme");
         UUID strangerId = UUID.randomUUID();
         String strangerToken = registerMember(strangerId);
-        when(userDomainService.isActiveOwner(strangerId)).thenReturn(false);
-        when(userDomainService.isActiveFounder(strangerId)).thenReturn(false);
+        when(userDomainService.isActiveOwner(strangerId, company.getId())).thenReturn(false);
+        when(userDomainService.isActiveFounder(strangerId, company.getId())).thenReturn(false);
         ICompanyPurchasePolicy policy = (request, c) -> {};
 
         assertThatThrownBy(() -> service.updatePurchasePolicy(strangerToken, company.getId(), policy))
@@ -335,8 +334,8 @@ class CompanyServiceBlackTest {
         Company company = service.createCompany(founderToken, "Acme");
         UUID strangerId = UUID.randomUUID();
         String strangerToken = registerMember(strangerId);
-        when(userDomainService.isActiveOwner(strangerId)).thenReturn(false);
-        when(userDomainService.isActiveFounder(strangerId)).thenReturn(false);
+        when(userDomainService.isActiveOwner(strangerId, company.getId())).thenReturn(false);
+        when(userDomainService.isActiveFounder(strangerId, company.getId())).thenReturn(false);
         ICompanyDiscountPolicy policy = (subtotal, request) -> subtotal;
 
         assertThatThrownBy(() -> service.updateDiscountPolicy(strangerToken, company.getId(), policy))
