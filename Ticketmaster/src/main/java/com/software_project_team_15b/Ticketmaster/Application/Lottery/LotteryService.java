@@ -4,8 +4,11 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Lottery
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.EventDomainServiceImpl;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -28,9 +31,11 @@ public class LotteryService {
     private static final Logger AUDIT = LoggerFactory.getLogger("audit.lottery");
 
     private final ILotteryDomainService lotteryDomainService;
+    private final UserDomainService userDomainService;
 
-    public LotteryService(ILotteryDomainService lotteryDomainService) {
+    public LotteryService(ILotteryDomainService lotteryDomainService, UserDomainService userDomainService) {
         this.lotteryDomainService = Objects.requireNonNull(lotteryDomainService);
+        this.userDomainService = Objects.requireNonNull(userDomainService);
     }
 
     /**
@@ -98,10 +103,18 @@ public class LotteryService {
      * @throws LotteryNotFoundException     if no lottery exists for the given event
      * @throws LotteryAlreadyDrawnException if the lottery for this event has already been drawn
      */
-    public Set<UUID> runEventLottery(UUID eventId, int count) {
+    public Set<UUID> runEventLottery(UUID userId, UUID companyId, UUID eventId, int count) {
         try {
+            if (userId == null) throw new IllegalArgumentException("userId cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             if (count < 0) throw new IllegalArgumentException("count cannot be negative");
+
+            if(!userDomainService.isActiveManager(userId, companyId, eventId) &&
+                !userDomainService.isActiveOwner(userId, companyId) &&
+                !userDomainService.isActiveFounder(userId, companyId)) {
+                throw new IllegalArgumentException("user does not have permission to run this lottery");
+            }
+
             Set<UUID> drawn = lotteryDomainService.runEventLottery(eventId, count);
             AUDIT.info("op=runEventLottery eventId={} count={} winnersDrawn={} result=ok", eventId, count, drawn.size());
             return drawn;

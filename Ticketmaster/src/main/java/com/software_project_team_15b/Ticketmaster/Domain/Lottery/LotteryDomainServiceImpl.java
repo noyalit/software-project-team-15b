@@ -203,22 +203,23 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
      * @throws LotteryAlreadyDrawnException if the lottery for this event has already been drawn
      */
     @Override
-    public synchronized Set<UUID> runEventLottery(UUID eventId, int count) {
+    public Set<UUID> runEventLottery(UUID eventId, int count) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
         if (count < 0) {
             throw new IllegalArgumentException("count cannot be negative");
         }
-        if (winners.containsKey(eventId)) {
+
+        // Claim the draw slot atomically before drawing. putIfAbsent returns null only for
+        // the first caller — all subsequent callers for the same event are rejected here,
+        // ensuring exactly one thread ever reaches drawWinnersTransactional.
+        ConcurrentHashMap<UUID, LocalDateTime> eventWinners = new ConcurrentHashMap<>();
+        if (winners.putIfAbsent(eventId, eventWinners) != null) {
             throw new LotteryAlreadyDrawnException("Lottery for event " + eventId + " has already been drawn");
         }
 
         Set<UUID> drawn = self.drawWinnersTransactional(eventId, count);
-
-        // Mark as drawn before scheduling — always, even when drawn is empty.
-        ConcurrentHashMap<UUID, LocalDateTime> eventWinners = new ConcurrentHashMap<>();
-        winners.put(eventId, eventWinners);
 
         LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(WINNER_ACCESS_TIME);
         for (UUID winner : drawn) {

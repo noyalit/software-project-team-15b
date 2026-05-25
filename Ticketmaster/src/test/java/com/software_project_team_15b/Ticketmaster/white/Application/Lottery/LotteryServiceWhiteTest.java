@@ -4,6 +4,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotterySer
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -36,14 +37,16 @@ import static org.mockito.Mockito.*;
 class LotteryServiceWhiteTest {
 
     @Mock private ILotteryDomainService lotteryDomainService;
+    @Mock private UserDomainService userDomainService;
     @InjectMocks private LotteryService service;
 
-    private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    private static final UUID USER_A   = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private static final UUID EVENT_ID   = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID USER_A     = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-0000-0000-000000000010");
 
     @AfterEach
     void verifyNoUnexpectedInteractions() {
-        verifyNoMoreInteractions(lotteryDomainService);
+        verifyNoMoreInteractions(lotteryDomainService, userDomainService);
     }
 
     // =========================================================================
@@ -71,11 +74,13 @@ class LotteryServiceWhiteTest {
     @Test
     void runEventLottery_delegates_andReturnsDomainServiceResult() {
         Set<UUID> expected = Set.of(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(EVENT_ID, 2)).thenReturn(expected);
 
-        Set<UUID> result = service.runEventLottery(EVENT_ID, 2);
+        Set<UUID> result = service.runEventLottery(USER_A, COMPANY_ID, EVENT_ID, 2);
 
         assertThat(result).isSameAs(expected);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).runEventLottery(EVENT_ID, 2);
     }
 
@@ -117,10 +122,12 @@ class LotteryServiceWhiteTest {
 
     @Test
     void runEventLottery_propagatesDomainServiceException() {
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         doThrow(new RuntimeException("already drawn")).when(lotteryDomainService).runEventLottery(any(), anyInt());
 
-        assertThatThrownBy(() -> service.runEventLottery(EVENT_ID, 1))
+        assertThatThrownBy(() -> service.runEventLottery(USER_A, COMPANY_ID, EVENT_ID, 1))
                 .isInstanceOf(RuntimeException.class);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).runEventLottery(EVENT_ID, 1);
     }
 
@@ -141,10 +148,12 @@ class LotteryServiceWhiteTest {
     @Test
     void runEventLottery_forwardsCountVerbatim() {
         UUID eid = UUID.randomUUID();
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, eid)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(eid, 7)).thenReturn(Set.of());
 
-        service.runEventLottery(eid, 7);
+        service.runEventLottery(USER_A, COMPANY_ID, eid, 7);
 
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, eid);
         verify(lotteryDomainService).runEventLottery(eid, 7);
     }
 

@@ -117,38 +117,6 @@ public class QueueService {
     }
 
     /**
-     * Enters the user into the waiting queue for the given event and returns a snapshot
-     * of their current access state.
-     *
-     * @param token   the user's auth token; must not be null
-     * @param eventId the unique identifier of the event; must not be null
-     * @return a {@link QueueAccessDTO} describing the user's current access state
-     * @throws IllegalArgumentException if {@code token} or {@code eventId} is null
-     * @throws InvalidTokenException    if the token is invalid
-     * @throws QueueNotFoundException   if no queue exists for the given event
-     * @throws QueueIsFullException     if the persistent queue has reached its capacity
-     * @throws AlreadyInQueueException  if the user is already waiting in the queue
-     */
-    public QueueAccessDTO requestAccess(String token, UUID eventId) {
-        try {
-            if (token == null) throw new IllegalArgumentException("token cannot be null");
-            if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-            validateToken(token);
-            UUID callerId = auth.extractUserId(token);
-            if (!auth.isMember(token)) {
-                AUDIT.warn("op=requestAccess callerId={} eventId={} result=rejected reason=non_member", callerId, eventId);
-                throw new IllegalArgumentException("User must be a member to join the event queue");
-            }
-            QueueAccessDTO view = queueDomainService.requestAccess(token, eventId);
-            AUDIT.info("op=requestAccess callerId={} eventId={} status={}", callerId, eventId, view.status());
-            return view;
-        } catch (RuntimeException e) {
-            AUDIT.warn("op=requestAccess eventId={} result=error error={}", eventId, e.getMessage());
-            throw e;
-        }
-    }
-
-    /**
      * Creates a new, empty virtual queue for the given event.
      *
      * @param eventId the unique identifier of the event; must not be null

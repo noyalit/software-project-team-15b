@@ -15,7 +15,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
@@ -34,11 +33,9 @@ import static org.mockito.Mockito.*;
  *       call, and invalid or null tokens short-circuit execution.</li>
  *   <li>Site-queue operations ({@code addUserToSiteQueue}) are managed locally within
  *       this service and never delegated to {@link IQueueDomainService}.</li>
- *   <li>Event-queue operations ({@code getQueueAccessView}, {@code requestAccess},
- *       {@code pushToEventQueue}) are forwarded to the domain service after token
- *       validation, without mutating or substituting arguments.</li>
- *   <li>{@code requestAccess} additionally enforces a membership check via
- *       {@link IAuth#isMember} before delegating.</li>
+ *   <li>Event-queue operations ({@code getQueueAccessView}, {@code pushToEventQueue})
+ *       are forwarded to the domain service after token validation, without mutating
+ *       or substituting arguments.</li>
  *   <li>{@code createEventQueue} and {@code deleteEventQueue} delegate directly without
  *       token validation.</li>
  * </ul>
@@ -96,35 +93,6 @@ class QueueServiceWhiteTest {
     }
 
     @Test
-    void requestAccess_validatesThenChecksMembership_thenDelegates() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-        when(auth.isMember("token-a")).thenReturn(true);
-        QueueAccessDTO expected = new QueueAccessDTO(EVENT_ID, QueueAccessStatus.ADMITTED, null, LocalDateTime.now().plusSeconds(100));
-        when(queueDomainService.requestAccess("token-a", EVENT_ID)).thenReturn(expected);
-
-        QueueAccessDTO result = service.requestAccess("token-a", EVENT_ID);
-
-        assertThat(result).isSameAs(expected);
-        var inOrder = inOrder(auth, queueDomainService);
-        inOrder.verify(auth).isTokenValid("token-a");
-        inOrder.verify(auth).extractUserId("token-a");
-        inOrder.verify(auth).isMember("token-a");
-        inOrder.verify(queueDomainService).requestAccess("token-a", EVENT_ID);
-    }
-
-    @Test
-    void requestAccess_nonMember_throwsIllegalArgument_andSkipsDomainService() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-        when(auth.isMember("token-a")).thenReturn(false);
-
-        assertThatThrownBy(() -> service.requestAccess("token-a", EVENT_ID))
-                .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(queueDomainService);
-    }
-
-    @Test
     void pushToEventQueue_validatesToken_thenDelegates() {
         when(auth.isTokenValid("token-a")).thenReturn(true);
         when(auth.extractUserId("token-a")).thenReturn(USER_ID);
@@ -175,19 +143,6 @@ class QueueServiceWhiteTest {
         assertThatThrownBy(() -> service.addUserToSiteQueue("bad-token"))
                 .isInstanceOf(InvalidTokenException.class);
         verifyNoInteractions(queueDomainService);
-    }
-
-    @Test
-    void requestAccess_propagatesDomainServiceException() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-        when(auth.isMember("token-a")).thenReturn(true);
-        doThrow(new RuntimeException("downstream")).when(queueDomainService).requestAccess(anyString(), any());
-
-        assertThatThrownBy(() -> service.requestAccess("token-a", EVENT_ID))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessage("downstream");
-        verify(queueDomainService).requestAccess("token-a", EVENT_ID);
     }
 
     @Test

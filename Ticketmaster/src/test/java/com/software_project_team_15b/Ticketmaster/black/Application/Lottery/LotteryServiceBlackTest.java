@@ -6,6 +6,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotterySer
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,11 +35,13 @@ import static org.mockito.Mockito.*;
 class LotteryServiceBlackTest {
 
     @Mock private ILotteryDomainService lotteryDomainService;
+    @Mock private UserDomainService userDomainService;
     @InjectMocks private LotteryService service;
 
-    private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    private static final UUID USER_A   = UUID.fromString("00000000-0000-0000-0000-000000000002");
-    private static final UUID USER_B   = UUID.fromString("00000000-0000-0000-0000-000000000003");
+    private static final UUID EVENT_ID   = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID USER_A     = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private static final UUID USER_B     = UUID.fromString("00000000-0000-0000-0000-000000000003");
+    private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-0000-0000-000000000010");
 
     // =========================================================================
     // Lottery CRUD — positive
@@ -94,33 +97,48 @@ class LotteryServiceBlackTest {
     @Test
     void runEventLottery_positive_returnsDomainProvidedWinners() {
         Set<UUID> expected = Set.of(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(EVENT_ID, 1)).thenReturn(expected);
 
-        assertThat(service.runEventLottery(EVENT_ID, 1)).containsExactlyInAnyOrderElementsOf(expected);
+        assertThat(service.runEventLottery(USER_A, COMPANY_ID, EVENT_ID, 1))
+                .containsExactlyInAnyOrderElementsOf(expected);
     }
 
     @Test
     void runEventLottery_positive_returnsEmptySetWhenDomainSaysEmptyPool() {
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(EVENT_ID, 5)).thenReturn(Set.of());
 
-        assertThat(service.runEventLottery(EVENT_ID, 5)).isEmpty();
+        assertThat(service.runEventLottery(USER_A, COMPANY_ID, EVENT_ID, 5)).isEmpty();
+    }
+
+    @Test
+    void runEventLottery_negative_userNotAuthorized_throwsIllegalArgument() {
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(false);
+        when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.runEventLottery(USER_A, COMPANY_ID, EVENT_ID, 1))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void runEventLottery_negative_propagatesLotteryAlreadyDrawn() {
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         doThrow(new LotteryAlreadyDrawnException("drawn"))
                 .when(lotteryDomainService).runEventLottery(EVENT_ID, 1);
 
-        assertThatThrownBy(() -> service.runEventLottery(EVENT_ID, 1))
+        assertThatThrownBy(() -> service.runEventLottery(USER_A, COMPANY_ID, EVENT_ID, 1))
                 .isInstanceOf(LotteryAlreadyDrawnException.class);
     }
 
     @Test
     void runEventLottery_negative_propagatesLotteryNotFound() {
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         doThrow(new LotteryNotFoundException("missing"))
                 .when(lotteryDomainService).runEventLottery(EVENT_ID, 1);
 
-        assertThatThrownBy(() -> service.runEventLottery(EVENT_ID, 1))
+        assertThatThrownBy(() -> service.runEventLottery(USER_A, COMPANY_ID, EVENT_ID, 1))
                 .isInstanceOf(LotteryNotFoundException.class);
     }
 
@@ -213,6 +231,7 @@ class LotteryServiceBlackTest {
     @Test
     void concurrentRunEventLottery_allThreadsReceiveDomainProvidedWinners() throws InterruptedException {
         Set<UUID> expected = Set.of(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(EVENT_ID, 1)).thenReturn(expected);
 
         int threads = 25;
@@ -224,7 +243,7 @@ class LotteryServiceBlackTest {
             pool.submit(() -> {
                 try {
                     start.await();
-                    Set<UUID> winners = service.runEventLottery(EVENT_ID, 1);
+                    Set<UUID> winners = service.runEventLottery(USER_A, COMPANY_ID, EVENT_ID, 1);
                     if (winners.equals(expected)) gotWinners.incrementAndGet();
                 } catch (Exception ignored) {}
                 return null;
