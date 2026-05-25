@@ -80,36 +80,6 @@ public class CompanyController {
         }
     }
 
-    @Operation(summary = "Find companies by founder or owner (provide exactly one query param)")
-    @GetMapping
-    public ResponseEntity<ApiResponse<List<CompanyDTO>>> findCompanies(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
-            @RequestParam(required = false) UUID founderId,
-            @RequestParam(required = false) UUID ownerId
-    ) {
-        try {
-            if (founderId != null && ownerId != null) {
-                return badRequest(new IllegalArgumentException("Provide either founderId or ownerId, not both"));
-            }
-            List<Company> companies;
-            if (founderId != null) {
-                companies = companyService.findCompaniesByFounder(token, founderId);
-            } else if (ownerId != null) {
-                companies = companyService.findCompaniesByOwner(token, ownerId);
-            } else {
-                return badRequest(new IllegalArgumentException("Provide either founderId or ownerId"));
-            }
-            List<CompanyDTO> result = companies.stream().map(CompanyDTO::from).toList();
-            return ResponseEntity.ok(new ApiResponse<>(result, null));
-        } catch (InvalidTokenException ex) {
-            return unauthorized(ex);
-        } catch (IllegalArgumentException ex) {
-            return badRequest(ex);
-        } catch (Exception ex) {
-            return internalServerError(ex);
-        }
-    }
-
     @Operation(summary = "Change the status of a company (founder or system admin only)")
     @PatchMapping(path = "/{companyId}/status", consumes = "application/json")
     public ResponseEntity<ApiResponse<CompanyDTO>> changeStatus(
