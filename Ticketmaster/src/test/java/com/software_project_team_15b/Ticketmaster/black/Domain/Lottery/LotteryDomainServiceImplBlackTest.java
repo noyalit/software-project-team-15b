@@ -1,10 +1,8 @@
 package com.software_project_team_15b.Ticketmaster.black.Domain.Lottery;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyLotteryException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
-import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
@@ -43,7 +41,6 @@ import static org.mockito.Mockito.*;
 class LotteryDomainServiceImplBlackTest {
 
     @Mock private ILotteryRepository lotteryRepository;
-    @Mock private IAuth auth;
     @InjectMocks private LotteryDomainServiceImpl service;
 
     private ILotteryDomainService domainService;
@@ -54,11 +51,11 @@ class LotteryDomainServiceImplBlackTest {
         domainService = service;
     }
 
-    private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final UUID EVENT_ID       = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID OTHER_EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000099");
-    private static final UUID USER_A   = UUID.fromString("00000000-0000-0000-0000-000000000002");
-    private static final UUID USER_B   = UUID.fromString("00000000-0000-0000-0000-000000000003");
-    private static final UUID USER_C   = UUID.fromString("00000000-0000-0000-0000-000000000004");
+    private static final UUID USER_A         = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private static final UUID USER_B         = UUID.fromString("00000000-0000-0000-0000-000000000003");
+    private static final UUID USER_C         = UUID.fromString("00000000-0000-0000-0000-000000000004");
 
     // =========================================================================
     // createEventLottery
@@ -110,7 +107,6 @@ class LotteryDomainServiceImplBlackTest {
 
         domainService.addToEventLottery(EVENT_ID, USER_A);
 
-        // observable: user is now drawable from the lottery pool
         assertThat(lottery.pop(USER_A)).isEqualTo(USER_A);
     }
 
@@ -354,12 +350,10 @@ class LotteryDomainServiceImplBlackTest {
         Lottery lottery = new Lottery(EVENT_ID);
         lottery.add(USER_A);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         domainService.runEventLottery(EVENT_ID, 1);
 
-        assertThat(domainService.hasAccess("token-a", EVENT_ID)).isTrue();
+        assertThat(domainService.hasAccess(USER_A, EVENT_ID)).isTrue();
     }
 
     @Test
@@ -367,40 +361,27 @@ class LotteryDomainServiceImplBlackTest {
         Lottery lottery = new Lottery(EVENT_ID);
         lottery.add(USER_A);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-        when(auth.isTokenValid("token-b")).thenReturn(true);
-        when(auth.extractUserId("token-b")).thenReturn(USER_B);
 
         domainService.runEventLottery(EVENT_ID, 1);
 
-        assertThat(domainService.hasAccess("token-b", EVENT_ID)).isFalse();
+        assertThat(domainService.hasAccess(USER_B, EVENT_ID)).isFalse();
     }
 
     @Test
     void hasAccess_positive_returnsFalseWhenNoLotteryDrawn() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        assertThat(domainService.hasAccess("token-a", EVENT_ID)).isFalse();
+        assertThat(domainService.hasAccess(USER_A, EVENT_ID)).isFalse();
     }
 
     @Test
-    void hasAccess_negative_nullToken_throwsIllegalArgument() {
+    void hasAccess_negative_nullUserId_throwsIllegalArgument() {
         assertThatThrownBy(() -> domainService.hasAccess(null, EVENT_ID))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void hasAccess_negative_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> domainService.hasAccess("token-a", null))
+        assertThatThrownBy(() -> domainService.hasAccess(USER_A, null))
                 .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void hasAccess_negative_invalidToken_throwsInvalidTokenException() {
-        when(auth.isTokenValid("bad")).thenReturn(false);
-
-        assertThatThrownBy(() -> domainService.hasAccess("bad", EVENT_ID))
-                .isInstanceOf(InvalidTokenException.class);
     }
 
     // =========================================================================
@@ -525,7 +506,6 @@ class LotteryDomainServiceImplBlackTest {
 
     @Test
     void getLotteryEligibilityForEvent_positive_unrelatedEventReportsNoLotteryRequired() {
-        // EVENT_ID was created/drawn; OTHER_EVENT_ID has no lottery at all.
         Lottery lottery = new Lottery(EVENT_ID);
         lottery.add(USER_A);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
@@ -612,8 +592,6 @@ class LotteryDomainServiceImplBlackTest {
         Lottery lottery = new Lottery(EVENT_ID);
         lottery.add(USER_A);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
 
         domainService.runEventLottery(EVENT_ID, 1);
 
@@ -626,7 +604,7 @@ class LotteryDomainServiceImplBlackTest {
             pool.submit(() -> {
                 try {
                     start.await();
-                    if (domainService.hasAccess("token-a", EVENT_ID)) trueCount.incrementAndGet();
+                    if (domainService.hasAccess(USER_A, EVENT_ID)) trueCount.incrementAndGet();
                 } catch (Exception ignored) {}
                 return null;
             });

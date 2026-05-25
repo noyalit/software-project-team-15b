@@ -1,7 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.black.Application.Queue;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyInQueueException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyQueueException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIsFullException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
@@ -16,10 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
-
 import java.time.LocalDateTime;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
@@ -36,9 +32,9 @@ import static org.mockito.Mockito.*;
  * is stubbed to drive each scenario; tests do not verify call ordering, count, or
  * argument forwarding — those concerns belong to the white-box suite.
  *
- * <p>Site-queue operations ({@code addUserToSiteQueue}, {@code validateAndExitQueue},
- * {@code canAccessWebsite}) are now managed locally within {@link QueueService}: they
- * require {@link IAuth} validation and do not delegate to {@link IQueueDomainService}.
+ * <p>The site-wide queue ({@code addUserToSiteQueue}) is managed locally within
+ * {@link QueueService}: it requires {@link IAuth} validation and does not delegate
+ * to {@link IQueueDomainService}.
  */
 @ExtendWith(MockitoExtension.class)
 class QueueServiceBlackTest {
@@ -60,43 +56,6 @@ class QueueServiceBlackTest {
         when(auth.extractUserId("token-a")).thenReturn(USER_ID);
 
         assertThatCode(() -> service.addUserToSiteQueue("token-a")).doesNotThrowAnyException();
-    }
-
-    @Test
-    void validateAndExitQueue_positive_returnsTrue_whenTokenHasBeenAdmitted() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-
-        // Add to site queue then trigger the admission scheduler tick
-        service.addUserToSiteQueue("token-a");
-        invokeAcceptUsers();
-
-        assertThat(service.validateAndExitQueue("token-a")).isTrue();
-    }
-
-    @Test
-    void validateAndExitQueue_positive_returnsFalse_whenTokenNotYetAdmitted() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-
-        // Token added to queue but scheduler not yet run — not in accepted set
-        service.addUserToSiteQueue("token-a");
-
-        assertThat(service.validateAndExitQueue("token-a")).isFalse();
-    }
-
-    @Test
-    void canAccessWebsite_positive_returnsTrue_whenBelowCapacity() {
-        assertThat(service.canAccessWebsite()).isTrue();
-    }
-
-    @Test
-    void canAccessWebsite_positive_returnsFalse_whenAtCapacity() {
-        Set<String> accepted = acceptedTokens();
-        for (int i = 0; i < 100; i++) {
-            accepted.add("token-" + i);
-        }
-        assertThat(service.canAccessWebsite()).isFalse();
     }
 
     // =========================================================================
@@ -128,20 +87,6 @@ class QueueServiceBlackTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    @Test
-    void validateAndExitQueue_negative_propagatesIllegalArgumentForNullToken() {
-        assertThatThrownBy(() -> service.validateAndExitQueue(null))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void validateAndExitQueue_negative_throwsInvalidTokenException_forInvalidToken() {
-        when(auth.isTokenValid("bad")).thenReturn(false);
-
-        assertThatThrownBy(() -> service.validateAndExitQueue("bad"))
-                .isInstanceOf(InvalidTokenException.class);
-    }
-
     // =========================================================================
     // Event-queue CRUD — positive
     // =========================================================================
@@ -162,13 +107,6 @@ class QueueServiceBlackTest {
         when(auth.extractUserId("token-a")).thenReturn(USER_ID);
 
         assertThatCode(() -> service.pushToEventQueue(EVENT_ID, "token-a")).doesNotThrowAnyException();
-    }
-
-    @Test
-    void popFromEventQueue_positive_returnsDomainProvidedToken() {
-        when(queueDomainService.popFromEventQueue(EVENT_ID)).thenReturn("token-a");
-
-        assertThat(service.popFromEventQueue(EVENT_ID)).isEqualTo("token-a");
     }
 
     // =========================================================================
@@ -218,86 +156,6 @@ class QueueServiceBlackTest {
 
         assertThatThrownBy(() -> service.pushToEventQueue(EVENT_ID, "token-a"))
                 .isInstanceOf(AlreadyInQueueException.class);
-    }
-
-    @Test
-    void popFromEventQueue_negative_propagatesEmptyQueue() {
-        doThrow(new EmptyQueueException("empty"))
-                .when(queueDomainService).popFromEventQueue(EVENT_ID);
-
-        assertThatThrownBy(() -> service.popFromEventQueue(EVENT_ID))
-                .isInstanceOf(EmptyQueueException.class);
-    }
-
-    @Test
-    void popFromEventQueue_negative_propagatesQueueNotFound() {
-        doThrow(new QueueNotFoundException("missing"))
-                .when(queueDomainService).popFromEventQueue(EVENT_ID);
-
-        assertThatThrownBy(() -> service.popFromEventQueue(EVENT_ID))
-                .isInstanceOf(QueueNotFoundException.class);
-    }
-
-    // =========================================================================
-    // getPositionInEventQueue
-    // =========================================================================
-
-    @Test
-    void getPositionInEventQueue_positive_returnsDomainProvidedPosition() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-        when(queueDomainService.getPositionInEventQueue("token-a", EVENT_ID)).thenReturn(2);
-
-        assertThat(service.getPositionInEventQueue("token-a", EVENT_ID)).isEqualTo(2);
-    }
-
-    @Test
-    void getPositionInEventQueue_negative_throwsInvalidTokenException_forInvalidToken() {
-        when(auth.isTokenValid("bad")).thenReturn(false);
-
-        assertThatThrownBy(() -> service.getPositionInEventQueue("bad", EVENT_ID))
-                .isInstanceOf(InvalidTokenException.class);
-    }
-
-    @Test
-    void getPositionInEventQueue_negative_propagatesQueueNotFound() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-        doThrow(new QueueNotFoundException("missing"))
-                .when(queueDomainService).getPositionInEventQueue("token-a", EVENT_ID);
-
-        assertThatThrownBy(() -> service.getPositionInEventQueue("token-a", EVENT_ID))
-                .isInstanceOf(QueueNotFoundException.class);
-    }
-
-    // =========================================================================
-    // isUserAdmitted
-    // =========================================================================
-
-    @Test
-    void isUserAdmitted_positive_returnsTrue_whenDomainReportsAdmitted() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-        when(queueDomainService.isUserAdmitted("token-a", EVENT_ID)).thenReturn(true);
-
-        assertThat(service.isUserAdmitted("token-a", EVENT_ID)).isTrue();
-    }
-
-    @Test
-    void isUserAdmitted_positive_returnsFalse_whenDomainReportsNotAdmitted() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-        when(queueDomainService.isUserAdmitted("token-a", EVENT_ID)).thenReturn(false);
-
-        assertThat(service.isUserAdmitted("token-a", EVENT_ID)).isFalse();
-    }
-
-    @Test
-    void isUserAdmitted_negative_throwsInvalidTokenException_forInvalidToken() {
-        when(auth.isTokenValid("bad")).thenReturn(false);
-
-        assertThatThrownBy(() -> service.isUserAdmitted("bad", EVENT_ID))
-                .isInstanceOf(InvalidTokenException.class);
     }
 
     // =========================================================================
@@ -419,65 +277,8 @@ class QueueServiceBlackTest {
     }
 
     // =========================================================================
-    // hasAccess
-    // =========================================================================
-
-    @Test
-    void hasAccess_positive_returnsTrue_whenDomainReportsAdmitted() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-        when(queueDomainService.hasAccess("token-a", EVENT_ID)).thenReturn(true);
-
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isTrue();
-    }
-
-    @Test
-    void hasAccess_positive_returnsFalse_whenDomainReportsNotAdmitted() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-        when(queueDomainService.hasAccess("token-a", EVENT_ID)).thenReturn(false);
-
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isFalse();
-    }
-
-    @Test
-    void hasAccess_negative_throwsInvalidTokenException_forInvalidToken() {
-        when(auth.isTokenValid("bad")).thenReturn(false);
-
-        assertThatThrownBy(() -> service.hasAccess("bad", EVENT_ID))
-                .isInstanceOf(InvalidTokenException.class);
-    }
-
-    // =========================================================================
     // Concurrency — concurrent calls return consistent results
     // =========================================================================
-
-    @Test
-    void concurrentHasAccess_allThreadsReturnSameTrueResult() throws InterruptedException {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_ID);
-        when(queueDomainService.hasAccess("token-a", EVENT_ID)).thenReturn(true);
-
-        int threads = 30;
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
-        AtomicInteger trueCount = new AtomicInteger();
-
-        for (int i = 0; i < threads; i++) {
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    if (service.hasAccess("token-a", EVENT_ID)) trueCount.incrementAndGet();
-                } catch (Exception ignored) {}
-                return null;
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
-        assertThat(trueCount.get()).isEqualTo(threads);
-    }
 
     @Test
     void concurrentRequestAccess_allThreadsReceiveDomainProvidedView() throws InterruptedException {
@@ -509,16 +310,4 @@ class QueueServiceBlackTest {
         assertThat(successes.get()).isEqualTo(threads);
     }
 
-    // =========================================================================
-    // Helpers
-    // =========================================================================
-
-    private void invokeAcceptUsers() {
-        ReflectionTestUtils.invokeMethod(service, "acceptUsersFromSiteQueue");
-    }
-
-    @SuppressWarnings("unchecked")
-    private Set<String> acceptedTokens() {
-        return (Set<String>) ReflectionTestUtils.getField(service, "acceptedTokens");
-    }
 }

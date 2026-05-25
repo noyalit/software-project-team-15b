@@ -69,27 +69,6 @@ class LotteryServiceWhiteTest {
     }
 
     @Test
-    void popRandomFromEventLottery_delegates_andReturnsDomainServiceResult() {
-        when(lotteryDomainService.popRandomFromEventLottery(EVENT_ID)).thenReturn(USER_A);
-
-        UUID result = service.popRandomFromEventLottery(EVENT_ID);
-
-        assertThat(result).isEqualTo(USER_A);
-        verify(lotteryDomainService).popRandomFromEventLottery(EVENT_ID);
-    }
-
-    @Test
-    void popRandomFromEventLotteryWithCount_delegates_andReturnsDomainServiceResult() {
-        Set<UUID> expected = Set.of(USER_A);
-        when(lotteryDomainService.popRandomFromEventLottery(EVENT_ID, 3)).thenReturn(expected);
-
-        Set<UUID> result = service.popRandomFromEventLottery(EVENT_ID, 3);
-
-        assertThat(result).isSameAs(expected);
-        verify(lotteryDomainService).popRandomFromEventLottery(EVENT_ID, 3);
-    }
-
-    @Test
     void runEventLottery_delegates_andReturnsDomainServiceResult() {
         Set<UUID> expected = Set.of(USER_A);
         when(lotteryDomainService.runEventLottery(EVENT_ID, 2)).thenReturn(expected);
@@ -101,16 +80,6 @@ class LotteryServiceWhiteTest {
     }
 
     @Test
-    void hasAccess_delegates_andReturnsDomainServiceResult() {
-        when(lotteryDomainService.hasAccess("token-a", EVENT_ID)).thenReturn(true);
-
-        boolean result = service.hasAccess("token-a", EVENT_ID);
-
-        assertThat(result).isTrue();
-        verify(lotteryDomainService).hasAccess("token-a", EVENT_ID);
-    }
-
-    @Test
     void getEventLotteryWinners_delegates_andReturnsDomainServiceResult() {
         Set<UUID> expected = Set.of(USER_A);
         when(lotteryDomainService.getEventLotteryWinners(EVENT_ID)).thenReturn(expected);
@@ -119,12 +88,6 @@ class LotteryServiceWhiteTest {
 
         assertThat(result).isSameAs(expected);
         verify(lotteryDomainService).getEventLotteryWinners(EVENT_ID);
-    }
-
-    @Test
-    void clearEventLotteryWinners_delegates_andDoesNothingElse() {
-        service.clearEventLotteryWinners(EVENT_ID);
-        verify(lotteryDomainService).clearEventLotteryWinners(EVENT_ID);
     }
 
     @Test
@@ -150,16 +113,6 @@ class LotteryServiceWhiteTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("boom");
         verify(lotteryDomainService).createEventLottery(EVENT_ID);
-    }
-
-    @Test
-    void popRandomFromEventLottery_propagatesDomainServiceException() {
-        doThrow(new RuntimeException("empty")).when(lotteryDomainService).popRandomFromEventLottery(EVENT_ID);
-
-        assertThatThrownBy(() -> service.popRandomFromEventLottery(EVENT_ID))
-                .isInstanceOf(RuntimeException.class)
-                .hasMessage("empty");
-        verify(lotteryDomainService).popRandomFromEventLottery(EVENT_ID);
     }
 
     @Test

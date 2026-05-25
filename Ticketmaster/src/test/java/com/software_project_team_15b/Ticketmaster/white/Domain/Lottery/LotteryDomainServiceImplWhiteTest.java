@@ -3,7 +3,6 @@ package com.software_project_team_15b.Ticketmaster.white.Domain.Lottery;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyLotteryException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
-import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryRepository;
@@ -32,16 +31,12 @@ import static org.mockito.Mockito.*;
  * White-box tests for {@link LotteryDomainServiceImpl}.
  *
  * <p>These tests reach past the {@link com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService}
- * contract to verify internal state and protected helpers — the winners map is inspected
- * via reflection, and an {@link ExposedLotteryService} subclass widens access to the
- * protected {@code clearWinnerAccess} method so that admin-intervention paths can be
- * exercised deterministically.
+ * contract to verify internal state — the winners map is inspected via reflection.
  */
 @ExtendWith(MockitoExtension.class)
 class LotteryDomainServiceImplWhiteTest {
 
     @Mock private ILotteryRepository lotteryRepository;
-    @Mock private IAuth auth;
     @InjectMocks private LotteryDomainServiceImpl service;
 
     @BeforeEach
@@ -52,24 +47,6 @@ class LotteryDomainServiceImplWhiteTest {
     private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID USER_A   = UUID.fromString("00000000-0000-0000-0000-000000000002");
     private static final UUID USER_B   = UUID.fromString("00000000-0000-0000-0000-000000000003");
-
-    /** Promotes clearWinnerAccess from protected to public for direct test invocation. */
-    private static class ExposedLotteryService extends LotteryDomainServiceImpl {
-        ExposedLotteryService(ILotteryRepository r, IAuth a) {
-            super(r, a);
-        }
-
-        @Override
-        public synchronized void clearWinnerAccess(UUID userId, UUID eventId) {
-            super.clearWinnerAccess(userId, eventId);
-        }
-    }
-
-    private ExposedLotteryService createExposed() {
-        ExposedLotteryService exposed = new ExposedLotteryService(lotteryRepository, auth);
-        ReflectionTestUtils.setField(exposed, "self", exposed);
-        return exposed;
-    }
 
     // =========================================================================
     // Lottery CRUD — positive (verify-based)
@@ -274,70 +251,6 @@ class LotteryDomainServiceImplWhiteTest {
     }
 
     // =========================================================================
-    // clearWinnerAccess — internal-state tests
-    // =========================================================================
-
-    @Test
-    void clearWinnerAccess_afterLotteryDeleted_doesNotThrow() {
-        ExposedLotteryService exposed = createExposed();
-        Lottery lottery = new Lottery(EVENT_ID);
-        lottery.add(USER_A);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        exposed.runEventLottery(EVENT_ID, 1);
-        winnersMap(exposed).remove(EVENT_ID);
-
-        assertThatCode(() -> exposed.clearWinnerAccess(USER_A, EVENT_ID))
-                .doesNotThrowAnyException();
-    }
-
-    @Test
-    void clearWinnerAccess_removesWinnerFromAdmittedSet() {
-        ExposedLotteryService exposed = createExposed();
-        Lottery lottery = new Lottery(EVENT_ID);
-        lottery.add(USER_A);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        exposed.runEventLottery(EVENT_ID, 1);
-        exposed.clearWinnerAccess(USER_A, EVENT_ID);
-
-        LotteryEligibilityDTO result = exposed.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
-        assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.NOT_SELECTED);
-    }
-
-    @Test
-    void clearWinnerAccess_doesNotTriggerAnotherDraw() {
-        ExposedLotteryService exposed = createExposed();
-        Lottery lottery = new Lottery(EVENT_ID);
-        lottery.add(USER_A);
-        lottery.add(USER_B);
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        Set<UUID> drawn = exposed.runEventLottery(EVENT_ID, 1);
-        UUID winner = drawn.iterator().next();
-        UUID loser  = winner.equals(USER_A) ? USER_B : USER_A;
-
-        exposed.clearWinnerAccess(winner, EVENT_ID);
-
-        LotteryEligibilityDTO result = exposed.getLotteryEligibilityForEvent(loser, EVENT_ID);
-        assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.NOT_SELECTED);
-    }
-
-    @Test
-    void clearWinnerAccess_nullUserId_throwsIllegalArgument() {
-        ExposedLotteryService exposed = createExposed();
-        assertThatThrownBy(() -> exposed.clearWinnerAccess(null, EVENT_ID))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void clearWinnerAccess_nullEventId_throwsIllegalArgument() {
-        ExposedLotteryService exposed = createExposed();
-        assertThatThrownBy(() -> exposed.clearWinnerAccess(USER_A, null))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    // =========================================================================
     // getLotteryEligibilityForEvent — verify and internal-state tests
     // =========================================================================
 
@@ -373,28 +286,23 @@ class LotteryDomainServiceImplWhiteTest {
 
     @Test
     void hasAccess_returnsFalseForExpiredWinner() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
         ConcurrentHashMap<UUID, LocalDateTime> eventWinners = new ConcurrentHashMap<>();
         eventWinners.put(USER_A, LocalDateTime.now().minusSeconds(1));
         winnersMap(service).put(EVENT_ID, eventWinners);
 
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isFalse();
+        assertThat(service.hasAccess(USER_A, EVENT_ID)).isFalse();
     }
 
     @Test
-    void hasAccess_nullToken_throwsIllegalArgument() {
+    void hasAccess_nullUserId_throwsIllegalArgument() {
         assertThatThrownBy(() -> service.hasAccess(null, EVENT_ID))
                 .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(auth);
     }
 
     @Test
     void hasAccess_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.hasAccess("token-a", null))
+        assertThatThrownBy(() -> service.hasAccess(USER_A, null))
                 .isInstanceOf(IllegalArgumentException.class);
-        verifyNoInteractions(auth);
     }
 
     // =========================================================================
@@ -580,43 +488,6 @@ class LotteryDomainServiceImplWhiteTest {
 
         assertThat(successes.get()).isEqualTo(1);
         assertThat(alreadyDrawn.get()).isEqualTo(threads - 1);
-    }
-
-    @Test
-    void concurrentClearWinnerAccess_isSafeUnderContention() throws InterruptedException {
-        ExposedLotteryService exposed = createExposed();
-        Lottery lottery = new Lottery(EVENT_ID);
-        for (int i = 0; i < 10; i++) lottery.add(UUID.randomUUID());
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
-
-        Set<UUID> drawn = exposed.runEventLottery(EVENT_ID, 5);
-        List<UUID> winnersList = new ArrayList<>(drawn);
-
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(winnersList.size());
-        AtomicInteger cleared = new AtomicInteger();
-
-        for (UUID w : winnersList) {
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    exposed.clearWinnerAccess(w, EVENT_ID);
-                    cleared.incrementAndGet();
-                } catch (Exception ignored) {}
-                return null;
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
-        assertThat(cleared.get()).isEqualTo(winnersList.size());
-
-        // All previously admitted winners now read as NOT_SELECTED.
-        for (UUID w : winnersList) {
-            assertThat(exposed.getLotteryEligibilityForEvent(w, EVENT_ID).status())
-                    .isEqualTo(LotteryEligibilityStatus.NOT_SELECTED);
-        }
     }
 
     // =========================================================================

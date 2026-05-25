@@ -1,7 +1,5 @@
 package com.software_project_team_15b.Ticketmaster.black.Application.Lottery;
 
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyLotteryException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryService;
@@ -67,9 +65,6 @@ class LotteryServiceBlackTest {
 
     @Test
     void createEventLottery_negative_propagatesIllegalArgument() {
-        doThrow(new IllegalArgumentException("eventId cannot be null"))
-                .when(lotteryDomainService).createEventLottery(null);
-
         assertThatThrownBy(() -> service.createEventLottery(null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
@@ -90,52 +85,6 @@ class LotteryServiceBlackTest {
 
         assertThatThrownBy(() -> service.addToEventLottery(EVENT_ID, USER_A))
                 .isInstanceOf(LotteryNotFoundException.class);
-    }
-
-    // =========================================================================
-    // popRandomFromEventLottery
-    // =========================================================================
-
-    @Test
-    void popRandomFromEventLottery_positive_returnsDomainProvidedUser() {
-        when(lotteryDomainService.popRandomFromEventLottery(EVENT_ID)).thenReturn(USER_A);
-
-        assertThat(service.popRandomFromEventLottery(EVENT_ID)).isEqualTo(USER_A);
-    }
-
-    @Test
-    void popRandomFromEventLotteryWithCount_positive_returnsDomainProvidedSet() {
-        Set<UUID> expected = Set.of(USER_A, USER_B);
-        when(lotteryDomainService.popRandomFromEventLottery(EVENT_ID, 2)).thenReturn(expected);
-
-        assertThat(service.popRandomFromEventLottery(EVENT_ID, 2)).containsExactlyInAnyOrderElementsOf(expected);
-    }
-
-    @Test
-    void popRandomFromEventLottery_negative_propagatesEmptyLottery() {
-        doThrow(new EmptyLotteryException("empty"))
-                .when(lotteryDomainService).popRandomFromEventLottery(EVENT_ID);
-
-        assertThatThrownBy(() -> service.popRandomFromEventLottery(EVENT_ID))
-                .isInstanceOf(EmptyLotteryException.class);
-    }
-
-    @Test
-    void popRandomFromEventLottery_negative_propagatesLotteryNotFound() {
-        doThrow(new LotteryNotFoundException("missing"))
-                .when(lotteryDomainService).popRandomFromEventLottery(EVENT_ID);
-
-        assertThatThrownBy(() -> service.popRandomFromEventLottery(EVENT_ID))
-                .isInstanceOf(LotteryNotFoundException.class);
-    }
-
-    @Test
-    void popRandomFromEventLotteryWithCount_negative_propagatesIllegalArgument() {
-        doThrow(new IllegalArgumentException("count cannot be negative"))
-                .when(lotteryDomainService).popRandomFromEventLottery(EVENT_ID, -1);
-
-        assertThatThrownBy(() -> service.popRandomFromEventLottery(EVENT_ID, -1))
-                .isInstanceOf(IllegalArgumentException.class);
     }
 
     // =========================================================================
@@ -176,33 +125,6 @@ class LotteryServiceBlackTest {
     }
 
     // =========================================================================
-    // hasAccess
-    // =========================================================================
-
-    @Test
-    void hasAccess_positive_returnsTrue_whenDomainReportsAdmitted() {
-        when(lotteryDomainService.hasAccess("token-a", EVENT_ID)).thenReturn(true);
-
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isTrue();
-    }
-
-    @Test
-    void hasAccess_positive_returnsFalse_whenDomainReportsNotAdmitted() {
-        when(lotteryDomainService.hasAccess("token-a", EVENT_ID)).thenReturn(false);
-
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isFalse();
-    }
-
-    @Test
-    void hasAccess_negative_propagatesInvalidToken() {
-        doThrow(new InvalidTokenException("bad"))
-                .when(lotteryDomainService).hasAccess("bad", EVENT_ID);
-
-        assertThatThrownBy(() -> service.hasAccess("bad", EVENT_ID))
-                .isInstanceOf(InvalidTokenException.class);
-    }
-
-    // =========================================================================
     // getEventLotteryWinners
     // =========================================================================
 
@@ -227,24 +149,6 @@ class LotteryServiceBlackTest {
                 .when(lotteryDomainService).getEventLotteryWinners(EVENT_ID);
 
         assertThatThrownBy(() -> service.getEventLotteryWinners(EVENT_ID))
-                .isInstanceOf(LotteryNotFoundException.class);
-    }
-
-    // =========================================================================
-    // clearEventLotteryWinners
-    // =========================================================================
-
-    @Test
-    void clearEventLotteryWinners_positive_returnsNormally() {
-        assertThatCode(() -> service.clearEventLotteryWinners(EVENT_ID)).doesNotThrowAnyException();
-    }
-
-    @Test
-    void clearEventLotteryWinners_negative_propagatesLotteryNotFound() {
-        doThrow(new LotteryNotFoundException("missing"))
-                .when(lotteryDomainService).clearEventLotteryWinners(EVENT_ID);
-
-        assertThatThrownBy(() -> service.clearEventLotteryWinners(EVENT_ID))
                 .isInstanceOf(LotteryNotFoundException.class);
     }
 
@@ -298,9 +202,6 @@ class LotteryServiceBlackTest {
 
     @Test
     void getLotteryEligibilityForEvent_negative_propagatesIllegalArgument() {
-        doThrow(new IllegalArgumentException("userId cannot be null"))
-                .when(lotteryDomainService).getLotteryEligibilityForEvent(null, EVENT_ID);
-
         assertThatThrownBy(() -> service.getLotteryEligibilityForEvent(null, EVENT_ID))
                 .isInstanceOf(IllegalArgumentException.class);
     }
@@ -308,31 +209,6 @@ class LotteryServiceBlackTest {
     // =========================================================================
     // Concurrency — facade is stateless, concurrent reads return consistent results
     // =========================================================================
-
-    @Test
-    void concurrentHasAccess_allThreadsReturnSameTrueResult() throws InterruptedException {
-        when(lotteryDomainService.hasAccess("token-a", EVENT_ID)).thenReturn(true);
-
-        int threads = 30;
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
-        AtomicInteger trueCount = new AtomicInteger();
-
-        for (int i = 0; i < threads; i++) {
-            pool.submit(() -> {
-                try {
-                    start.await();
-                    if (service.hasAccess("token-a", EVENT_ID)) trueCount.incrementAndGet();
-                } catch (Exception ignored) {}
-                return null;
-            });
-        }
-
-        start.countDown();
-        pool.shutdown();
-        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
-        assertThat(trueCount.get()).isEqualTo(threads);
-    }
 
     @Test
     void concurrentRunEventLottery_allThreadsReceiveDomainProvidedWinners() throws InterruptedException {
