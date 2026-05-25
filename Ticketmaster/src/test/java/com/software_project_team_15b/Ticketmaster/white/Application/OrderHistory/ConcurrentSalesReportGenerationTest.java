@@ -18,6 +18,10 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainServic
 
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Manager;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.*;
 
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.*;
@@ -49,6 +53,9 @@ class ConcurrentSalesReportGenerationTest {
     ICompanyRepository companyRepository;
 
     @Mock
+    IMemberRepository memberRepository;
+
+    @Mock
     UserDomainService userDomainService;
 
     @Mock
@@ -69,7 +76,6 @@ class ConcurrentSalesReportGenerationTest {
         Company company = org.mockito.Mockito.mock(Company.class);
         when(company.getId()).thenReturn(companyId);
         when(companyRepository.findByFounder(callerId)).thenReturn(List.of(company));
-        when(companyRepository.findById(companyId)).thenReturn(Optional.of(company));
 
         UUID eventId1 = UUID.randomUUID();
         UUID eventId2 = UUID.randomUUID();
@@ -77,8 +83,12 @@ class ConcurrentSalesReportGenerationTest {
         Event e1 = createEvent(eventId1);
         Event e2 = createEvent(eventId2);
 
-        when(company.getEventManagers(eventId1)).thenReturn(Set.of(callerId));
-        when(company.getEventManagers(eventId2)).thenReturn(Set.of(callerId));
+        Member member = org.mockito.Mockito.mock(Member.class);
+        Set<com.software_project_team_15b.Ticketmaster.Domain.Member.Role> roles = new HashSet<>();
+        roles.add(new Manager(UUID.randomUUID(), companyId, eventId1, Set.of(ManagerPermission.GENERATE_SALES_REPORTS)));
+        roles.add(new Manager(UUID.randomUUID(), companyId, eventId2, Set.of(ManagerPermission.GENERATE_SALES_REPORTS)));
+        when(member.getAssignedRoles()).thenReturn(roles);
+        when(memberRepository.findById(callerId)).thenReturn(Optional.of(member));
 
         List<Event> events = List.of(e1, e2);
 
@@ -100,7 +110,7 @@ class ConcurrentSalesReportGenerationTest {
         List<Future<Map<String, Object>>> futures = new ArrayList<>();
 
         for (int i = 0; i < threadCount; i++) {
-            futures.add(pool.submit(() -> 
+            futures.add(pool.submit(() ->
                     {
                         start.await();
                         return service.generateSalesReport(token, companyId);
