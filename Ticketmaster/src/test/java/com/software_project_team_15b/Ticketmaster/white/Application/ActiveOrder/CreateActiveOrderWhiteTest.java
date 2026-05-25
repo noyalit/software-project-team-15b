@@ -76,6 +76,21 @@ class CreateActiveOrderWhiteTest extends PurchasingServiceWhiteTestBase {
         verifyNoInteractions(purchasingDomainService);
     }
 
+        @Test
+        void createActiveOrderShouldThrowWhenTokenIsNull() {
+                IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                                service.createActiveOrder(null, eventId, areaId)
+                );
+
+                assertTrue(exception.getMessage().contains("Token cannot be null or blank"));
+
+                verifyNoInteractions(auth);
+                verifyNoInteractions(eventDomainService);
+                verifyNoInteractions(queueDomainService);
+                verifyNoInteractions(lotteryDomainService);
+                verifyNoInteractions(purchasingDomainService);
+        }
+
     @Test
     void createActiveOrderShouldStopWhenEventCannotBeBooked() {
         mockValidUser();

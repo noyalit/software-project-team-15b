@@ -82,20 +82,33 @@ public class PurchasingService {
     }
 
     public QueueAccessDTO requestAccessToCreateActiveOrder(String token, UUID eventId) {
-        return queueDomainService.requestAccess(token, eventId);
+        try {
+            UUID userId = requireValidUser(token);
+            requireEventId(eventId);
+            QueueAccessDTO queueAccess = queueDomainService.requestAccess(token, eventId);
+            AUDIT.info("op=requestAccessToCreateActiveOrder user={} event={} result=ok",
+                    userId, eventId);
+            return queueAccess;
+        }
+        catch (RuntimeException e) {
+            AUDIT.warn("op=requestAccessToCreateActiveOrder token={} event={} result=rejected reason={}",
+                    token, eventId, e.getMessage());
+            throw e;
+        }
     }
 
     @Transactional
     public UUID createActiveOrder(String token, UUID eventId, UUID areaId) {
         try {
+            requireCreateActiveOrderArguments(eventId, areaId);
             UUID userId = requireValidUser(token);
             purchasingDomainService.requireEventCanBeBooked(
                     eventId,
-                    eventId == null ? null : eventDomainService.getEventAvailability(eventId)
+                    eventDomainService.getEventAvailability(eventId)
             );
             purchasingDomainService.requireAreaCanBeBooked(
                     areaId,
-                    eventId == null || areaId == null ? false : eventDomainService.getAreaAvailability(eventId, areaId)
+                    eventDomainService.getAreaAvailability(eventId, areaId)
             );
             requireAccessForPurchase(token, userId, eventId);
 
@@ -174,6 +187,7 @@ public class PurchasingService {
     @Transactional
     public ActiveOrderDTO getActiveOrder(String token, UUID orderId) {
         try {
+            requireOrderId(orderId);
             UUID userId = requireValidUser(token);
             ActiveOrder activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
             ensureOrderIsActive(activeOrder);
@@ -197,12 +211,24 @@ public class PurchasingService {
             PolicyViolationException.class
     })
     public CheckoutStartedDTO startCheckoutForMember(String token, UUID orderId) {
-        UUID userId = requireValidUser(token);
-        if (!auth.isMember(token)) {
-            throw new IllegalStateException("Only members can use this method");
+        UUID userId;
+        LocalDate birthDate;
+
+        try {
+            requireOrderId(orderId);
+            userId = requireValidUser(token);
+            if (!auth.isMember(token)) {
+                throw new IllegalStateException("Only members can use this method");
+            }
+            birthDate = getUserBirthDate(userId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=startCheckoutForMember order={} result=rejected reason={}", orderId, e.getMessage());
+            throw e;
         }
-        LocalDate birthDate = getUserBirthDate(userId);
-        return startCheckoutForUser(token, userId, orderId, birthDate);
+
+        CheckoutStartedDTO checkoutStarted = startCheckoutForUser(token, userId, orderId, birthDate);
+        AUDIT.info("op=startCheckoutForMember order={} user={} result=ok", orderId, userId);
+        return checkoutStarted;
     }
 
     @Transactional(noRollbackFor = {
@@ -211,11 +237,23 @@ public class PurchasingService {
             PolicyViolationException.class
     })
     public CheckoutStartedDTO startCheckoutForGuest(String token, UUID orderId, LocalDate guestBirthDate) {
-        UUID userId = requireValidUser(token);
-        if (!auth.isGuest(token)) {
-            throw new IllegalStateException("Only guests can use this method");
+        UUID userId;
+
+        try {
+            requireOrderId(orderId);
+            requireBirthDate(guestBirthDate);
+            userId = requireValidUser(token);
+            if (!auth.isGuest(token)) {
+                throw new IllegalStateException("Only guests can use this method");
+            }
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=startCheckoutForGuest order={} result=rejected reason={}", orderId, e.getMessage());
+            throw e;
         }
-        return startCheckoutForUser(token, userId, orderId, guestBirthDate);
+
+        CheckoutStartedDTO checkoutStarted = startCheckoutForUser(token, userId, orderId, guestBirthDate);
+        AUDIT.info("op=startCheckoutForGuest order={} user={} result=ok", orderId, userId);
+        return checkoutStarted;
     }
 
     private CheckoutStartedDTO startCheckoutForUser(String token, UUID userId, UUID orderId, LocalDate birthDate) {
@@ -274,6 +312,12 @@ public class PurchasingService {
             FailedToIssueTicketsException.class
     })
     public CheckoutCompletedDTO completeCheckoutForMember(String token, UUID orderId, String couponCode) {
+        try {
+            requireOrderId(orderId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=completeCheckoutForMember order={} result=rejected reason={}", orderId, e.getMessage());
+            throw e;
+        }
         UUID userId = requireValidUser(token);
         if (!auth.isMember(token)) {
             throw new IllegalStateException("Only members can use this method");
@@ -289,6 +333,8 @@ public class PurchasingService {
             FailedToIssueTicketsException.class
     })
     public CheckoutCompletedDTO completeCheckoutForGuest(String token, UUID orderId, LocalDate birthDate, String couponCode) {
+        requireOrderId(orderId);
+        requireBirthDate(birthDate);
         UUID userId = requireValidUser(token);
         if (!auth.isGuest(token)) {
             throw new IllegalStateException("Only guests can use this method");
@@ -417,10 +463,17 @@ public class PurchasingService {
     }
 
     private UUID requireValidUser(String token) {
+        requireToken(token);
         if (!auth.isTokenValid(token)) {
             throw new InvalidTokenException("Token is invalid or expired");
         }
         return auth.extractUserId(token);
+    }
+
+    private void requireToken(String token) {
+        if (token == null || token.isBlank()) {
+            throw new IllegalArgumentException("Token cannot be null or blank");
+        }
     }
 
     private void issueTickets(ActiveOrder activeOrder) {
@@ -593,10 +646,37 @@ public class PurchasingService {
     }
 
     private Set<UUID> requireSeatsAvailable(UUID eventId, UUID areaId, Set<UUID> requestedSeatIds) {
+        requireCreateActiveOrderArguments(eventId, areaId);
+        requireSeatIds(requestedSeatIds);
         Map<Boolean, Set<UUID>> seatsAvailability =
                 eventDomainService.getSeatsAvailability(eventId, areaId, requestedSeatIds);
 
         return purchasingDomainService.requireRequestedSeatsAvailable(seatsAvailability, requestedSeatIds);
+    }
+
+    private void requireBirthDate(LocalDate birthDate) {
+        if (birthDate == null || birthDate.isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("Birth date cannot be null or in the future");
+        }
+    }
+
+    private void requireCreateActiveOrderArguments(UUID eventId, UUID areaId) {
+        requireEventId(eventId);
+        if (areaId == null) {
+            throw new IllegalArgumentException("Area ID cannot be null");
+        }
+    }
+
+    private void requireEventId(UUID eventId) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID cannot be null");
+        }
+    }
+
+    private void requireOrderId(UUID orderId) {
+        if (orderId == null) {
+            throw new IllegalArgumentException("Order ID cannot be null");
+        }
     }
 
     private void requireRemoveOrAddSeatsFromActiveOrderCommand(RemoveOrAddSeatsFromActiveOrderCommand cmd) {
