@@ -1,23 +1,26 @@
 package com.software_project_team_15b.Ticketmaster.Application.Company;
 
-import java.util.*;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 
-import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
 /**
  * Application-level service for managing {@link Company} aggregates.
@@ -257,7 +260,8 @@ public class CompanyService {
     private void requireOwner(Company company, UUID callerId) {
         // isActiveOwner excludes Founders; check isActiveFounder as well so that
         // the company founder can exercise owner-level actions.
-        if (!userDomainService.isActiveOwner(callerId) && !userDomainService.isActiveFounder(callerId)) {
+        UUID companyId = company.getId();
+        if (!userDomainService.isActiveOwner(callerId, companyId) && !userDomainService.isActiveFounder(callerId, companyId)) {
             throw new UnauthorizedCompanyActionException(
                     "Only an owner of the company can perform this action");
         }
@@ -273,6 +277,7 @@ public class CompanyService {
      */
     private void requireFounderOrSystemAdmin(String token, Company company) {
         requireValidToken(token);
+        UUID companyId = company.getId();
         if (auth.isSystemAdmin(token)) {
             return;
         }
@@ -285,7 +290,7 @@ public class CompanyService {
             throw new UnauthorizedCompanyActionException(
                     "Only the company's founder or a system admin can perform this action");
         }
-        if (!userDomainService.isActiveFounder(callerId)) {
+        if (!userDomainService.isActiveFounder(callerId, companyId)) {
             throw new UnauthorizedCompanyActionException(
                     "Only the company's founder or a system admin can perform this action");
         }
