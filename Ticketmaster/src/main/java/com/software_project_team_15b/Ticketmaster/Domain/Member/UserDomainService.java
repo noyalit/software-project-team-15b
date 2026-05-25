@@ -500,7 +500,7 @@ public class UserDomainService {
         }
     }
 
-    private void validateRawPassword(String password) {
+    public void validateRawPassword(String password) {
         if (password == null || password.isBlank()) {
             throw new InvalidMemberInputException("Password cannot be null or empty");
         }
