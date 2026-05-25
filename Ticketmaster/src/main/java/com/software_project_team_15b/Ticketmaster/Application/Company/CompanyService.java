@@ -311,16 +311,15 @@ public class CompanyService {
     /**
      * Returns all companies whose founder matches {@code founderId}.
      *
-     * <p>Note: {@code token} is accepted for API consistency but no
-     * authorization check is currently enforced on this query.
-     *
-     * @param token     caller's token (currently unused for authorization)
+     * @param token     an active token; must not be null, blank, or expired
      * @param founderId the id of the founder to search by; must not be null
      * @return a non-null, possibly empty list of matching companies
+     * @throws InvalidTokenException    if the token is null, blank, or not valid
      * @throws IllegalArgumentException if {@code founderId} is null
      * @throws IllegalStateException    if the repository returns null instead of an empty list
      */
     public List<Company> findCompaniesByFounder(String token, UUID founderId) {
+        requireValidToken(token);
         requireNonNull(founderId, "Founder ID");
         List<Company> result = companyRepository.findByFounder(founderId);
         if (result == null) {
@@ -342,6 +341,7 @@ public class CompanyService {
      * @throws IllegalStateException    if the repository returns null instead of an empty list
      */
     public List<Company> findCompaniesByOwner(String token, UUID ownerId) {
+        requireValidToken(token);
         requireNonNull(ownerId, "Owner ID");
         List<Company> result = companyRepository.findByOwner(ownerId);
         if (result == null) {
