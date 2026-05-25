@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
@@ -62,7 +62,7 @@ public class UserService {
     public MemberDTO registerMember(String token, String username, String password, LocalDate birthDate) {
         try {
             validateEntranceToken(token);
-            validateRawPassword(password);
+            userDomainService.validateRawPassword(password);
 
             Member saved = userDomainService.registerMember(
                     username,
@@ -144,17 +144,11 @@ public class UserService {
      */
     public String tryEnterFromQueue(String tempToken) {
         if (!auth.isTokenValid(tempToken)) {
-            throw new IllegalArgumentException("Invalid or expired token");
+            throw new InvalidTokenException("Invalid or expired token");
         }
 
         if (!auth.isTemp(tempToken)) {
-            throw new IllegalArgumentException("Token is not a temporary queue token");
-        }
-
-        boolean canExitQueue = queueDomainService.validateAndExitQueue(tempToken);
-
-        if (!canExitQueue) {
-            throw new IllegalStateException("User is still waiting in the queue");
+            throw new InvalidTokenException("Token is not a temporary queue token");
         }
 
         auth.exitSystem(tempToken);
@@ -204,7 +198,7 @@ public class UserService {
      */
     public String logout(String token) {
         if (!auth.isTokenValid(token)) {
-            throw new IllegalArgumentException("Invalid or expired token");
+            throw new InvalidTokenException("Invalid or expired token");
         }
 
         if (auth.isGuest(token)) {
@@ -259,7 +253,7 @@ public class UserService {
     public MemberDTO changePassword(String token, String newPassword) {
         try {
             UUID userId = getAuthenticatedMemberId(token);
-            validateRawPassword(newPassword);
+            userDomainService.validateRawPassword(newPassword);
             Member saved = userDomainService.changePassword(userId,passwordEncoder.encode(newPassword));
 
             AUDIT.info("op=change-password userId={}",userId);
@@ -473,7 +467,7 @@ public class UserService {
      public boolean cancelMemberAccountBySystemAdmin(String token, UUID memberIdToCancel) {
         try{
             if (!auth.isTokenValid(token) || !auth.isSystemAdmin(token)) {
-                throw new IllegalArgumentException("Only a system admin can cancel member accounts");
+                throw new InvalidTokenException("Only a system admin can cancel member accounts");
             }
             UUID systemAdminId = auth.extractUserId(token);
             boolean result = userDomainService.cancelMemberAccount(memberIdToCancel);
@@ -487,30 +481,13 @@ public class UserService {
         }
     }
 
-    private void validateRawPassword(String password) {
-        if (password == null || password.isBlank()) {
-            throw new InvalidMemberInputException("Password cannot be null or empty");
-        }
-
-        if (password.length() < 8) {
-            throw new InvalidMemberInputException("Password must be at least 8 characters long");
-        }
-
-        String regex = "^(?=.*[A-Z])(?=.*\\d).+$";
-        if (!password.matches(regex)) {
-            throw new InvalidMemberInputException(
-                    "Password must contain at least one uppercase letter and one number"
-            );
-        }
-    }
-
     private UUID getAuthenticatedMemberId(String token) {
         if (!auth.isTokenValid(token)) {
-            throw new IllegalArgumentException("Invalid or expired token");
+            throw new InvalidTokenException("Invalid or expired token");
         }
 
         if (!auth.isMember(token)) {
-            throw new IllegalArgumentException("Only members can perform this action");
+            throw new InvalidTokenException("Only members can perform this action");
         }
 
         return auth.extractUserId(token);
@@ -518,11 +495,11 @@ public class UserService {
 
     private void validateEntranceToken(String token) {
         if (!auth.isTokenValid(token)) {
-            throw new IllegalArgumentException("Invalid or expired token");
+            throw new InvalidTokenException("Invalid or expired token");
         }
 
         if (!(auth.isGuest(token))) {
-            throw new IllegalArgumentException("Only guest or temporary token can perform this action");
+            throw new InvalidTokenException("Only guest or temporary token can perform this action");
         }
     }
 

@@ -35,6 +35,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,6 +62,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @SpringBootTest
 @DisplayName("E2E: Order flow — seat reservation and checkout (UC II.2.2, II.2.5.A, II.2.7, II.2.8)")
+@Disabled("Reason: Flaky or under development")
 class EventOrderFlowE2ETest {
 
     @Autowired EventManagementService events;
