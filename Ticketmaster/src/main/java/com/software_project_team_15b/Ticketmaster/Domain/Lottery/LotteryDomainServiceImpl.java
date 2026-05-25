@@ -43,9 +43,6 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
     private static final int WINNER_ACCESS_TIME = 600; // seconds
 
     private final ILotteryRepository lotteryRepository;
-    // eventId → (winnerId → accessExpiresAt). Presence of an eventId key signals the lottery was drawn.
-    // Entries are never removed; getLotteryEligibilityForEvent checks the timestamp to distinguish
-    // WON_AND_ACCESS_VALID from ACCESS_EXPIRED without needing a scheduler.
     private final ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>> winners = new ConcurrentHashMap<>();
     // Self-reference through the Spring proxy so that @Retryable and @Transactional
     // on drawWinnersTransactional take effect when called from runEventLottery.
@@ -207,6 +204,7 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
      * @throws LotteryNotFoundException     if no lottery exists for the given event
      * @throws LotteryAlreadyDrawnException if the lottery for this event has already been drawn
      */
+    //TODO: Only event manager/owner can run
     @Override
     public synchronized Set<UUID> runEventLottery(UUID eventId, int count) {
         if (eventId == null) {
@@ -255,28 +253,6 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
         Set<UUID> drawn = lottery.popRandom(count);
         lotteryRepository.updateLottery(lottery);
         return drawn;
-    }
-
-    /**
-     * Forcibly revokes a winner's access for the given event (e.g. for admin intervention).
-     * After this call {@link #getLotteryEligibilityForEvent} returns
-     * {@link LotteryEligibilityStatus#NOT_SELECTED} for that user.
-     * No new drawing is triggered — once a lottery is drawn it is permanently closed.
-     *
-     * @param userId  the winner whose access is being revoked; must not be null
-     * @param eventId the unique identifier of the event; must not be null
-     * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
-     */
-    protected synchronized void clearWinnerAccess(UUID userId, UUID eventId) {
-        if (userId == null) {
-            throw new IllegalArgumentException("userId cannot be null");
-        }
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
-        }
-        ConcurrentHashMap<UUID, LocalDateTime> eventWinners = winners.get(eventId);
-        if (eventWinners == null) return;
-        eventWinners.remove(userId);
     }
 
     /**

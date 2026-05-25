@@ -1,7 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Application.Queue;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyInQueueException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyQueueException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIsFullException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
@@ -9,9 +8,9 @@ import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 
-import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.HashSet;
@@ -20,8 +19,6 @@ import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -44,16 +41,10 @@ public class QueueService {
 
     private final Queue<String> siteQueue = new LinkedList<>();
     private final Set<String> acceptedTokens = new HashSet<>();
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
     public QueueService(IQueueDomainService queueDomainService, IAuth auth) {
         this.queueDomainService = Objects.requireNonNull(queueDomainService);
         this.auth = auth;
-    }
-
-    @PostConstruct
-    private void startSiteQueueScheduler() {
-        scheduler.scheduleAtFixedRate(this::acceptUsersFromSiteQueue, 0, SITE_QUEUE_INTERVAL, TimeUnit.SECONDS);
     }
 
     /**
@@ -61,20 +52,30 @@ public class QueueService {
      * site queue into the admitted set until it reaches {@link #MAX_VISITORS}.
      * Tokens that have since expired while waiting in the queue are discarded.
      */
+    @Scheduled(fixedRate = SITE_QUEUE_INTERVAL, timeUnit = TimeUnit.SECONDS)
     private synchronized void acceptUsersFromSiteQueue() {
-        acceptedTokens.removeIf(token -> !auth.isTokenValid(token));
-        while (!siteQueue.isEmpty() && acceptedTokens.size() < MAX_VISITORS) {
-            String token = siteQueue.poll();
-            if (auth.isTokenValid(token)) {
-                acceptedTokens.add(token);
+        try {
+            acceptedTokens.removeIf(token -> !auth.isTokenValid(token));
+            while (!siteQueue.isEmpty() && acceptedTokens.size() < MAX_VISITORS) {
+                String token = siteQueue.poll();
+                if (auth.isTokenValid(token)) {
+                    acceptedTokens.add(token);
+                }
             }
+        } catch (Exception e) {
+            AUDIT.error("op=acceptUsersFromSiteQueue result=error error={}", e.getMessage());
         }
     }
 
     private void validateToken(String token) {
-        if (!auth.isTokenValid(token)) {
-            AUDIT.warn("op=validateToken result=rejected reason=invalid_token");
-            throw new InvalidTokenException("Invalid token");
+        try {
+            if (!auth.isTokenValid(token)) {
+                AUDIT.warn("op=validateToken result=rejected reason=invalid_token");
+                throw new InvalidTokenException("Invalid token");
+            }
+        } catch (RuntimeException e) {
+            AUDIT.error("op=validateToken result=error error={}", e.getMessage());
+            throw e;
         }
     }
 
@@ -85,83 +86,20 @@ public class QueueService {
      * @throws IllegalArgumentException if {@code token} is null or is already present in the queue
      */
     public synchronized void addUserToSiteQueue(String token) {
-        if (token == null) throw new IllegalArgumentException("token cannot be null");
-        validateToken(token);
-        UUID callerId = auth.extractUserId(token);
-        AUDIT.info("op=addUserToSiteQueue callerId={}", callerId);
-        if (siteQueue.contains(token)) {
-            throw new IllegalArgumentException("User is already in the site queue");
+        try {
+            if (token == null) throw new IllegalArgumentException("token cannot be null");
+            validateToken(token);
+            UUID callerId = auth.extractUserId(token);
+            AUDIT.info("op=addUserToSiteQueue callerId={}", callerId);
+            if (siteQueue.contains(token)) {
+                throw new IllegalArgumentException("User is already in the site queue");
+            }
+            siteQueue.add(token);
+            AUDIT.info("op=addUserToSiteQueue callerId={} result=ok", callerId);
+        } catch (RuntimeException e) {
+            AUDIT.error("op=addUserToSiteQueue result=error error={}", e.getMessage());
+            throw e;
         }
-        siteQueue.add(token);
-        AUDIT.info("op=addUserToSiteQueue callerId={} result=ok", callerId);
-    }
-
-    /**
-     * Returns {@code true} if the given token has been admitted from the site queue and
-     * may proceed to access the website.
-     *
-     * @param token the user's auth token; must not be null
-     * @return {@code true} if the token is currently in the admitted set
-     * @throws IllegalArgumentException if {@code token} is null
-     */
-    public synchronized boolean validateAndExitQueue(String token) {
-        if (token == null) throw new IllegalArgumentException("token cannot be null");
-        validateToken(token);
-        UUID callerId = auth.extractUserId(token);
-        AUDIT.info("op=validateAndExitQueue callerId={}", callerId);
-        boolean admitted = acceptedTokens.contains(token);
-        AUDIT.info("op=validateAndExitQueue callerId={} admitted={}", callerId, admitted);
-        return admitted;
-    }
-
-    /**
-     * Returns {@code true} if the site currently has capacity for additional visitors.
-     *
-     * @return {@code true} if the number of currently admitted users is below the site cap
-     */
-    public synchronized boolean canAccessWebsite() {
-        AUDIT.info("op=canAccessWebsite");
-        return acceptedTokens.size() < MAX_VISITORS;
-    }
-
-    /**
-     * Returns the zero-based position of the given token in the event's waiting queue.
-     *
-     * @param token   the user's auth token; must not be null
-     * @param eventId the unique identifier of the event; must not be null
-     * @return the token's position (0 = next to be admitted)
-     * @throws IllegalArgumentException if {@code token} or {@code eventId} is null,
-     *                                  or if the token is not present in the queue
-     * @throws QueueNotFoundException   if no queue exists for the given event
-     */
-    public int getPositionInEventQueue(String token, UUID eventId) {
-        if (token == null) throw new IllegalArgumentException("token cannot be null");
-        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-        validateToken(token);
-        UUID callerId = auth.extractUserId(token);
-        AUDIT.info("op=getPositionInEventQueue callerId={} eventId={}", callerId, eventId);
-        int position = queueDomainService.getPositionInEventQueue(token, eventId);
-        AUDIT.info("op=getPositionInEventQueue callerId={} eventId={} position={}", callerId, eventId, position);
-        return position;
-    }
-
-    /**
-     * Returns {@code true} if the user identified by the given token is currently in the
-     * admitted window for {@code eventId}.
-     *
-     * @param token   the user's auth token; must not be null
-     * @param eventId the unique identifier of the event; must not be null
-     * @return {@code true} if the user is currently admitted
-     */
-    public boolean isUserAdmitted(String token, UUID eventId) {
-        if (token == null) throw new IllegalArgumentException("token cannot be null");
-        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-        validateToken(token);
-        UUID callerId = auth.extractUserId(token);
-        AUDIT.info("op=isUserAdmitted callerId={} eventId={}", callerId, eventId);
-        boolean admitted = queueDomainService.isUserAdmitted(token, eventId);
-        AUDIT.info("op=isUserAdmitted callerId={} eventId={} admitted={}", callerId, eventId, admitted);
-        return admitted;
     }
 
     /**
@@ -175,14 +113,19 @@ public class QueueService {
      * @throws QueueNotFoundException   if a queue exists for the event but cannot be read
      */
     public QueueAccessDTO getQueueAccessView(String token, UUID eventId) {
-        if (token == null) throw new IllegalArgumentException("token cannot be null");
-        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-        validateToken(token);
-        UUID callerId = auth.extractUserId(token);
-        AUDIT.info("op=getQueueAccessView callerId={} eventId={}", callerId, eventId);
-        QueueAccessDTO view = queueDomainService.getQueueAccessView(token, eventId);
-        AUDIT.info("op=getQueueAccessView callerId={} eventId={} status={}", callerId, eventId, view.status());
-        return view;
+        try {
+            if (token == null) throw new IllegalArgumentException("token cannot be null");
+            if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            validateToken(token);
+            UUID callerId = auth.extractUserId(token);
+            AUDIT.info("op=getQueueAccessView callerId={} eventId={}", callerId, eventId);
+            QueueAccessDTO view = queueDomainService.getQueueAccessView(token, eventId);
+            AUDIT.info("op=getQueueAccessView callerId={} eventId={} status={}", callerId, eventId, view.status());
+            return view;
+        } catch (RuntimeException e) {
+            AUDIT.error("op=getQueueAccessView eventId={} result=error error={}", eventId, e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -199,39 +142,23 @@ public class QueueService {
      * @throws AlreadyInQueueException  if the user is already waiting in the queue
      */
     public QueueAccessDTO requestAccess(String token, UUID eventId) {
-        if (token == null) throw new IllegalArgumentException("token cannot be null");
-        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-        validateToken(token);
-        UUID callerId = auth.extractUserId(token);
-        if (!auth.isMember(token)) {
-            AUDIT.warn("op=requestAccess callerId={} eventId={} result=rejected reason=non_member", callerId, eventId);
-            throw new IllegalArgumentException("User must be a member to join the event queue");
+        try {
+            if (token == null) throw new IllegalArgumentException("token cannot be null");
+            if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            validateToken(token);
+            UUID callerId = auth.extractUserId(token);
+            if (!auth.isMember(token)) {
+                AUDIT.warn("op=requestAccess callerId={} eventId={} result=rejected reason=non_member", callerId, eventId);
+                throw new IllegalArgumentException("User must be a member to join the event queue");
+            }
+            AUDIT.info("op=requestAccess callerId={} eventId={}", callerId, eventId);
+            QueueAccessDTO view = queueDomainService.requestAccess(token, eventId);
+            AUDIT.info("op=requestAccess callerId={} eventId={} status={}", callerId, eventId, view.status());
+            return view;
+        } catch (RuntimeException e) {
+            AUDIT.error("op=requestAccess eventId={} result=error error={}", eventId, e.getMessage());
+            throw e;
         }
-        AUDIT.info("op=requestAccess callerId={} eventId={}", callerId, eventId);
-        QueueAccessDTO view = queueDomainService.requestAccess(token, eventId);
-        AUDIT.info("op=requestAccess callerId={} eventId={} status={}", callerId, eventId, view.status());
-        return view;
-    }
-
-    /**
-     * Returns {@code true} if the user identified by the given token currently holds
-     * admitted access to the event.
-     *
-     * @param token   the user's auth token; must not be null
-     * @param eventId the unique identifier of the event; must not be null
-     * @return {@code true} if the user is currently admitted to the event
-     * @throws IllegalArgumentException if {@code token} or {@code eventId} is null
-     * @throws InvalidTokenException    if the token is invalid
-     */
-    public boolean hasAccess(String token, UUID eventId) {
-        if (token == null) throw new IllegalArgumentException("token cannot be null");
-        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-        validateToken(token);
-        UUID callerId = auth.extractUserId(token);
-        AUDIT.info("op=hasAccess callerId={} eventId={}", callerId, eventId);
-        boolean access = queueDomainService.hasAccess(token, eventId);
-        AUDIT.info("op=hasAccess callerId={} eventId={} result={}", callerId, eventId, access);
-        return access;
     }
 
     /**
@@ -241,10 +168,15 @@ public class QueueService {
      * @throws IllegalArgumentException if {@code eventId} is null
      */
     public void createEventQueue(UUID eventId) {
-        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-        AUDIT.info("op=createEventQueue eventId={}", eventId);
-        queueDomainService.createEventQueue(eventId);
-        AUDIT.info("op=createEventQueue eventId={} result=ok", eventId);
+        try {
+            if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            AUDIT.info("op=createEventQueue eventId={}", eventId);
+            queueDomainService.createEventQueue(eventId);
+            AUDIT.info("op=createEventQueue eventId={} result=ok", eventId);
+        } catch (RuntimeException e) {
+            AUDIT.error("op=createEventQueue eventId={} result=error error={}", eventId, e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -255,27 +187,15 @@ public class QueueService {
      * @throws QueueNotFoundException   if no queue exists for the given event
      */
     public void deleteEventQueue(UUID eventId) {
-        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-        AUDIT.info("op=deleteEventQueue eventId={}", eventId);
-        queueDomainService.deleteEventQueue(eventId);
-        AUDIT.info("op=deleteEventQueue eventId={} result=ok", eventId);
-    }
-
-    /**
-     * Removes and returns the user token at the front of the event's queue (FIFO order).
-     *
-     * @param eventId the unique identifier of the event; must not be null
-     * @return the auth token of the user at the front of the queue
-     * @throws IllegalArgumentException if {@code eventId} is null
-     * @throws QueueNotFoundException   if no queue exists for the given event
-     * @throws EmptyQueueException      if the queue contains no entries
-     */
-    public String popFromEventQueue(UUID eventId) {
-        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-        AUDIT.info("op=popFromEventQueue eventId={}", eventId);
-        String token = queueDomainService.popFromEventQueue(eventId);
-        AUDIT.info("op=popFromEventQueue eventId={} result=ok", eventId);
-        return token;
+        try {
+            if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            AUDIT.info("op=deleteEventQueue eventId={}", eventId);
+            queueDomainService.deleteEventQueue(eventId);
+            AUDIT.info("op=deleteEventQueue eventId={} result=ok", eventId);
+        } catch (RuntimeException e) {
+            AUDIT.error("op=deleteEventQueue eventId={} result=error error={}", eventId, e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -289,12 +209,17 @@ public class QueueService {
      * @throws AlreadyInQueueException   if the token is already waiting in the queue
      */
     public void pushToEventQueue(UUID eventId, String token) {
-        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-        if (token == null) throw new IllegalArgumentException("token cannot be null");
-        validateToken(token);
-        UUID callerId = auth.extractUserId(token);
-        AUDIT.info("op=pushToEventQueue callerId={} eventId={}", callerId, eventId);
-        queueDomainService.pushToEventQueue(eventId, token);
-        AUDIT.info("op=pushToEventQueue callerId={} eventId={} result=ok", callerId, eventId);
+        try {
+            if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            if (token == null) throw new IllegalArgumentException("token cannot be null");
+            validateToken(token);
+            UUID callerId = auth.extractUserId(token);
+            AUDIT.info("op=pushToEventQueue callerId={} eventId={}", callerId, eventId);
+            queueDomainService.pushToEventQueue(eventId, token);
+            AUDIT.info("op=pushToEventQueue callerId={} eventId={} result=ok", callerId, eventId);
+        } catch (RuntimeException e) {
+            AUDIT.error("op=pushToEventQueue eventId={} result=error error={}", eventId, e.getMessage());
+            throw e;
+        }
     }
 }
