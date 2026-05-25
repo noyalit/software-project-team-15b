@@ -63,7 +63,7 @@ public class QueueService {
                 }
             }
         } catch (Exception e) {
-            AUDIT.error("op=acceptUsersFromSiteQueue result=error error={}", e.getMessage());
+            AUDIT.warn("op=acceptUsersFromSiteQueue result=error error={}", e.getMessage());
         }
     }
 
@@ -74,7 +74,7 @@ public class QueueService {
                 throw new InvalidTokenException("Invalid token");
             }
         } catch (RuntimeException e) {
-            AUDIT.error("op=validateToken result=error error={}", e.getMessage());
+            AUDIT.warn("op=validateToken result=error error={}", e.getMessage());
             throw e;
         }
     }
@@ -90,14 +90,13 @@ public class QueueService {
             if (token == null) throw new IllegalArgumentException("token cannot be null");
             validateToken(token);
             UUID callerId = auth.extractUserId(token);
-            AUDIT.info("op=addUserToSiteQueue callerId={}", callerId);
             if (siteQueue.contains(token)) {
                 throw new IllegalArgumentException("User is already in the site queue");
             }
             siteQueue.add(token);
             AUDIT.info("op=addUserToSiteQueue callerId={} result=ok", callerId);
         } catch (RuntimeException e) {
-            AUDIT.error("op=addUserToSiteQueue result=error error={}", e.getMessage());
+            AUDIT.warn("op=addUserToSiteQueue result=error error={}", e.getMessage());
             throw e;
         }
     }
@@ -118,12 +117,11 @@ public class QueueService {
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             validateToken(token);
             UUID callerId = auth.extractUserId(token);
-            AUDIT.info("op=getQueueAccessView callerId={} eventId={}", callerId, eventId);
             QueueAccessDTO view = queueDomainService.getQueueAccessView(token, eventId);
             AUDIT.info("op=getQueueAccessView callerId={} eventId={} status={}", callerId, eventId, view.status());
             return view;
         } catch (RuntimeException e) {
-            AUDIT.error("op=getQueueAccessView eventId={} result=error error={}", eventId, e.getMessage());
+            AUDIT.warn("op=getQueueAccessView eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
         }
     }
@@ -151,12 +149,11 @@ public class QueueService {
                 AUDIT.warn("op=requestAccess callerId={} eventId={} result=rejected reason=non_member", callerId, eventId);
                 throw new IllegalArgumentException("User must be a member to join the event queue");
             }
-            AUDIT.info("op=requestAccess callerId={} eventId={}", callerId, eventId);
             QueueAccessDTO view = queueDomainService.requestAccess(token, eventId);
             AUDIT.info("op=requestAccess callerId={} eventId={} status={}", callerId, eventId, view.status());
             return view;
         } catch (RuntimeException e) {
-            AUDIT.error("op=requestAccess eventId={} result=error error={}", eventId, e.getMessage());
+            AUDIT.warn("op=requestAccess eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
         }
     }
@@ -170,11 +167,10 @@ public class QueueService {
     public void createEventQueue(UUID eventId) {
         try {
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-            AUDIT.info("op=createEventQueue eventId={}", eventId);
             queueDomainService.createEventQueue(eventId);
             AUDIT.info("op=createEventQueue eventId={} result=ok", eventId);
         } catch (RuntimeException e) {
-            AUDIT.error("op=createEventQueue eventId={} result=error error={}", eventId, e.getMessage());
+            AUDIT.warn("op=createEventQueue eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
         }
     }
@@ -189,11 +185,10 @@ public class QueueService {
     public void deleteEventQueue(UUID eventId) {
         try {
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-            AUDIT.info("op=deleteEventQueue eventId={}", eventId);
             queueDomainService.deleteEventQueue(eventId);
             AUDIT.info("op=deleteEventQueue eventId={} result=ok", eventId);
         } catch (RuntimeException e) {
-            AUDIT.error("op=deleteEventQueue eventId={} result=error error={}", eventId, e.getMessage());
+            AUDIT.warn("op=deleteEventQueue eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
         }
     }
@@ -214,11 +209,10 @@ public class QueueService {
             if (token == null) throw new IllegalArgumentException("token cannot be null");
             validateToken(token);
             UUID callerId = auth.extractUserId(token);
-            AUDIT.info("op=pushToEventQueue callerId={} eventId={}", callerId, eventId);
             queueDomainService.pushToEventQueue(eventId, token);
             AUDIT.info("op=pushToEventQueue callerId={} eventId={} result=ok", callerId, eventId);
         } catch (RuntimeException e) {
-            AUDIT.error("op=pushToEventQueue eventId={} result=error error={}", eventId, e.getMessage());
+            AUDIT.warn("op=pushToEventQueue eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
         }
     }

@@ -42,11 +42,10 @@ public class LotteryService {
     public void createEventLottery(UUID eventId) {
         try {
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-            AUDIT.info("op=createEventLottery eventId={}", eventId);
             lotteryDomainService.createEventLottery(eventId);
             AUDIT.info("op=createEventLottery eventId={} result=ok", eventId);
         } catch (RuntimeException e) {
-            AUDIT.error("op=createEventLottery eventId={} result=error error={}", eventId, e.getMessage());
+            AUDIT.warn("op=createEventLottery eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
         }
     }
@@ -61,11 +60,10 @@ public class LotteryService {
     public void deleteEventLottery(UUID eventId) {
         try {
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-            AUDIT.info("op=deleteEventLottery eventId={}", eventId);
             lotteryDomainService.deleteEventLottery(eventId);
             AUDIT.info("op=deleteEventLottery eventId={} result=ok", eventId);
         } catch (RuntimeException e) {
-            AUDIT.error("op=deleteEventLottery eventId={} result=error error={}", eventId, e.getMessage());
+            AUDIT.warn("op=deleteEventLottery eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
         }
     }
@@ -82,11 +80,10 @@ public class LotteryService {
         try {
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             if (userId == null) throw new IllegalArgumentException("userId cannot be null");
-            AUDIT.info("op=addToEventLottery eventId={} userId={}", eventId, userId);
             lotteryDomainService.addToEventLottery(eventId, userId);
             AUDIT.info("op=addToEventLottery eventId={} userId={} result=ok", eventId, userId);
         } catch (RuntimeException e) {
-            AUDIT.error("op=addToEventLottery eventId={} userId={} result=error error={}", eventId, userId, e.getMessage());
+            AUDIT.warn("op=addToEventLottery eventId={} userId={} result=error error={}", eventId, userId, e.getMessage());
             throw e;
         }
     }
@@ -105,12 +102,11 @@ public class LotteryService {
         try {
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             if (count < 0) throw new IllegalArgumentException("count cannot be negative");
-            AUDIT.info("op=runEventLottery eventId={} count={}", eventId, count);
             Set<UUID> drawn = lotteryDomainService.runEventLottery(eventId, count);
             AUDIT.info("op=runEventLottery eventId={} count={} winnersDrawn={} result=ok", eventId, count, drawn.size());
             return drawn;
         } catch (RuntimeException e) {
-            AUDIT.error("op=runEventLottery eventId={} count={} result=error error={}", eventId, count, e.getMessage());
+            AUDIT.warn("op=runEventLottery eventId={} count={} result=error error={}", eventId, count, e.getMessage());
             throw e;
         }
     }
@@ -126,12 +122,11 @@ public class LotteryService {
     public Set<UUID> getEventLotteryWinners(UUID eventId) {
         try {
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-            AUDIT.info("op=getEventLotteryWinners eventId={}", eventId);
             Set<UUID> winners = lotteryDomainService.getEventLotteryWinners(eventId);
             AUDIT.info("op=getEventLotteryWinners eventId={} result=ok", eventId);
             return winners;
         } catch (RuntimeException e) {
-            AUDIT.error("op=getEventLotteryWinners eventId={} result=error error={}", eventId, e.getMessage());
+            AUDIT.warn("op=getEventLotteryWinners eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
         }
     }
@@ -148,12 +143,11 @@ public class LotteryService {
         try {
             if (userId == null) throw new IllegalArgumentException("userId cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-            AUDIT.info("op=getLotteryEligibilityForEvent userId={} eventId={}", userId, eventId);
             LotteryEligibilityDTO dto = lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId);
             AUDIT.info("op=getLotteryEligibilityForEvent userId={} eventId={} status={}", userId, eventId, dto.status());
             return dto;
         } catch (RuntimeException e) {
-            AUDIT.error("op=getLotteryEligibilityForEvent userId={} eventId={} result=error error={}", userId, eventId, e.getMessage());
+            AUDIT.warn("op=getLotteryEligibilityForEvent userId={} eventId={} result=error error={}", userId, eventId, e.getMessage());
             throw e;
         }
     }
