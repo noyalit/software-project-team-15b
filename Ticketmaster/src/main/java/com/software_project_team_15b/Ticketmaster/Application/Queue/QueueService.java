@@ -64,14 +64,8 @@ public class QueueService {
     }
 
     private void validateToken(String token) {
-        try {
-            if (!auth.isTokenValid(token)) {
-                AUDIT.warn("op=validateToken result=rejected reason=invalid_token");
-                throw new InvalidTokenException("Invalid token");
-            }
-        } catch (RuntimeException e) {
-            AUDIT.warn("op=validateToken result=error error={}", e.getMessage());
-            throw e;
+        if (!auth.isTokenValid(token)) {
+            throw new InvalidTokenException("Invalid token");
         }
     }
 
