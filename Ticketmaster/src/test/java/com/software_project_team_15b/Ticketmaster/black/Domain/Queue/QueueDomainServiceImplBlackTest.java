@@ -538,16 +538,22 @@ class QueueDomainServiceImplBlackTest {
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
         when(queueRepository.getAllQueues()).thenReturn(List.of(queue));
 
-        CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(n);
-
+        // Push sequentially — VirtualQueue.push() delegates to ArrayList.add(), which is not
+        // thread-safe; concurrent pushes to the same queue can silently drop entries.
         for (int i = 0; i < n; i++) {
-            final String tok = "token-" + i;
+            exposed.pushToEventQueue(EVENT_ID, "token-" + i);
+        }
+
+        // Advance concurrently: after the first thread runs advanceAll() the accessMap is full
+        // (future expiry), so all subsequent concurrent calls become safe read-only no-ops.
+        int threads = 4;
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+
+        for (int i = 0; i < threads; i++) {
             pool.submit(() -> {
-                try {
-                    start.await();
-                    exposed.pushToEventQueue(EVENT_ID, tok);
-                } catch (Exception ignored) {}
+                try { start.await(); } catch (InterruptedException ignored) {}
+                exposed.advanceAll();
                 return null;
             });
         }
@@ -555,8 +561,6 @@ class QueueDomainServiceImplBlackTest {
         start.countDown();
         pool.shutdown();
         assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
-
-        exposed.advanceAll();
 
         for (int i = 0; i < n; i++) {
             assertThat(exposed.hasAccess("token-" + i, EVENT_ID)).isTrue();

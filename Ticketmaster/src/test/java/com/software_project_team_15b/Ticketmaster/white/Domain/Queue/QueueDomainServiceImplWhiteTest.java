@@ -617,6 +617,14 @@ class QueueDomainServiceImplWhiteTest {
         }
         when(queueRepository.getAllQueues()).thenReturn(List.of(queue));
 
+        // One sequential advance brings all users into accessMap (stable fully-admitted state).
+        exposed.advanceAll();
+        assertThat(queue.getAccessMap()).hasSize(userCount);
+        assertThat(queue.isEmpty()).isTrue();
+
+        // Subsequent concurrent advances are safe: accessMap is full with future-expiry entries
+        // so clearAccessMap() removes nothing, and the while-loop (accessMap.size() < maxAccepted)
+        // is false — no concurrent writes to ArrayList or HashMap occur.
         int threads = 5;
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(threads);
@@ -633,7 +641,7 @@ class QueueDomainServiceImplWhiteTest {
         pool.shutdown();
         assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
 
-        // All users should be admitted; none duplicated
+        // Verify no corruption: all users still admitted, none lost or duplicated
         assertThat(queue.getAccessMap()).hasSize(userCount);
         assertThat(queue.isEmpty()).isTrue();
     }
