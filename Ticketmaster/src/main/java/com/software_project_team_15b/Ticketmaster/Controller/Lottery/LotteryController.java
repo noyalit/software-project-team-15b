@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Controller.Lottery;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
@@ -48,6 +49,8 @@ public class LotteryController {
             lotteryService.createEventLottery(token, companyId, eventId);
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(new ApiResponse<>(null, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
         } catch (UnauthorizedException ex) {
             return forbidden(ex);
         } catch (IllegalArgumentException ex) {
@@ -67,6 +70,8 @@ public class LotteryController {
         try {
             lotteryService.deleteEventLottery(token, companyId, eventId);
             return ResponseEntity.ok(new ApiResponse<>(null, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
         } catch (UnauthorizedException ex) {
             return forbidden(ex);
         } catch (LotteryNotFoundException ex) {
@@ -89,6 +94,8 @@ public class LotteryController {
             lotteryService.addToEventLottery(eventId, token);
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(new ApiResponse<>(null, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
         } catch (UnauthorizedException ex) {
             return forbidden(ex);
         } catch (LotteryNotFoundException ex) {
@@ -111,6 +118,8 @@ public class LotteryController {
         try {
             Set<UUID> winners = lotteryService.runEventLottery(token, companyId, eventId, request.count(), request.expirationTime());
             return ResponseEntity.ok(new ApiResponse<>(winners, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
         } catch (UnauthorizedException ex) {
             return forbidden(ex);
         } catch (LotteryNotFoundException ex) {
@@ -134,6 +143,8 @@ public class LotteryController {
         try {
             Set<UUID> winners = lotteryService.getEventLotteryWinners(token, companyId, eventId);
             return ResponseEntity.ok(new ApiResponse<>(winners, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
         } catch (UnauthorizedException ex) {
             return forbidden(ex);
         } catch (LotteryNotFoundException ex) {
@@ -155,6 +166,8 @@ public class LotteryController {
         try {
             LotteryEligibilityDTO dto = lotteryService.getLotteryEligibilityForEvent(token, eventId);
             return ResponseEntity.ok(new ApiResponse<>(dto, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         } catch (Exception ex) {
@@ -163,6 +176,11 @@ public class LotteryController {
     }
 
     public record DrawRequest(int count, LocalDateTime expirationTime) {}
+
+    private <T> ResponseEntity<ApiResponse<T>> unauthorized(Exception ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(new ApiResponse<>(null, ex.getMessage()));
+    }
 
     private <T> ResponseEntity<ApiResponse<T>> badRequest(Exception ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
