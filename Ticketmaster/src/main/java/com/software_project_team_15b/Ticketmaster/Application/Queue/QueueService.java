@@ -37,12 +37,10 @@ public class QueueService {
 
     private final IAuth auth;
     private final IQueueDomainService queueDomainService;
-    private final UserDomainService userDomainService;
 
-    public QueueService(IQueueDomainService queueDomainService, IAuth auth, UserDomainService userDomainService) {
+    public QueueService(IQueueDomainService queueDomainService, IAuth auth) {
         this.queueDomainService = Objects.requireNonNull(queueDomainService);
         this.auth = auth;
-        this.userDomainService = Objects.requireNonNull(userDomainService);
     }
 
     /**
@@ -97,24 +95,22 @@ public class QueueService {
     /**
      * Creates a new, empty virtual queue for the given event.
      *
-     * @param userId    the caller's user id; must not be null
-     * @param companyId the company that owns the event
+     * @param token    the caller's auth token; must not be null
      * @param eventId   the unique identifier of the event; must not be null
      * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
      * @throws UnauthorizedException    if the caller is not a manager, owner, or founder of the event
      */
-    public void createEventQueue(UUID userId, UUID companyId, UUID eventId, int  capacity, int max_accepted) {
+    public void createEventQueue(String token, UUID eventId, int  capacity, int max_accepted) {
         try {
-            if (userId == null) throw new IllegalArgumentException("userId cannot be null");
-            if (companyId == null) throw new IllegalArgumentException("companyId cannot be null");
+            if (token == null) throw new IllegalArgumentException("token cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             if (capacity <= 0) throw new IllegalArgumentException("capacity cannot be <= 0");
             if (max_accepted <= 0) throw new IllegalArgumentException("max_accepted cannot be <= 0");
-            requireEventPermissions(userId, companyId, eventId);
+            requireSystemAdmin(token);
             queueDomainService.createEventQueue(eventId,  capacity, max_accepted);
-            AUDIT.info("op=createEventQueue userId={} eventId={} result=ok", userId, eventId);
+            AUDIT.info("op=createEventQueue token={} eventId={} result=ok", token, eventId);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=createEventQueue userId={} eventId={} result=error error={}", userId, eventId, e.getMessage());
+            AUDIT.warn("op=createEventQueue token={} eventId={} result=error error={}", token, eventId, e.getMessage());
             throw e;
         }
     }
@@ -122,23 +118,21 @@ public class QueueService {
     /**
      * Deletes the virtual queue associated with the given event.
      *
-     * @param userId    the caller's user id; must not be null
-     * @param companyId the company that owns the event
+     * @param token    the caller's auth token; must not be null
      * @param eventId   the unique identifier of the event; must not be null
      * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
      * @throws UnauthorizedException    if the caller is not a manager, owner, or founder of the event
      * @throws QueueNotFoundException   if no queue exists for the given event
      */
-    public void deleteEventQueue(UUID userId, UUID companyId, UUID eventId) {
+    public void deleteEventQueue(String token, UUID eventId) {
         try {
-            if (userId == null) throw new IllegalArgumentException("userId cannot be null");
-            if (companyId == null) throw new IllegalArgumentException("companyId cannot be null");
+            if (token == null) throw new IllegalArgumentException("token cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-            requireEventPermissions(userId, companyId, eventId);
+            requireSystemAdmin(token);
             queueDomainService.deleteEventQueue(eventId);
-            AUDIT.info("op=deleteEventQueue userId={} eventId={} result=ok", userId, eventId);
+            AUDIT.info("op=deleteEventQueue token={} eventId={} result=ok", token, eventId);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=deleteEventQueue userId={} eventId={} result=error error={}", userId, eventId, e.getMessage());
+            AUDIT.warn("op=deleteEventQueue token={} eventId={} result=error error={}", token, eventId, e.getMessage());
             throw e;
         }
     }
@@ -194,7 +188,6 @@ public class QueueService {
      * Updates the capacity and max-accepted limits of the virtual queue for the given event.
      *
      * @param token        the caller's auth token; must not be null
-     * @param companyId    the company that owns the event; must not be null
      * @param eventId      the unique identifier of the event; must not be null
      * @param capacity     the new maximum number of users that may wait; must be positive
      * @param max_accepted the new maximum number of simultaneously admitted users; must be positive
@@ -202,17 +195,15 @@ public class QueueService {
      * @throws UnauthorizedException    if the caller is not a manager, owner, or founder of the event
      * @throws QueueNotFoundException   if no queue exists for the given event
      */
-    public void updateEventQueueSettings(String token, UUID companyId, UUID eventId, int capacity, int max_accepted) {
+    public void updateEventQueueSettings(String token, UUID eventId, int capacity, int max_accepted) {
         try {
             if (token == null) throw new IllegalArgumentException("token cannot be null");
-            if (companyId == null) throw new IllegalArgumentException("companyId cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             if (capacity <= 0) throw new IllegalArgumentException("capacity cannot be <= 0");
             if (max_accepted <= 0) throw new IllegalArgumentException("max_accepted cannot be <= 0");
-            UUID userId = auth.extractUserId(token);
-            requireEventPermissions(userId, companyId, eventId);
+            requireSystemAdmin(token);
             queueDomainService.updateQueueSettings(eventId, capacity, max_accepted);
-            AUDIT.info("op=updateEventQueueSettings userId={} eventId={} capacity={} max_accepted={} result=ok", userId, eventId, capacity, max_accepted);
+            AUDIT.info("op=updateEventQueueSettings token={} eventId={} capacity={} max_accepted={} result=ok", token, eventId, capacity, max_accepted);
         } catch (RuntimeException e) {
             AUDIT.warn("op=updateEventQueueSettings eventId={} capacity={} max_accepted={} result=error error={}", eventId, capacity, max_accepted, e.getMessage());
             throw e;
@@ -237,14 +228,6 @@ public class QueueService {
         } catch (RuntimeException e) {
             AUDIT.warn("op=getAllQueueSnapshots result=error error={}", e.getMessage());
             throw e;
-        }
-    }
-
-    private void requireEventPermissions(UUID userId, UUID companyId, UUID eventId) {
-        if (!userDomainService.isActiveManager(userId, companyId, eventId) &&
-            !userDomainService.isActiveOwner(userId, companyId) &&
-            !userDomainService.isActiveFounder(userId, companyId)) {
-            throw new UnauthorizedException("user does not have permission to perform this action");
         }
     }
 

@@ -5,7 +5,7 @@ import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 
 import org.junit.jupiter.api.AfterEach;
@@ -15,6 +15,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
@@ -25,16 +27,18 @@ import static org.mockito.Mockito.*;
  *
  * <p>These tests verify the internal wiring of the facade:
  * <ul>
- *   <li>Token validation via {@link IAuth} occurs before any event-queue domain service
- *       call, and invalid or null tokens short-circuit execution.</li>
+ *   <li>Token validation via {@link IAuth#isTokenValid} occurs before any domain-service
+ *       call for {@code getQueueAccessView}, and invalid or null tokens short-circuit
+ *       execution.</li>
  *   <li>{@code getQueueAccessView} is forwarded to the domain service after token
  *       validation, without mutating or substituting arguments.</li>
- *   <li>{@code createEventQueue} and {@code deleteEventQueue} check authorization via
- *       {@link com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService}
- *       then delegate to the domain service without touching the auth token.</li>
+ *   <li>{@code createEventQueue}, {@code deleteEventQueue}, {@code clearEventQueue},
+ *       {@code getQueueSnapshot}, {@code updateEventQueueSettings}, and
+ *       {@code getAllQueueSnapshots} all call {@link IAuth#isSystemAdmin} before
+ *       delegating to the domain service.</li>
  * </ul>
  *
- * <p>After each test, {@code verifyNoMoreInteractions} on the domain service mock guards
+ * <p>After each test, {@code verifyNoMoreInteractions} on the domain-service mock guards
  * against accidental extra delegations.
  */
 @ExtendWith(MockitoExtension.class)
@@ -42,22 +46,24 @@ class QueueServiceWhiteTest {
 
     @Mock private IQueueDomainService queueDomainService;
     @Mock private IAuth auth;
-    @Mock private UserDomainService userDomainService;
     @InjectMocks private QueueService service;
 
-    private static final UUID EVENT_ID   = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    private static final UUID USER_ID    = UUID.fromString("00000000-0000-0000-0000-000000000002");
-    private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-0000-0000-000000000010");
+    private static final UUID   EVENT_ID    = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final String ADMIN_TOKEN = "admin-token";
 
     @AfterEach
     void verifyNoUnexpectedDomainServiceInteractions() {
-        verifyNoMoreInteractions(queueDomainService, userDomainService);
+        verifyNoMoreInteractions(queueDomainService);
     }
 
     // =========================================================================
-    // Event-queue methods — validate token, then delegate to domain service
+    // getQueueAccessView — validate token, then delegate
     // =========================================================================
 
+    /**
+     * Verifies that {@link IAuth#isTokenValid} is called before the domain-service
+     * delegation, and that the domain-service return value is passed through unchanged.
+     */
     @Test
     void getQueueAccessView_validatesToken_thenDelegates() {
         when(auth.isTokenValid("token-a")).thenReturn(true);
@@ -72,50 +78,10 @@ class QueueServiceWhiteTest {
         inOrder.verify(queueDomainService).getQueueAccessView("token-a", EVENT_ID);
     }
 
-    // =========================================================================
-    // Methods that delegate without token validation
-    // =========================================================================
-
-    @Test
-    void createEventQueue_delegates_andDoesNothingElse() {
-        when(userDomainService.isActiveManager(USER_ID, COMPANY_ID, EVENT_ID)).thenReturn(true);
-        service.createEventQueue(USER_ID, COMPANY_ID, EVENT_ID, 1000, 100);
-
-        verify(userDomainService).isActiveManager(USER_ID, COMPANY_ID, EVENT_ID);
-        verify(queueDomainService).createEventQueue(EVENT_ID, 1000, 100);
-        verifyNoInteractions(auth);
-    }
-
-    @Test
-    void deleteEventQueue_delegates_andDoesNothingElse() {
-        when(userDomainService.isActiveManager(USER_ID, COMPANY_ID, EVENT_ID)).thenReturn(true);
-        service.deleteEventQueue(USER_ID, COMPANY_ID, EVENT_ID);
-
-        verify(userDomainService).isActiveManager(USER_ID, COMPANY_ID, EVENT_ID);
-        verify(queueDomainService).deleteEventQueue(EVENT_ID);
-        verifyNoInteractions(auth);
-    }
-
-    // =========================================================================
-    // Exception propagation — service does NOT swallow or wrap exceptions
-    // =========================================================================
-
-    @Test
-    void deleteEventQueue_propagatesDomainServiceException() {
-        when(userDomainService.isActiveManager(USER_ID, COMPANY_ID, EVENT_ID)).thenReturn(true);
-        doThrow(new QueueNotFoundException("missing")).when(queueDomainService).deleteEventQueue(EVENT_ID);
-
-        assertThatThrownBy(() -> service.deleteEventQueue(USER_ID, COMPANY_ID, EVENT_ID))
-                .isInstanceOf(QueueNotFoundException.class);
-        verify(userDomainService).isActiveManager(USER_ID, COMPANY_ID, EVENT_ID);
-        verify(queueDomainService).deleteEventQueue(EVENT_ID);
-        verifyNoInteractions(auth);
-    }
-
-    // =========================================================================
-    // Argument pass-through — verify args are not mutated or substituted
-    // =========================================================================
-
+    /**
+     * Verifies that {@code getQueueAccessView} passes token and eventId to the domain
+     * service without modification or substitution.
+     */
     @Test
     void getQueueAccessView_forwardsExactArgumentsWithoutMutation() {
         UUID eid = UUID.randomUUID();
@@ -128,4 +94,119 @@ class QueueServiceWhiteTest {
         verify(queueDomainService).getQueueAccessView(tok, eid);
     }
 
+    // =========================================================================
+    // Admin-gated mutations — isSystemAdmin check precedes domain delegation
+    // =========================================================================
+
+    /**
+     * Verifies that {@code createEventQueue} checks system-admin status before
+     * delegating to the domain service, and makes no other interactions.
+     */
+    @Test
+    void createEventQueue_checksAdminThenDelegates() {
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+
+        service.createEventQueue(ADMIN_TOKEN, EVENT_ID, 1000, 100);
+
+        var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);
+        inOrder.verify(queueDomainService).createEventQueue(EVENT_ID, 1000, 100);
+    }
+
+    /**
+     * Verifies that {@code deleteEventQueue} checks system-admin status before
+     * delegating to the domain service, and makes no other interactions.
+     */
+    @Test
+    void deleteEventQueue_checksAdminThenDelegates() {
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+
+        service.deleteEventQueue(ADMIN_TOKEN, EVENT_ID);
+
+        var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);
+        inOrder.verify(queueDomainService).deleteEventQueue(EVENT_ID);
+    }
+
+    /**
+     * Verifies that a {@link QueueNotFoundException} thrown by the domain service
+     * propagates unchanged through {@code deleteEventQueue}.
+     */
+    @Test
+    void deleteEventQueue_propagatesDomainServiceException() {
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+        doThrow(new QueueNotFoundException("missing")).when(queueDomainService).deleteEventQueue(EVENT_ID);
+
+        assertThatThrownBy(() -> service.deleteEventQueue(ADMIN_TOKEN, EVENT_ID))
+                .isInstanceOf(QueueNotFoundException.class);
+        verify(auth).isSystemAdmin(ADMIN_TOKEN);
+        verify(queueDomainService).deleteEventQueue(EVENT_ID);
+    }
+
+    /**
+     * Verifies that {@code clearEventQueue} checks system-admin status before
+     * delegating to the domain service.
+     */
+    @Test
+    void clearEventQueue_checksAdminThenDelegates() {
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+
+        service.clearEventQueue(ADMIN_TOKEN, EVENT_ID);
+
+        var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);
+        inOrder.verify(queueDomainService).clearEventQueue(EVENT_ID);
+    }
+
+    /**
+     * Verifies that {@code getQueueSnapshot} checks system-admin status, delegates
+     * to the domain service, and returns the domain-service result unchanged.
+     */
+    @Test
+    void getQueueSnapshot_checksAdminThenDelegatesAndReturnsSnapshot() {
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+        QueueSnapshotDTO expected = new QueueSnapshotDTO(EVENT_ID, 100, 10, 5, 3, Map.of());
+        when(queueDomainService.getQueueSnapshot(EVENT_ID)).thenReturn(expected);
+
+        QueueSnapshotDTO result = service.getQueueSnapshot(ADMIN_TOKEN, EVENT_ID);
+
+        assertThat(result).isSameAs(expected);
+        var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);
+        inOrder.verify(queueDomainService).getQueueSnapshot(EVENT_ID);
+    }
+
+    /**
+     * Verifies that {@code updateEventQueueSettings} checks system-admin status and
+     * forwards all arguments to the domain service without substitution.
+     */
+    @Test
+    void updateEventQueueSettings_checksAdminThenDelegatesWithExactArgs() {
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+
+        service.updateEventQueueSettings(ADMIN_TOKEN, EVENT_ID, 200, 20);
+
+        var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);
+        inOrder.verify(queueDomainService).updateQueueSettings(EVENT_ID, 200, 20);
+    }
+
+    /**
+     * Verifies that {@code getAllQueueSnapshots} checks system-admin status, delegates
+     * to the domain service, and returns the domain-service result unchanged.
+     */
+    @Test
+    void getAllQueueSnapshots_checksAdminThenDelegatesAndReturnsList() {
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+        QueueSnapshotDTO snap = new QueueSnapshotDTO(EVENT_ID, 100, 10, 5, 3, Map.of());
+        List<QueueSnapshotDTO> expected = List.of(snap);
+        when(queueDomainService.getAllQueueSnapshots()).thenReturn(expected);
+
+        List<QueueSnapshotDTO> result = service.getAllQueueSnapshots(ADMIN_TOKEN);
+
+        assertThat(result).isSameAs(expected);
+        var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);
+        inOrder.verify(queueDomainService).getAllQueueSnapshots();
+    }
 }
