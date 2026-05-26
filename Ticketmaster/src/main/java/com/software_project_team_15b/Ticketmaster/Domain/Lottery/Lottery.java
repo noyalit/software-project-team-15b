@@ -1,12 +1,26 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Lottery;
 
 import jakarta.persistence.*;
+
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
+/**
+ * JPA entity representing a lottery for a single event.
+ *
+ * <p>Tracks the pool of entered user UUIDs ({@code lotterySet}), the set of drawn
+ * winners ({@code winners}), the optional winner-access expiration timestamp, and
+ * the pool capacity. Lifecycle: users {@link #add enter} the pool → the organizer
+ * calls {@link #popRandom(int)} to draw winners (moving them from the pool into
+ * {@code winners}) → winners hold access until {@link #expirationTime}.
+ *
+ * <p>{@link #popRandom()} and {@link #popRandom(int)} are not thread-safe; callers
+ * that need concurrent safety must manage synchronization externally.
+ */
 @Entity
 @Table(name = "lottery")
 public class Lottery {
@@ -33,6 +47,12 @@ public class Lottery {
 
     @Column(name = "capacity", nullable = false)
     private int capacity;
+
+    @Column(name = "expiration_time")
+    private LocalDateTime expirationTime = null;
+
+    @Column(name = "drawn")
+    private boolean drawn = false;
 
     @Version
     private long version;
@@ -92,6 +112,7 @@ public class Lottery {
      * @throws IllegalStateException if the lottery is full
      */
     public boolean add(UUID option) {
+        requireNotDrawn();
         if (option == null) {
             throw new IllegalArgumentException("option cannot be null");
         }
@@ -108,6 +129,7 @@ public class Lottery {
      * @return the option if it was removed successfully, null otherwise
      */
     public UUID pop(UUID option) {
+        requireNotDrawn();
         if (option == null) {
             throw new IllegalArgumentException("option cannot be null");
         }
@@ -142,6 +164,7 @@ public class Lottery {
      * @return a randomly selected option that was removed from the lottery, or null if the lottery is empty
      */
     public UUID popRandom() {
+        requireNotDrawn();
         UUID value = getRandom();
         if (value == null) return null;
         pop(value);
@@ -161,6 +184,7 @@ public class Lottery {
      */
     public void clearWinners() {
         winners.clear();
+        drawn = false;
     }
 
     /**
@@ -170,6 +194,7 @@ public class Lottery {
      * @return a HashSet containing up to 'count' randomly selected options that were removed from the lottery
      */
     public Set<UUID> popRandom(int count) {
+        requireNotDrawn();
         if (count < 0) {
             throw new IllegalArgumentException("count cannot be negative");
         }
@@ -185,7 +210,36 @@ public class Lottery {
 
             result.add(value);
         }
-
+        drawn = true;
         return result;
+    }
+
+    /**
+     * Sets the timestamp after which drawn winners may no longer use their access.
+     *
+     * @param expirationTime the expiry instant; {@code null} means no expiration is set
+     */
+    public void setExpirationTime(LocalDateTime expirationTime) {
+        this.expirationTime = expirationTime;
+    }
+
+    /**
+     * Returns the timestamp after which drawn winners may no longer use their access,
+     * or {@code null} if the lottery has not been drawn yet.
+     *
+     * @return the expiry instant, or {@code null}
+     */
+    public LocalDateTime getExpirationTime() {
+        return expirationTime;
+    }
+
+    public boolean isDrawn() {
+        return drawn;
+    }
+
+    private void requireNotDrawn() {
+        if (drawn) {
+            throw new IllegalStateException("lottery has already been drawn");
+        }
     }
 }

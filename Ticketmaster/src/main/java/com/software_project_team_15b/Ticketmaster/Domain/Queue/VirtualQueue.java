@@ -1,8 +1,13 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Queue;
 
 import jakarta.persistence.*;
+
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -27,8 +32,20 @@ public class VirtualQueue {
     @OrderColumn(name = "position")
     protected List<String> queue = new ArrayList<>();
 
+    @ElementCollection
+    @CollectionTable(
+            name = "virtual_queue_access_map",
+            joinColumns = @JoinColumn(name = "queue_id")
+    )
+    @MapKeyColumn(name = "token")
+    @Column(name = "expires_at", nullable = false)
+    protected Map<String, LocalDateTime> accessMap = new HashMap<>();
+
     @Column(name = "capacity", nullable = false)
     protected int capacity;
+
+    @Column(name = "max_accepted", nullable = false)
+    protected int maxAccepted;
 
     @Version
     private long version;
@@ -43,7 +60,7 @@ public class VirtualQueue {
      * @throws IllegalArgumentException if queueId is null
      */
     public VirtualQueue(UUID queueId) {
-        this(queueId, Integer.MAX_VALUE);
+        this(queueId, Integer.MAX_VALUE, Integer.MAX_VALUE);
     }
 
     /**
@@ -51,16 +68,20 @@ public class VirtualQueue {
      * @param capacity the maximum number of entries the queue may hold; must be non-negative
      * @throws IllegalArgumentException if queueId is null or capacity is negative
      */
-    public VirtualQueue(UUID queueId, int capacity) {
+    public VirtualQueue(UUID queueId, int capacity, int maxAccepted) {
         if (queueId == null) {
             throw new IllegalArgumentException("queueId cannot be null");
         }
         if (capacity < 0) {
             throw new IllegalArgumentException("capacity cannot be negative");
         }
+        if (maxAccepted < 0) {
+            throw new IllegalArgumentException("maxAccepted cannot be negative");
+        }
 
         this.id = queueId;
         this.capacity = capacity;
+        this.maxAccepted = maxAccepted;
     }
 
     /**
@@ -69,6 +90,14 @@ public class VirtualQueue {
      */
     public int getCapacity() {
         return capacity;
+    }
+
+    /**
+     * Get the maximum number of users that may be simultaneously admitted.
+     * @return {@code int} Queue's max-accepted limit
+     */
+    public int getMaxAccepted() {
+        return maxAccepted;
     }
 
     /**
@@ -153,6 +182,13 @@ public class VirtualQueue {
         return queue.contains(item);
     }
 
+    /**
+     * Returns the zero-based position of the given token in the waiting list.
+     *
+     * @param item the token to locate; must not be null
+     * @return the 0-based index of the token in the queue
+     * @throws IllegalArgumentException if {@code item} is null or not present in the queue
+     */
     public int getPosition(String item) {
         if (item == null) {
             throw new IllegalArgumentException("item cannot be null");
@@ -163,4 +199,106 @@ public class VirtualQueue {
             throw new IllegalArgumentException("item is not in the queue");
         }
     }
+
+    /**
+     * Removes the given token from the waiting list, if present.
+     *
+     * @param item the token to remove; must not be null
+     * @return {@code true} if the token was present and removed
+     * @throws IllegalArgumentException if {@code item} is null
+     */
+    public boolean remove(String item) {
+        if (item == null) throw new IllegalArgumentException("item cannot be null");
+        return queue.remove(item);
+    }
+
+    /**
+     * Removes the given token from {@link #accessMap}, if present.
+     *
+     * @param item the token to remove; must not be null
+     * @return {@code true} if the token had an active access entry that was removed
+     * @throws IllegalArgumentException if {@code item} is null
+     */
+    public boolean clearAccess(String item) {
+        if (item == null) throw new IllegalArgumentException("item cannot be null");
+        return accessMap.remove(item) != null;
+    }
+
+    /**
+     * Removes all entries from both the waiting list and {@link #accessMap}, leaving
+     * this queue completely empty.
+     */
+    public void clear() {
+        queue.clear();
+        accessMap.clear();
+    }
+
+    /**
+     * Updates the capacity and max-accepted limits for this queue.
+     *
+     * @param capacity    the new maximum number of users that may wait; must be non-negative
+     * @param maxAccepted the new maximum number of simultaneously admitted users; must be non-negative
+     * @throws IllegalArgumentException if either value is negative
+     */
+    public void setSettings(int capacity, int maxAccepted) {
+        if (capacity < 0) throw new IllegalArgumentException("capacity cannot be negative");
+        if (maxAccepted < 0) throw new IllegalArgumentException("maxAccepted cannot be negative");
+        this.capacity = capacity;
+        this.maxAccepted = maxAccepted;
+    }
+
+    /**
+     * Removes all entries from {@link #accessMap} whose expiry time is at or before now.
+     */
+    public void clearAccessMap() {
+        LocalDateTime now = LocalDateTime.now();
+        accessMap.entrySet().removeIf(entry -> !entry.getValue().isAfter(now));
+    }
+
+    /**
+     * Evicts expired access entries, then promotes users from the front of the waiting
+     * queue into {@link #accessMap} until {@link #maxAccepted} slots are filled or the
+     * queue is empty. Each promoted token is assigned the given expiry time.
+     *
+     * @param accessExpiresAt the expiry {@link LocalDateTime} to assign to each newly admitted token
+     */
+    public void advanceQueue(LocalDateTime accessExpiresAt) {
+        clearAccessMap();
+        while (!queue.isEmpty() && accessMap.size() < maxAccepted) {
+            String item = pop();
+            if (item == null) {
+                continue;
+            }
+            accessMap.put(item, accessExpiresAt);
+        }
+    }
+
+    /**
+     * Evicts expired access entries, then returns an unmodifiable view of
+     * {@link #accessMap}.
+     *
+     * @return an unmodifiable map of admitted tokens to their expiry times
+     */
+    public Map<String, LocalDateTime> getAccessMap() {
+        clearAccessMap();
+        return Collections.unmodifiableMap(accessMap);
+    }
+
+    /**
+     * Returns the expiry time for the given token if it is currently admitted, or
+     * {@code null} if the token is not present or its access has already expired.
+     * Expired entries are evicted before the lookup.
+     *
+     * @param item the token to look up; must not be null
+     * @return the expiry {@link LocalDateTime}, or {@code null} if not admitted
+     * @throws IllegalArgumentException if {@code item} is null
+     */
+    public LocalDateTime hasAccess(String item) {
+        if (item == null) {
+            throw new IllegalArgumentException("item cannot be null");
+        }
+        clearAccessMap();
+        return accessMap.get(item);
+    }
+
 }

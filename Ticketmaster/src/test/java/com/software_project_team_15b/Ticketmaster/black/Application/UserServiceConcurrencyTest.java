@@ -14,14 +14,12 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.UserType;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -32,7 +30,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
-import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainServiceImpl;
 
 class UserServiceConcurrencyTest {
 
@@ -74,7 +71,7 @@ class UserServiceConcurrencyTest {
         owner2Token = auth.registerMemberToken(owner2Id);
 
         UserDomainService userDomainService = new UserDomainService(memberRepository);
-        IQueueDomainService queueDomainService = new QueueDomainServiceImpl(new NoopQueueService());
+        IQueueDomainService queueDomainService = new NoopQueueDomainService();
         ApplicationEventPublisher eventPublisher = ignored -> {};
         service = new UserService(
                 userDomainService,
@@ -86,9 +83,15 @@ class UserServiceConcurrencyTest {
         );
     }
 
-    private static final class NoopQueueService extends QueueService {
-        NoopQueueService() {
-            super(null, null);
+    private static final class NoopQueueDomainService implements IQueueDomainService {
+        @Override
+        public QueueAccessDTO requestAccess(String accessToken, UUID eventId) {
+            return new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null);
+        }
+
+        @Override
+        public boolean hasAccess(String accessToken, UUID eventId) {
+            return true;
         }
 
         @Override
@@ -97,12 +100,67 @@ class UserServiceConcurrencyTest {
         }
 
         @Override
-        public synchronized void addUserToSiteQueue(String token) {
+        public Set<String> getAcceptedTokens() {
+            return Set.of();
         }
 
         @Override
-        public boolean validateAndExitQueue(String token) {
-            return true;
+        public void acceptUsersFromSiteQueue() {
+
+        }
+
+        @Override
+        public void addUserToSiteQueue(String token) {
+        }
+
+        @Override
+        public void removeAcceptedToken(String token) {
+
+        }
+
+        @Override
+        public QueueAccessDTO getQueueAccessView(String token, UUID eventId) {
+            return new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null);
+        }
+
+        @Override
+        public int getPositionInEventQueue(String token, UUID eventId) {
+            return 0;
+        }
+
+        @Override
+        public void createEventQueue(UUID eventId, int capacity, int max_accepted) {
+        }
+
+        @Override
+        public void deleteEventQueue(UUID eventId) {
+        }
+
+        @Override
+        public String popFromEventQueue(UUID eventId) {
+            return null;
+        }
+
+        @Override
+        public void pushToEventQueue(UUID eventId, String token) {
+        }
+
+        @Override
+        public void clearEventQueue(UUID eventId) {
+        }
+
+        @Override
+        public QueueSnapshotDTO getQueueSnapshot(UUID eventId) {
+            return new QueueSnapshotDTO(eventId, 0, 0, 0, 0, Map.of());
+        }
+
+        @Override
+        public List<QueueSnapshotDTO> getAllQueueSnapshots() {
+            return List.of();
+        }
+
+        @Override
+        public void updateQueueSettings(UUID eventId, int capacity, int max_accepted) {
         }
     }
 
