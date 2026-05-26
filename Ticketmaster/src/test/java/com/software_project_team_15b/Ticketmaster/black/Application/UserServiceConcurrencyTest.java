@@ -117,11 +117,6 @@ class UserServiceConcurrencyTest {
 
         }
 
-        // TODO: Remove?
-        public boolean validateAndExitQueue(String token) {
-            return true;
-        }
-
         @Override
         public QueueAccessDTO getQueueAccessView(String token, UUID eventId) {
             return new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null);
@@ -133,12 +128,7 @@ class UserServiceConcurrencyTest {
         }
 
         @Override
-        public boolean isUserAdmitted(String token, UUID eventId) {
-            return true;
-        }
-
-        @Override
-        public void createEventQueue(UUID eventId) {
+        public void createEventQueue(UUID eventId, int capacity, int max_accepted) {
         }
 
         @Override

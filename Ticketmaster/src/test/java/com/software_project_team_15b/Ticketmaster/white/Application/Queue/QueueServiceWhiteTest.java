@@ -79,10 +79,10 @@ class QueueServiceWhiteTest {
     @Test
     void createEventQueue_delegates_andDoesNothingElse() {
         when(userDomainService.isActiveManager(USER_ID, COMPANY_ID, EVENT_ID)).thenReturn(true);
-        service.createEventQueue(USER_ID, COMPANY_ID, EVENT_ID);
+        service.createEventQueue(USER_ID, COMPANY_ID, EVENT_ID, 1000, 100);
 
         verify(userDomainService).isActiveManager(USER_ID, COMPANY_ID, EVENT_ID);
-        verify(queueDomainService).createEventQueue(EVENT_ID);
+        verify(queueDomainService).createEventQueue(EVENT_ID, 1000, 100);
         verifyNoInteractions(auth);
     }
 

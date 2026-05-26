@@ -1,8 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Application.Queue;
 
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyInQueueException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIsFullException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
@@ -54,7 +52,7 @@ public class QueueService {
      * domain service stays free of auth dependencies.
      */
     @Scheduled(fixedRate = SITE_QUEUE_INTERVAL, timeUnit = TimeUnit.SECONDS)
-    private synchronized void acceptUsersFromSiteQueue() {
+    private void acceptUsersFromSiteQueue() {
         Set<String> acceptedTokens = queueDomainService.getAcceptedTokens();
         for (String token : acceptedTokens) {
             if (!auth.isTokenValid(token)) {
@@ -103,12 +101,12 @@ public class QueueService {
      * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
      * @throws UnauthorizedException    if the caller is not a manager, owner, or founder of the event
      */
-    public void createEventQueue(UUID userId, UUID companyId, UUID eventId) {
+    public void createEventQueue(UUID userId, UUID companyId, UUID eventId, int  capacity, int max_accepted) {
         try {
             if (userId == null) throw new IllegalArgumentException("userId cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             requireEventPermissions(userId, companyId, eventId);
-            queueDomainService.createEventQueue(eventId);
+            queueDomainService.createEventQueue(eventId,  capacity, max_accepted);
             AUDIT.info("op=createEventQueue userId={} eventId={} result=ok", userId, eventId);
         } catch (RuntimeException e) {
             AUDIT.warn("op=createEventQueue userId={} eventId={} result=error error={}", userId, eventId, e.getMessage());

@@ -8,29 +8,25 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNo
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Domain service for managing virtual queues associated with events and the site-wide
  * waiting queue.
  *
- * <p>Owns the persistent {@link IQueueRepository} aggregate, the per-event admission
- * map, the in-memory site queue ({@link #siteQueue}), the admitted-token set
- * ({@link #acceptedTokens}), and the scheduler that drains event queues and expires
- * per-event access windows. Each event may have at most one queue, keyed by the event's UUID.
+ * <p>Owns the persistent {@link IQueueRepository} aggregate, the in-memory site queue
+ * ({@link #siteQueue}), and the admitted-token set ({@link #acceptedTokens}). Per-event
+ * admission state is persisted inside each {@link VirtualQueue}'s {@code accessMap}.
+ * Each event may have at most one queue, keyed by the event's UUID.
  *
  * <p>Auth-dependent eviction (validating token freshness before admitting users from the
  * site queue) is handled by the application-layer {@code QueueService}, which calls
@@ -43,15 +39,11 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class QueueDomainServiceImpl implements IQueueDomainService {
 
-    private final int ACCESS_TIME = 100;
+    private static final int ACCESS_TIME = 100;
     private static final int MAX_VISITORS = 100;
+    private static final int EVENT_QUEUE_INTERVAL = 5;
 
     private final IQueueRepository queueRepository;
-    // Self-reference through the Spring proxy so that @Retryable and @Transactional
-    // on popFromEventQueue take effect when called from advanceEventQueue.
-    @Autowired @Lazy private IQueueDomainService self;
-    private final ConcurrentHashMap<UUID, ConcurrentHashMap<String, LocalDateTime>> eventAccess = new ConcurrentHashMap<>();
-    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
 
     private final Queue<String> siteQueue = new LinkedList<>();
     private final Set<String> acceptedTokens = new HashSet<>();
@@ -137,69 +129,19 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
     }
 
     /**
-     * Removes a user's timed access window for an event and immediately tries to fill
-     * the vacated slot from the waiting queue.
+     * Iterates every persisted queue, evicts expired access entries, and promotes waiting
+     * users into the admitted set until each queue's {@code maxAccepted} cap is reached.
+     * Newly admitted tokens receive an expiry window of {@link #ACCESS_TIME} seconds from now.
      *
-     * <p>Called automatically by the scheduler when a user's {@link #ACCESS_TIME}-second
-     * window expires. If the event has been deleted (no access map present) the call is a no-op.
-     *
-     * @param token   the user's auth token; must not be null
-     * @param eventId the unique identifier of the event; must not be null
+     * <p>Runs on a fixed schedule every {@link #EVENT_QUEUE_INTERVAL} seconds.
      */
-    protected synchronized void clearEventAccess(String token, UUID eventId) {
-        if (token == null) {
-            throw new IllegalArgumentException("token cannot be null");
+    @Scheduled(fixedRate = EVENT_QUEUE_INTERVAL, timeUnit = TimeUnit.SECONDS)
+    @Transactional
+    protected void advanceEventQueues() {
+        for (VirtualQueue queue : queueRepository.getAllQueues()) {
+            queue.advanceQueue(LocalDateTime.now().plusSeconds(ACCESS_TIME));
+            queueRepository.updateQueue(queue);
         }
-        if (eventId == null) {
-            throw new IllegalArgumentException("eventId cannot be null");
-        }
-        ConcurrentHashMap<String, LocalDateTime> access = eventAccess.get(eventId);
-        if (access == null) return;
-        access.remove(token);
-        advanceEventQueue(eventId);
-    }
-
-    /**
-     * Fills available admission slots for the given event by promoting users from its
-     * persistent waiting queue.
-     *
-     * <p>Up to 100 users may hold simultaneous access to an event. Each promoted user is
-     * granted a {@link #ACCESS_TIME}-second window; a callback is registered with the
-     * scheduler to call {@link #clearEventAccess(String, UUID)} when that window closes.
-     * Stops early if the queue is empty.
-     *
-     * <p>Uses {@code self} (the Spring proxy) to invoke {@link #popFromEventQueue} so
-     * that {@link org.springframework.retry.annotation.Retryable} and
-     * {@link org.springframework.transaction.annotation.Transactional} take effect.
-     *
-     * @param eventId the unique identifier of the event; must not be null
-     */
-    protected synchronized void advanceEventQueue(UUID eventId) {
-        ConcurrentHashMap<String, LocalDateTime> access = eventAccess.get(eventId);
-        if (access == null) return;
-        while (access.size() < 100) {
-            try {
-                String nextToken = self.popFromEventQueue(eventId);
-                LocalDateTime expiresAt = LocalDateTime.now().plusSeconds(ACCESS_TIME);
-                access.put(nextToken, expiresAt);
-                scheduler.schedule(() -> clearEventAccess(nextToken, eventId), ACCESS_TIME, TimeUnit.SECONDS);
-            } catch (EmptyQueueException e) {
-                break;
-            }
-        }
-    }
-
-    /**
-     * Returns {@code true} if {@code token} is currently in the admitted window for {@code eventId}.
-     *
-     * @param token   the user's auth token; must not be null
-     * @param eventId the unique identifier of the event; must not be null
-     * @return {@code true} if the user is currently admitted
-     */
-    @Override
-    public boolean isUserAdmitted(String token, UUID eventId) {
-        ConcurrentHashMap<String, LocalDateTime> access = eventAccess.get(eventId);
-        return access != null && access.containsKey(token);
     }
 
     /**
@@ -224,18 +166,22 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      */
     @Override
     public QueueAccessDTO getQueueAccessView(String token, UUID eventId) {
+        if (token == null) throw new IllegalArgumentException("token cannot be null");
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
-        ConcurrentHashMap<String, LocalDateTime> admittedUsers = eventAccess.get(eventId);
-        if (admittedUsers == null) {
+
+        VirtualQueue queue = queueRepository.getQueue(eventId);
+        if (queue == null) {
             return new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null);
         }
-        LocalDateTime expiresAt = admittedUsers.get(token);
+
+        LocalDateTime expiresAt = queue.hasAccess(token);
         if (expiresAt != null) {
             return new QueueAccessDTO(eventId, QueueAccessStatus.ADMITTED, null, expiresAt);
         }
-        int position = getPositionInEventQueue(token, eventId);
+
+        int position = getPositionInEventQueue(token, eventId);     // throws if token not in queue
         return new QueueAccessDTO(eventId, QueueAccessStatus.WAITING, position, null);
     }
 
@@ -243,19 +189,20 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      * Enters the user into the waiting queue for the given event and returns a snapshot
      * of their current access state.
      *
-     * <p>If the user is already admitted their current {@link QueueAccessDTO} is returned
-     * immediately without re-queuing them.
+     * <p>If the event has no queue, {@link QueueAccessStatus#NO_QUEUE} is returned
+     * immediately. If the user is already admitted, their current {@link QueueAccessDTO}
+     * is returned without re-queuing them.
      *
      * @param token   the user's auth token; must not be null
      * @param eventId the unique identifier of the event; must not be null
      * @return a {@link QueueAccessDTO} describing the user's current access state
      * @throws IllegalArgumentException if {@code token} or {@code eventId} is null
-     * @throws InvalidTokenException    if the token is invalid
-     * @throws QueueNotFoundException   if no queue exists for the given event
      * @throws QueueIsFullException     if the persistent queue has reached its capacity
      * @throws AlreadyInQueueException  if the user is already waiting in the queue
      */
     @Override
+    @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
+    @Transactional
     public QueueAccessDTO requestAccess(String token, UUID eventId) {
         if (token == null) {
             throw new IllegalArgumentException("token cannot be null");
@@ -263,9 +210,12 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
-        ConcurrentHashMap<String, LocalDateTime> admittedUsers = eventAccess.get(eventId);
-        if (admittedUsers == null || !admittedUsers.containsKey(token)) {
-            self.pushToEventQueue(eventId, token);
+        VirtualQueue queue = queueRepository.getQueue(eventId);
+        if (queue == null) {
+            return new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null);
+        }
+        if (queue.hasAccess(token) == null) {
+            pushToEventQueue(eventId, token);
         }
         return getQueueAccessView(token, eventId);
     }
@@ -287,7 +237,11 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
-        return isUserAdmitted(token, eventId);
+        VirtualQueue queue = queueRepository.getQueue(eventId);
+        if (queue == null) {
+            return true;
+        }
+        return queue.hasAccess(token) != null;
     }
 
     /**
@@ -298,14 +252,18 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      */
     @Override
     @Transactional
-    public void createEventQueue(UUID eventId) {
+    public void createEventQueue(UUID eventId, int capacity, int max_accepted) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
-        VirtualQueue queue = new VirtualQueue(eventId);
+        if (capacity < 0) {
+            throw new IllegalArgumentException("capacity cannot be negative");
+        }
+        if (max_accepted < 0) {
+            throw new IllegalArgumentException("max_accepted cannot be negative");
+        }
+        VirtualQueue queue = new VirtualQueue(eventId, capacity, max_accepted);
         queueRepository.addQueue(queue);
-        eventAccess.put(eventId, new ConcurrentHashMap<>());
-        advanceEventQueue(eventId);
     }
 
     /**
@@ -326,7 +284,6 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
             throw new QueueNotFoundException("Queue not found for eventId: " + eventId);
         }
         queueRepository.removeQueue(queue);
-        eventAccess.remove(eventId);
     }
 
     /**
@@ -395,7 +352,6 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
         }
         queue.push(token);
         queueRepository.updateQueue(queue);
-        advanceEventQueue(eventId);
     }
 
     /**

@@ -52,7 +52,7 @@ class QueueServiceBlackTest {
     @Test
     void createEventQueue_positive_returnsNormally() {
         when(userDomainService.isActiveManager(USER_ID, COMPANY_ID, EVENT_ID)).thenReturn(true);
-        assertThatCode(() -> service.createEventQueue(USER_ID, COMPANY_ID, EVENT_ID)).doesNotThrowAnyException();
+        assertThatCode(() -> service.createEventQueue(USER_ID, COMPANY_ID, EVENT_ID, 1000, 100)).doesNotThrowAnyException();
     }
 
     @Test
@@ -67,7 +67,7 @@ class QueueServiceBlackTest {
 
     @Test
     void createEventQueue_negative_propagatesIllegalArgument() {
-        assertThatThrownBy(() -> service.createEventQueue(USER_ID, COMPANY_ID, null))
+        assertThatThrownBy(() -> service.createEventQueue(USER_ID, COMPANY_ID, null, 1000, 100))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -77,7 +77,7 @@ class QueueServiceBlackTest {
         when(userDomainService.isActiveOwner(USER_ID, COMPANY_ID)).thenReturn(false);
         when(userDomainService.isActiveFounder(USER_ID, COMPANY_ID)).thenReturn(false);
 
-        assertThatThrownBy(() -> service.createEventQueue(USER_ID, COMPANY_ID, EVENT_ID))
+        assertThatThrownBy(() -> service.createEventQueue(USER_ID, COMPANY_ID, EVENT_ID, 1000, 100))
                 .isInstanceOf(UnauthorizedException.class);
     }
 

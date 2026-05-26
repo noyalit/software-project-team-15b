@@ -86,22 +86,16 @@ public interface IQueueDomainService {
      */
     int getPositionInEventQueue(String token, UUID eventId);
 
-    /**
-     * Returns {@code true} if {@code token} is currently in the admitted window for {@code eventId},
-     * without performing any token validation.
-     *
-     * @param token   the user's auth token; must not be null
-     * @param eventId the unique identifier of the event; must not be null
-     * @return {@code true} if the user is currently admitted
-     */
-    boolean isUserAdmitted(String token, UUID eventId);
 
     /**
      * Creates a new, empty virtual queue for the given event.
      *
-     * @param eventId the unique identifier of the event; must not be null
+     * @param eventId      the unique identifier of the event; must not be null
+     * @param capacity     the maximum number of users that may wait in the queue; must be non-negative
+     * @param max_accepted the maximum number of users that may be simultaneously admitted; must be non-negative
+     * @throws IllegalArgumentException if {@code eventId} is null, or either capacity value is negative
      */
-    void createEventQueue(UUID eventId);
+    void createEventQueue(UUID eventId, int capacity, int max_accepted);
 
     /**
      * Deletes the virtual queue associated with the given event.

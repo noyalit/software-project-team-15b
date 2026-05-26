@@ -18,32 +18,28 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
 /**
  * Black-box tests for {@link QueueDomainServiceImpl} exercised purely through the
  * {@link IQueueDomainService} contract.
  *
- * <p>No reflection on the SUT, no protected-method exposure: the system is driven via
- * public interface methods and observed through public interface methods. The Spring
- * proxy {@code self} reference is injected once during setup since outside of a Spring
- * context the @Retryable / @Transactional self-invocation would otherwise NPE — that is
- * test plumbing, not white-box knowledge.
+ * <p>No reflection on the SUT. The system is driven via public interface methods and
+ * observed through public interface methods only. Where admission must be triggered
+ * deterministically (bypassing the {@code @Scheduled} boundary), an
+ * {@link ExposedQueuesService} subclass exposes {@code advanceEventQueues}.
  *
- * <p>Site-queue operations ({@code addUserToSiteQueue}, {@code acceptUsersFromSiteQueue},
- * {@code getAcceptedTokens}, {@code removeAcceptedToken}) are implemented by the domain
- * service. Auth-dependent token eviction is performed by the application-layer
- * {@code QueueService} on a schedule.
+ * <p>Admission now happens exclusively inside {@code advanceEventQueues}: users pushed to
+ * a queue's waiting list are promoted to {@code accessMap} only when that method runs.
  */
 @ExtendWith(MockitoExtension.class)
 class QueueDomainServiceImplBlackTest {
@@ -54,13 +50,30 @@ class QueueDomainServiceImplBlackTest {
     private IQueueDomainService domainService;
 
     @BeforeEach
-    void wireSelfAndExpose() {
-        ReflectionTestUtils.setField(service, "self", service);
+    void setUp() {
         domainService = service;
     }
 
     private static final UUID EVENT_ID       = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID OTHER_EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000099");
+
+    /** Exposes the protected {@code advanceEventQueues} for deterministic scheduling in tests. */
+    private static class ExposedQueuesService extends QueueDomainServiceImpl {
+        ExposedQueuesService(IQueueRepository r) { super(r); }
+        public void advanceAll() { advanceEventQueues(); }
+    }
+
+    private ExposedQueuesService createExposed() {
+        return new ExposedQueuesService(queueRepository);
+    }
+
+    /** Builds a VirtualQueue with the given token already admitted (in accessMap). */
+    private static VirtualQueue admittedQueue(UUID id, String token) {
+        VirtualQueue q = new VirtualQueue(id, Integer.MAX_VALUE, 100);
+        q.push(token);
+        q.advanceQueue(LocalDateTime.now().plusSeconds(100));
+        return q;
+    }
 
     // =========================================================================
     // Site-queue operations
@@ -138,19 +151,41 @@ class QueueDomainServiceImplBlackTest {
     // =========================================================================
 
     @Test
-    void createEventQueue_positive_admitsUsersAlreadyInRepoQueue() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+    void createEventQueue_positive_createsQueueSuccessfully() {
+        assertThatCode(() -> domainService.createEventQueue(EVENT_ID, 1000, 100))
+                .doesNotThrowAnyException();
+        verify(queueRepository).addQueue(any(VirtualQueue.class));
+    }
+
+    @Test
+    void createEventQueue_positive_usersAdmittedAfterAdvance() {
+        ExposedQueuesService exposed = createExposed();
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, Integer.MAX_VALUE, 100);
         queue.push("token-a");
+        when(queueRepository.getAllQueues()).thenReturn(List.of(queue));
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
 
-        domainService.createEventQueue(EVENT_ID);
+        exposed.createEventQueue(EVENT_ID, Integer.MAX_VALUE, 100);
+        exposed.advanceAll();
 
-        assertThat(domainService.isUserAdmitted("token-a", EVENT_ID)).isTrue();
+        assertThat(exposed.hasAccess("token-a", EVENT_ID)).isTrue();
     }
 
     @Test
     void createEventQueue_negative_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> domainService.createEventQueue(null))
+        assertThatThrownBy(() -> domainService.createEventQueue(null, 100, 10))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void createEventQueue_negative_negativeCapacity_throwsIllegalArgument() {
+        assertThatThrownBy(() -> domainService.createEventQueue(EVENT_ID, -1, 10))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void createEventQueue_negative_negativeMaxAccepted_throwsIllegalArgument() {
+        assertThatThrownBy(() -> domainService.createEventQueue(EVENT_ID, 100, -1))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -159,16 +194,11 @@ class QueueDomainServiceImplBlackTest {
     // =========================================================================
 
     @Test
-    void deleteEventQueue_positive_removesAdmittedUsersForEvent() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
+    void deleteEventQueue_positive_removesQueue() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, Integer.MAX_VALUE, 100);
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-
-        domainService.createEventQueue(EVENT_ID);
-        assertThat(domainService.isUserAdmitted("token-a", EVENT_ID)).isTrue();
-
-        domainService.deleteEventQueue(EVENT_ID);
-        assertThat(domainService.isUserAdmitted("token-a", EVENT_ID)).isFalse();
+        assertThatCode(() -> domainService.deleteEventQueue(EVENT_ID))
+                .doesNotThrowAnyException();
     }
 
     @Test
@@ -189,14 +219,13 @@ class QueueDomainServiceImplBlackTest {
     // =========================================================================
 
     @Test
-    void pushToEventQueue_positive_userBecomesAdmittedWhenSlotAvailable() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+    void pushToEventQueue_positive_addsTokenToWaitingList() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, Integer.MAX_VALUE, 100);
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
 
-        domainService.createEventQueue(EVENT_ID);
         domainService.pushToEventQueue(EVENT_ID, "token-a");
 
-        assertThat(domainService.isUserAdmitted("token-a", EVENT_ID)).isTrue();
+        assertThat(queue.contains("token-a")).isTrue();
     }
 
     @Test
@@ -220,7 +249,7 @@ class QueueDomainServiceImplBlackTest {
 
     @Test
     void pushToEventQueue_negative_queueFull_throwsQueueIsFullException() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID, 1);
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, 1, Integer.MAX_VALUE);
         queue.push("token-x");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
 
@@ -230,7 +259,7 @@ class QueueDomainServiceImplBlackTest {
 
     @Test
     void pushToEventQueue_negative_alreadyInQueue_throwsAlreadyInQueueException() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, Integer.MAX_VALUE, 100);
         queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
 
@@ -244,7 +273,7 @@ class QueueDomainServiceImplBlackTest {
 
     @Test
     void popFromEventQueue_positive_returnsFrontTokenInFifoOrder() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, Integer.MAX_VALUE, 0);
         queue.push("token-a");
         queue.push("token-b");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
@@ -268,7 +297,7 @@ class QueueDomainServiceImplBlackTest {
 
     @Test
     void popFromEventQueue_negative_emptyQueue_throwsEmptyQueueException() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, Integer.MAX_VALUE, 0);
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
         assertThatThrownBy(() -> domainService.popFromEventQueue(EVENT_ID))
                 .isInstanceOf(EmptyQueueException.class);
@@ -280,7 +309,7 @@ class QueueDomainServiceImplBlackTest {
 
     @Test
     void getPositionInEventQueue_positive_returnsZeroBasedIndex() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, Integer.MAX_VALUE, 0);
         queue.push("token-a");
         queue.push("token-b");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
@@ -309,44 +338,54 @@ class QueueDomainServiceImplBlackTest {
     }
 
     // =========================================================================
-    // isUserAdmitted
+    // hasAccess
     // =========================================================================
 
     @Test
-    void isUserAdmitted_positive_returnsTrue_afterUserPromotedFromQueue() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+    void hasAccess_positive_returnsTrueWhenUserAdmitted() {
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(admittedQueue(EVENT_ID, "token-a"));
+        assertThat(domainService.hasAccess("token-a", EVENT_ID)).isTrue();
+    }
+
+    @Test
+    void hasAccess_positive_returnsTrueWhenNoQueueExistsForEvent() {
+        // No queue = unrestricted access
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
+        assertThat(domainService.hasAccess("token-a", EVENT_ID)).isTrue();
+    }
+
+    @Test
+    void hasAccess_positive_returnsFalseWhenUserInWaitingQueueButNotAdmitted() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, Integer.MAX_VALUE, 0);
         queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-
-        domainService.createEventQueue(EVENT_ID);
-
-        assertThat(domainService.isUserAdmitted("token-a", EVENT_ID)).isTrue();
+        assertThat(domainService.hasAccess("token-a", EVENT_ID)).isFalse();
     }
 
     @Test
-    void isUserAdmitted_negative_returnsFalse_whenNoQueueExists() {
-        assertThat(domainService.isUserAdmitted("token-a", EVENT_ID)).isFalse();
-    }
-
-    @Test
-    void isUserAdmitted_negative_returnsFalse_whenUserNotInAdmittedSet() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+    void hasAccess_positive_returnsFalseWhenUserNotPresentAtAll() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, Integer.MAX_VALUE, 100);
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-
-        domainService.createEventQueue(EVENT_ID);
-
-        assertThat(domainService.isUserAdmitted("token-a", EVENT_ID)).isFalse();
+        assertThat(domainService.hasAccess("token-a", EVENT_ID)).isFalse();
     }
 
     @Test
-    void isUserAdmitted_negative_returnsFalse_forUnrelatedEventId() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+    void hasAccess_positive_returnsFalseForUnrelatedEventId() {
+        when(queueRepository.getQueue(OTHER_EVENT_ID)).thenReturn(
+                new VirtualQueue(OTHER_EVENT_ID, Integer.MAX_VALUE, 100));
+        assertThat(domainService.hasAccess("token-a", OTHER_EVENT_ID)).isFalse();
+    }
 
-        domainService.createEventQueue(EVENT_ID);
+    @Test
+    void hasAccess_negative_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> domainService.hasAccess(null, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
 
-        assertThat(domainService.isUserAdmitted("token-a", OTHER_EVENT_ID)).isFalse();
+    @Test
+    void hasAccess_negative_nullEventId_throwsIllegalArgument() {
+        assertThatThrownBy(() -> domainService.hasAccess("token-a", null))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     // =========================================================================
@@ -355,6 +394,7 @@ class QueueDomainServiceImplBlackTest {
 
     @Test
     void getQueueAccessView_positive_returnsNoQueue_whenEventHasNoQueue() {
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
         QueueAccessDTO view = domainService.getQueueAccessView("token-a", EVENT_ID);
 
         assertThat(view.status()).isEqualTo(QueueAccessStatus.NO_QUEUE);
@@ -365,11 +405,7 @@ class QueueDomainServiceImplBlackTest {
 
     @Test
     void getQueueAccessView_positive_returnsAdmitted_withFutureExpiry() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-
-        domainService.createEventQueue(EVENT_ID);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(admittedQueue(EVENT_ID, "token-a"));
 
         QueueAccessDTO view = domainService.getQueueAccessView("token-a", EVENT_ID);
 
@@ -379,16 +415,10 @@ class QueueDomainServiceImplBlackTest {
     }
 
     @Test
-    void getQueueAccessView_positive_returnsWaiting_withPositionWhenAdmissionSlotsFull() {
-        // First call (advance) sees empty queue; second call (position lookup) sees the user
-        VirtualQueue emptyForAdvance = new VirtualQueue(EVENT_ID);
-        VirtualQueue withUserForPosition = new VirtualQueue(EVENT_ID);
-        withUserForPosition.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID))
-                .thenReturn(emptyForAdvance)
-                .thenReturn(withUserForPosition);
-
-        domainService.createEventQueue(EVENT_ID);
+    void getQueueAccessView_positive_returnsWaiting_whenUserInWaitingList() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, Integer.MAX_VALUE, 0);
+        queue.push("token-a");
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
 
         QueueAccessDTO view = domainService.getQueueAccessView("token-a", EVENT_ID);
 
@@ -409,29 +439,45 @@ class QueueDomainServiceImplBlackTest {
     // =========================================================================
 
     @Test
-    void requestAccess_positive_admittedImmediately_whenSlotsAvailable() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
+    void requestAccess_positive_returnsWaiting_forNewUser() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, Integer.MAX_VALUE, 0);
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
 
-        domainService.createEventQueue(EVENT_ID);
         QueueAccessDTO view = domainService.requestAccess("token-a", EVENT_ID);
 
-        assertThat(view.status()).isEqualTo(QueueAccessStatus.ADMITTED);
-        assertThat(view.canCreateActiveOrder()).isTrue();
+        assertThat(view.status()).isEqualTo(QueueAccessStatus.WAITING);
+        assertThat(view.position()).isEqualTo(0);
     }
 
     @Test
-    void requestAccess_positive_userAlreadyAdmitted_isIdempotent() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+    void requestAccess_positive_returnsAdmitted_whenUserAlreadyInAccessMap() {
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(admittedQueue(EVENT_ID, "token-a"));
 
-        domainService.createEventQueue(EVENT_ID);
         QueueAccessDTO first  = domainService.requestAccess("token-a", EVENT_ID);
         QueueAccessDTO second = domainService.requestAccess("token-a", EVENT_ID);
 
         assertThat(first.status()).isEqualTo(QueueAccessStatus.ADMITTED);
         assertThat(second.status()).isEqualTo(QueueAccessStatus.ADMITTED);
+    }
+
+    @Test
+    void requestAccess_positive_returnsNoQueue_whenNoQueueForEvent() {
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
+
+        QueueAccessDTO view = domainService.requestAccess("token-a", EVENT_ID);
+
+        assertThat(view.status()).isEqualTo(QueueAccessStatus.NO_QUEUE);
+        assertThat(view.canCreateActiveOrder()).isTrue();
+    }
+
+    @Test
+    void requestAccess_negative_throwsAlreadyInQueue_whenUserAlreadyWaiting() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, Integer.MAX_VALUE, 0);
+        queue.push("token-a");
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+
+        assertThatThrownBy(() -> domainService.requestAccess("token-a", EVENT_ID))
+                .isInstanceOf(AlreadyInQueueException.class);
     }
 
     @Test
@@ -447,58 +493,22 @@ class QueueDomainServiceImplBlackTest {
     }
 
     // =========================================================================
-    // hasAccess
-    // =========================================================================
-
-    @Test
-    void hasAccess_positive_returnsTrue_whenUserAdmitted() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-
-        domainService.createEventQueue(EVENT_ID);
-
-        assertThat(domainService.hasAccess("token-a", EVENT_ID)).isTrue();
-    }
-
-    @Test
-    void hasAccess_positive_returnsFalse_whenUserNotAdmitted() {
-        assertThat(domainService.hasAccess("token-a", EVENT_ID)).isFalse();
-    }
-
-    @Test
-    void hasAccess_negative_nullToken_throwsIllegalArgument() {
-        assertThatThrownBy(() -> domainService.hasAccess(null, EVENT_ID))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void hasAccess_negative_nullEventId_throwsIllegalArgument() {
-        assertThatThrownBy(() -> domainService.hasAccess("token-a", null))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    // =========================================================================
     // Concurrency
     // =========================================================================
 
     @Test
-    void concurrentRequestAccess_independentEvents_allThreadsBecomeAdmitted() throws InterruptedException {
-        // Each thread operates on its own event/queue so the test isolates the domain
-        // service's concurrency behavior on independent aggregates.
+    void concurrentRequestAccess_independentEvents_allSucceedWithoutExceptions() throws InterruptedException {
         int n = 15;
         UUID[] eventIds = new UUID[n];
-        VirtualQueue[] queues = new VirtualQueue[n];
         for (int i = 0; i < n; i++) {
             eventIds[i] = UUID.randomUUID();
-            queues[i] = new VirtualQueue(eventIds[i]);
-            when(queueRepository.getQueue(eventIds[i])).thenReturn(queues[i]);
-            domainService.createEventQueue(eventIds[i]);
+            VirtualQueue q = new VirtualQueue(eventIds[i], Integer.MAX_VALUE, 0);
+            when(queueRepository.getQueue(eventIds[i])).thenReturn(q);
         }
 
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(n);
-        AtomicInteger admitted = new AtomicInteger();
+        AtomicInteger waiting = new AtomicInteger();
 
         for (int i = 0; i < n; i++) {
             final int idx = i;
@@ -507,9 +517,7 @@ class QueueDomainServiceImplBlackTest {
                 try {
                     start.await();
                     QueueAccessDTO view = domainService.requestAccess(tok, eventIds[idx]);
-                    if (view.status() == QueueAccessStatus.ADMITTED) {
-                        admitted.incrementAndGet();
-                    }
+                    if (view.status() == QueueAccessStatus.WAITING) waiting.incrementAndGet();
                 } catch (Exception ignored) {}
                 return null;
             });
@@ -518,7 +526,40 @@ class QueueDomainServiceImplBlackTest {
         start.countDown();
         pool.shutdown();
         assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
-        assertThat(admitted.get()).isEqualTo(n);
+        assertThat(waiting.get()).isEqualTo(n);
+    }
+
+    @Test
+    void concurrentRequestAccess_sameEvent_allAdmittedAfterAdvance() throws InterruptedException {
+        ExposedQueuesService exposed = createExposed();
+        int n = 10;
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, Integer.MAX_VALUE, n);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+        when(queueRepository.getAllQueues()).thenReturn(List.of(queue));
+
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(n);
+
+        for (int i = 0; i < n; i++) {
+            final String tok = "token-" + i;
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    exposed.pushToEventQueue(EVENT_ID, tok);
+                } catch (Exception ignored) {}
+                return null;
+            });
+        }
+
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
+
+        exposed.advanceAll();
+
+        for (int i = 0; i < n; i++) {
+            assertThat(exposed.hasAccess("token-" + i, EVENT_ID)).isTrue();
+        }
     }
 
     @Test
@@ -548,11 +589,7 @@ class QueueDomainServiceImplBlackTest {
 
     @Test
     void concurrentHasAccess_allThreadsObserveSameAdmissionResult() throws InterruptedException {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-
-        domainService.createEventQueue(EVENT_ID);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(admittedQueue(EVENT_ID, "token-a"));
 
         int threads = 30;
         CountDownLatch start = new CountDownLatch(1);
