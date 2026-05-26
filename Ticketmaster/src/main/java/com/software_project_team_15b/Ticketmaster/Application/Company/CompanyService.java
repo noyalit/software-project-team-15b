@@ -196,6 +196,7 @@ public class CompanyService {
         try {
             requireNonNull(companyId, "Company ID");
             requireNonNull(newStatus, "Company status");
+            requireValidToken(token);
             Company company = getCompanyOrThrow(companyId);
             requireFounderOrSystemAdmin(token, company);
             company.changeStatus(newStatus);

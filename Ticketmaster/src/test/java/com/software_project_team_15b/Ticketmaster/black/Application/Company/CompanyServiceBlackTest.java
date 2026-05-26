@@ -460,6 +460,12 @@ class CompanyServiceBlackTest {
                 .isInstanceOf(InvalidTokenException.class);
     }
 
+    @Test
+    void changeStatus_throws_InvalidTokenException_before_CompanyNotFoundException_when_token_invalid() {
+        assertThatThrownBy(() -> service.changeStatus("bad", UUID.randomUUID(), CompanyStatus.CLOSED))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
     // ===========================================================================================
     // getCompany / findCompany — positive
 
