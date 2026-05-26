@@ -200,8 +200,8 @@ public class QueueService {
         try {
             if (token == null) throw new IllegalArgumentException("token cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-            if (capacity <= 0) throw new IllegalArgumentException("capacity cannot be <= 0");
-            if (max_accepted <= 0) throw new IllegalArgumentException("max_accepted cannot be <= 0");
+            if (capacity < 0) throw new IllegalArgumentException("capacity cannot be <= 0");
+            if (max_accepted < 0) throw new IllegalArgumentException("max_accepted cannot be <= 0");
             requireSystemAdmin(token);
             queueDomainService.updateQueueSettings(eventId, capacity, max_accepted);
             AUDIT.info("op=updateEventQueueSettings token={} eventId={} capacity={} max_accepted={} result=ok", token, eventId, capacity, max_accepted);
