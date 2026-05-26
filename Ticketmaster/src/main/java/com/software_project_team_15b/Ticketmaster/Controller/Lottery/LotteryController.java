@@ -3,7 +3,6 @@ package com.software_project_team_15b.Ticketmaster.Controller.Lottery;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
-import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryService;
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
@@ -33,11 +32,9 @@ import java.util.UUID;
 public class LotteryController {
 
     private final LotteryService lotteryService;
-    private final IAuth auth;
 
-    public LotteryController(LotteryService lotteryService, IAuth auth) {
+    public LotteryController(LotteryService lotteryService) {
         this.lotteryService = lotteryService;
-        this.auth = auth;
     }
 
     @Operation(summary = "Create a lottery for an event (manager/owner/founder only)")
@@ -48,8 +45,7 @@ public class LotteryController {
             @PathVariable UUID eventId
     ) {
         try {
-            UUID userId = auth.extractUserId(token);
-            lotteryService.createEventLottery(userId, companyId, eventId);
+            lotteryService.createEventLottery(token, companyId, eventId);
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(new ApiResponse<>(null, null));
         } catch (UnauthorizedException ex) {
@@ -69,8 +65,7 @@ public class LotteryController {
             @PathVariable UUID eventId
     ) {
         try {
-            UUID userId = auth.extractUserId(token);
-            lotteryService.deleteEventLottery(userId, companyId, eventId);
+            lotteryService.deleteEventLottery(token, companyId, eventId);
             return ResponseEntity.ok(new ApiResponse<>(null, null));
         } catch (UnauthorizedException ex) {
             return forbidden(ex);
@@ -114,8 +109,7 @@ public class LotteryController {
             @RequestBody DrawRequest request
     ) {
         try {
-            UUID userId = auth.extractUserId(token);
-            Set<UUID> winners = lotteryService.runEventLottery(userId, companyId, eventId, request.count(), request.expirationTime());
+            Set<UUID> winners = lotteryService.runEventLottery(token, companyId, eventId, request.count(), request.expirationTime());
             return ResponseEntity.ok(new ApiResponse<>(winners, null));
         } catch (UnauthorizedException ex) {
             return forbidden(ex);
@@ -138,8 +132,7 @@ public class LotteryController {
             @PathVariable UUID eventId
     ) {
         try {
-            UUID userId = auth.extractUserId(token);
-            Set<UUID> winners = lotteryService.getEventLotteryWinners(userId, companyId, eventId);
+            Set<UUID> winners = lotteryService.getEventLotteryWinners(token, companyId, eventId);
             return ResponseEntity.ok(new ApiResponse<>(winners, null));
         } catch (UnauthorizedException ex) {
             return forbidden(ex);
@@ -160,8 +153,7 @@ public class LotteryController {
             @PathVariable UUID eventId
     ) {
         try {
-            UUID userId = auth.extractUserId(token);
-            LotteryEligibilityDTO dto = lotteryService.getLotteryEligibilityForEvent(userId, eventId);
+            LotteryEligibilityDTO dto = lotteryService.getLotteryEligibilityForEvent(token, eventId);
             return ResponseEntity.ok(new ApiResponse<>(dto, null));
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
