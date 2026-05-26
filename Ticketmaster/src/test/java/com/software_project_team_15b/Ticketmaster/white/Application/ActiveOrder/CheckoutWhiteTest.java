@@ -29,6 +29,34 @@ import static org.mockito.Mockito.*;
 
 class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
 
+        @Test
+        void completeCheckoutForGuestShouldRejectNullOrderId() {
+                IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                                service.completeCheckoutForGuest(token, null, LocalDate.of(2000, 1, 1), null)
+                );
+
+                assertTrue(exception.getMessage().contains("Order ID cannot be null"));
+
+                verifyNoInteractions(purchasingDomainService);
+                verifyNoInteractions(paymentGateway);
+                verifyNoInteractions(ticketProvider);
+                verifyNoInteractions(eventDomainService);
+        }
+
+        @Test
+        void completeCheckoutForGuestShouldRejectNullBirthDate() {
+                IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                                service.completeCheckoutForGuest(token, orderId, null, null)
+                );
+
+                assertTrue(exception.getMessage().contains("Birth date cannot be null or in the future"));
+
+                verifyNoInteractions(purchasingDomainService);
+                verifyNoInteractions(paymentGateway);
+                verifyNoInteractions(ticketProvider);
+                verifyNoInteractions(eventDomainService);
+        }
+
     @Test
     void startCheckoutForGuestShouldValidateOrderHoldSeatsAndStartCheckout() {
         mockValidGuest();
