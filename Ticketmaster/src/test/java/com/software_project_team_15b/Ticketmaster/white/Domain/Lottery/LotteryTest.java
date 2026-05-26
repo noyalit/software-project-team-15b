@@ -242,19 +242,6 @@ public class LotteryTest {
     }
 
     @Test
-    void popRandomCountShouldRemoveReturnedEntriesFromLottery() {
-        lottery.add(ALICE);
-        lottery.add(BOB);
-        lottery.add(CAROL);
-
-        Set<UUID> result = lottery.popRandom(2);
-
-        for (UUID entry : result) {
-            assertNull(lottery.pop(entry));
-        }
-    }
-
-    @Test
     void popRandomCountShouldReturnUniqueEntries() {
         lottery.add(ALICE);
         lottery.add(BOB);
@@ -318,6 +305,47 @@ public class LotteryTest {
     }
 
     @Test
+    void drawnLotteryShouldRejectAddAfterDraw() {
+        lottery.add(ALICE);
+        lottery.add(BOB);
+
+        lottery.popRandom(2);
+
+        assertTrue(lottery.isDrawn());
+        assertThrows(IllegalStateException.class, () -> lottery.add(CAROL));
+    }
+
+    @Test
+    void drawnLotteryShouldRejectPopAfterDraw() {
+        lottery.add(ALICE);
+
+        lottery.popRandom(1);
+
+        assertTrue(lottery.isDrawn());
+        assertThrows(IllegalStateException.class, () -> lottery.pop(ALICE));
+    }
+
+    @Test
+    void drawnLotteryShouldRejectPopRandomAfterDraw() {
+        lottery.add(ALICE);
+
+        lottery.popRandom(1);
+
+        assertTrue(lottery.isDrawn());
+        assertThrows(IllegalStateException.class, lottery::popRandom);
+    }
+
+    @Test
+    void drawnLotteryShouldRejectPopRandomCountAfterDraw() {
+        lottery.add(ALICE);
+
+        lottery.popRandom(1);
+
+        assertTrue(lottery.isDrawn());
+        assertThrows(IllegalStateException.class, () -> lottery.popRandom(1));
+    }
+
+    @Test
     void popRandomOnEmptyLotteryShouldNotAddToWinners() {
         lottery.popRandom();
 
@@ -343,6 +371,7 @@ public class LotteryTest {
         lottery.clearWinners();
 
         assertTrue(lottery.getWinners().isEmpty());
+        assertFalse(lottery.isDrawn());
     }
 
     @Test

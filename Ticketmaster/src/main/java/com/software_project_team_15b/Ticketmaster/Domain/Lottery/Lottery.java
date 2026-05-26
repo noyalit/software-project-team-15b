@@ -112,6 +112,7 @@ public class Lottery {
      * @throws IllegalStateException if the lottery is full
      */
     public boolean add(UUID option) {
+        requireNotDrawn();
         if (option == null) {
             throw new IllegalArgumentException("option cannot be null");
         }
@@ -128,6 +129,7 @@ public class Lottery {
      * @return the option if it was removed successfully, null otherwise
      */
     public UUID pop(UUID option) {
+        requireNotDrawn();
         if (option == null) {
             throw new IllegalArgumentException("option cannot be null");
         }
@@ -162,6 +164,7 @@ public class Lottery {
      * @return a randomly selected option that was removed from the lottery, or null if the lottery is empty
      */
     public UUID popRandom() {
+        requireNotDrawn();
         UUID value = getRandom();
         if (value == null) return null;
         pop(value);
@@ -181,6 +184,7 @@ public class Lottery {
      */
     public void clearWinners() {
         winners.clear();
+        drawn = false;
     }
 
     /**
@@ -190,6 +194,7 @@ public class Lottery {
      * @return a HashSet containing up to 'count' randomly selected options that were removed from the lottery
      */
     public Set<UUID> popRandom(int count) {
+        requireNotDrawn();
         if (count < 0) {
             throw new IllegalArgumentException("count cannot be negative");
         }
@@ -230,5 +235,11 @@ public class Lottery {
 
     public boolean isDrawn() {
         return drawn;
+    }
+
+    private void requireNotDrawn() {
+        if (drawn) {
+            throw new IllegalStateException("lottery has already been drawn");
+        }
     }
 }
