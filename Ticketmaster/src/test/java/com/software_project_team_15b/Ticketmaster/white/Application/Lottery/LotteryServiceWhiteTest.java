@@ -60,26 +60,36 @@ class LotteryServiceWhiteTest {
 
     @Test
     void createEventLottery_delegates_andDoesNothingElse() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
-        service.createEventLottery(USER_A, COMPANY_ID, EVENT_ID);
+        service.createEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID);
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).createEventLottery(EVENT_ID);
     }
 
     @Test
     void deleteEventLottery_delegates_andDoesNothingElse() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
-        service.deleteEventLottery(USER_A, COMPANY_ID, EVENT_ID);
+        service.deleteEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID);
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).deleteEventLottery(EVENT_ID);
     }
 
     @Test
     void addToEventLottery_delegates_andDoesNothingElse() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
         when(auth.isMember(TOKEN_A)).thenReturn(true);
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         service.addToEventLottery(EVENT_ID, TOKEN_A);
         var inOrder = inOrder(auth, lotteryDomainService);
+        inOrder.verify(auth).isTokenValid(TOKEN_A);
         inOrder.verify(auth).isMember(TOKEN_A);
         inOrder.verify(auth).extractUserId(TOKEN_A);
         inOrder.verify(lotteryDomainService).addToEventLottery(EVENT_ID, USER_A);
@@ -88,12 +98,16 @@ class LotteryServiceWhiteTest {
     @Test
     void runEventLottery_delegates_andReturnsDomainServiceResult() {
         Set<UUID> expected = Set.of(USER_A);
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(EVENT_ID, 2, EXPIRY)).thenReturn(expected);
 
-        Set<UUID> result = service.runEventLottery(USER_A, COMPANY_ID, EVENT_ID, 2, EXPIRY);
+        Set<UUID> result = service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 2, EXPIRY);
 
         assertThat(result).isSameAs(expected);
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).runEventLottery(EVENT_ID, 2, EXPIRY);
     }
@@ -101,12 +115,16 @@ class LotteryServiceWhiteTest {
     @Test
     void getEventLotteryWinners_delegates_andReturnsDomainServiceResult() {
         Set<UUID> expected = Set.of(USER_A);
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.getEventLotteryWinners(EVENT_ID)).thenReturn(expected);
 
-        Set<UUID> result = service.getEventLotteryWinners(USER_A, COMPANY_ID, EVENT_ID);
+        Set<UUID> result = service.getEventLotteryWinners(TOKEN_A, COMPANY_ID, EVENT_ID);
 
         assertThat(result).isSameAs(expected);
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).getEventLotteryWinners(EVENT_ID);
     }
@@ -114,11 +132,15 @@ class LotteryServiceWhiteTest {
     @Test
     void getLotteryEligibilityForEvent_delegates_andReturnsDomainServiceResult() {
         LotteryEligibilityDTO expected = new LotteryEligibilityDTO(LotteryEligibilityStatus.WON_AND_ACCESS_VALID);
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(lotteryDomainService.getLotteryEligibilityForEvent(USER_A, EVENT_ID)).thenReturn(expected);
 
-        LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
+        LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(TOKEN_A, EVENT_ID);
 
         assertThat(result).isSameAs(expected);
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
         verify(lotteryDomainService).getLotteryEligibilityForEvent(USER_A, EVENT_ID);
     }
 
@@ -128,23 +150,31 @@ class LotteryServiceWhiteTest {
 
     @Test
     void createEventLottery_propagatesDomainServiceException() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         doThrow(new IllegalArgumentException("boom")).when(lotteryDomainService).createEventLottery(EVENT_ID);
 
-        assertThatThrownBy(() -> service.createEventLottery(USER_A, COMPANY_ID, EVENT_ID))
+        assertThatThrownBy(() -> service.createEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("boom");
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).createEventLottery(EVENT_ID);
     }
 
     @Test
     void runEventLottery_propagatesDomainServiceException() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         doThrow(new RuntimeException("already drawn")).when(lotteryDomainService).runEventLottery(any(), anyInt(), any());
 
-        assertThatThrownBy(() -> service.runEventLottery(USER_A, COMPANY_ID, EVENT_ID, 1, EXPIRY))
+        assertThatThrownBy(() -> service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 1, EXPIRY))
                 .isInstanceOf(RuntimeException.class);
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).runEventLottery(EVENT_ID, 1, EXPIRY);
     }
@@ -158,11 +188,13 @@ class LotteryServiceWhiteTest {
         UUID eid = UUID.randomUUID();
         String tok = "tok-xyz";
         UUID resolvedId = UUID.randomUUID();
+        when(auth.isTokenValid(tok)).thenReturn(true);
         when(auth.isMember(tok)).thenReturn(true);
         when(auth.extractUserId(tok)).thenReturn(resolvedId);
 
         service.addToEventLottery(eid, tok);
 
+        verify(auth).isTokenValid(tok);
         verify(auth).isMember(tok);
         verify(auth).extractUserId(tok);
         verify(lotteryDomainService).addToEventLottery(eid, resolvedId);
@@ -171,11 +203,15 @@ class LotteryServiceWhiteTest {
     @Test
     void runEventLottery_forwardsCountVerbatim() {
         UUID eid = UUID.randomUUID();
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, eid)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(eid, 7, EXPIRY)).thenReturn(Set.of());
 
-        service.runEventLottery(USER_A, COMPANY_ID, eid, 7, EXPIRY);
+        service.runEventLottery(TOKEN_A, COMPANY_ID, eid, 7, EXPIRY);
 
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, eid);
         verify(lotteryDomainService).runEventLottery(eid, 7, EXPIRY);
     }
@@ -186,6 +222,8 @@ class LotteryServiceWhiteTest {
 
     @Test
     void concurrentDelegation_eachCallForwardsExactlyOnce() throws InterruptedException {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         int threads = 50;
         CountDownLatch start = new CountDownLatch(1);
@@ -196,7 +234,7 @@ class LotteryServiceWhiteTest {
             pool.submit(() -> {
                 try {
                     start.await();
-                    service.createEventLottery(USER_A, COMPANY_ID, EVENT_ID);
+                    service.createEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID);
                     completed.incrementAndGet();
                 } catch (Exception ignored) {}
                 return null;
@@ -208,6 +246,8 @@ class LotteryServiceWhiteTest {
         assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
 
         assertThat(completed.get()).isEqualTo(threads);
+        verify(auth, times(threads)).isTokenValid(TOKEN_A);
+        verify(auth, times(threads)).extractUserId(TOKEN_A);
         verify(userDomainService, times(threads)).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService, times(threads)).createEventLottery(EVENT_ID);
     }

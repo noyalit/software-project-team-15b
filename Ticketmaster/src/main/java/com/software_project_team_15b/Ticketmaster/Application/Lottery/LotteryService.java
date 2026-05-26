@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Application.Lottery;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
@@ -43,21 +44,24 @@ public class LotteryService {
     /**
      * Creates a new, empty lottery for the given event.
      *
-     * @param userId    the caller's user id; must not be null
+     * @param token     the caller's auth token; must not be null
      * @param companyId the company that owns the event
      * @param eventId   the unique identifier of the event; must not be null
-     * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
+     * @throws IllegalArgumentException if {@code token} or {@code eventId} is null
+     * @throws InvalidTokenException    if the token is invalid or expired
      * @throws UnauthorizedException    if the caller is not a manager, owner, or founder of the event
      */
-    public void createEventLottery(UUID userId, UUID companyId, UUID eventId) {
+    public void createEventLottery(String token, UUID companyId, UUID eventId) {
         try {
-            if (userId == null) throw new IllegalArgumentException("userId cannot be null");
+            if (token == null) throw new IllegalArgumentException("token cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            validateToken(token);
+            UUID userId = auth.extractUserId(token);
             requireEventPermissions(userId, companyId, eventId);
             lotteryDomainService.createEventLottery(eventId);
             AUDIT.info("op=createEventLottery userId={} eventId={} result=ok", userId, eventId);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=createEventLottery userId={} eventId={} result=error error={}", userId, eventId, e.getMessage());
+            AUDIT.warn("op=createEventLottery eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
         }
     }
@@ -65,22 +69,25 @@ public class LotteryService {
     /**
      * Deletes the lottery associated with the given event.
      *
-     * @param userId    the caller's user id; must not be null
+     * @param token     the caller's auth token; must not be null
      * @param companyId the company that owns the event
      * @param eventId   the unique identifier of the event; must not be null
-     * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
+     * @throws IllegalArgumentException if {@code token} or {@code eventId} is null
+     * @throws InvalidTokenException    if the token is invalid or expired
      * @throws UnauthorizedException    if the caller is not a manager, owner, or founder of the event
      * @throws LotteryNotFoundException if no lottery exists for the given event
      */
-    public void deleteEventLottery(UUID userId, UUID companyId, UUID eventId) {
+    public void deleteEventLottery(String token, UUID companyId, UUID eventId) {
         try {
-            if (userId == null) throw new IllegalArgumentException("userId cannot be null");
+            if (token == null) throw new IllegalArgumentException("token cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            validateToken(token);
+            UUID userId = auth.extractUserId(token);
             requireEventPermissions(userId, companyId, eventId);
             lotteryDomainService.deleteEventLottery(eventId);
             AUDIT.info("op=deleteEventLottery userId={} eventId={} result=ok", userId, eventId);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=deleteEventLottery userId={} eventId={} result=error error={}", userId, eventId, e.getMessage());
+            AUDIT.warn("op=deleteEventLottery eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
         }
     }
@@ -94,6 +101,7 @@ public class LotteryService {
      * @param eventId the unique identifier of the event; must not be null
      * @param token   the caller's auth token; must not be null
      * @throws IllegalArgumentException if {@code eventId} or {@code token} is null
+     * @throws InvalidTokenException    if the token is invalid or expired
      * @throws UnauthorizedException    if the caller is not a member
      * @throws LotteryNotFoundException if no lottery exists for the given event
      */
@@ -101,6 +109,7 @@ public class LotteryService {
         try {
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             if (token == null) throw new IllegalArgumentException("token cannot be null");
+            validateToken(token);
             if (!auth.isMember(token)) throw new UnauthorizedException("only members can enter the lottery");
             UUID userId = auth.extractUserId(token);
             lotteryDomainService.addToEventLottery(eventId, userId);
@@ -114,25 +123,28 @@ public class LotteryService {
     /**
      * Runs the lottery for the given event, selecting up to {@code count} winners.
      *
-     * @param userId    the caller's user id; must not be null
+     * @param token     the caller's auth token; must not be null
      * @param companyId the company that owns the event
      * @param eventId   the unique identifier of the event; must not be null
      * @param count     the maximum number of winners to select; must not be negative
      * @param expirationTime the timestamp at which winner access should expire; must not be null and must be in the future
      * @return the set of selected winner UUIDs (may be empty if pool was empty)
-     * @throws IllegalArgumentException     if {@code userId} or {@code eventId} is null, or {@code count} is negative
+     * @throws IllegalArgumentException     if {@code token} or {@code eventId} is null, or {@code count} is negative
+     * @throws InvalidTokenException        if the token is invalid or expired
      * @throws UnauthorizedException        if the caller is not a manager, owner, or founder of the event
      * @throws LotteryNotFoundException     if no lottery exists for the given event
      * @throws LotteryAlreadyDrawnException if the lottery for this event has already been drawn
      */
-    public Set<UUID> runEventLottery(UUID userId, UUID companyId, UUID eventId, int count, LocalDateTime expirationTime) {
+    public Set<UUID> runEventLottery(String token, UUID companyId, UUID eventId, int count, LocalDateTime expirationTime) {
         try {
-            if (userId == null) throw new IllegalArgumentException("userId cannot be null");
+            if (token == null) throw new IllegalArgumentException("token cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             if (count < 0) throw new IllegalArgumentException("count cannot be negative");
             if (expirationTime == null) throw new IllegalArgumentException("expirationTime cannot be null");
             if (expirationTime.isBefore(LocalDateTime.now())) throw new IllegalArgumentException("expirationTime must be in the future");
 
+            validateToken(token);
+            UUID userId = auth.extractUserId(token);
             requireEventPermissions(userId, companyId, eventId);
             Set<UUID> drawn = lotteryDomainService.runEventLottery(eventId, count, expirationTime);
             AUDIT.info("op=runEventLottery eventId={} count={} winnersDrawn={} result=ok", eventId, count, drawn.size());
@@ -146,19 +158,22 @@ public class LotteryService {
     /**
      * Returns the set of all winners drawn for the given event.
      *
-     * @param userId    the caller's user id; must not be null
-     * @param companyId the company that owns the event
+     * @param token     the caller's auth token; must not be null
+     * @param companyId the company that owns the event; must not be null
      * @param eventId   the unique identifier of the event; must not be null
      * @return an unmodifiable set of winner UUIDs
-     * @throws IllegalArgumentException if {@code userId}, {@code companyId}, or {@code eventId} is null
+     * @throws IllegalArgumentException if {@code token}, {@code companyId}, or {@code eventId} is null
+     * @throws InvalidTokenException    if the token is invalid or expired
      * @throws UnauthorizedException    if the caller is not a manager, owner, or founder of the event
      * @throws LotteryNotFoundException if no lottery exists for the given event
      */
-    public Set<UUID> getEventLotteryWinners(UUID userId, UUID companyId, UUID eventId) {
+    public Set<UUID> getEventLotteryWinners(String token, UUID companyId, UUID eventId) {
         try {
-            if (userId == null) throw new IllegalArgumentException("userId cannot be null");
+            if (token == null) throw new IllegalArgumentException("token cannot be null");
             if (companyId == null) throw new IllegalArgumentException("companyId cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            validateToken(token);
+            UUID userId = auth.extractUserId(token);
             requireEventPermissions(userId, companyId, eventId);
             Set<UUID> winners = lotteryDomainService.getEventLotteryWinners(eventId);
             AUDIT.info("op=getEventLotteryWinners eventId={} result=ok", eventId);
@@ -172,21 +187,30 @@ public class LotteryService {
     /**
      * Returns the lottery eligibility status for the given user and event.
      *
-     * @param userId  the unique identifier of the user; must not be null
+     * @param token   the caller's auth token; must not be null
      * @param eventId the unique identifier of the event; must not be null
      * @return a {@link LotteryEligibilityDTO} describing the user's eligibility
-     * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
+     * @throws IllegalArgumentException if {@code token} or {@code eventId} is null
+     * @throws InvalidTokenException    if the token is invalid or expired
      */
-    public LotteryEligibilityDTO getLotteryEligibilityForEvent(UUID userId, UUID eventId) {
+    public LotteryEligibilityDTO getLotteryEligibilityForEvent(String token, UUID eventId) {
         try {
-            if (userId == null) throw new IllegalArgumentException("userId cannot be null");
+            if (token == null) throw new IllegalArgumentException("token cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            validateToken(token);
+            UUID userId = auth.extractUserId(token);
             LotteryEligibilityDTO dto = lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId);
             AUDIT.info("op=getLotteryEligibilityForEvent userId={} eventId={} status={}", userId, eventId, dto.status());
             return dto;
         } catch (RuntimeException e) {
-            AUDIT.warn("op=getLotteryEligibilityForEvent userId={} eventId={} result=error error={}", userId, eventId, e.getMessage());
+            AUDIT.warn("op=getLotteryEligibilityForEvent eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
+        }
+    }
+
+    private void validateToken(String token) {
+        if (!auth.isTokenValid(token)) {
+            throw new InvalidTokenException("Invalid token");
         }
     }
 
