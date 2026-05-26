@@ -99,31 +99,35 @@ class QueueServiceWhiteTest {
     // =========================================================================
 
     /**
-     * Verifies that {@code createEventQueue} checks system-admin status before
-     * delegating to the domain service, and makes no other interactions.
+     * Verifies that {@code createEventQueue} validates the token, then checks system-admin
+     * status, then delegates to the domain service.
      */
     @Test
     void createEventQueue_checksAdminThenDelegates() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
 
         service.createEventQueue(ADMIN_TOKEN, EVENT_ID, 1000, 100);
 
         var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isTokenValid(ADMIN_TOKEN);
         inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);
         inOrder.verify(queueDomainService).createEventQueue(EVENT_ID, 1000, 100);
     }
 
     /**
-     * Verifies that {@code deleteEventQueue} checks system-admin status before
-     * delegating to the domain service, and makes no other interactions.
+     * Verifies that {@code deleteEventQueue} validates the token, then checks system-admin
+     * status, then delegates to the domain service.
      */
     @Test
     void deleteEventQueue_checksAdminThenDelegates() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
 
         service.deleteEventQueue(ADMIN_TOKEN, EVENT_ID);
 
         var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isTokenValid(ADMIN_TOKEN);
         inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);
         inOrder.verify(queueDomainService).deleteEventQueue(EVENT_ID);
     }
@@ -134,36 +138,41 @@ class QueueServiceWhiteTest {
      */
     @Test
     void deleteEventQueue_propagatesDomainServiceException() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
         doThrow(new QueueNotFoundException("missing")).when(queueDomainService).deleteEventQueue(EVENT_ID);
 
         assertThatThrownBy(() -> service.deleteEventQueue(ADMIN_TOKEN, EVENT_ID))
                 .isInstanceOf(QueueNotFoundException.class);
+        verify(auth).isTokenValid(ADMIN_TOKEN);
         verify(auth).isSystemAdmin(ADMIN_TOKEN);
         verify(queueDomainService).deleteEventQueue(EVENT_ID);
     }
 
     /**
-     * Verifies that {@code clearEventQueue} checks system-admin status before
-     * delegating to the domain service.
+     * Verifies that {@code clearEventQueue} validates the token, then checks system-admin
+     * status, then delegates to the domain service.
      */
     @Test
     void clearEventQueue_checksAdminThenDelegates() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
 
         service.clearEventQueue(ADMIN_TOKEN, EVENT_ID);
 
         var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isTokenValid(ADMIN_TOKEN);
         inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);
         inOrder.verify(queueDomainService).clearEventQueue(EVENT_ID);
     }
 
     /**
-     * Verifies that {@code getQueueSnapshot} checks system-admin status, delegates
-     * to the domain service, and returns the domain-service result unchanged.
+     * Verifies that {@code getQueueSnapshot} validates the token, checks system-admin
+     * status, delegates to the domain service, and returns the result unchanged.
      */
     @Test
     void getQueueSnapshot_checksAdminThenDelegatesAndReturnsSnapshot() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
         QueueSnapshotDTO expected = new QueueSnapshotDTO(EVENT_ID, 100, 10, 5, 3, Map.of());
         when(queueDomainService.getQueueSnapshot(EVENT_ID)).thenReturn(expected);
@@ -172,31 +181,35 @@ class QueueServiceWhiteTest {
 
         assertThat(result).isSameAs(expected);
         var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isTokenValid(ADMIN_TOKEN);
         inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);
         inOrder.verify(queueDomainService).getQueueSnapshot(EVENT_ID);
     }
 
     /**
-     * Verifies that {@code updateEventQueueSettings} checks system-admin status and
-     * forwards all arguments to the domain service without substitution.
+     * Verifies that {@code updateEventQueueSettings} validates the token, checks system-admin
+     * status, and forwards all arguments to the domain service without substitution.
      */
     @Test
     void updateEventQueueSettings_checksAdminThenDelegatesWithExactArgs() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
 
         service.updateEventQueueSettings(ADMIN_TOKEN, EVENT_ID, 200, 20);
 
         var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isTokenValid(ADMIN_TOKEN);
         inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);
         inOrder.verify(queueDomainService).updateQueueSettings(EVENT_ID, 200, 20);
     }
 
     /**
-     * Verifies that {@code getAllQueueSnapshots} checks system-admin status, delegates
-     * to the domain service, and returns the domain-service result unchanged.
+     * Verifies that {@code getAllQueueSnapshots} validates the token, checks system-admin
+     * status, delegates to the domain service, and returns the result unchanged.
      */
     @Test
     void getAllQueueSnapshots_checksAdminThenDelegatesAndReturnsList() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
         QueueSnapshotDTO snap = new QueueSnapshotDTO(EVENT_ID, 100, 10, 5, 3, Map.of());
         List<QueueSnapshotDTO> expected = List.of(snap);
@@ -206,6 +219,7 @@ class QueueServiceWhiteTest {
 
         assertThat(result).isSameAs(expected);
         var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isTokenValid(ADMIN_TOKEN);
         inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);
         inOrder.verify(queueDomainService).getAllQueueSnapshots();
     }
