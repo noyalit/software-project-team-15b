@@ -199,13 +199,14 @@ public class CompanyService {
             requireValidToken(token);
             Company company = getCompanyOrThrow(companyId);
             requireFounderOrSystemAdmin(token, company);
+            UUID callerId = auth.extractUserId(token);
             company.changeStatus(newStatus);
             if (newStatus == CompanyStatus.CLOSED) {
                 eventManagementService.searchInCompany(companyId, null)
                         .forEach(event -> eventManagementService.cancel(event.eventId()));
             }
             Company saved = companyRepository.save(company);
-            AUDIT.info("op=changeStatus companyId={} newStatus={} result=ok", companyId, newStatus);
+            AUDIT.info("op=changeStatus callerId={} companyId={} newStatus={} result=ok", callerId, companyId, newStatus);
             return saved;
         } catch (RuntimeException e) {
             AUDIT.warn("op=changeStatus companyId={} newStatus={} result=rejected reason={}",

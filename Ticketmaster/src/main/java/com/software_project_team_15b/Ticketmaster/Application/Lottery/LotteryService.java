@@ -113,9 +113,9 @@ public class LotteryService {
             if (!auth.isMember(token)) throw new UnauthorizedException("only members can enter the lottery");
             UUID userId = auth.extractUserId(token);
             lotteryDomainService.addToEventLottery(eventId, userId);
-            AUDIT.info("op=addToEventLottery eventId={} token={} result=ok", eventId, token);
+            AUDIT.info("op=addToEventLottery eventId={} userId={} result=ok", eventId, userId);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=addToEventLottery eventId={} token={} result=error error={}", eventId, token, e.getMessage());
+            AUDIT.warn("op=addToEventLottery eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
         }
     }
@@ -176,7 +176,7 @@ public class LotteryService {
             UUID userId = auth.extractUserId(token);
             requireEventPermissions(userId, companyId, eventId);
             Set<UUID> winners = lotteryDomainService.getEventLotteryWinners(eventId);
-            AUDIT.info("op=getEventLotteryWinners eventId={} result=ok", eventId);
+            AUDIT.info("op=getEventLotteryWinners userId={} eventId={} result=ok", userId, eventId);
             return winners;
         } catch (RuntimeException e) {
             AUDIT.warn("op=getEventLotteryWinners eventId={} result=error error={}", eventId, e.getMessage());
