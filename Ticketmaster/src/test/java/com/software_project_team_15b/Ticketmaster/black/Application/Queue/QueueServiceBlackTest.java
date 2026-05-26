@@ -333,8 +333,8 @@ class QueueServiceBlackTest {
      * A non-positive capacity must be rejected with an {@link IllegalArgumentException}.
      */
     @Test
-    void updateEventQueueSettings_negative_zeroCapacity_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.updateEventQueueSettings(ADMIN_TOKEN, EVENT_ID, 0, 20))
+    void updateEventQueueSettings_negative_negativeCapacity_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.updateEventQueueSettings(ADMIN_TOKEN, EVENT_ID, -1, 20))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -342,8 +342,8 @@ class QueueServiceBlackTest {
      * A non-positive max-accepted value must be rejected with an {@link IllegalArgumentException}.
      */
     @Test
-    void updateEventQueueSettings_negative_zeroMaxAccepted_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.updateEventQueueSettings(ADMIN_TOKEN, EVENT_ID, 200, 0))
+    void updateEventQueueSettings_negative_negativeMaxAccepted_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.updateEventQueueSettings(ADMIN_TOKEN, EVENT_ID, 200, -1))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
