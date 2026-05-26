@@ -62,6 +62,7 @@ class QueueServiceBlackTest {
      */
     @Test
     void createEventQueue_positive_returnsNormally() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
 
         assertThatCode(() -> service.createEventQueue(ADMIN_TOKEN, EVENT_ID, 1000, 100))
@@ -111,10 +112,23 @@ class QueueServiceBlackTest {
     }
 
     /**
+     * An invalid or expired token must cause an {@link InvalidTokenException} before the
+     * admin check is reached.
+     */
+    @Test
+    void createEventQueue_negative_invalidToken_throwsInvalidTokenException() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.createEventQueue(NON_ADMIN_TOKEN, EVENT_ID, 1000, 100))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    /**
      * A caller who is not a system admin must receive an {@link UnauthorizedException}.
      */
     @Test
     void createEventQueue_negative_notAdmin_throwsUnauthorized() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(NON_ADMIN_TOKEN)).thenReturn(false);
 
         assertThatThrownBy(() -> service.createEventQueue(NON_ADMIN_TOKEN, EVENT_ID, 1000, 100))
@@ -131,6 +145,7 @@ class QueueServiceBlackTest {
      */
     @Test
     void deleteEventQueue_positive_returnsNormally() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
 
         assertThatCode(() -> service.deleteEventQueue(ADMIN_TOKEN, EVENT_ID))
@@ -147,6 +162,7 @@ class QueueServiceBlackTest {
      */
     @Test
     void deleteEventQueue_negative_propagatesQueueNotFound() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
         doThrow(new QueueNotFoundException("missing"))
                 .when(queueDomainService).deleteEventQueue(EVENT_ID);
@@ -156,11 +172,24 @@ class QueueServiceBlackTest {
     }
 
     /**
+     * An invalid or expired token must cause an {@link InvalidTokenException} before the
+     * admin check is reached.
+     */
+    @Test
+    void deleteEventQueue_negative_invalidToken_throwsInvalidTokenException() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.deleteEventQueue(NON_ADMIN_TOKEN, EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    /**
      * A caller who is not a system admin must receive an {@link UnauthorizedException}
      * when attempting to delete an event queue.
      */
     @Test
     void deleteEventQueue_negative_notAdmin_throwsUnauthorized() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(NON_ADMIN_TOKEN)).thenReturn(false);
 
         assertThatThrownBy(() -> service.deleteEventQueue(NON_ADMIN_TOKEN, EVENT_ID))
@@ -177,6 +206,7 @@ class QueueServiceBlackTest {
      */
     @Test
     void clearEventQueue_positive_returnsNormally() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
 
         assertThatCode(() -> service.clearEventQueue(ADMIN_TOKEN, EVENT_ID))
@@ -206,10 +236,23 @@ class QueueServiceBlackTest {
     }
 
     /**
+     * An invalid or expired token must cause an {@link InvalidTokenException} before the
+     * admin check is reached.
+     */
+    @Test
+    void clearEventQueue_negative_invalidToken_throwsInvalidTokenException() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.clearEventQueue(NON_ADMIN_TOKEN, EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    /**
      * A caller who is not a system admin must receive an {@link UnauthorizedException}.
      */
     @Test
     void clearEventQueue_negative_notAdmin_throwsUnauthorized() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(NON_ADMIN_TOKEN)).thenReturn(false);
 
         assertThatThrownBy(() -> service.clearEventQueue(NON_ADMIN_TOKEN, EVENT_ID))
@@ -222,6 +265,7 @@ class QueueServiceBlackTest {
      */
     @Test
     void clearEventQueue_negative_propagatesQueueNotFound() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
         doThrow(new QueueNotFoundException("missing"))
                 .when(queueDomainService).clearEventQueue(EVENT_ID);
@@ -240,6 +284,7 @@ class QueueServiceBlackTest {
      */
     @Test
     void getQueueSnapshot_positive_returnsSnapshot() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
         QueueSnapshotDTO expected = new QueueSnapshotDTO(EVENT_ID, 500, 50, 12, 8, Map.of());
         when(queueDomainService.getQueueSnapshot(EVENT_ID)).thenReturn(expected);
@@ -276,10 +321,23 @@ class QueueServiceBlackTest {
     }
 
     /**
+     * An invalid or expired token must cause an {@link InvalidTokenException} before the
+     * admin check is reached.
+     */
+    @Test
+    void getQueueSnapshot_negative_invalidToken_throwsInvalidTokenException() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getQueueSnapshot(NON_ADMIN_TOKEN, EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    /**
      * A caller who is not a system admin must receive an {@link UnauthorizedException}.
      */
     @Test
     void getQueueSnapshot_negative_notAdmin_throwsUnauthorized() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(NON_ADMIN_TOKEN)).thenReturn(false);
 
         assertThatThrownBy(() -> service.getQueueSnapshot(NON_ADMIN_TOKEN, EVENT_ID))
@@ -292,6 +350,7 @@ class QueueServiceBlackTest {
      */
     @Test
     void getQueueSnapshot_negative_propagatesQueueNotFound() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
         doThrow(new QueueNotFoundException("missing"))
                 .when(queueDomainService).getQueueSnapshot(EVENT_ID);
@@ -310,6 +369,7 @@ class QueueServiceBlackTest {
      */
     @Test
     void updateEventQueueSettings_positive_returnsNormally() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
 
         assertThatCode(() -> service.updateEventQueueSettings(ADMIN_TOKEN, EVENT_ID, 200, 20))
@@ -348,10 +408,23 @@ class QueueServiceBlackTest {
     }
 
     /**
+     * An invalid or expired token must cause an {@link InvalidTokenException} before the
+     * admin check is reached.
+     */
+    @Test
+    void updateEventQueueSettings_negative_invalidToken_throwsInvalidTokenException() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.updateEventQueueSettings(NON_ADMIN_TOKEN, EVENT_ID, 200, 20))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    /**
      * A caller who is not a system admin must receive an {@link UnauthorizedException}.
      */
     @Test
     void updateEventQueueSettings_negative_notAdmin_throwsUnauthorized() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(NON_ADMIN_TOKEN)).thenReturn(false);
 
         assertThatThrownBy(() -> service.updateEventQueueSettings(NON_ADMIN_TOKEN, EVENT_ID, 200, 20))
@@ -364,6 +437,7 @@ class QueueServiceBlackTest {
      */
     @Test
     void updateEventQueueSettings_negative_propagatesQueueNotFound() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
         doThrow(new QueueNotFoundException("missing"))
                 .when(queueDomainService).updateQueueSettings(EVENT_ID, 200, 20);
@@ -382,6 +456,7 @@ class QueueServiceBlackTest {
      */
     @Test
     void getAllQueueSnapshots_positive_returnsAllSnapshots() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
         QueueSnapshotDTO snap = new QueueSnapshotDTO(EVENT_ID, 100, 10, 3, 2, Map.of());
         when(queueDomainService.getAllQueueSnapshots()).thenReturn(List.of(snap));
@@ -406,10 +481,23 @@ class QueueServiceBlackTest {
     }
 
     /**
+     * An invalid or expired token must cause an {@link InvalidTokenException} before the
+     * admin check is reached.
+     */
+    @Test
+    void getAllQueueSnapshots_negative_invalidToken_throwsInvalidTokenException() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getAllQueueSnapshots(NON_ADMIN_TOKEN))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    /**
      * A caller who is not a system admin must receive an {@link UnauthorizedException}.
      */
     @Test
     void getAllQueueSnapshots_negative_notAdmin_throwsUnauthorized() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(true);
         when(auth.isSystemAdmin(NON_ADMIN_TOKEN)).thenReturn(false);
 
         assertThatThrownBy(() -> service.getAllQueueSnapshots(NON_ADMIN_TOKEN))

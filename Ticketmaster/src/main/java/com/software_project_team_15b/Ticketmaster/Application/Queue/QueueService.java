@@ -99,6 +99,7 @@ public class QueueService {
      * @param capacity     the maximum number of users that may wait; must be non-negative
      * @param max_accepted the maximum number of simultaneously admitted users; must be non-negative
      * @throws IllegalArgumentException if {@code token} or {@code eventId} is null, or either limit is negative
+     * @throws InvalidTokenException    if the token is invalid or expired
      * @throws UnauthorizedException    if the caller is not a system admin
      */
     public void createEventQueue(String token, UUID eventId, int  capacity, int max_accepted) {
@@ -107,6 +108,7 @@ public class QueueService {
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             if (capacity < 0) throw new IllegalArgumentException("capacity cannot be negative");
             if (max_accepted < 0) throw new IllegalArgumentException("max_accepted cannot be negative");
+            validateToken(token);
             requireSystemAdmin(token);
             queueDomainService.createEventQueue(eventId,  capacity, max_accepted);
             AUDIT.info("op=createEventQueue token={} eventId={} result=ok", token, eventId);
@@ -122,6 +124,7 @@ public class QueueService {
      * @param token   the caller's auth token; must not be null
      * @param eventId the unique identifier of the event; must not be null
      * @throws IllegalArgumentException if {@code token} or {@code eventId} is null
+     * @throws InvalidTokenException    if the token is invalid or expired
      * @throws UnauthorizedException    if the caller is not a system admin
      * @throws QueueNotFoundException   if no queue exists for the given event
      */
@@ -129,6 +132,7 @@ public class QueueService {
         try {
             if (token == null) throw new IllegalArgumentException("token cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            validateToken(token);
             requireSystemAdmin(token);
             queueDomainService.deleteEventQueue(eventId);
             AUDIT.info("op=deleteEventQueue token={} eventId={} result=ok", token, eventId);
@@ -145,6 +149,7 @@ public class QueueService {
      * @param token   the caller's auth token; must not be null
      * @param eventId the unique identifier of the event; must not be null
      * @throws IllegalArgumentException if {@code token} or {@code eventId} is null
+     * @throws InvalidTokenException    if the token is invalid or expired
      * @throws UnauthorizedException    if the caller is not a system admin
      * @throws QueueNotFoundException   if no queue exists for the given event
      */
@@ -152,6 +157,7 @@ public class QueueService {
         try {
             if (token == null) throw new IllegalArgumentException("token cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            validateToken(token);
             requireSystemAdmin(token);
             queueDomainService.clearEventQueue(eventId);
             AUDIT.info("op=clearEventQueue token={} eventId={} result=ok", token, eventId);
@@ -168,6 +174,7 @@ public class QueueService {
      * @param eventId    the unique identifier of the event; must not be null
      * @return a {@link QueueSnapshotDTO} describing the queue's current state
      * @throws IllegalArgumentException if {@code adminToken} or {@code eventId} is null
+     * @throws InvalidTokenException    if the token is invalid or expired
      * @throws UnauthorizedException    if the caller is not a system admin
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException if no queue exists for the given event
      */
@@ -175,6 +182,7 @@ public class QueueService {
         try {
             if (adminToken == null) throw new IllegalArgumentException("adminToken cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            validateToken(adminToken);
             requireSystemAdmin(adminToken);
             QueueSnapshotDTO snapshot = queueDomainService.getQueueSnapshot(eventId);
             AUDIT.info("op=getQueueSnapshot adminToken={} eventId={} result=ok", adminToken, eventId);
@@ -193,7 +201,8 @@ public class QueueService {
      * @param capacity     the new maximum number of users that may wait; must be positive
      * @param max_accepted the new maximum number of simultaneously admitted users; must be positive
      * @throws IllegalArgumentException if any argument is null or any limit is not positive
-     * @throws UnauthorizedException    if the caller is not a manager, owner, or founder of the event
+     * @throws InvalidTokenException    if the token is invalid or expired
+     * @throws UnauthorizedException    if the caller is not a system admin
      * @throws QueueNotFoundException   if no queue exists for the given event
      */
     public void updateEventQueueSettings(String token, UUID eventId, int capacity, int max_accepted) {
@@ -202,6 +211,7 @@ public class QueueService {
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             if (capacity < 0) throw new IllegalArgumentException("capacity cannot be <= 0");
             if (max_accepted < 0) throw new IllegalArgumentException("max_accepted cannot be <= 0");
+            validateToken(token);
             requireSystemAdmin(token);
             queueDomainService.updateQueueSettings(eventId, capacity, max_accepted);
             AUDIT.info("op=updateEventQueueSettings token={} eventId={} capacity={} max_accepted={} result=ok", token, eventId, capacity, max_accepted);
@@ -217,11 +227,13 @@ public class QueueService {
      * @param adminToken the caller's auth token; must belong to a system admin
      * @return an unmodifiable list of {@link QueueSnapshotDTO}, one per persisted queue
      * @throws IllegalArgumentException if {@code adminToken} is null
+     * @throws InvalidTokenException    if the token is invalid or expired
      * @throws UnauthorizedException    if the caller is not a system admin
      */
     public List<QueueSnapshotDTO> getAllQueueSnapshots(String adminToken) {
         try {
             if (adminToken == null) throw new IllegalArgumentException("adminToken cannot be null");
+            validateToken(adminToken);
             requireSystemAdmin(adminToken);
             List<QueueSnapshotDTO> snapshots = queueDomainService.getAllQueueSnapshots();
             AUDIT.info("op=getAllQueueSnapshots adminToken={} count={} result=ok", adminToken, snapshots.size());
