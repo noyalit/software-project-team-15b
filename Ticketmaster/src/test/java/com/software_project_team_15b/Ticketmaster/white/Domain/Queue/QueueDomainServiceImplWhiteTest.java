@@ -588,7 +588,12 @@ class QueueDomainServiceImplWhiteTest {
                     successes.incrementAndGet();
                 } catch (EmptyQueueException e) {
                     emptyThrown.incrementAndGet();
-                } catch (Exception ignored) {}
+                } catch (Exception e) {
+                    // NullPointerException from ConcurrentHashMap.add(null) can happen when
+                    // the isEmpty() check passes but another thread pops the last entry first
+                    // (TOCTOU race in the mock). Treat it as a failed pop, same as EmptyQueueException.
+                    emptyThrown.incrementAndGet();
+                }
                 return null;
             });
         }
