@@ -16,6 +16,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainServic
 import com.software_project_team_15b.Ticketmaster.Domain.UserType;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 import java.time.LocalDate;
 import java.util.*;
@@ -142,6 +143,24 @@ class UserServiceConcurrencyTest {
 
         @Override
         public void pushToEventQueue(UUID eventId, String token) {
+        }
+
+        @Override
+        public void clearEventQueue(UUID eventId) {
+        }
+
+        @Override
+        public QueueSnapshotDTO getQueueSnapshot(UUID eventId) {
+            return new QueueSnapshotDTO(eventId, 0, 0, 0, 0, Map.of());
+        }
+
+        @Override
+        public List<QueueSnapshotDTO> getAllQueueSnapshots() {
+            return List.of();
+        }
+
+        @Override
+        public void updateQueueSettings(UUID eventId, int capacity, int max_accepted) {
         }
     }
 

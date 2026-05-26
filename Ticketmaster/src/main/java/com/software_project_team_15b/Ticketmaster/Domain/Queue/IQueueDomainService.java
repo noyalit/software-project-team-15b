@@ -1,9 +1,11 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Queue;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
 
 /**
  * Domain service for managing per-event virtual queues and the site-wide waiting queue.
@@ -126,4 +128,40 @@ public interface IQueueDomainService {
      * @return {@code true} if the number of currently admitted users is below the site cap
      */
     boolean canAccessWebsite();
+
+    /**
+     * Removes the given user from both the waiting list and the admitted set for the
+     * given event queue. A no-op if the user is not present in either.
+     *
+     * @param eventId the unique identifier of the event; must not be null
+     * @throws QueueNotFoundException if no queue exists for the given event
+     */
+    void clearEventQueue(UUID eventId);
+
+    /**
+     * Returns a snapshot of the virtual queue for the given event.
+     *
+     * @param eventId the unique identifier of the event; must not be null
+     * @return a {@link QueueSnapshotDTO} describing the queue's current state
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException if no queue exists for the given event
+     */
+    QueueSnapshotDTO getQueueSnapshot(UUID eventId);
+
+    /**
+     * Returns snapshots of all virtual queues currently in the repository.
+     *
+     * @return an unmodifiable list of {@link QueueSnapshotDTO}, one per persisted queue
+     */
+    List<QueueSnapshotDTO> getAllQueueSnapshots();
+
+    /**
+     * Updates the capacity and max-accepted limits of the virtual queue for the given event.
+     *
+     * @param eventId      the unique identifier of the event; must not be null
+     * @param capacity     the new maximum number of users that may wait; must be non-negative
+     * @param max_accepted the new maximum number of simultaneously admitted users; must be non-negative
+     * @throws IllegalArgumentException if {@code eventId} is null or either limit is negative
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException if no queue exists for the given event
+     */
+    void updateQueueSettings(UUID eventId, int capacity, int max_accepted);
 }

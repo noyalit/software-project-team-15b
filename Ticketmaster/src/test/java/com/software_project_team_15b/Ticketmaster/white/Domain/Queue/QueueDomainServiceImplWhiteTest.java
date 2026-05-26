@@ -6,6 +6,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIs
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainServiceImpl;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.VirtualQueue;
@@ -630,6 +631,154 @@ class QueueDomainServiceImplWhiteTest {
         // All users should be admitted; none duplicated
         assertThat(queue.getAccessMap()).hasSize(userCount);
         assertThat(queue.isEmpty()).isTrue();
+    }
+
+    // =========================================================================
+    // clearEventQueue — repository interaction
+    // =========================================================================
+
+    @Test
+    void clearEventQueue_positive_clearsEntireQueueAndCallsUpdateQueue() {
+        VirtualQueue queue = admittedQueue(EVENT_ID, "token-a");
+        queue.push("token-b");
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+
+        service.clearEventQueue(EVENT_ID);
+
+        assertThat(queue.isEmpty()).isTrue();
+        assertThat(queue.getAccessMap()).isEmpty();
+        verify(queueRepository).updateQueue(queue);
+    }
+
+    @Test
+    void clearEventQueue_negative_nullEventId_doesNotHitRepository() {
+        assertThatThrownBy(() -> service.clearEventQueue(null))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(queueRepository);
+    }
+
+    @Test
+    void clearEventQueue_negative_queueNotFound_doesNotCallUpdate() {
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
+
+        assertThatThrownBy(() -> service.clearEventQueue(EVENT_ID))
+                .isInstanceOf(QueueNotFoundException.class);
+        verify(queueRepository, never()).updateQueue(any());
+    }
+
+    // =========================================================================
+    // updateQueueSettings — repository interaction
+    // =========================================================================
+
+    @Test
+    void updateQueueSettings_positive_persistsNewSettingsViaUpdateQueue() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, 100, 10);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+
+        service.updateQueueSettings(EVENT_ID, 500, 50);
+
+        assertThat(queue.getCapacity()).isEqualTo(500);
+        assertThat(queue.getMaxAccepted()).isEqualTo(50);
+        verify(queueRepository).updateQueue(queue);
+    }
+
+    @Test
+    void updateQueueSettings_negative_nullEventId_doesNotHitRepository() {
+        assertThatThrownBy(() -> service.updateQueueSettings(null, 100, 10))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(queueRepository);
+    }
+
+    @Test
+    void updateQueueSettings_negative_negativeCapacity_doesNotHitRepository() {
+        assertThatThrownBy(() -> service.updateQueueSettings(EVENT_ID, -1, 10))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(queueRepository);
+    }
+
+    @Test
+    void updateQueueSettings_negative_negativeMaxAccepted_doesNotHitRepository() {
+        assertThatThrownBy(() -> service.updateQueueSettings(EVENT_ID, 100, -1))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(queueRepository);
+    }
+
+    @Test
+    void updateQueueSettings_negative_queueNotFound_doesNotCallUpdate() {
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
+
+        assertThatThrownBy(() -> service.updateQueueSettings(EVENT_ID, 100, 10))
+                .isInstanceOf(QueueNotFoundException.class);
+        verify(queueRepository, never()).updateQueue(any());
+    }
+
+    // =========================================================================
+    // getQueueSnapshot — repository interaction
+    // =========================================================================
+
+    @Test
+    void getQueueSnapshot_positive_callsGetQueueAndReturnsCorrectFields() {
+        VirtualQueue queue = admittedQueue(EVENT_ID, "token-a");
+        queue.push("token-b");
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+
+        QueueSnapshotDTO snap = service.getQueueSnapshot(EVENT_ID);
+
+        verify(queueRepository).getQueue(EVENT_ID);
+        assertThat(snap.eventId()).isEqualTo(EVENT_ID);
+        assertThat(snap.admittedCount()).isEqualTo(1);
+        assertThat(snap.waitingCount()).isEqualTo(1);
+        assertThat(snap.admittedUsers()).containsKey("token-a");
+    }
+
+    @Test
+    void getQueueSnapshot_negative_nullEventId_doesNotHitRepository() {
+        assertThatThrownBy(() -> service.getQueueSnapshot(null))
+                .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(queueRepository);
+    }
+
+    @Test
+    void getQueueSnapshot_negative_queueNotFound_throwsQueueNotFoundException() {
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
+
+        assertThatThrownBy(() -> service.getQueueSnapshot(EVENT_ID))
+                .isInstanceOf(QueueNotFoundException.class);
+    }
+
+    // =========================================================================
+    // getAllQueueSnapshots — repository interaction
+    // =========================================================================
+
+    @Test
+    void getAllQueueSnapshots_positive_callsGetAllQueues() {
+        UUID id2 = UUID.randomUUID();
+        when(queueRepository.getAllQueues()).thenReturn(
+                List.of(new VirtualQueue(EVENT_ID, 100, 10), new VirtualQueue(id2, 200, 20)));
+
+        List<QueueSnapshotDTO> result = service.getAllQueueSnapshots();
+
+        verify(queueRepository).getAllQueues();
+        assertThat(result).hasSize(2);
+    }
+
+    @Test
+    void getAllQueueSnapshots_positive_snapshotContainsCapacityAndMaxAccepted() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, 500, 50);
+        when(queueRepository.getAllQueues()).thenReturn(List.of(queue));
+
+        QueueSnapshotDTO snap = service.getAllQueueSnapshots().get(0);
+
+        assertThat(snap.capacity()).isEqualTo(500);
+        assertThat(snap.maxAccepted()).isEqualTo(50);
+    }
+
+    @Test
+    void getAllQueueSnapshots_positive_emptyRepositoryReturnsEmptyList() {
+        when(queueRepository.getAllQueues()).thenReturn(List.of());
+
+        assertThat(service.getAllQueueSnapshots()).isEmpty();
+        verify(queueRepository).getAllQueues();
     }
 
     // =========================================================================

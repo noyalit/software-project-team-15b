@@ -7,6 +7,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIs
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainServiceImpl;
@@ -610,5 +611,168 @@ class QueueDomainServiceImplBlackTest {
         pool.shutdown();
         assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
         assertThat(trueCount.get()).isEqualTo(threads);
+    }
+
+    // =========================================================================
+    // clearEventQueue
+    // =========================================================================
+
+    @Test
+    void clearEventQueue_positive_removesAllWaitingUsers() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, Integer.MAX_VALUE, 0);
+        queue.push("token-a");
+        queue.push("token-b");
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+
+        domainService.clearEventQueue(EVENT_ID);
+
+        assertThat(queue.contains("token-a")).isFalse();
+        assertThat(queue.contains("token-b")).isFalse();
+        assertThat(queue.isEmpty()).isTrue();
+    }
+
+    @Test
+    void clearEventQueue_positive_removesAllAdmittedUsers() {
+        VirtualQueue queue = admittedQueue(EVENT_ID, "token-a");
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+
+        domainService.clearEventQueue(EVENT_ID);
+
+        assertThat(domainService.hasAccess("token-a", EVENT_ID)).isFalse();
+    }
+
+    @Test
+    void clearEventQueue_positive_emptyQueueIsNoOp() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, Integer.MAX_VALUE, 100);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+
+        assertThatCode(() -> domainService.clearEventQueue(EVENT_ID))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void clearEventQueue_negative_nullEventId_throwsIllegalArgument() {
+        assertThatThrownBy(() -> domainService.clearEventQueue(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void clearEventQueue_negative_queueNotFound_throwsQueueNotFoundException() {
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
+
+        assertThatThrownBy(() -> domainService.clearEventQueue(EVENT_ID))
+                .isInstanceOf(QueueNotFoundException.class);
+    }
+
+    // =========================================================================
+    // updateQueueSettings
+    // =========================================================================
+
+    @Test
+    void updateQueueSettings_positive_updatesCapacityAndMaxAccepted() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, 100, 10);
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+
+        domainService.updateQueueSettings(EVENT_ID, 500, 50);
+
+        assertThat(queue.getCapacity()).isEqualTo(500);
+        assertThat(queue.getMaxAccepted()).isEqualTo(50);
+    }
+
+    @Test
+    void updateQueueSettings_negative_nullEventId_throwsIllegalArgument() {
+        assertThatThrownBy(() -> domainService.updateQueueSettings(null, 100, 10))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void updateQueueSettings_negative_negativeCapacity_throwsIllegalArgument() {
+        assertThatThrownBy(() -> domainService.updateQueueSettings(EVENT_ID, -1, 10))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void updateQueueSettings_negative_negativeMaxAccepted_throwsIllegalArgument() {
+        assertThatThrownBy(() -> domainService.updateQueueSettings(EVENT_ID, 100, -1))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void updateQueueSettings_negative_queueNotFound_throwsQueueNotFoundException() {
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
+
+        assertThatThrownBy(() -> domainService.updateQueueSettings(EVENT_ID, 100, 10))
+                .isInstanceOf(QueueNotFoundException.class);
+    }
+
+    // =========================================================================
+    // getQueueSnapshot
+    // =========================================================================
+
+    @Test
+    void getQueueSnapshot_positive_reflectsCurrentQueueState() {
+        VirtualQueue queue = admittedQueue(EVENT_ID, "token-a");
+        queue.push("token-b");
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+
+        QueueSnapshotDTO snapshot = domainService.getQueueSnapshot(EVENT_ID);
+
+        assertThat(snapshot.eventId()).isEqualTo(EVENT_ID);
+        assertThat(snapshot.admittedCount()).isEqualTo(1);
+        assertThat(snapshot.waitingCount()).isEqualTo(1);
+        assertThat(snapshot.admittedUsers()).containsKey("token-a");
+    }
+
+    @Test
+    void getQueueSnapshot_negative_nullEventId_throwsIllegalArgument() {
+        assertThatThrownBy(() -> domainService.getQueueSnapshot(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getQueueSnapshot_negative_queueNotFound_throwsQueueNotFoundException() {
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
+
+        assertThatThrownBy(() -> domainService.getQueueSnapshot(EVENT_ID))
+                .isInstanceOf(QueueNotFoundException.class);
+    }
+
+    // =========================================================================
+    // getAllQueueSnapshots
+    // =========================================================================
+
+    @Test
+    void getAllQueueSnapshots_positive_returnsOneSnapshotPerQueue() {
+        UUID id2 = UUID.fromString("00000000-0000-0000-0000-000000000002");
+        VirtualQueue q1 = new VirtualQueue(EVENT_ID, 500, 50);
+        VirtualQueue q2 = new VirtualQueue(id2, 200, 20);
+        when(queueRepository.getAllQueues()).thenReturn(List.of(q1, q2));
+
+        List<QueueSnapshotDTO> snapshots = domainService.getAllQueueSnapshots();
+
+        assertThat(snapshots).hasSize(2);
+        assertThat(snapshots).extracting(QueueSnapshotDTO::eventId)
+                .containsExactlyInAnyOrder(EVENT_ID, id2);
+    }
+
+    @Test
+    void getAllQueueSnapshots_positive_returnsEmptyListWhenNoQueues() {
+        when(queueRepository.getAllQueues()).thenReturn(List.of());
+
+        assertThat(domainService.getAllQueueSnapshots()).isEmpty();
+    }
+
+    @Test
+    void getAllQueueSnapshots_positive_snapshotFieldsMatchQueue() {
+        VirtualQueue queue = admittedQueue(EVENT_ID, "token-a");
+        queue.push("token-b");
+        when(queueRepository.getAllQueues()).thenReturn(List.of(queue));
+
+        QueueSnapshotDTO snap = domainService.getAllQueueSnapshots().get(0);
+
+        assertThat(snap.capacity()).isEqualTo(Integer.MAX_VALUE);
+        assertThat(snap.maxAccepted()).isEqualTo(100);
+        assertThat(snap.admittedCount()).isEqualTo(1);
+        assertThat(snap.waitingCount()).isEqualTo(1);
     }
 }

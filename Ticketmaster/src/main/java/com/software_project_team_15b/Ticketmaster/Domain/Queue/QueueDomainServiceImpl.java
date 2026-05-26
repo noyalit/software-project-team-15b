@@ -7,6 +7,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIs
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
 
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.retry.annotation.Backoff;
@@ -17,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -363,5 +365,98 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
     @Override
     public boolean canAccessWebsite() {
         return acceptedTokens.size() < MAX_VISITORS;
+    }
+
+    /**
+     * Removes all users from both the waiting list and the admitted set for the given
+     * event queue, leaving it completely empty.
+     *
+     * @param eventId the unique identifier of the event; must not be null
+     * @throws IllegalArgumentException if {@code eventId} is null
+     * @throws QueueNotFoundException   if no queue exists for the given event
+     */
+    @Override
+    @Transactional
+    public void clearEventQueue(UUID eventId) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+        VirtualQueue queue = queueRepository.getQueue(eventId);
+        if (queue == null) {
+            throw new QueueNotFoundException("Queue not found for eventId: " + eventId);
+        }
+        queue.clear();
+        queueRepository.updateQueue(queue);
+    }
+
+    /**
+     * Returns a snapshot of the virtual queue for the given event.
+     *
+     * @param eventId the unique identifier of the event; must not be null
+     * @return a {@link QueueSnapshotDTO} describing the queue's current state
+     * @throws IllegalArgumentException if {@code eventId} is null
+     * @throws QueueNotFoundException   if no queue exists for the given event
+     */
+    @Override
+    public QueueSnapshotDTO getQueueSnapshot(UUID eventId) {
+        if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+        VirtualQueue queue = queueRepository.getQueue(eventId);
+        if (queue == null) {
+            throw new QueueNotFoundException("Queue not found for eventId: " + eventId);
+        }
+        return toSnapshot(queue);
+    }
+
+    /**
+     * Returns snapshots of all virtual queues currently in the repository.
+     *
+     * @return an unmodifiable list of {@link QueueSnapshotDTO}, one per persisted queue
+     */
+    @Override
+    public List<QueueSnapshotDTO> getAllQueueSnapshots() {
+        return queueRepository.getAllQueues().stream()
+                .map(this::toSnapshot)
+                .toList();
+    }
+
+    /**
+     * Updates the capacity and max-accepted limits of the virtual queue for the given event.
+     *
+     * @param eventId      the unique identifier of the event; must not be null
+     * @param capacity     the new maximum number of users that may wait; must be non-negative
+     * @param max_accepted the new maximum number of simultaneously admitted users; must be non-negative
+     * @throws IllegalArgumentException if {@code eventId} is null or either limit is negative
+     * @throws QueueNotFoundException   if no queue exists for the given event
+     */
+    @Override
+    @Transactional
+    public void updateQueueSettings(UUID eventId, int capacity, int max_accepted) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+        if (capacity < 0) {
+            throw new IllegalArgumentException("capacity cannot be negative");
+        }
+        if (max_accepted < 0) {
+            throw new IllegalArgumentException("max_accepted cannot be negative");
+        }
+        VirtualQueue queue = queueRepository.getQueue(eventId);
+        if (queue == null) {
+            throw new QueueNotFoundException("Queue not found for eventId: " + eventId);
+        }
+        queue.setSettings(capacity, max_accepted);
+        queueRepository.updateQueue(queue);
+    }
+
+    private QueueSnapshotDTO toSnapshot(VirtualQueue queue) {
+        Map<String, LocalDateTime> admitted = queue.getAccessMap();
+        return new QueueSnapshotDTO(
+                queue.getId(),
+                queue.getCapacity(),
+                queue.getMaxAccepted(),
+                queue.size(),
+                admitted.size(),
+                admitted
+        );
     }
 }

@@ -586,4 +586,161 @@ public class VirtualQueueTest {
         assertNull(queue.hasAccess(BOB));
         assertNotNull(queue.hasAccess(ALICE)); // ALICE unaffected
     }
+
+    // =========================================================================
+    // remove
+    // =========================================================================
+
+    @Test
+    void remove_positive_removesExistingTokenFromWaitingList() {
+        queue.push(ALICE);
+        assertTrue(queue.remove(ALICE));
+        assertFalse(queue.contains(ALICE));
+        assertTrue(queue.isEmpty());
+    }
+
+    @Test
+    void remove_positive_returnsFalseWhenTokenNotPresent() {
+        assertFalse(queue.remove(ALICE));
+    }
+
+    @Test
+    void remove_positive_doesNotAffectOtherWaitingTokens() {
+        queue.push(ALICE);
+        queue.push(BOB);
+        queue.remove(ALICE);
+        assertTrue(queue.contains(BOB));
+        assertEquals(0, queue.getPosition(BOB));
+    }
+
+    @Test
+    void remove_negative_throwsWhenTokenIsNull() {
+        assertThrows(IllegalArgumentException.class, () -> queue.remove(null));
+    }
+
+    // =========================================================================
+    // clearAccess
+    // =========================================================================
+
+    @Test
+    void clearAccess_positive_removesAdmittedToken() {
+        queue.push(ALICE);
+        queue.advanceQueue(LocalDateTime.now().plusSeconds(100));
+        assertTrue(queue.clearAccess(ALICE));
+        assertNull(queue.hasAccess(ALICE));
+    }
+
+    @Test
+    void clearAccess_positive_returnsFalseWhenTokenNotAdmitted() {
+        assertFalse(queue.clearAccess(ALICE));
+    }
+
+    @Test
+    void clearAccess_positive_doesNotAffectWaitingList() {
+        queue.push(ALICE);
+        queue.push(BOB);
+        queue.advanceQueue(LocalDateTime.now().plusSeconds(100));
+        // ALICE and BOB are now admitted; artificially push CAROL to waiting
+        VirtualQueue limited = new VirtualQueue(queueId, Integer.MAX_VALUE, 1);
+        limited.push(ALICE);
+        limited.push(BOB);
+        limited.advanceQueue(LocalDateTime.now().plusSeconds(100)); // only ALICE admitted
+        limited.clearAccess(ALICE);
+        assertTrue(limited.contains(BOB)); // BOB still waiting
+    }
+
+    @Test
+    void clearAccess_negative_throwsWhenTokenIsNull() {
+        assertThrows(IllegalArgumentException.class, () -> queue.clearAccess(null));
+    }
+
+    // =========================================================================
+    // clear
+    // =========================================================================
+
+    @Test
+    void clear_positive_emptiesWaitingListAndAccessMap() {
+        queue.push(ALICE);
+        queue.push(BOB);
+        queue.advanceQueue(LocalDateTime.now().plusSeconds(100));
+        queue.push(CAROL);
+
+        queue.clear();
+
+        assertTrue(queue.isEmpty());
+        assertTrue(queue.getAccessMap().isEmpty());
+        assertNull(queue.hasAccess(ALICE));
+        assertNull(queue.hasAccess(BOB));
+    }
+
+    @Test
+    void clear_positive_isNoOpOnAlreadyEmptyQueue() {
+        assertDoesNotThrow(() -> queue.clear());
+        assertTrue(queue.isEmpty());
+        assertTrue(queue.getAccessMap().isEmpty());
+    }
+
+    @Test
+    void clear_positive_allowsPushAfterClearing() {
+        queue.push(ALICE);
+        queue.clear();
+        assertDoesNotThrow(() -> queue.push(ALICE));
+        assertTrue(queue.contains(ALICE));
+    }
+
+    // =========================================================================
+    // setSettings
+    // =========================================================================
+
+    @Test
+    void setSettings_positive_updatesCapacity() {
+        VirtualQueue q = new VirtualQueue(queueId, 10, 5);
+        q.setSettings(100, 5);
+        assertEquals(100, q.getCapacity());
+    }
+
+    @Test
+    void setSettings_positive_updatesMaxAccepted() {
+        VirtualQueue q = new VirtualQueue(queueId, 10, 5);
+        q.setSettings(10, 50);
+        assertEquals(50, q.getMaxAccepted());
+    }
+
+    @Test
+    void setSettings_positive_allowsZeroValues() {
+        VirtualQueue q = new VirtualQueue(queueId, 10, 5);
+        assertDoesNotThrow(() -> q.setSettings(0, 0));
+        assertEquals(0, q.getCapacity());
+        assertEquals(0, q.getMaxAccepted());
+    }
+
+    @Test
+    void setSettings_negative_negativeCapacityThrows() {
+        assertThrows(IllegalArgumentException.class, () -> queue.setSettings(-1, 5));
+    }
+
+    @Test
+    void setSettings_negative_negativeMaxAcceptedThrows() {
+        assertThrows(IllegalArgumentException.class, () -> queue.setSettings(10, -1));
+    }
+
+    @Test
+    void setSettings_positive_newCapacityEnforcedOnNextPush() {
+        VirtualQueue q = new VirtualQueue(queueId, 10, 5);
+        q.setSettings(1, 5);
+        q.push(ALICE);
+        assertTrue(q.isFull());
+        assertThrows(IllegalStateException.class, () -> q.push(BOB));
+    }
+
+    @Test
+    void setSettings_positive_newMaxAcceptedEnforcedOnNextAdvance() {
+        VirtualQueue q = new VirtualQueue(queueId, Integer.MAX_VALUE, 10);
+        q.push(ALICE);
+        q.push(BOB);
+        q.setSettings(Integer.MAX_VALUE, 1); // reduce to 1
+        q.advanceQueue(LocalDateTime.now().plusSeconds(100));
+        assertNotNull(q.hasAccess(ALICE));
+        assertNull(q.hasAccess(BOB)); // BOB still waiting
+    }
 }

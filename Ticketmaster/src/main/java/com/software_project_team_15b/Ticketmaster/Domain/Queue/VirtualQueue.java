@@ -93,6 +93,14 @@ public class VirtualQueue {
     }
 
     /**
+     * Get the maximum number of users that may be simultaneously admitted.
+     * @return {@code int} Queue's max-accepted limit
+     */
+    public int getMaxAccepted() {
+        return maxAccepted;
+    }
+
+    /**
      * Get the unique identifier for this queue.
      * @return {@code UUID} Queue's ID
      */
@@ -186,6 +194,53 @@ public class VirtualQueue {
     }
 
     /**
+     * Removes the given token from the waiting list, if present.
+     *
+     * @param item the token to remove; must not be null
+     * @return {@code true} if the token was present and removed
+     * @throws IllegalArgumentException if {@code item} is null
+     */
+    public boolean remove(String item) {
+        if (item == null) throw new IllegalArgumentException("item cannot be null");
+        return queue.remove(item);
+    }
+
+    /**
+     * Removes the given token from {@link #accessMap}, if present.
+     *
+     * @param item the token to remove; must not be null
+     * @return {@code true} if the token had an active access entry that was removed
+     * @throws IllegalArgumentException if {@code item} is null
+     */
+    public boolean clearAccess(String item) {
+        if (item == null) throw new IllegalArgumentException("item cannot be null");
+        return accessMap.remove(item) != null;
+    }
+
+    /**
+     * Removes all entries from both the waiting list and {@link #accessMap}, leaving
+     * this queue completely empty.
+     */
+    public void clear() {
+        queue.clear();
+        accessMap.clear();
+    }
+
+    /**
+     * Updates the capacity and max-accepted limits for this queue.
+     *
+     * @param capacity    the new maximum number of users that may wait; must be non-negative
+     * @param maxAccepted the new maximum number of simultaneously admitted users; must be non-negative
+     * @throws IllegalArgumentException if either value is negative
+     */
+    public void setSettings(int capacity, int maxAccepted) {
+        if (capacity < 0) throw new IllegalArgumentException("capacity cannot be negative");
+        if (maxAccepted < 0) throw new IllegalArgumentException("maxAccepted cannot be negative");
+        this.capacity = capacity;
+        this.maxAccepted = maxAccepted;
+    }
+
+    /**
      * Removes all entries from {@link #accessMap} whose expiry time is at or before now.
      */
     public void clearAccessMap() {
@@ -238,4 +293,5 @@ public class VirtualQueue {
         clearAccessMap();
         return accessMap.get(item);
     }
+
 }

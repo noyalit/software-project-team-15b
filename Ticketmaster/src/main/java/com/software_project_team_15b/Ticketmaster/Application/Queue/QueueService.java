@@ -5,6 +5,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNo
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 
@@ -13,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -104,7 +106,10 @@ public class QueueService {
     public void createEventQueue(UUID userId, UUID companyId, UUID eventId, int  capacity, int max_accepted) {
         try {
             if (userId == null) throw new IllegalArgumentException("userId cannot be null");
+            if (companyId == null) throw new IllegalArgumentException("companyId cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            if (capacity <= 0) throw new IllegalArgumentException("capacity cannot be <= 0");
+            if (max_accepted <= 0) throw new IllegalArgumentException("max_accepted cannot be <= 0");
             requireEventPermissions(userId, companyId, eventId);
             queueDomainService.createEventQueue(eventId,  capacity, max_accepted);
             AUDIT.info("op=createEventQueue userId={} eventId={} result=ok", userId, eventId);
@@ -127,6 +132,7 @@ public class QueueService {
     public void deleteEventQueue(UUID userId, UUID companyId, UUID eventId) {
         try {
             if (userId == null) throw new IllegalArgumentException("userId cannot be null");
+            if (companyId == null) throw new IllegalArgumentException("companyId cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             requireEventPermissions(userId, companyId, eventId);
             queueDomainService.deleteEventQueue(eventId);
@@ -137,11 +143,114 @@ public class QueueService {
         }
     }
 
+    /**
+     * Removes all users from both the waiting list and the admitted set for the given
+     * event queue. Requires system-admin privileges.
+     *
+     * @param token   the caller's auth token; must not be null
+     * @param eventId the unique identifier of the event; must not be null
+     * @throws IllegalArgumentException if {@code token} or {@code eventId} is null
+     * @throws UnauthorizedException    if the caller is not a system admin
+     * @throws QueueNotFoundException   if no queue exists for the given event
+     */
+    public void clearEventQueue(String token, UUID eventId) {
+        try {
+            if (token == null) throw new IllegalArgumentException("token cannot be null");
+            if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            requireSystemAdmin(token);
+            queueDomainService.clearEventQueue(eventId);
+            AUDIT.info("op=clearEventQueue token={} eventId={} result=ok", token, eventId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=clearEventQueue eventId={} result=error error={}", eventId, e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * Returns a snapshot of the virtual queue for the given event.
+     *
+     * @param adminToken the caller's auth token; must belong to a system admin
+     * @param eventId    the unique identifier of the event; must not be null
+     * @return a {@link QueueSnapshotDTO} describing the queue's current state
+     * @throws IllegalArgumentException if {@code adminToken} or {@code eventId} is null
+     * @throws UnauthorizedException    if the caller is not a system admin
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException if no queue exists for the given event
+     */
+    public QueueSnapshotDTO getQueueSnapshot(String adminToken, UUID eventId) {
+        try {
+            if (adminToken == null) throw new IllegalArgumentException("adminToken cannot be null");
+            if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            requireSystemAdmin(adminToken);
+            QueueSnapshotDTO snapshot = queueDomainService.getQueueSnapshot(eventId);
+            AUDIT.info("op=getQueueSnapshot adminToken={} eventId={} result=ok", adminToken, eventId);
+            return snapshot;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=getQueueSnapshot eventId={} result=error error={}", eventId, e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * Updates the capacity and max-accepted limits of the virtual queue for the given event.
+     *
+     * @param token        the caller's auth token; must not be null
+     * @param companyId    the company that owns the event; must not be null
+     * @param eventId      the unique identifier of the event; must not be null
+     * @param capacity     the new maximum number of users that may wait; must be positive
+     * @param max_accepted the new maximum number of simultaneously admitted users; must be positive
+     * @throws IllegalArgumentException if any argument is null or any limit is not positive
+     * @throws UnauthorizedException    if the caller is not a manager, owner, or founder of the event
+     * @throws QueueNotFoundException   if no queue exists for the given event
+     */
+    public void updateEventQueueSettings(String token, UUID companyId, UUID eventId, int capacity, int max_accepted) {
+        try {
+            if (token == null) throw new IllegalArgumentException("token cannot be null");
+            if (companyId == null) throw new IllegalArgumentException("companyId cannot be null");
+            if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
+            if (capacity <= 0) throw new IllegalArgumentException("capacity cannot be <= 0");
+            if (max_accepted <= 0) throw new IllegalArgumentException("max_accepted cannot be <= 0");
+            UUID userId = auth.extractUserId(token);
+            requireEventPermissions(userId, companyId, eventId);
+            queueDomainService.updateQueueSettings(eventId, capacity, max_accepted);
+            AUDIT.info("op=updateEventQueueSettings userId={} eventId={} capacity={} max_accepted={} result=ok", userId, eventId, capacity, max_accepted);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=updateEventQueueSettings eventId={} capacity={} max_accepted={} result=error error={}", eventId, capacity, max_accepted, e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * Returns snapshots of all virtual queues in the repository.
+     *
+     * @param adminToken the caller's auth token; must belong to a system admin
+     * @return an unmodifiable list of {@link QueueSnapshotDTO}, one per persisted queue
+     * @throws IllegalArgumentException if {@code adminToken} is null
+     * @throws UnauthorizedException    if the caller is not a system admin
+     */
+    public List<QueueSnapshotDTO> getAllQueueSnapshots(String adminToken) {
+        try {
+            if (adminToken == null) throw new IllegalArgumentException("adminToken cannot be null");
+            requireSystemAdmin(adminToken);
+            List<QueueSnapshotDTO> snapshots = queueDomainService.getAllQueueSnapshots();
+            AUDIT.info("op=getAllQueueSnapshots adminToken={} count={} result=ok", adminToken, snapshots.size());
+            return snapshots;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=getAllQueueSnapshots result=error error={}", e.getMessage());
+            throw e;
+        }
+    }
+
     private void requireEventPermissions(UUID userId, UUID companyId, UUID eventId) {
         if (!userDomainService.isActiveManager(userId, companyId, eventId) &&
             !userDomainService.isActiveOwner(userId, companyId) &&
             !userDomainService.isActiveFounder(userId, companyId)) {
             throw new UnauthorizedException("user does not have permission to perform this action");
+        }
+    }
+
+    private void requireSystemAdmin(String token) {
+        if (!auth.isSystemAdmin(token)) {
+            throw new UnauthorizedException("caller is not a system admin");
         }
     }
 }
