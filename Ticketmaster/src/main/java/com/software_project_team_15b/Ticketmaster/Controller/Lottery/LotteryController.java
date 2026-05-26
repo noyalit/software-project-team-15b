@@ -87,7 +87,6 @@ public class LotteryController {
     @PostMapping("/entries")
     public ResponseEntity<ApiResponse<Void>> addToEventLottery(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
-            @PathVariable UUID companyId,
             @PathVariable UUID eventId
     ) {
         try {
@@ -108,7 +107,7 @@ public class LotteryController {
     }
 
     @Operation(summary = "Run the lottery draw for an event (manager/owner/founder only)")
-    @PostMapping("/draw")
+    @PostMapping(path = "/draw", consumes = "application/json")
     public ResponseEntity<ApiResponse<Set<UUID>>> runEventLottery(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
             @PathVariable UUID companyId,
@@ -160,7 +159,6 @@ public class LotteryController {
     @GetMapping("/eligibility")
     public ResponseEntity<ApiResponse<LotteryEligibilityDTO>> getLotteryEligibility(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
-            @PathVariable UUID companyId,
             @PathVariable UUID eventId
     ) {
         try {
