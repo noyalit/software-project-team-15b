@@ -82,8 +82,9 @@ public class QueueService {
             if (token == null) throw new IllegalArgumentException("token cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             validateToken(token);
+            UUID userId = auth.extractUserId(token);
             QueueAccessDTO view = queueDomainService.getQueueAccessView(token, eventId);
-            AUDIT.info("op=getQueueAccessView token={} eventId={} status={}", token, eventId, view.status());
+            AUDIT.info("op=getQueueAccessView userId={} eventId={} status={}", userId, eventId, view.status());
             return view;
         } catch (RuntimeException e) {
             AUDIT.warn("op=getQueueAccessView eventId={} result=error error={}", eventId, e.getMessage());
@@ -110,10 +111,11 @@ public class QueueService {
             if (max_accepted < 0) throw new IllegalArgumentException("max_accepted cannot be negative");
             validateToken(token);
             requireSystemAdmin(token);
+            UUID userId = auth.extractUserId(token);
             queueDomainService.createEventQueue(eventId,  capacity, max_accepted);
-            AUDIT.info("op=createEventQueue token={} eventId={} result=ok", token, eventId);
+            AUDIT.info("op=createEventQueue userId={} eventId={} result=ok", userId, eventId);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=createEventQueue token={} eventId={} result=error error={}", token, eventId, e.getMessage());
+            AUDIT.warn("op=createEventQueue eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
         }
     }
@@ -134,10 +136,11 @@ public class QueueService {
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             validateToken(token);
             requireSystemAdmin(token);
+            UUID userId = auth.extractUserId(token);
             queueDomainService.deleteEventQueue(eventId);
-            AUDIT.info("op=deleteEventQueue token={} eventId={} result=ok", token, eventId);
+            AUDIT.info("op=deleteEventQueue userId={} eventId={} result=ok", userId, eventId);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=deleteEventQueue token={} eventId={} result=error error={}", token, eventId, e.getMessage());
+            AUDIT.warn("op=deleteEventQueue eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
         }
     }
@@ -150,7 +153,7 @@ public class QueueService {
      * @param eventId the unique identifier of the event; must not be null
      * @throws IllegalArgumentException if {@code token} or {@code eventId} is null
      * @throws InvalidTokenException    if the token is invalid or expired
-     * @throws UnauthorizedException    if the caller is not a system admin
+     * @throws UnauthorizedException    if the caller is not a system adminF
      * @throws QueueNotFoundException   if no queue exists for the given event
      */
     public void clearEventQueue(String token, UUID eventId) {
@@ -159,8 +162,9 @@ public class QueueService {
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             validateToken(token);
             requireSystemAdmin(token);
+            UUID userId = auth.extractUserId(token);
             queueDomainService.clearEventQueue(eventId);
-            AUDIT.info("op=clearEventQueue token={} eventId={} result=ok", token, eventId);
+            AUDIT.info("op=clearEventQueue userId={} eventId={} result=ok", userId, eventId);
         } catch (RuntimeException e) {
             AUDIT.warn("op=clearEventQueue eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
@@ -184,8 +188,9 @@ public class QueueService {
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
             validateToken(adminToken);
             requireSystemAdmin(adminToken);
+            UUID userId = auth.extractUserId(adminToken);
             QueueSnapshotDTO snapshot = queueDomainService.getQueueSnapshot(eventId);
-            AUDIT.info("op=getQueueSnapshot adminToken={} eventId={} result=ok", adminToken, eventId);
+            AUDIT.info("op=getQueueSnapshot userId={} eventId={} result=ok", userId, eventId);
             return snapshot;
         } catch (RuntimeException e) {
             AUDIT.warn("op=getQueueSnapshot eventId={} result=error error={}", eventId, e.getMessage());
@@ -213,8 +218,9 @@ public class QueueService {
             if (max_accepted < 0) throw new IllegalArgumentException("max_accepted cannot be <= 0");
             validateToken(token);
             requireSystemAdmin(token);
+            UUID userId = auth.extractUserId(token);
             queueDomainService.updateQueueSettings(eventId, capacity, max_accepted);
-            AUDIT.info("op=updateEventQueueSettings token={} eventId={} capacity={} max_accepted={} result=ok", token, eventId, capacity, max_accepted);
+            AUDIT.info("op=updateEventQueueSettings userId={} eventId={} capacity={} max_accepted={} result=ok", userId, eventId, capacity, max_accepted);
         } catch (RuntimeException e) {
             AUDIT.warn("op=updateEventQueueSettings eventId={} capacity={} max_accepted={} result=error error={}", eventId, capacity, max_accepted, e.getMessage());
             throw e;
@@ -235,8 +241,9 @@ public class QueueService {
             if (adminToken == null) throw new IllegalArgumentException("adminToken cannot be null");
             validateToken(adminToken);
             requireSystemAdmin(adminToken);
+            UUID userId = auth.extractUserId(adminToken);
             List<QueueSnapshotDTO> snapshots = queueDomainService.getAllQueueSnapshots();
-            AUDIT.info("op=getAllQueueSnapshots adminToken={} count={} result=ok", adminToken, snapshots.size());
+            AUDIT.info("op=getAllQueueSnapshots userId={} count={} result=ok", userId, snapshots.size());
             return snapshots;
         } catch (RuntimeException e) {
             AUDIT.warn("op=getAllQueueSnapshots result=error error={}", e.getMessage());
