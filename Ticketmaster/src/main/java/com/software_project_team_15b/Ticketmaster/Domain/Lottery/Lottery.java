@@ -51,6 +51,9 @@ public class Lottery {
     @Column(name = "expiration_time")
     private LocalDateTime expirationTime = null;
 
+    @Column(name = "drawn")
+    private boolean drawn = false;
+
     @Version
     private long version;
 
@@ -202,7 +205,7 @@ public class Lottery {
 
             result.add(value);
         }
-
+        drawn = true;
         return result;
     }
 
@@ -223,5 +226,9 @@ public class Lottery {
      */
     public LocalDateTime getExpirationTime() {
         return expirationTime;
+    }
+
+    public boolean isDrawn() {
+        return drawn;
     }
 }

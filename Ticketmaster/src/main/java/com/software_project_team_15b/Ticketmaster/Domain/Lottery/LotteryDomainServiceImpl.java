@@ -189,6 +189,11 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
         if (lottery == null) {
             throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
         }
+
+        if (lottery.isDrawn()) {
+            throw new IllegalStateException("Lottery has already been drawn for eventId: " + eventId);
+        }
+
         Set<UUID> drawn = lottery.popRandom(count);
         lottery.setExpirationTime(expirationTime);
         lotteryRepository.updateLottery(lottery);
@@ -206,6 +211,7 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
      * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
      */
     @Override
+    @Transactional(readOnly = true)
     public boolean hasAccess(UUID userId, UUID eventId) {
         if (userId == null) {
             throw new IllegalArgumentException("userId cannot be null");
@@ -266,6 +272,7 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
      * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
      */
     @Override
+    @Transactional(readOnly = true)
     public LotteryEligibilityDTO getLotteryEligibilityForEvent(UUID userId, UUID eventId) {
         if (userId == null) {
             throw new IllegalArgumentException("userId cannot be null");

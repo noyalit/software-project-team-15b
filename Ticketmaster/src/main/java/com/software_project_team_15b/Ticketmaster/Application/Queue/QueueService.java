@@ -6,7 +6,6 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Unautho
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 
 import org.slf4j.Logger;
@@ -95,17 +94,19 @@ public class QueueService {
     /**
      * Creates a new, empty virtual queue for the given event.
      *
-     * @param token    the caller's auth token; must not be null
-     * @param eventId   the unique identifier of the event; must not be null
-     * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
-     * @throws UnauthorizedException    if the caller is not a manager, owner, or founder of the event
+     * @param token        the caller's auth token; must not be null
+     * @param eventId      the unique identifier of the event; must not be null
+     * @param capacity     the maximum number of users that may wait; must be non-negative
+     * @param max_accepted the maximum number of simultaneously admitted users; must be non-negative
+     * @throws IllegalArgumentException if {@code token} or {@code eventId} is null, or either limit is negative
+     * @throws UnauthorizedException    if the caller is not a system admin
      */
     public void createEventQueue(String token, UUID eventId, int  capacity, int max_accepted) {
         try {
             if (token == null) throw new IllegalArgumentException("token cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-            if (capacity <= 0) throw new IllegalArgumentException("capacity cannot be <= 0");
-            if (max_accepted <= 0) throw new IllegalArgumentException("max_accepted cannot be <= 0");
+            if (capacity < 0) throw new IllegalArgumentException("capacity cannot be negative");
+            if (max_accepted < 0) throw new IllegalArgumentException("max_accepted cannot be negative");
             requireSystemAdmin(token);
             queueDomainService.createEventQueue(eventId,  capacity, max_accepted);
             AUDIT.info("op=createEventQueue token={} eventId={} result=ok", token, eventId);
@@ -118,10 +119,10 @@ public class QueueService {
     /**
      * Deletes the virtual queue associated with the given event.
      *
-     * @param token    the caller's auth token; must not be null
-     * @param eventId   the unique identifier of the event; must not be null
-     * @throws IllegalArgumentException if {@code userId} or {@code eventId} is null
-     * @throws UnauthorizedException    if the caller is not a manager, owner, or founder of the event
+     * @param token   the caller's auth token; must not be null
+     * @param eventId the unique identifier of the event; must not be null
+     * @throws IllegalArgumentException if {@code token} or {@code eventId} is null
+     * @throws UnauthorizedException    if the caller is not a system admin
      * @throws QueueNotFoundException   if no queue exists for the given event
      */
     public void deleteEventQueue(String token, UUID eventId) {

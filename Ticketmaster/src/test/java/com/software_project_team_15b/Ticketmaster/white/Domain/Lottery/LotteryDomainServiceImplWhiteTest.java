@@ -252,16 +252,16 @@ class LotteryDomainServiceImplWhiteTest {
     }
 
     @Test
-    void runEventLottery_calledTwice_secondCallReturnsEmptySet() {
+    void runEventLottery_calledTwice_secondCallThrowsIllegalState() {
         Lottery lottery = new Lottery(EVENT_ID);
         lottery.add(USER_A);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
         service.runEventLottery(EVENT_ID, 1, EXPIRY);
-        Set<UUID> second = service.runEventLottery(EVENT_ID, 1, EXPIRY);
 
-        assertThat(second).isEmpty();
-        verify(lotteryRepository, times(2)).updateLottery(any());
+        assertThatThrownBy(() -> service.runEventLottery(EVENT_ID, 1, EXPIRY))
+                .isInstanceOf(IllegalStateException.class);
+        verify(lotteryRepository, times(1)).updateLottery(any());
     }
 
     @Test
@@ -420,21 +420,26 @@ class LotteryDomainServiceImplWhiteTest {
     }
 
     @Test
-    void concurrentRunEventLottery_allCallsCompleteWithoutException() throws InterruptedException {
-        Lottery lottery = new Lottery(EVENT_ID);
-        for (int i = 0; i < 10; i++) lottery.add(UUID.randomUUID());
-        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
+    void concurrentRunEventLottery_independentLotteries_allSucceed() throws InterruptedException {
+        int n = 10;
+        UUID[] eventIds = new UUID[n];
+        for (int i = 0; i < n; i++) {
+            eventIds[i] = UUID.randomUUID();
+            Lottery lottery = new Lottery(eventIds[i]);
+            lottery.add(UUID.randomUUID());
+            when(lotteryRepository.getLottery(eventIds[i])).thenReturn(lottery);
+        }
 
-        int threads = 10;
         CountDownLatch start = new CountDownLatch(1);
-        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        ExecutorService pool = Executors.newFixedThreadPool(n);
         AtomicInteger successes = new AtomicInteger();
 
-        for (int i = 0; i < threads; i++) {
+        for (int i = 0; i < n; i++) {
+            final UUID eid = eventIds[i];
             pool.submit(() -> {
                 try {
                     start.await();
-                    service.runEventLottery(EVENT_ID, 1, EXPIRY);
+                    service.runEventLottery(eid, 1, EXPIRY);
                     successes.incrementAndGet();
                 } catch (Exception ignored) {}
                 return null;
@@ -445,7 +450,7 @@ class LotteryDomainServiceImplWhiteTest {
         pool.shutdown();
         assertThat(pool.awaitTermination(10, SECONDS)).isTrue();
 
-        assertThat(successes.get()).isEqualTo(threads);
+        assertThat(successes.get()).isEqualTo(n);
     }
 
     // =========================================================================

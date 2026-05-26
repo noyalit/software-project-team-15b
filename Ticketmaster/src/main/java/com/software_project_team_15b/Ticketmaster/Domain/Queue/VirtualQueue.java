@@ -182,6 +182,13 @@ public class VirtualQueue {
         return queue.contains(item);
     }
 
+    /**
+     * Returns the zero-based position of the given token in the waiting list.
+     *
+     * @param item the token to locate; must not be null
+     * @return the 0-based index of the token in the queue
+     * @throws IllegalArgumentException if {@code item} is null or not present in the queue
+     */
     public int getPosition(String item) {
         if (item == null) {
             throw new IllegalArgumentException("item cannot be null");

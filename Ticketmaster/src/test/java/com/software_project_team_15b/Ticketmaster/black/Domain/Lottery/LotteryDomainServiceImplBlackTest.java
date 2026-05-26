@@ -223,15 +223,15 @@ class LotteryDomainServiceImplBlackTest {
     }
 
     @Test
-    void runEventLottery_calledTwice_secondCallReturnsEmptySet() {
+    void runEventLottery_calledTwice_secondCallThrowsIllegalState() {
         Lottery lottery = new Lottery(EVENT_ID);
         lottery.add(USER_A);
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
         domainService.runEventLottery(EVENT_ID, 1, EXPIRY);
-        Set<UUID> second = domainService.runEventLottery(EVENT_ID, 1, EXPIRY);
 
-        assertThat(second).isEmpty();
+        assertThatThrownBy(() -> domainService.runEventLottery(EVENT_ID, 1, EXPIRY))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     // =========================================================================
@@ -418,18 +418,17 @@ class LotteryDomainServiceImplBlackTest {
     }
 
     @Test
-    void runEventLottery_sameEvent_sequentialCallsDrainPool() {
+    void runEventLottery_positive_countBoundedByPoolSize() {
         Lottery lottery = new Lottery(EVENT_ID);
         for (int i = 0; i < 4; i++) lottery.add(UUID.randomUUID());
         when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
 
-        Set<UUID> first  = domainService.runEventLottery(EVENT_ID, 3, EXPIRY);
-        Set<UUID> second = domainService.runEventLottery(EVENT_ID, 3, EXPIRY);
-        Set<UUID> third  = domainService.runEventLottery(EVENT_ID, 3, EXPIRY);
+        Set<UUID> result = domainService.runEventLottery(EVENT_ID, 3, EXPIRY);
 
-        assertThat(first).hasSize(3);
-        assertThat(second).hasSize(1);
-        assertThat(third).isEmpty();
+        assertThat(result).hasSize(3);
+        // Lottery is now marked drawn; any subsequent call must be rejected
+        assertThatThrownBy(() -> domainService.runEventLottery(EVENT_ID, 3, EXPIRY))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
