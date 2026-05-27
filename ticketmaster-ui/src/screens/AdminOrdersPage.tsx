@@ -254,7 +254,7 @@ export default function AdminOrdersPage() {
               >
                 <option value="">Select a company…</option>
                 {companiesQuery.data?.map((c) => (
-                  <option key={c.id} value={c.id}>
+                  <option key={c.companyId} value={c.companyId}>
                     {c.name}
                   </option>
                 ))}

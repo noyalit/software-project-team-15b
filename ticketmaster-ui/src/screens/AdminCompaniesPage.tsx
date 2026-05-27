@@ -134,7 +134,7 @@ export default function AdminCompaniesPage() {
               onChange={(e) => {
                 const nextId = e.target.value;
                 setSelectedCompanyId(nextId);
-                const selected = companiesQuery.data?.find((c) => c.id === nextId);
+                const selected = companiesQuery.data?.find((c) => c.companyId === nextId);
                 if (selected) {
                   setStatus(selected.status);
                 }
@@ -144,7 +144,7 @@ export default function AdminCompaniesPage() {
             >
               <option value="">Select a company…</option>
               {companiesQuery.data?.map((c) => (
-                <option key={c.id} value={c.id}>
+                <option key={c.companyId} value={c.companyId}>
                   {c.name}
                 </option>
               ))}
@@ -219,10 +219,10 @@ export default function AdminCompaniesPage() {
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {companiesQuery.data.map((c) => (
-                  <tr key={c.id} className="bg-white">
+                  <tr key={c.companyId} className="bg-white">
                     <td className="px-4 py-3 font-medium text-slate-900">{c.name}</td>
                     <td className="px-4 py-3 text-slate-700">{c.status}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-700">{c.id}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-slate-700">{c.companyId}</td>
                   </tr>
                 ))}
               </tbody>

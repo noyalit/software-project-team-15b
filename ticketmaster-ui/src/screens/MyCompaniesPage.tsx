@@ -115,14 +115,14 @@ export default function MyCompaniesPage() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {companiesQuery.data.map((c) => (
-            <div key={c.id} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div key={c.companyId} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-lg font-semibold text-slate-900">{c.name}</div>
                   <div className="mt-1 text-sm text-slate-600">Status: {c.status}</div>
                 </div>
                 <Link
-                  to={`/companies/${c.id}`}
+                  to={`/companies/${c.companyId}`}
                   className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                 >
                   Open

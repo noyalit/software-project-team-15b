@@ -47,7 +47,7 @@ export type EventDTO = {
 };
 
 export type CompanyDTO = {
-  id: string;
+  companyId: string;
   name: string;
   status: CompanyStatus;
   founderId?: string;
