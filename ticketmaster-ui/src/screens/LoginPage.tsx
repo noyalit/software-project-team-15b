@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { http } from '../api/http';
-import type { ApiResponse } from '../api/types';
+import type { ApiResponse, MemberDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 import { useState } from 'react';
 
@@ -10,24 +10,36 @@ type LoginResponse = ApiResponse<string>;
 export default function LoginPage() {
   const nav = useNavigate();
   const location = useLocation();
-  const { setAuth } = useAuthStore();
+  const { setAuth, setUsername: setAuthUsername } = useAuthStore();
 
   const successMessage = (location.state as { successMessage?: string } | null)?.successMessage;
 
   const [mode, setMode] = useState<'member' | 'system-admin'>('member');
-  const [username, setUsername] = useState('');
+  const [usernameInput, setUsernameInput] = useState('');
   const [password, setPassword] = useState('');
 
   const login = useMutation({
     mutationFn: async () => {
       const path = mode === 'member' ? '/api/users/login' : '/api/users/login/system-admin';
-      const res = await http.post<LoginResponse>(path, { username, password });
+      const res = await http.post<LoginResponse>(path, { username: usernameInput, password });
       if (res.data.error) throw new Error(res.data.error);
       if (!res.data.data) throw new Error('No token returned');
       return res.data.data;
     },
-    onSuccess: (token) => {
-      setAuth(token, mode === 'member' ? 'member' : 'system-admin');
+    onSuccess: async (token) => {
+      const nextUserType = mode === 'member' ? 'member' : 'system-admin';
+      setAuth(token, nextUserType, nextUserType === 'member' ? usernameInput : null);
+      if (nextUserType === 'member') {
+        try {
+          const res = await http.get<ApiResponse<MemberDTO>>('/api/users/me');
+          const name = res.data.data?.username ?? null;
+          setAuthUsername(name);
+        } catch {
+          setAuthUsername(null);
+        }
+      } else {
+        setAuthUsername(null);
+      }
       nav('/');
     },
   });
@@ -72,8 +84,8 @@ export default function LoginPage() {
           <label className="block">
             <div className="text-sm font-medium text-slate-700">Username</div>
             <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              value={usernameInput}
+              onChange={(e) => setUsernameInput(e.target.value)}
               className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
             />
           </label>

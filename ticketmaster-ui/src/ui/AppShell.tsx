@@ -1,4 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
 import { Link, Outlet, useLocation } from 'react-router-dom';
+import { http } from '../api/http';
+import type { ApiResponse, MemberDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 import logo from '../assets/Ticket4U_logo.jpeg';
 
@@ -20,7 +23,28 @@ function NavLink({ to, label }: { to: string; label: string }) {
 }
 
 export default function AppShell() {
-  const { token, userType, logout } = useAuthStore();
+  const { token, userType, username, logout } = useAuthStore();
+
+  const meQuery = useQuery({
+    queryKey: ['me', token],
+    queryFn: async () => {
+      const res = await http.get<ApiResponse<MemberDTO>>('/api/users/me');
+      if (res.data.error) throw new Error(res.data.error);
+      if (!res.data.data) throw new Error('No user returned');
+      return res.data.data;
+    },
+    enabled: Boolean(token) && userType === 'member',
+    staleTime: 60_000,
+  });
+
+  const badgeText = (() => {
+    if (!token) return null;
+    if (userType === 'member') {
+      const name = username || meQuery.data?.username;
+      return name ? `Hello ${name}!` : 'Hello!';
+    }
+    return 'Admin';
+  })();
 
   return (
     <div className="min-h-screen">
@@ -40,9 +64,11 @@ export default function AppShell() {
           <div className="flex items-center gap-2">
             {token ? (
               <>
-                <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-                  {userType}
-                </span>
+                {badgeText && (
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                    {badgeText}
+                  </span>
+                )}
                 <button
                   onClick={logout}
                   className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"

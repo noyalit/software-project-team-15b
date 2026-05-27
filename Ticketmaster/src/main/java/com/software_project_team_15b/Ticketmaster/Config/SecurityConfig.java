@@ -31,6 +31,7 @@ public class SecurityConfig {
                 }))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/**").permitAll()
                         .requestMatchers(
                                 "/api/users/enter",
                                 "/api/users/login",
@@ -39,7 +40,7 @@ public class SecurityConfig {
                         ).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/events/search").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/events/**").permitAll()
-                        .anyRequest().authenticated());
+                        .anyRequest().permitAll());
 
         return http.build();
     }

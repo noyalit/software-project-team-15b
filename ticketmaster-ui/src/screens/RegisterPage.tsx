@@ -73,7 +73,6 @@ export default function RegisterPage() {
               onChange={(e) => setBirthDate(e.target.value)}
               className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400"
             />
-            <div className="mt-1 text-xs text-slate-500">Format: YYYY-MM-DD (e.g. 2000-01-01).</div>
           </label>
 
         <button
