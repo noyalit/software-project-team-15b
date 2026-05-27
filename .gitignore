@@ -1,1 +1,12 @@
 /.idea/
+
+# ticketmaster-ui
+/ticketmaster-ui/node_modules/
+/ticketmaster-ui/dist/
+/ticketmaster-ui/.vite/
+/ticketmaster-ui/npm-debug.log*
+/ticketmaster-ui/yarn-debug.log*
+/ticketmaster-ui/yarn-error.log*
+/ticketmaster-ui/pnpm-debug.log*
+/ticketmaster-ui/.env
+/ticketmaster-ui/.env.*
