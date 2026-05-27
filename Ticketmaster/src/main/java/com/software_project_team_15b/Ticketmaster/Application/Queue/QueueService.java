@@ -1,23 +1,25 @@
 package com.software_project_team_15b.Ticketmaster.Application.Queue;
 
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
-import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
-import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
-import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
-
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.events.TempTokenAcceptedFromQueueEvent;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 
 /**
  * Application-layer facade over the queue domain.
@@ -36,10 +38,12 @@ public class QueueService {
 
     private final IAuth auth;
     private final IQueueDomainService queueDomainService;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public QueueService(IQueueDomainService queueDomainService, IAuth auth) {
+    public QueueService(IQueueDomainService queueDomainService, IAuth auth, ApplicationEventPublisher eventPublisher) {
         this.queueDomainService = Objects.requireNonNull(queueDomainService);
         this.auth = auth;
+        this.eventPublisher = Objects.requireNonNull(eventPublisher);
     }
 
     /**
@@ -52,13 +56,23 @@ public class QueueService {
      */
     @Scheduled(fixedRate = SITE_QUEUE_INTERVAL, timeUnit = TimeUnit.SECONDS)
     private void acceptUsersFromSiteQueue() {
-        Set<String> acceptedTokens = queueDomainService.getAcceptedTokens();
-        for (String token : acceptedTokens) {
+        Set<String> beforeAcceptedTokens = Set.copyOf(queueDomainService.getAcceptedTokens());
+
+        for (String token : beforeAcceptedTokens) {
             if (!auth.isTokenValid(token)) {
                 queueDomainService.removeAcceptedToken(token);
             }
         }
+
         queueDomainService.acceptUsersFromSiteQueue();
+
+        Set<String> afterAcceptedTokens = queueDomainService.getAcceptedTokens();
+
+        afterAcceptedTokens.stream()
+                .filter(token -> !beforeAcceptedTokens.contains(token))
+                .forEach(token ->
+                        eventPublisher.publishEvent(new TempTokenAcceptedFromQueueEvent(token))
+                );
     }
 
     private void validateToken(String token) {
