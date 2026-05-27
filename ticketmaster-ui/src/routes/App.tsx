@@ -11,6 +11,7 @@ import AdminQueuesPage from '../screens/AdminQueuesPage';
 import AdminCompaniesPage from '../screens/AdminCompaniesPage';
 import AdminMembersPage from '../screens/AdminMembersPage';
 import AdminOrdersPage from '../screens/AdminOrdersPage';
+import CreateCompanyPage from '../screens/CreateCompanyPage';
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/me" element={<ProfilePage />} />
 
         <Route path="/companies/me" element={<MyCompaniesPage />} />
+        <Route path="/companies/new" element={<CreateCompanyPage />} />
         <Route path="/admin/queues" element={<AdminQueuesPage />} />
         <Route path="/admin/companies" element={<AdminCompaniesPage />} />
         <Route path="/admin/members" element={<AdminMembersPage />} />

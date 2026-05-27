@@ -93,8 +93,18 @@ export default function MyCompaniesPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">My Companies</h1>
-        <p className="mt-1 text-sm text-slate-600">Companies you own or founded.</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">My Companies</h1>
+            <p className="mt-1 text-sm text-slate-600">Companies you own or founded.</p>
+          </div>
+          <Link
+            to="/companies/new"
+            className="inline-flex items-center justify-center rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            Create company
+          </Link>
+        </div>
       </div>
 
       {companiesQuery.data.length === 0 ? (
