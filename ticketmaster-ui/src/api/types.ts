@@ -6,6 +6,8 @@ export type ApiResponse<T> = {
 export type Category = string;
 export type EventStatus = string;
 
+export type CompanyStatus = 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
+
 export type EventAreaView = {
   areaId: string;
   name: string;
@@ -27,7 +29,7 @@ export type EventDTO = {
 export type CompanyDTO = {
   id: string;
   name: string;
-  status: string;
+  status: CompanyStatus;
   founderId?: string;
 };
 

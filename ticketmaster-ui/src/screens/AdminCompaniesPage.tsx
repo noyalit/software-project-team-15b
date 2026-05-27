@@ -3,7 +3,7 @@ import type { AxiosError } from 'axios';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { http } from '../api/http';
-import type { ApiResponse, CompanyDTO } from '../api/types';
+import type { ApiResponse, CompanyDTO, CompanyStatus } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 
 type CompaniesResponse = ApiResponse<CompanyDTO[]>;
@@ -15,7 +15,7 @@ export default function AdminCompaniesPage() {
   const { token, userType, clearAuth } = useAuthStore();
 
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
-  const [status, setStatus] = useState('ACTIVE');
+  const [status, setStatus] = useState<CompanyStatus>('ACTIVE');
 
   const companiesQuery = useQuery({
     queryKey: ['admin', 'companies', token],
@@ -122,7 +122,14 @@ export default function AdminCompaniesPage() {
             <div className="text-sm font-medium text-slate-700">Company</div>
             <select
               value={selectedCompanyId}
-              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              onChange={(e) => {
+                const nextId = e.target.value;
+                setSelectedCompanyId(nextId);
+                const selected = companiesQuery.data?.find((c) => c.id === nextId);
+                if (selected) {
+                  setStatus(selected.status);
+                }
+              }}
               disabled={companiesQuery.isPending || companiesQuery.isError}
               className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm disabled:opacity-60"
             >
@@ -136,12 +143,15 @@ export default function AdminCompaniesPage() {
           </label>
           <label className="block">
             <div className="text-sm font-medium text-slate-700">Status</div>
-            <input
+            <select
               value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              placeholder="ACTIVE / SUSPENDED / ..."
+              onChange={(e) => setStatus(e.target.value as CompanyStatus)}
               className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
-            />
+            >
+              <option value="ACTIVE">ACTIVE</option>
+              <option value="SUSPENDED">SUSPENDED</option>
+              <option value="CLOSED">CLOSED</option>
+            </select>
           </label>
           <div className="md:col-span-3">
             <button
