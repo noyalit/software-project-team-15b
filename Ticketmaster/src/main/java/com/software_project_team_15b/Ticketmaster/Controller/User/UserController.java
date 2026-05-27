@@ -75,7 +75,7 @@ public class UserController {
     @Operation(summary = "Login as member")
     @PostMapping(path = "/login", consumes = "application/json")
     public ResponseEntity<ApiResponse<String>> login(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+                    @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token,
             @RequestBody LoginRequest request
     ) {
         try {
@@ -94,7 +94,7 @@ public class UserController {
     @Operation(summary = "Login as system admin")
     @PostMapping(path = "/login/system-admin", consumes = "application/json")
     public ResponseEntity<ApiResponse<String>> loginSystemAdmin(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+                    @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token,
             @RequestBody LoginRequest request
     ) {
         try {

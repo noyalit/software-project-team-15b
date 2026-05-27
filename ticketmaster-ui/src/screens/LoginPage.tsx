@@ -12,18 +12,13 @@ export default function LoginPage() {
   const { setAuth } = useAuthStore();
 
   const [mode, setMode] = useState<'member' | 'system-admin'>('member');
-  const [entranceToken, setEntranceToken] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
 
   const login = useMutation({
     mutationFn: async () => {
       const path = mode === 'member' ? '/api/users/login' : '/api/users/login/system-admin';
-      const res = await http.post<LoginResponse>(
-        path,
-        { username, password },
-        { headers: { Authorization: entranceToken } }
-      );
+      const res = await http.post<LoginResponse>(path, { username, password });
       if (res.data.error) throw new Error(res.data.error);
       if (!res.data.data) throw new Error('No token returned');
       return res.data.data;
@@ -35,72 +30,64 @@ export default function LoginPage() {
   });
 
   return (
-    <div className="mx-auto max-w-lg rounded-2xl border border-white/10 bg-white/5 p-6">
-      <h1 className="text-xl font-bold">Login</h1>
-      <p className="mt-1 text-sm text-white/70">
-        Login requires an **entrance token** from `POST /api/users/enter`. Paste it here.
-      </p>
+    <div className="mx-auto max-w-lg">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Login</h1>
 
-      <div className="mt-4 flex gap-2">
-        <button
-          onClick={() => setMode('member')}
-          className={
-            mode === 'member'
-              ? 'rounded-md bg-white px-3 py-2 text-sm font-semibold text-[#0b1220]'
-              : 'rounded-md border border-white/10 px-3 py-2 text-sm text-white/80 hover:bg-white/5'
-          }
-        >
-          Member
-        </button>
-        <button
-          onClick={() => setMode('system-admin')}
-          className={
-            mode === 'system-admin'
-              ? 'rounded-md bg-white px-3 py-2 text-sm font-semibold text-[#0b1220]'
-              : 'rounded-md border border-white/10 px-3 py-2 text-sm text-white/80 hover:bg-white/5'
-          }
-        >
-          System Admin
-        </button>
-      </div>
+        <div className="mt-5 flex rounded-xl bg-slate-100 p-1">
+          <button
+            type="button"
+            onClick={() => setMode('member')}
+            className={
+              mode === 'member'
+                ? 'flex-1 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm'
+                : 'flex-1 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-white/60'
+            }
+          >
+            User
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('system-admin')}
+            className={
+              mode === 'system-admin'
+                ? 'flex-1 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm'
+                : 'flex-1 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 hover:bg-white/60'
+            }
+          >
+            Admin
+          </button>
+        </div>
 
-      <div className="mt-4 space-y-3">
-        <label className="block">
-          <div className="text-sm text-white/70">Entrance token</div>
-          <input
-            value={entranceToken}
-            onChange={(e) => setEntranceToken(e.target.value)}
-            className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
-            placeholder="Paste token from /api/users/enter"
-          />
-        </label>
-        <label className="block">
-          <div className="text-sm text-white/70">Username</div>
-          <input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
-          />
-        </label>
-        <label className="block">
-          <div className="text-sm text-white/70">Password</div>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white"
-          />
-        </label>
+        <div className="mt-5 space-y-4">
+          <label className="block">
+            <div className="text-sm font-medium text-slate-700">Username</div>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
+            />
+          </label>
+          <label className="block">
+            <div className="text-sm font-medium text-slate-700">Password</div>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
+            />
+          </label>
 
-        <button
-          onClick={() => login.mutate()}
-          disabled={login.isPending}
-          className="w-full rounded-md bg-white px-4 py-2 text-sm font-semibold text-[#0b1220] hover:bg-white/90 disabled:opacity-60"
-        >
-          {login.isPending ? 'Logging in…' : 'Login'}
-        </button>
+          <button
+            onClick={() => login.mutate()}
+            disabled={login.isPending}
+            className="w-full rounded-md bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-60"
+          >
+            {login.isPending ? 'Logging in…' : 'Login'}
+          </button>
 
-        {login.isError && <div className="text-sm text-red-300">{(login.error as Error).message}</div>}
+          {login.isError && <div className="text-sm text-red-600">{(login.error as Error).message}</div>}
+        </div>
       </div>
     </div>
   );
