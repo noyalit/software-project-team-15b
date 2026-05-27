@@ -7,6 +7,7 @@ import MyCompaniesPage from '../screens/MyCompaniesPage';
 import LoginPage from '../screens/LoginPage';
 import RegisterPage from '../screens/RegisterPage';
 import ProfilePage from '../screens/ProfilePage';
+import AdminQueuesPage from '../screens/AdminQueuesPage';
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/me" element={<ProfilePage />} />
 
         <Route path="/companies/me" element={<MyCompaniesPage />} />
+        <Route path="/admin/queues" element={<AdminQueuesPage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

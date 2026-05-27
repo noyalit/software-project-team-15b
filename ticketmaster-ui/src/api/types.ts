@@ -38,3 +38,12 @@ export type MemberDTO = {
   activeRole?: string;
   assignedRoles?: string[];
 };
+
+export type QueueSnapshotDTO = {
+  eventId: string;
+  capacity: number;
+  maxAccepted: number;
+  waitingCount: number;
+  admittedCount: number;
+  admittedUsers: Record<string, string>;
+};
