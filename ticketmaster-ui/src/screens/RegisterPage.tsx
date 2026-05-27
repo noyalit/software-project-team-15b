@@ -46,6 +46,9 @@ export default function RegisterPage() {
             onChange={(e) => setPassword(e.target.value)}
             className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
           />
+          <div className="mt-1 text-xs text-slate-500">
+            Must include at least 1 uppercase letter and 1 number (e.g. <code>Password1</code>).
+          </div>
         </label>
         <label className="block">
           <div className="text-sm font-medium text-slate-700">Birth date</div>
