@@ -14,6 +14,7 @@ export default function CompanyPage() {
   const [ownerSuccessMessage, setOwnerSuccessMessage] = useState<string | null>(null);
   const [removeOwnerUsername, setRemoveOwnerUsername] = useState('');
   const [removeOwnerSuccessMessage, setRemoveOwnerSuccessMessage] = useState<string | null>(null);
+  const [resignSuccessMessage, setResignSuccessMessage] = useState<string | null>(null);
 
   const companyQuery = useQuery({
     queryKey: ['company', companyId, token],
@@ -137,6 +138,39 @@ export default function CompanyPage() {
     onSuccess: () => {
       setRemoveOwnerUsername('');
       setRemoveOwnerSuccessMessage('Owner removed.');
+    },
+  });
+
+  const resignMutation = useMutation({
+    mutationFn: async () => {
+      setResignSuccessMessage(null);
+      if (!companyId) {
+        throw new Error('Company ID is missing.');
+      }
+
+      try {
+        const res = await http.post<ApiResponse<MemberDTO>>(`/api/users/roles/owner/resign/${companyId}`);
+        if (res.data.error) throw new Error(res.data.error);
+        return res.data.data ?? null;
+      } catch (e) {
+        const err = e as AxiosError<ApiResponse<MemberDTO>>;
+        const status = err.response?.status;
+
+        if (status === 401) {
+          clearAuth();
+          throw new Error('Your session expired. Please log in again.');
+        }
+
+        throw new Error(
+          getApiErrorMessage<MemberDTO>(e, {
+            fallback: 'Failed to resign from ownership. Please try again.',
+            serverFallback: 'Ownership resignation is currently unavailable due to a server issue. Please try again later.',
+          })
+        );
+      }
+    },
+    onSuccess: () => {
+      setResignSuccessMessage('You resigned from ownership.');
     },
   });
 
@@ -295,6 +329,33 @@ export default function CompanyPage() {
         {removeOwnerSuccessMessage && !removeOwnerMutation.isError && (
           <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
             {removeOwnerSuccessMessage}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="text-slate-900 font-semibold">Resign ownership</div>
+        <div className="mt-2 text-sm text-slate-600">If you are an owner (not a founder), you can resign from this company.</div>
+
+        <div className="mt-4">
+          <button
+            onClick={() => resignMutation.mutate()}
+            disabled={resignMutation.isPending}
+            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+          >
+            {resignMutation.isPending ? 'Resigning…' : 'Resign'}
+          </button>
+        </div>
+
+        {resignMutation.isError && (
+          <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            {(resignMutation.error as Error).message}
+          </div>
+        )}
+
+        {resignSuccessMessage && !resignMutation.isError && (
+          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            {resignSuccessMessage}
           </div>
         )}
       </div>
