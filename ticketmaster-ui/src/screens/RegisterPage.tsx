@@ -8,18 +8,13 @@ type RegisterResponse = ApiResponse<MemberDTO>;
 
 export default function RegisterPage() {
   const nav = useNavigate();
-  const [entranceToken, setEntranceToken] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [birthDate, setBirthDate] = useState('');
 
   const register = useMutation({
     mutationFn: async () => {
-      const res = await http.post<RegisterResponse>(
-        '/api/users/register',
-        { username, password, birthDate },
-        { headers: { Authorization: entranceToken } }
-      );
+      const res = await http.post<RegisterResponse>('/api/users/register', { username, password, birthDate });
       if (res.data.error) throw new Error(res.data.error);
       if (!res.data.data) throw new Error('No member returned');
       return res.data.data;
@@ -33,20 +28,8 @@ export default function RegisterPage() {
     <div className="mx-auto max-w-lg">
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Register</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Register requires an <strong>entrance token</strong> from <code>POST /api/users/enter</code>.
-        </p>
 
         <div className="mt-5 space-y-4">
-        <label className="block">
-          <div className="text-sm font-medium text-slate-700">Entrance token</div>
-          <input
-            value={entranceToken}
-            onChange={(e) => setEntranceToken(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400"
-            placeholder="Paste token from /api/users/enter"
-          />
-        </label>
         <label className="block">
           <div className="text-sm font-medium text-slate-700">Username</div>
           <input

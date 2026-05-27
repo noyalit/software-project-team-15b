@@ -49,7 +49,7 @@ public class UserController {
     @Operation(summary = "Register a new member")
     @PostMapping(path = "/register", consumes = "application/json")
     public ResponseEntity<ApiResponse<MemberDTO>> registerMember(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+                    @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token,
             @RequestBody RegisterMemberRequest request
     ) {
         try {

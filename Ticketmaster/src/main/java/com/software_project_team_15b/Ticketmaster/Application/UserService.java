@@ -61,6 +61,9 @@ public class UserService {
      */
     public MemberDTO registerMember(String token, String username, String password, LocalDate birthDate) {
         try {
+            if (token == null || token.isBlank()) {
+                token = enterAsGuest();
+            }
             validateEntranceToken(token);
             userDomainService.validateRawPassword(password);
 
