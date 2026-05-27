@@ -9,6 +9,7 @@ import RegisterPage from '../screens/RegisterPage';
 import ProfilePage from '../screens/ProfilePage';
 import AdminQueuesPage from '../screens/AdminQueuesPage';
 import AdminCompaniesPage from '../screens/AdminCompaniesPage';
+import AdminMembersPage from '../screens/AdminMembersPage';
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/companies/me" element={<MyCompaniesPage />} />
         <Route path="/admin/queues" element={<AdminQueuesPage />} />
         <Route path="/admin/companies" element={<AdminCompaniesPage />} />
+        <Route path="/admin/members" element={<AdminMembersPage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
