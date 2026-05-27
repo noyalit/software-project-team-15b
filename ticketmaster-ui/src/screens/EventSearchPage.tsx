@@ -22,7 +22,7 @@ export default function EventSearchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const filtered = (search.data ?? []).filter((e) => {
+  const filtered = (search.data ?? []).filter((e: EventDTO) => {
     const hay = `${e.name} ${e.artist} ${e.location}`.toLowerCase();
     return hay.includes(query.toLowerCase());
   });
@@ -31,35 +31,35 @@ export default function EventSearchPage() {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-xl font-bold">Events</h1>
-          <p className="text-sm text-white/70">Search results powered by `POST /api/events/search`.</p>
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Discover Events</h1>
+          <p className="text-sm text-slate-600">Search results powered by `POST /api/events/search`.</p>
         </div>
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Filter by name, artist, location"
-          className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-white/40 md:w-80"
+          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 shadow-sm md:w-80"
         />
       </div>
 
-      {search.isPending && <div className="text-white/70">Loading…</div>}
+      {search.isPending && <div className="text-slate-600">Loading…</div>}
       {search.isError && <div className="text-red-300">{(search.error as Error).message}</div>}
 
       <div className="grid gap-4 md:grid-cols-2">
-        {filtered.map((e) => (
+        {filtered.map((e: EventDTO) => (
           <Link
             key={e.eventId}
             to={`/events/${e.eventId}`}
-            className="rounded-2xl border border-white/10 bg-white/5 p-5 hover:bg-white/10"
+            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-slate-300"
           >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-sm text-white/60">{new Date(e.startsAt).toLocaleString()}</div>
-                <div className="mt-1 text-lg font-semibold">{e.name}</div>
-                <div className="mt-1 text-sm text-white/70">{e.artist}</div>
-                <div className="mt-2 text-sm text-white/60">{e.location}</div>
+                <div className="text-sm text-slate-500">{new Date(e.startsAt).toLocaleString()}</div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">{e.name}</div>
+                <div className="mt-1 text-sm text-slate-600">{e.artist}</div>
+                <div className="mt-2 text-sm text-slate-500">{e.location}</div>
               </div>
-              <div className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/80">{e.status}</div>
+              <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">{e.status}</div>
             </div>
           </Link>
         ))}
