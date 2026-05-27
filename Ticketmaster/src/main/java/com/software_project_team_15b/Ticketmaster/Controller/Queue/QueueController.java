@@ -7,6 +7,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.SiteQueueSnapshotDTO;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -36,6 +37,45 @@ public class QueueController {
 
     public QueueController(QueueService queueService) {
         this.queueService = queueService;
+    }
+
+    @Operation(summary = "Update site queue settings (admin only)")
+    @PatchMapping(path = "/site", consumes = "application/json")
+    public ResponseEntity<ApiResponse<SiteQueueSnapshotDTO>> updateSiteQueueSettings(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @RequestBody SiteQueueSettingsRequest request
+    ) {
+        try {
+            SiteQueueSnapshotDTO snapshot = queueService.updateSiteQueueSettings(token, request.maxVisitors());
+            return ResponseEntity.ok(new ApiResponse<>(snapshot, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (UnauthorizedException ex) {
+            return forbidden(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Get site queue snapshot (admin only)")
+    @GetMapping("/site")
+    public ResponseEntity<ApiResponse<SiteQueueSnapshotDTO>> getSiteQueueSnapshot(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+    ) {
+        try {
+            SiteQueueSnapshotDTO snapshot = queueService.getSiteQueueSnapshot(token);
+            return ResponseEntity.ok(new ApiResponse<>(snapshot, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (UnauthorizedException ex) {
+            return forbidden(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
     }
 
     @Operation(summary = "Get all queue snapshots (admin only)")
@@ -189,6 +229,8 @@ public class QueueController {
     }
 
     public record QueueSettingsRequest(int capacity, int maxAccepted) {}
+
+    public record SiteQueueSettingsRequest(int maxVisitors) {}
 
     private <T> ResponseEntity<ApiResponse<T>> badRequest(Exception ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)

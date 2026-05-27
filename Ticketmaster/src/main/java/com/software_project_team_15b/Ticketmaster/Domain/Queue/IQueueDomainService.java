@@ -6,6 +6,7 @@ import java.util.UUID;
 
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.SiteQueueSnapshotDTO;
 
 /**
  * Domain service for managing per-event virtual queues and the site-wide waiting queue.
@@ -40,6 +41,16 @@ public interface IQueueDomainService {
      * @throws IllegalArgumentException if {@code token} is null or already in the queue
      */
     void addUserToSiteQueue(String token);
+
+    /**
+     * Returns a snapshot of the site-wide queue state.
+     */
+    SiteQueueSnapshotDTO getSiteQueueSnapshot();
+
+    /**
+     * Updates the maximum number of concurrently admitted visitors.
+     */
+    void updateSiteQueueSettings(int maxVisitors);
 
     /**
      * Removes the given token from the admitted set.

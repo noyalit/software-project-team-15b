@@ -8,6 +8,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNo
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.SiteQueueSnapshotDTO;
 
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.retry.annotation.Backoff;
@@ -42,8 +43,9 @@ import java.util.concurrent.TimeUnit;
 public class QueueDomainServiceImpl implements IQueueDomainService {
 
     private static final int ACCESS_TIME = 100;
-    private static final int MAX_VISITORS = 100;
     private static final int EVENT_QUEUE_INTERVAL = 5;
+
+    private int maxVisitors = 100;
 
     private final IQueueRepository queueRepository;
 
@@ -111,7 +113,7 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      * {@link #MAX_VISITORS} concurrent visitors are admitted or the queue is empty.
      */
     public synchronized void acceptUsersFromSiteQueue() {
-        while (!siteQueue.isEmpty() && acceptedTokens.size() < MAX_VISITORS) {
+        while (!siteQueue.isEmpty() && acceptedTokens.size() < maxVisitors) {
             acceptedTokens.add(siteQueue.poll());
         }
     }
@@ -128,6 +130,17 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
             throw new IllegalArgumentException("User is already in the site queue");
         }
         siteQueue.add(token);
+    }
+
+    @Override
+    public synchronized SiteQueueSnapshotDTO getSiteQueueSnapshot() {
+        return new SiteQueueSnapshotDTO(maxVisitors, siteQueue.size(), acceptedTokens.size());
+    }
+
+    @Override
+    public synchronized void updateSiteQueueSettings(int maxVisitors) {
+        if (maxVisitors <= 0) throw new IllegalArgumentException("maxVisitors must be positive");
+        this.maxVisitors = maxVisitors;
     }
 
     /**

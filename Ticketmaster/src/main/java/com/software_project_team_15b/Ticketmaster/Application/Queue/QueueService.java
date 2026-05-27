@@ -6,6 +6,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Unautho
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.SiteQueueSnapshotDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 
 import org.slf4j.Logger;
@@ -40,6 +41,23 @@ public class QueueService {
     public QueueService(IQueueDomainService queueDomainService, IAuth auth) {
         this.queueDomainService = Objects.requireNonNull(queueDomainService);
         this.auth = auth;
+    }
+
+    public SiteQueueSnapshotDTO updateSiteQueueSettings(String adminToken, int maxVisitors) {
+        try {
+            if (adminToken == null) throw new IllegalArgumentException("adminToken cannot be null");
+            validateToken(adminToken);
+            requireSystemAdmin(adminToken);
+            if (maxVisitors <= 0) throw new IllegalArgumentException("maxVisitors must be positive");
+            UUID userId = auth.extractUserId(adminToken);
+            queueDomainService.updateSiteQueueSettings(maxVisitors);
+            SiteQueueSnapshotDTO snapshot = queueDomainService.getSiteQueueSnapshot();
+            AUDIT.info("op=updateSiteQueueSettings userId={} maxVisitors={} result=ok", userId, maxVisitors);
+            return snapshot;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=updateSiteQueueSettings maxVisitors={} result=error error={}", maxVisitors, e.getMessage());
+            throw e;
+        }
     }
 
     /**
@@ -194,6 +212,21 @@ public class QueueService {
             return snapshot;
         } catch (RuntimeException e) {
             AUDIT.warn("op=getQueueSnapshot eventId={} result=error error={}", eventId, e.getMessage());
+            throw e;
+        }
+    }
+
+    public SiteQueueSnapshotDTO getSiteQueueSnapshot(String adminToken) {
+        try {
+            if (adminToken == null) throw new IllegalArgumentException("adminToken cannot be null");
+            validateToken(adminToken);
+            requireSystemAdmin(adminToken);
+            UUID userId = auth.extractUserId(adminToken);
+            SiteQueueSnapshotDTO snapshot = queueDomainService.getSiteQueueSnapshot();
+            AUDIT.info("op=getSiteQueueSnapshot userId={} result=ok", userId);
+            return snapshot;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=getSiteQueueSnapshot result=error error={}", e.getMessage());
             throw e;
         }
     }

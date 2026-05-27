@@ -47,3 +47,9 @@ export type QueueSnapshotDTO = {
   admittedCount: number;
   admittedUsers: Record<string, string>;
 };
+
+export type SiteQueueSnapshotDTO = {
+  maxVisitors: number;
+  waitingCount: number;
+  admittedCount: number;
+};
