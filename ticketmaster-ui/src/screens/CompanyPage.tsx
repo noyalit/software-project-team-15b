@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AxiosError } from 'axios';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
@@ -9,12 +9,14 @@ import { useAuthStore } from '../ui/authStore';
 
 export default function CompanyPage() {
   const { companyId } = useParams();
+  const qc = useQueryClient();
   const { token, userType, clearAuth } = useAuthStore();
   const [ownerUsername, setOwnerUsername] = useState('');
   const [ownerSuccessMessage, setOwnerSuccessMessage] = useState<string | null>(null);
   const [removeOwnerUsername, setRemoveOwnerUsername] = useState('');
   const [removeOwnerSuccessMessage, setRemoveOwnerSuccessMessage] = useState<string | null>(null);
   const [resignSuccessMessage, setResignSuccessMessage] = useState<string | null>(null);
+  const [statusSuccessMessage, setStatusSuccessMessage] = useState<string | null>(null);
 
   const companyQuery = useQuery({
     queryKey: ['company', companyId, token],
@@ -43,6 +45,34 @@ export default function CompanyPage() {
       }
     },
     enabled: Boolean(companyId) && Boolean(token) && userType === 'member',
+  });
+
+  const meQuery = useQuery({
+    queryKey: ['me', token],
+    queryFn: async () => {
+      try {
+        const res = await http.get<ApiResponse<MemberDTO>>('/api/users/me');
+        if (res.data.error) throw new Error(res.data.error);
+        if (!res.data.data) throw new Error('User not found');
+        return res.data.data;
+      } catch (e) {
+        const err = e as AxiosError<ApiResponse<MemberDTO>>;
+        const status = err.response?.status;
+
+        if (status === 401) {
+          clearAuth();
+          throw new Error('Your session expired. Please log in again.');
+        }
+
+        throw new Error(
+          getApiErrorMessage<MemberDTO>(e, {
+            fallback: 'Failed to load your profile. Please try again.',
+            serverFallback: 'Profile is currently unavailable due to a server issue. Please try again later.',
+          })
+        );
+      }
+    },
+    enabled: Boolean(token) && userType === 'member',
   });
 
   const appointOwnerMutation = useMutation({
@@ -174,6 +204,43 @@ export default function CompanyPage() {
     },
   });
 
+  const changeStatusMutation = useMutation({
+    mutationFn: async (newStatus: 'ACTIVE' | 'SUSPENDED' | 'CLOSED') => {
+      setStatusSuccessMessage(null);
+      if (!companyId) {
+        throw new Error('Company ID is missing.');
+      }
+
+      try {
+        const res = await http.patch<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}/status`, {
+          status: newStatus,
+        });
+        if (res.data.error) throw new Error(res.data.error);
+        return res.data.data ?? null;
+      } catch (e) {
+        const err = e as AxiosError<ApiResponse<CompanyDTO>>;
+        const status = err.response?.status;
+
+        if (status === 401) {
+          clearAuth();
+          throw new Error('Your session expired. Please log in again.');
+        }
+
+        throw new Error(
+          getApiErrorMessage<CompanyDTO>(e, {
+            fallback: 'Failed to update company status. Please try again.',
+            serverFallback: 'Company updates are currently unavailable due to a server issue. Please try again later.',
+          })
+        );
+      }
+    },
+    onSuccess: async () => {
+      setStatusSuccessMessage('Company status updated.');
+      await qc.invalidateQueries({ queryKey: ['company'] });
+      await qc.invalidateQueries({ queryKey: ['companies'] });
+    },
+  });
+
   if (userType !== 'member') {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -230,6 +297,7 @@ export default function CompanyPage() {
   }
 
   const company = companyQuery.data;
+  const isFounder = Boolean(meQuery.data?.userId) && meQuery.data?.userId === company.founderId;
 
   return (
     <div className="space-y-4">
@@ -254,6 +322,51 @@ export default function CompanyPage() {
           </div>
         </div>
       </div>
+
+      {isFounder && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="text-slate-900 font-semibold">Founder actions</div>
+          <div className="mt-2 text-sm text-slate-600">
+            Only the company founder can suspend, close, or reopen the company.
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              onClick={() => changeStatusMutation.mutate('SUSPENDED')}
+              disabled={changeStatusMutation.isPending}
+              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+            >
+              Suspend
+            </button>
+            <button
+              onClick={() => changeStatusMutation.mutate('CLOSED')}
+              disabled={changeStatusMutation.isPending}
+              className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 hover:bg-rose-100 disabled:opacity-60"
+            >
+              Close
+            </button>
+            <button
+              onClick={() => changeStatusMutation.mutate('ACTIVE')}
+              disabled={changeStatusMutation.isPending}
+              className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+            >
+              Reopen
+            </button>
+          </div>
+
+          {changeStatusMutation.isError && (
+            <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              {(changeStatusMutation.error as Error).message}
+            </div>
+          )}
+
+          {statusSuccessMessage && !changeStatusMutation.isError && (
+            <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {statusSuccessMessage}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="text-slate-900 font-semibold">Add owner</div>
