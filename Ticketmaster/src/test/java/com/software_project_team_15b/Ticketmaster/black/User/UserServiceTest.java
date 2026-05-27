@@ -1,4 +1,4 @@
-package com.software_project_team_15b.Ticketmaster.black.Application;
+package com.software_project_team_15b.Ticketmaster.black.User;
 
 import java.time.LocalDate;
 import java.util.Optional;
@@ -517,6 +517,9 @@ class UserServiceTest {
         when(passwordEncoder.encode("NewPassword1")).thenReturn("newHash");
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
 
+        MemberDTO saved = service.changePassword(token, "NewPassword1");
+
+        assertThat(saved.getUserId()).isEqualTo(memberId);
         verify(memberRepository).save(member);
     }
 
