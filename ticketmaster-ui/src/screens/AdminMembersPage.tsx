@@ -195,11 +195,6 @@ export default function AdminMembersPage() {
           </div>
         )}
       </div>
-
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        This action uses the backend endpoint <span className="font-mono">POST /api/users/admin/cancel-member</span>, which currently deletes the member account.
-        If you want a true “SUSPENDED” state (disable login without deletion), we need to add a member status field in the backend.
-      </div>
     </div>
   );
 }

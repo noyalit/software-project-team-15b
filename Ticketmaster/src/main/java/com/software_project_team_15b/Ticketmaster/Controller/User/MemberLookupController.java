@@ -37,8 +37,8 @@ public class MemberLookupController {
             @RequestParam String username
     ) {
         try {
-            if (!auth.isTokenValid(token) || !auth.isMember(token)) {
-                throw new InvalidTokenException("Only an authenticated member can resolve members");
+            if (!auth.isTokenValid(token) || !(auth.isMember(token) || auth.isSystemAdmin(token))) {
+                throw new InvalidTokenException("Only an authenticated member or system admin can resolve members");
             }
 
             Member member = userDomainService.getMemberByUsername(username);
