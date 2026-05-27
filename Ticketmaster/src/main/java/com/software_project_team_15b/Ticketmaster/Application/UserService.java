@@ -61,6 +61,9 @@ public class UserService {
      */
     public MemberDTO registerMember(String token, String username, String password, LocalDate birthDate) {
         try {
+            if (token == null || token.isBlank()) {
+                token = enterAsGuest();
+            }
             validateEntranceToken(token);
             userDomainService.validateRawPassword(password);
 
@@ -89,6 +92,9 @@ public class UserService {
      */
     public String login(String token, String username, String password) {
         try {
+            if (token == null || token.isBlank()) {
+                token = enterAsGuest();
+            }
             validateEntranceToken(token);
             auth.exitSystem(token);
             Member member = userDomainService.getMemberByUsername(username);
@@ -166,6 +172,9 @@ public class UserService {
      */
     public String loginSystemAdmin(String token, String username, String password) {
         // System admins authenticate with a pre-existing SystemAdmin record.
+        if (token == null || token.isBlank()) {
+            token = enterAsGuest();
+        }
         validateEntranceToken(token);
         auth.exitSystem(token);
         SystemAdmin admin = systemAdminRepository.findByUsername(username)
@@ -498,7 +507,7 @@ public class UserService {
             throw new InvalidTokenException("Invalid or expired token");
         }
 
-        if (!(auth.isGuest(token))) {
+        if (!(auth.isGuest(token) || auth.isTemp(token))) {
             throw new InvalidTokenException("Only guest or temporary token can perform this action");
         }
     }
