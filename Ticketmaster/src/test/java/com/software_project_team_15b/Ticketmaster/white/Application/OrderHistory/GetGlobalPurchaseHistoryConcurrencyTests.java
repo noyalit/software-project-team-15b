@@ -23,6 +23,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.Ticket;
 import java.time.Instant;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.DTO.OrderHistoryDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -200,9 +201,21 @@ public class GetGlobalPurchaseHistoryConcurrencyTests {
                 );
         }
 
-        private com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory createOrder(UUID userId, UUID eventId, int ticketCount, String price) {
+        private OrderHistory createOrder(UUID userId, UUID eventId, int ticketCount, String price) {
                 if (eventId != null && eventsRepository.findById(eventId).isEmpty()) {
-                        eventsRepository.save(createEvent(UUID.randomUUID()));
+                        // Ensure an Event exists with the provided eventId (use the given id)
+                        Event e = new Event(
+                                eventId,
+                                UUID.randomUUID(),
+                                "Test Event",
+                                "Artist",
+                                Category.CONCERT,
+                                Instant.now().plusSeconds(3600),
+                                "Location",
+                                List.of(),
+                                List.of()
+                        );
+                        eventsRepository.save(e);
                 }
                 Money basePrice = Money.of(price, "USD");
                 java.util.Set<Ticket> tickets = new java.util.HashSet<>();
@@ -211,7 +224,7 @@ public class GetGlobalPurchaseHistoryConcurrencyTests {
                 }
                 java.math.BigDecimal total = basePrice.amount().multiply(java.math.BigDecimal.valueOf(ticketCount));
                 Money totalPrice = Money.of(total.toPlainString(), "USD");
-                return new com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory(UUID.randomUUID(), userId, eventId, UUID.randomUUID(), totalPrice, tickets);
+                return new OrderHistory(UUID.randomUUID(), userId, eventId, UUID.randomUUID(), totalPrice, tickets);
         }
 
 }

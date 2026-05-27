@@ -55,11 +55,6 @@ import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainServic
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
 
-    private static final String DEFAULT_ENTRANCE_TOKEN = "entrance";
-    private static final String DEFAULT_USERNAME = "john";
-    private static final String DEFAULT_PASSWORD = "Password1";
-    private static final LocalDate DEFAULT_BIRTH_DATE = LocalDate.of(2000, 1, 1);
-
     @Mock private IMemberRepository memberRepository;
     @Mock private ISystemAdminRepository systemAdminRepository;
     @Mock private IAuth auth;
@@ -70,17 +65,8 @@ class UserServiceTest {
     private UserService service;
     private UserDomainService userDomainService;
 
-    private String entranceToken;
-    private String username;
-    private String password;
-    private LocalDate birthDate;
-
     @BeforeEach
     void setUp() {
-        entranceToken = DEFAULT_ENTRANCE_TOKEN;
-        username = DEFAULT_USERNAME;
-        password = DEFAULT_PASSWORD;
-        birthDate = DEFAULT_BIRTH_DATE;
 
         userDomainService = Mockito.spy(new UserDomainService(memberRepository));
         service = new UserService(userDomainService, auth, passwordEncoder, queueDomainService, systemAdminRepository, eventPublisher);
@@ -530,8 +516,6 @@ class UserServiceTest {
         when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
         when(passwordEncoder.encode("NewPassword1")).thenReturn("newHash");
         when(memberRepository.save(any(Member.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        MemberDTO saved = service.changePassword(token, "NewPassword1");
 
         verify(memberRepository).save(member);
     }

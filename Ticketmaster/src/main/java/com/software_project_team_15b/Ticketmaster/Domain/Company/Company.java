@@ -4,7 +4,6 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.CompanyP
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import jakarta.persistence.*;
-import java.time.LocalDateTime;
 import java.util.*;
 
 /**
@@ -28,8 +27,6 @@ public class Company {
 
     @Version
     private Long version;
-
-    private LocalDateTime lastModified;
 
     @Column(unique = true, nullable = false)
     private String name;
@@ -105,7 +102,6 @@ public class Company {
         this.name = name;
         this.founderId = Objects.requireNonNull(founderId, "founderId");
         this.status = CompanyStatus.ACTIVE;
-        this.lastModified = LocalDateTime.now();
     }
 
     /**
@@ -119,7 +115,6 @@ public class Company {
         verifyActive();
         Objects.requireNonNull(policy, "policy");
         this.purchasePolicies = new ArrayList<>(List.of(policy));
-        touch();
     }
 
     /**
@@ -133,7 +128,6 @@ public class Company {
         verifyActive();
         Objects.requireNonNull(policy, "policy");
         this.discountPolicies = new ArrayList<>(List.of(policy));
-        touch();
     }
 
     /**
@@ -147,7 +141,6 @@ public class Company {
             throw new IllegalArgumentException("newStatus cannot be null");
         }
         this.status = newStatus;
-        touch();
     }
 
     // =============================================================================================================
@@ -157,10 +150,6 @@ public class Company {
         if (this.status != CompanyStatus.ACTIVE) {
             throw new IllegalStateException("Company is not ACTIVE.");
         }
-    }
-
-    private void touch() {
-        this.lastModified = LocalDateTime.now();
     }
 
 }
