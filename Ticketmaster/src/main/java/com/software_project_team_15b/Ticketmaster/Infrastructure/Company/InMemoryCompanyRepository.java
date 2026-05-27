@@ -104,6 +104,11 @@ public class InMemoryCompanyRepository implements ICompanyRepository {
                 .orElse(List.of());
     }
 
+    @Override
+    public List<Company> findAll() {
+        return store.values().stream().collect(Collectors.toList());
+    }
+
     /**
      * Uses reflection to assign the generated id to a new Company instance,
      * replicating the behaviour of JPA's UUID generation strategy. This is

@@ -27,13 +27,13 @@ class SystemInitializerTest {
     @Test
     void run_creates_default_admin_when_missing() {
         when(systemAdminRepository.findByUsername("admin")).thenReturn(Optional.empty());
-        when(passwordEncoder.encode("Admin1234")).thenReturn("encoded");
+        when(passwordEncoder.encode("Admin123")).thenReturn("encoded");
 
         SystemInitializer initializer = new SystemInitializer(
                 systemAdminRepository,
                 passwordEncoder,
                 "admin",
-                "Admin1234"
+                "Admin123"
         );
 
         initializer.run(null);
@@ -55,7 +55,7 @@ class SystemInitializerTest {
                 systemAdminRepository,
                 passwordEncoder,
                 "admin",
-                "Admin1234"
+                "Admin123"
         );
 
         initializer.run(null);

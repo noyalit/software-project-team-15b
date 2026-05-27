@@ -52,4 +52,11 @@ public interface ICompanyRepository {
      * @return a non-null, possibly empty list of companies
      */
     List<Company> findByOwner(UUID ownerId);
+
+    /**
+     * Returns all companies in the system.
+     *
+     * @return a non-null, possibly empty list of companies
+     */
+    List<Company> findAll();
 }

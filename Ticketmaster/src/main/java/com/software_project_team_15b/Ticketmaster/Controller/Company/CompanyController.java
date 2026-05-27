@@ -42,6 +42,27 @@ public class CompanyController {
         this.companyService = companyService;
     }
 
+    @Operation(summary = "List all companies (system admin only)")
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<CompanyDTO>>> listAllCompanies(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+    ) {
+        try {
+            List<CompanyDTO> result = companyService.listAllCompanies(token).stream()
+                    .map(CompanyDTO::from)
+                    .toList();
+            return ResponseEntity.ok(new ApiResponse<>(result, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     @Operation(summary = "Create a new company (caller becomes founder)")
     @PostMapping(consumes = "application/json")
     public ResponseEntity<ApiResponse<CompanyDTO>> createCompany(

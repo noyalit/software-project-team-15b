@@ -132,6 +132,15 @@ public class CompanyService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional(readOnly = true)
+    public List<Company> listAllCompanies(String token) {
+        requireValidToken(token);
+        if (!auth.isSystemAdmin(token)) {
+            throw new UnauthorizedCompanyActionException("Only a system admin can list all companies");
+        }
+        return companyRepository.findAll();
+    }
+
     /**
      * Replaces the company's purchase policy. Only an owner of the company
      * may perform this action, and the company must be in an active state.

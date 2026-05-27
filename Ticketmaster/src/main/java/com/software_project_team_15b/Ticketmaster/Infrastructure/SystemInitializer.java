@@ -22,7 +22,7 @@ public class SystemInitializer implements ApplicationRunner {
             ISystemAdminRepository systemAdminRepository,
             IPasswordEncoder passwordEncoder,
             @Value("${app.init.admin.username:admin}") String defaultAdminUsername,
-            @Value("${app.init.admin.password:Admin1234}") String defaultAdminPassword
+            @Value("${app.init.admin.password:Admin123}") String defaultAdminPassword
     ) {
         this.systemAdminRepository = systemAdminRepository;
         this.passwordEncoder = passwordEncoder;
