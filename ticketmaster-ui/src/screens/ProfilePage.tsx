@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { AxiosError } from 'axios';
 import { Link } from 'react-router-dom';
 import { http } from '../api/http';
+import { getApiErrorMessage } from '../api/errors';
 import type { ApiResponse, MemberDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 
@@ -19,14 +20,18 @@ export default function ProfilePage() {
       } catch (e) {
         const err = e as AxiosError<ApiResponse<MemberDTO>>;
         const status = err.response?.status;
-        const apiMessage = err.response?.data?.error;
 
         if (status === 401) {
           clearAuth();
           throw new Error('Your session expired. Please log in again.');
         }
 
-        throw new Error(apiMessage || err.message);
+        throw new Error(
+          getApiErrorMessage<MemberDTO>(e, {
+            fallback: 'Failed to load your profile. Please try again.',
+            serverFallback: 'Profile is currently unavailable due to a server issue. Please try again later.',
+          })
+        );
       }
     },
     enabled: userType === 'member' && Boolean(token),

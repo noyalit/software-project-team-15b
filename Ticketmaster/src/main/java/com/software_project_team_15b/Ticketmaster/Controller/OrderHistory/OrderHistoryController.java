@@ -105,7 +105,11 @@ public class OrderHistoryController {
     }
 
     private <T> ResponseEntity<ApiResponse<T>> internalServerError(Exception ex) {
+        String msg = ex == null || ex.getMessage() == null || ex.getMessage().isBlank()
+                ? "The request failed due to a server error. Please try again later."
+                : ex.getMessage();
+
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ApiResponse<>(null, "Internal server error"));
+                .body(new ApiResponse<>(null, msg));
     }
 }

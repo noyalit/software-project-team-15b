@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { AxiosError } from 'axios';
 import { http } from '../api/http';
+import { getApiErrorMessage } from '../api/errors';
 import type { ApiResponse, MemberDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 import { useState } from 'react';
@@ -28,15 +29,12 @@ export default function LoginPage() {
         if (!res.data.data) throw new Error('No token returned');
         return res.data.data;
       } catch (e) {
-        const err = e as AxiosError<LoginResponse>;
-        const status = err.response?.status;
-        const apiMessage = err.response?.data?.error;
-
-        if (status && status >= 500) {
-          throw new Error('Login failed due to a server error. Please try again in a minute.');
-        }
-
-        throw new Error(apiMessage || err.message);
+        throw new Error(
+          getApiErrorMessage<string>(e, {
+            fallback: 'Login failed. Please check your username and password and try again.',
+            serverFallback: 'Login is currently unavailable due to a server issue. Please try again in a minute.',
+          })
+        );
       }
     },
     onSuccess: async (token) => {

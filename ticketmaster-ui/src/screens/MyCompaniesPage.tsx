@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { AxiosError } from 'axios';
 import { Link } from 'react-router-dom';
 import { http } from '../api/http';
+import { getApiErrorMessage } from '../api/errors';
 import type { ApiResponse, CompanyDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 
@@ -18,14 +19,18 @@ export default function MyCompaniesPage() {
       } catch (e) {
         const err = e as AxiosError<ApiResponse<CompanyDTO[]>>;
         const status = err.response?.status;
-        const apiMessage = err.response?.data?.error;
 
         if (status === 401) {
           clearAuth();
           throw new Error('Your session expired. Please log in again.');
         }
 
-        throw new Error(apiMessage || err.message);
+        throw new Error(
+          getApiErrorMessage<CompanyDTO[]>(e, {
+            fallback: 'Failed to load your companies. Please try again.',
+            serverFallback: 'Companies are currently unavailable due to a server issue. Please try again later.',
+          })
+        );
       }
     },
     enabled: userType === 'member' && Boolean(token),

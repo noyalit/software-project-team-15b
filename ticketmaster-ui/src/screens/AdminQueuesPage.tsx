@@ -3,6 +3,7 @@ import type { AxiosError } from 'axios';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { http } from '../api/http';
+import { getApiErrorMessage } from '../api/errors';
 import type { ApiResponse, SiteQueueSnapshotDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 
@@ -25,7 +26,6 @@ export default function AdminQueuesPage() {
       } catch (e) {
         const err = e as AxiosError<ApiResponse<SiteQueueSnapshotDTO>>;
         const status = err.response?.status;
-        const apiMessage = err.response?.data?.error;
 
         if (status === 401) {
           clearAuth();
@@ -38,7 +38,12 @@ export default function AdminQueuesPage() {
           throw new Error('There is no queue.');
         }
 
-        throw new Error(apiMessage || err.message);
+        throw new Error(
+          getApiErrorMessage<SiteQueueSnapshotDTO>(e, {
+            fallback: 'Failed to load the site queue snapshot. Please try again.',
+            serverFallback: 'Queues are currently unavailable due to a server issue. Please try again later.',
+          })
+        );
       }
     },
     enabled: userType === 'system-admin' && Boolean(token),
@@ -57,7 +62,6 @@ export default function AdminQueuesPage() {
       } catch (e) {
         const err = e as AxiosError<ApiResponse<SiteQueueSnapshotDTO>>;
         const status = err.response?.status;
-        const apiMessage = err.response?.data?.error;
 
         if (status === 401) {
           clearAuth();
@@ -70,7 +74,12 @@ export default function AdminQueuesPage() {
           throw new Error('There is no queue.');
         }
 
-        throw new Error(apiMessage || err.message);
+        throw new Error(
+          getApiErrorMessage<SiteQueueSnapshotDTO>(e, {
+            fallback: 'Failed to update the site queue. Please verify your input and try again.',
+            serverFallback: 'Queues are currently unavailable due to a server issue. Please try again later.',
+          })
+        );
       }
     },
     onSuccess: async () => {

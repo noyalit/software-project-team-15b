@@ -3,6 +3,7 @@ import type { AxiosError } from 'axios';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { http } from '../api/http';
+import { getApiErrorMessage } from '../api/errors';
 import type { ApiResponse, MemberDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 
@@ -33,14 +34,18 @@ export default function AdminMembersPage() {
       } catch (e) {
         const err = e as AxiosError<ResolveMemberResponse>;
         const statusCode = err.response?.status;
-        const apiMessage = err.response?.data?.error;
 
         if (statusCode === 401) {
           clearAuth();
           throw new Error('Your session expired. Please log in again.');
         }
 
-        throw new Error(apiMessage || err.message);
+        throw new Error(
+          getApiErrorMessage<MemberDTO>(e, {
+            fallback: 'Failed to find member. Please verify the username and try again.',
+            serverFallback: 'Member lookup is currently unavailable due to a server issue. Please try again later.',
+          })
+        );
       }
     },
     enabled: false,
@@ -61,7 +66,6 @@ export default function AdminMembersPage() {
       } catch (e) {
         const err = e as AxiosError<CancelMemberResponse>;
         const statusCode = err.response?.status;
-        const apiMessage = err.response?.data?.error;
 
         if (statusCode === 401) {
           clearAuth();
@@ -71,7 +75,12 @@ export default function AdminMembersPage() {
           throw new Error('You are not authorized to manage members.');
         }
 
-        throw new Error(apiMessage || err.message);
+        throw new Error(
+          getApiErrorMessage<boolean>(e, {
+            fallback: 'Failed to suspend member. Please try again.',
+            serverFallback: 'Member management is currently unavailable due to a server issue. Please try again later.',
+          })
+        );
       }
     },
     onSuccess: (ok) => {

@@ -3,6 +3,7 @@ import type { AxiosError } from 'axios';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { http } from '../api/http';
+import { getApiErrorMessage } from '../api/errors';
 import type { ApiResponse, CompanyDTO, CompanyStatus } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 
@@ -27,7 +28,6 @@ export default function AdminCompaniesPage() {
       } catch (e) {
         const err = e as AxiosError<CompaniesResponse>;
         const statusCode = err.response?.status;
-        const apiMessage = err.response?.data?.error;
 
         if (statusCode === 401) {
           clearAuth();
@@ -37,7 +37,12 @@ export default function AdminCompaniesPage() {
           throw new Error('You are not authorized to view companies.');
         }
 
-        throw new Error(apiMessage || err.message);
+        throw new Error(
+          getApiErrorMessage<CompanyDTO[]>(e, {
+            fallback: 'Failed to load companies. Please try again.',
+            serverFallback: 'Companies are currently unavailable due to a server issue. Please try again later.',
+          })
+        );
       }
     },
     enabled: userType === 'system-admin' && Boolean(token),
@@ -56,7 +61,6 @@ export default function AdminCompaniesPage() {
       } catch (e) {
         const err = e as AxiosError<ChangeStatusResponse>;
         const statusCode = err.response?.status;
-        const apiMessage = err.response?.data?.error;
 
         if (statusCode === 401) {
           clearAuth();
@@ -66,7 +70,12 @@ export default function AdminCompaniesPage() {
           throw new Error('You are not authorized to change company status.');
         }
 
-        throw new Error(apiMessage || err.message);
+        throw new Error(
+          getApiErrorMessage<CompanyDTO>(e, {
+            fallback: 'Failed to update company status. Please try again.',
+            serverFallback: 'Company updates are currently unavailable due to a server issue. Please try again later.',
+          })
+        );
       }
     },
     onSuccess: async () => {

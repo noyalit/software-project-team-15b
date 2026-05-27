@@ -2,6 +2,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import type { AxiosError } from 'axios';
 import { http } from '../api/http';
+import { getApiErrorMessage } from '../api/errors';
 import type { ApiResponse, MemberDTO } from '../api/types';
 import { useState } from 'react';
 
@@ -24,9 +25,12 @@ export default function RegisterPage() {
         if (!res.data.data) throw new Error('No member returned');
         return res.data.data;
       } catch (e) {
-        const err = e as AxiosError<RegisterResponse>;
-        const apiMessage = err.response?.data?.error;
-        throw new Error(apiMessage || err.message);
+        throw new Error(
+          getApiErrorMessage<MemberDTO>(e, {
+            fallback: 'Registration failed. Please verify your input and try again.',
+            serverFallback: 'Registration is currently unavailable due to a server issue. Please try again later.',
+          })
+        );
       }
     },
     onSuccess: () => {
