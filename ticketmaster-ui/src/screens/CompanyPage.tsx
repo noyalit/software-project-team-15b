@@ -1,14 +1,19 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import type { AxiosError } from 'axios';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getApiErrorMessage } from '../api/errors';
 import { http } from '../api/http';
-import type { ApiResponse, CompanyDTO } from '../api/types';
+import type { ApiResponse, CompanyDTO, MemberDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 
 export default function CompanyPage() {
   const { companyId } = useParams();
   const { token, userType, clearAuth } = useAuthStore();
+  const [ownerUsername, setOwnerUsername] = useState('');
+  const [ownerSuccessMessage, setOwnerSuccessMessage] = useState<string | null>(null);
+  const [removeOwnerUsername, setRemoveOwnerUsername] = useState('');
+  const [removeOwnerSuccessMessage, setRemoveOwnerSuccessMessage] = useState<string | null>(null);
 
   const companyQuery = useQuery({
     queryKey: ['company', companyId, token],
@@ -37,6 +42,102 @@ export default function CompanyPage() {
       }
     },
     enabled: Boolean(companyId) && Boolean(token) && userType === 'member',
+  });
+
+  const appointOwnerMutation = useMutation({
+    mutationFn: async () => {
+      setOwnerSuccessMessage(null);
+      const username = ownerUsername.trim();
+      if (!username) {
+        throw new Error('Please enter a username.');
+      }
+      if (!companyId) {
+        throw new Error('Company ID is missing.');
+      }
+
+      try {
+        const resolved = await http.get<ApiResponse<MemberDTO>>('/api/users/members/resolve', {
+          params: { username },
+        });
+        if (resolved.data.error) throw new Error(resolved.data.error);
+        const memberId = resolved.data.data?.userId;
+        if (!memberId) throw new Error('Member not found');
+
+        const appointed = await http.post<ApiResponse<MemberDTO>>('/api/users/roles/owner', {
+          memberId,
+          companyId,
+        });
+        if (appointed.data.error) throw new Error(appointed.data.error);
+        return appointed.data.data ?? null;
+      } catch (e) {
+        const err = e as AxiosError<ApiResponse<MemberDTO>>;
+        const status = err.response?.status;
+
+        if (status === 401) {
+          clearAuth();
+          throw new Error('Your session expired. Please log in again.');
+        }
+
+        throw new Error(
+          getApiErrorMessage<MemberDTO>(e, {
+            fallback: 'Failed to add owner. Please try again.',
+            serverFallback: 'Adding an owner is currently unavailable due to a server issue. Please try again later.',
+          })
+        );
+      }
+    },
+    onSuccess: () => {
+      setOwnerUsername('');
+      setOwnerSuccessMessage('Owner added.');
+    },
+  });
+
+  const removeOwnerMutation = useMutation({
+    mutationFn: async () => {
+      setRemoveOwnerSuccessMessage(null);
+      const username = removeOwnerUsername.trim();
+      if (!username) {
+        throw new Error('Please enter a username.');
+      }
+      if (!companyId) {
+        throw new Error('Company ID is missing.');
+      }
+
+      try {
+        const resolved = await http.get<ApiResponse<MemberDTO>>('/api/users/members/resolve', {
+          params: { username },
+        });
+        if (resolved.data.error) throw new Error(resolved.data.error);
+        const memberToRemoveId = resolved.data.data?.userId;
+        if (!memberToRemoveId) throw new Error('Member not found');
+
+        const removed = await http.post<ApiResponse<MemberDTO>>('/api/users/roles/owner/remove', {
+          memberToRemoveId,
+          companyId,
+        });
+        if (removed.data.error) throw new Error(removed.data.error);
+        return removed.data.data ?? null;
+      } catch (e) {
+        const err = e as AxiosError<ApiResponse<MemberDTO>>;
+        const status = err.response?.status;
+
+        if (status === 401) {
+          clearAuth();
+          throw new Error('Your session expired. Please log in again.');
+        }
+
+        throw new Error(
+          getApiErrorMessage<MemberDTO>(e, {
+            fallback: 'Failed to remove owner. Please try again.',
+            serverFallback: 'Removing an owner is currently unavailable due to a server issue. Please try again later.',
+          })
+        );
+      }
+    },
+    onSuccess: () => {
+      setRemoveOwnerUsername('');
+      setRemoveOwnerSuccessMessage('Owner removed.');
+    },
   });
 
   if (userType !== 'member') {
@@ -118,6 +219,84 @@ export default function CompanyPage() {
             <span className="font-medium">ID:</span> <span className="font-mono text-xs">{company.companyId}</span>
           </div>
         </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="text-slate-900 font-semibold">Add owner</div>
+        <div className="mt-2 text-sm text-slate-600">Enter a member username to appoint them as an owner.</div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <label className="block md:col-span-2">
+            <div className="text-sm font-medium text-slate-700">Username</div>
+            <input
+              value={ownerUsername}
+              onChange={(e) => setOwnerUsername(e.target.value)}
+              placeholder="e.g. alice"
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
+            />
+          </label>
+          <div className="flex items-end">
+            <button
+              onClick={() => appointOwnerMutation.mutate()}
+              disabled={appointOwnerMutation.isPending}
+              className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+            >
+              {appointOwnerMutation.isPending ? 'Adding…' : 'Add owner'}
+            </button>
+          </div>
+        </div>
+
+        {appointOwnerMutation.isError && (
+          <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            {(appointOwnerMutation.error as Error).message}
+          </div>
+        )}
+
+        {ownerSuccessMessage && !appointOwnerMutation.isError && (
+          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            {ownerSuccessMessage}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="text-slate-900 font-semibold">Remove owner appointment</div>
+        <div className="mt-2 text-sm text-slate-600">
+          Enter a member username to remove their owner appointment (only if they were appointed by you).
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <label className="block md:col-span-2">
+            <div className="text-sm font-medium text-slate-700">Username</div>
+            <input
+              value={removeOwnerUsername}
+              onChange={(e) => setRemoveOwnerUsername(e.target.value)}
+              placeholder="e.g. alice"
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
+            />
+          </label>
+          <div className="flex items-end">
+            <button
+              onClick={() => removeOwnerMutation.mutate()}
+              disabled={removeOwnerMutation.isPending}
+              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+            >
+              {removeOwnerMutation.isPending ? 'Removing…' : 'Remove owner'}
+            </button>
+          </div>
+        </div>
+
+        {removeOwnerMutation.isError && (
+          <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            {(removeOwnerMutation.error as Error).message}
+          </div>
+        )}
+
+        {removeOwnerSuccessMessage && !removeOwnerMutation.isError && (
+          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            {removeOwnerSuccessMessage}
+          </div>
+        )}
       </div>
     </div>
   );
