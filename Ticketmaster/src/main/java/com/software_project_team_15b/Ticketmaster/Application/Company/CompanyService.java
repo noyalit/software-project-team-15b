@@ -4,6 +4,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -112,6 +114,22 @@ public class CompanyService {
             throw new IllegalStateException("Repository returned null for findByFounder; expected an empty list");
         }
         return result;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Company> getMyCompanies(String token) {
+        requireValidToken(token);
+        UUID memberId = requireAuthenticatedMember(token);
+
+        List<Company> asFounder = companyRepository.findByFounder(memberId);
+        List<Company> asOwner = companyRepository.findByOwner(memberId);
+
+        return Stream.concat(asFounder.stream(), asOwner.stream())
+                .filter(Objects::nonNull)
+                .collect(Collectors.toMap(Company::getId, c -> c, (a, b) -> a))
+                .values()
+                .stream()
+                .collect(Collectors.toList());
     }
 
     /**

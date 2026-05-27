@@ -63,6 +63,27 @@ public class CompanyController {
         }
     }
 
+    @Operation(summary = "List companies related to the logged in member")
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<List<CompanyDTO>>> getMyCompanies(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+    ) {
+        try {
+            List<CompanyDTO> result = companyService.getMyCompanies(token).stream()
+                    .map(CompanyDTO::from)
+                    .toList();
+            return ResponseEntity.ok(new ApiResponse<>(result, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     @Operation(summary = "Get a company by ID")
     @GetMapping("/{companyId}")
     public ResponseEntity<ApiResponse<CompanyDTO>> getCompany(
