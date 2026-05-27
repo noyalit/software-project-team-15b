@@ -32,7 +32,6 @@ export default function EventSearchPage() {
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Discover Events</h1>
-          <p className="text-sm text-slate-600">Search results powered by `POST /api/events/search`.</p>
         </div>
         <input
           value={query}
