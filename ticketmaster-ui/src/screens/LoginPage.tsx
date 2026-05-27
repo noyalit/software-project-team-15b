@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { useLocation, useNavigate } from 'react-router-dom';
+import type { AxiosError } from 'axios';
 import { http } from '../api/http';
 import type { ApiResponse, MemberDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
@@ -21,10 +22,22 @@ export default function LoginPage() {
   const login = useMutation({
     mutationFn: async () => {
       const path = mode === 'member' ? '/api/users/login' : '/api/users/login/system-admin';
-      const res = await http.post<LoginResponse>(path, { username: usernameInput, password });
-      if (res.data.error) throw new Error(res.data.error);
-      if (!res.data.data) throw new Error('No token returned');
-      return res.data.data;
+      try {
+        const res = await http.post<LoginResponse>(path, { username: usernameInput, password });
+        if (res.data.error) throw new Error(res.data.error);
+        if (!res.data.data) throw new Error('No token returned');
+        return res.data.data;
+      } catch (e) {
+        const err = e as AxiosError<LoginResponse>;
+        const status = err.response?.status;
+        const apiMessage = err.response?.data?.error;
+
+        if (status && status >= 500) {
+          throw new Error('Login failed due to a server error. Please try again in a minute.');
+        }
+
+        throw new Error(apiMessage || err.message);
+      }
     },
     onSuccess: async (token) => {
       const nextUserType = mode === 'member' ? 'member' : 'system-admin';
