@@ -4,10 +4,13 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getApiErrorMessage } from '../api/errors';
 import { http } from '../api/http';
-import type { ApiResponse, OrderHistoryDTO } from '../api/types';
+import type { ApiResponse, CompanyDTO, EventDTO, MemberDTO, OrderHistoryDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 
 type OrdersResponse = ApiResponse<OrderHistoryDTO[]>;
+type CompaniesResponse = ApiResponse<CompanyDTO[]>;
+type EventsResponse = ApiResponse<EventDTO[]>;
+type ResolveMemberResponse = ApiResponse<MemberDTO>;
 
 type Mode = 'all' | 'user' | 'event' | 'company';
 
@@ -15,19 +18,110 @@ export default function AdminOrdersPage() {
   const { token, userType, clearAuth } = useAuthStore();
 
   const [mode, setMode] = useState<Mode>('all');
-  const [filterId, setFilterId] = useState('');
+  const [username, setUsername] = useState('');
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [selectedEventId, setSelectedEventId] = useState('');
 
   const endpoint = useMemo(() => {
-    const id = filterId.trim();
     if (mode === 'all') return '/api/order-history/admin/all';
-    if (mode === 'user') return id ? `/api/order-history/admin/user/${id}` : null;
-    if (mode === 'event') return id ? `/api/order-history/admin/event/${id}` : null;
-    if (mode === 'company') return id ? `/api/order-history/admin/company/${id}` : null;
+    if (mode === 'company') return selectedCompanyId ? `/api/order-history/admin/company/${selectedCompanyId}` : null;
+    if (mode === 'event') return selectedEventId ? `/api/order-history/admin/event/${selectedEventId}` : null;
     return null;
-  }, [mode, filterId]);
+  }, [mode, selectedCompanyId, selectedEventId]);
+
+  const companiesQuery = useQuery({
+    queryKey: ['admin', 'orders', 'companies', token],
+    queryFn: async () => {
+      try {
+        const res = await http.get<CompaniesResponse>('/api/companies');
+        if (res.data.error) throw new Error(res.data.error);
+        return res.data.data ?? [];
+      } catch (e) {
+        const err = e as AxiosError<CompaniesResponse>;
+        const status = err.response?.status;
+
+        if (status === 401) {
+          clearAuth();
+          throw new Error('Your session expired. Please log in again.');
+        }
+        if (status === 403) {
+          throw new Error('You are not authorized to view companies.');
+        }
+
+        throw new Error(
+          getApiErrorMessage<CompanyDTO[]>(e, {
+            fallback: 'Failed to load companies. Please try again.',
+            serverFallback: 'Companies are currently unavailable due to a server issue. Please try again later.',
+          })
+        );
+      }
+    },
+    enabled: userType === 'system-admin' && Boolean(token),
+  });
+
+  const eventsQuery = useQuery({
+    queryKey: ['admin', 'orders', 'events', token],
+    queryFn: async () => {
+      try {
+        const res = await http.post<EventsResponse>('/api/events/search', {});
+        if (res.data.error) throw new Error(res.data.error);
+        return res.data.data ?? [];
+      } catch (e) {
+        const err = e as AxiosError<EventsResponse>;
+        const status = err.response?.status;
+
+        if (status === 401) {
+          clearAuth();
+          throw new Error('Your session expired. Please log in again.');
+        }
+
+        throw new Error(
+          getApiErrorMessage<EventDTO[]>(e, {
+            fallback: 'Failed to load events. Please try again.',
+            serverFallback: 'Events are currently unavailable due to a server issue. Please try again later.',
+          })
+        );
+      }
+    },
+    enabled: userType === 'system-admin' && Boolean(token),
+  });
+
+  const resolveMemberMutation = useMutation({
+    mutationFn: async () => {
+      const u = username.trim();
+      if (!u) {
+        throw new Error('Username is required.');
+      }
+
+      try {
+        const res = await http.get<ResolveMemberResponse>('/api/users/members/resolve', { params: { username: u } });
+        if (res.data.error) throw new Error(res.data.error);
+        if (!res.data.data) throw new Error('Member not found');
+        return res.data.data;
+      } catch (e) {
+        const err = e as AxiosError<ResolveMemberResponse>;
+        const status = err.response?.status;
+
+        if (status === 401) {
+          clearAuth();
+          throw new Error('Your session expired. Please log in again.');
+        }
+        if (status === 403) {
+          throw new Error('You are not authorized to resolve members.');
+        }
+
+        throw new Error(
+          getApiErrorMessage<MemberDTO>(e, {
+            fallback: 'Failed to resolve member. Please verify the username and try again.',
+            serverFallback: 'Member lookup is currently unavailable due to a server issue. Please try again later.',
+          })
+        );
+      }
+    },
+  });
 
   const ordersQuery = useQuery({
-    queryKey: ['admin', 'orders', mode, filterId, token],
+    queryKey: ['admin', 'orders', mode, selectedCompanyId, selectedEventId, token],
     queryFn: async () => {
       if (!endpoint) return [];
       try {
@@ -54,11 +148,19 @@ export default function AdminOrdersPage() {
         );
       }
     },
-    enabled: userType === 'system-admin' && Boolean(token) && Boolean(endpoint),
+    enabled: userType === 'system-admin' && Boolean(token) && Boolean(endpoint) && mode !== 'user',
   });
 
   const runQuery = useMutation({
     mutationFn: async () => {
+      if (mode === 'user') {
+        const member = await resolveMemberMutation.mutateAsync();
+        const res = await http.get<OrdersResponse>(`/api/order-history/admin/user/${member.userId}`);
+        if (res.data.error) {
+          throw new Error(res.data.error);
+        }
+        return { data: res.data.data ?? [] };
+      }
       return ordersQuery.refetch();
     },
   });
@@ -116,32 +218,73 @@ export default function AdminOrdersPage() {
               onChange={(e) => {
                 const next = e.target.value as Mode;
                 setMode(next);
-                if (next === 'all') setFilterId('');
+                setUsername('');
+                setSelectedCompanyId('');
+                setSelectedEventId('');
               }}
               className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
             >
               <option value="all">All orders</option>
-              <option value="user">By userId</option>
-              <option value="event">By eventId</option>
-              <option value="company">By companyId</option>
+              <option value="user">By username</option>
+              <option value="event">By event name</option>
+              <option value="company">By company name</option>
             </select>
           </label>
 
-          <label className="block md:col-span-2">
-            <div className="text-sm font-medium text-slate-700">ID</div>
-            <input
-              value={filterId}
-              onChange={(e) => setFilterId(e.target.value)}
-              disabled={mode === 'all'}
-              placeholder={mode === 'all' ? 'Not required' : 'UUID'}
-              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm disabled:opacity-60"
-            />
-          </label>
+          {mode === 'user' && (
+            <label className="block md:col-span-2">
+              <div className="text-sm font-medium text-slate-700">Username</div>
+              <input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="username"
+                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
+              />
+            </label>
+          )}
+
+          {mode === 'company' && (
+            <label className="block md:col-span-2">
+              <div className="text-sm font-medium text-slate-700">Company</div>
+              <select
+                value={selectedCompanyId}
+                onChange={(e) => setSelectedCompanyId(e.target.value)}
+                disabled={companiesQuery.isPending || companiesQuery.isError}
+                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm disabled:opacity-60"
+              >
+                <option value="">Select a company…</option>
+                {companiesQuery.data?.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {mode === 'event' && (
+            <label className="block md:col-span-2">
+              <div className="text-sm font-medium text-slate-700">Event</div>
+              <select
+                value={selectedEventId}
+                onChange={(e) => setSelectedEventId(e.target.value)}
+                disabled={eventsQuery.isPending || eventsQuery.isError}
+                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm disabled:opacity-60"
+              >
+                <option value="">Select an event…</option>
+                {eventsQuery.data?.map((ev) => (
+                  <option key={ev.eventId} value={ev.eventId}>
+                    {ev.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <div className="md:col-span-3">
             <button
               onClick={() => runQuery.mutate()}
-              disabled={ordersQuery.isFetching || !endpoint}
+              disabled={ordersQuery.isFetching || runQuery.isPending || (mode !== 'user' && !endpoint) || (mode === 'user' && !username.trim())}
               className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
             >
               {ordersQuery.isFetching ? 'Loading…' : 'Load orders'}
@@ -149,9 +292,9 @@ export default function AdminOrdersPage() {
           </div>
         </div>
 
-        {ordersQuery.isError && (
+        {(ordersQuery.isError || runQuery.isError) && (
           <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-            {(ordersQuery.error as Error).message}
+            {((ordersQuery.error ?? runQuery.error) as Error).message}
           </div>
         )}
       </div>
@@ -162,7 +305,7 @@ export default function AdminOrdersPage() {
           <div className="text-sm text-slate-600">{orders.length} orders</div>
         </div>
 
-        {!ordersQuery.isFetching && !ordersQuery.isError && orders.length === 0 && (
+        {!ordersQuery.isFetching && !ordersQuery.isError && !runQuery.isError && orders.length === 0 && (
           <div className="mt-4 text-slate-600">No orders found.</div>
         )}
 
