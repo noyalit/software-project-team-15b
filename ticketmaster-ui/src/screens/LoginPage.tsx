@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { http } from '../api/http';
 import type { ApiResponse } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
@@ -9,7 +9,10 @@ type LoginResponse = ApiResponse<string>;
 
 export default function LoginPage() {
   const nav = useNavigate();
+  const location = useLocation();
   const { setAuth } = useAuthStore();
+
+  const successMessage = (location.state as { successMessage?: string } | null)?.successMessage;
 
   const [mode, setMode] = useState<'member' | 'system-admin'>('member');
   const [username, setUsername] = useState('');
@@ -33,6 +36,12 @@ export default function LoginPage() {
     <div className="mx-auto max-w-lg">
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Login</h1>
+
+        {successMessage && (
+          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            {successMessage}
+          </div>
+        )}
 
         <div className="mt-5 flex rounded-xl bg-slate-100 p-1">
           <button

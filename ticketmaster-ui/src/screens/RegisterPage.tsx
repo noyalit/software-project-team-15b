@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import type { AxiosError } from 'axios';
 import { http } from '../api/http';
 import type { ApiResponse, MemberDTO } from '../api/types';
 import { useState } from 'react';
@@ -14,13 +15,26 @@ export default function RegisterPage() {
 
   const register = useMutation({
     mutationFn: async () => {
-      const res = await http.post<RegisterResponse>('/api/users/register', { username, password, birthDate });
-      if (res.data.error) throw new Error(res.data.error);
-      if (!res.data.data) throw new Error('No member returned');
-      return res.data.data;
+      try {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+          throw new Error('Birth date must be in YYYY-MM-DD format (e.g. 2000-01-01).');
+        }
+        const res = await http.post<RegisterResponse>('/api/users/register', { username, password, birthDate });
+        if (res.data.error) throw new Error(res.data.error);
+        if (!res.data.data) throw new Error('No member returned');
+        return res.data.data;
+      } catch (e) {
+        const err = e as AxiosError<RegisterResponse>;
+        const apiMessage = err.response?.data?.error;
+        throw new Error(apiMessage || err.message);
+      }
     },
     onSuccess: () => {
-      nav('/login');
+      nav('/login', {
+        state: {
+          successMessage: 'Registration successful. You can now log in.',
+        },
+      });
     },
   });
 
@@ -30,35 +44,37 @@ export default function RegisterPage() {
         <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Register</h1>
 
         <div className="mt-5 space-y-4">
-        <label className="block">
-          <div className="text-sm font-medium text-slate-700">Username</div>
-          <input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
-          />
-        </label>
-        <label className="block">
-          <div className="text-sm font-medium text-slate-700">Password</div>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
-          />
-          <div className="mt-1 text-xs text-slate-500">
-            Must include at least 1 uppercase letter and 1 number (e.g. <code>Password1</code>).
-          </div>
-        </label>
-        <label className="block">
-          <div className="text-sm font-medium text-slate-700">Birth date</div>
-          <input
-            value={birthDate}
-            onChange={(e) => setBirthDate(e.target.value)}
-            placeholder="YYYY-MM-DD"
-            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400"
-          />
-        </label>
+          <label className="block">
+            <div className="text-sm font-medium text-slate-700">Username</div>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
+            />
+          </label>
+          <label className="block">
+            <div className="text-sm font-medium text-slate-700">Password</div>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
+            />
+            <div className="mt-1 text-xs text-slate-500">
+              Must be at least 8 characters and include at least 1 uppercase letter and 1 number (e.g.{' '}
+              <code>Password12</code>).
+            </div>
+          </label>
+          <label className="block">
+            <div className="text-sm font-medium text-slate-700">Birth date</div>
+            <input
+              type="date"
+              value={birthDate}
+              onChange={(e) => setBirthDate(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400"
+            />
+            <div className="mt-1 text-xs text-slate-500">Format: YYYY-MM-DD (e.g. 2000-01-01).</div>
+          </label>
 
         <button
           onClick={() => register.mutate()}
