@@ -52,7 +52,6 @@ public class EventDomainServiceImpl implements IEventDomainService {
     private final TransactionTemplate txTemplate;
 
     public EventDomainServiceImpl(IEventRepository events,
-                                  @Lazy CompanyService companyService,
                                   EventLockRegistry locks,
                                   PlatformTransactionManager txManager) {
         this.events = Objects.requireNonNull(events);
