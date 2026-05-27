@@ -1,5 +1,24 @@
 package com.software_project_team_15b.Ticketmaster.white.Application.Queue;
 
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
@@ -7,20 +26,6 @@ import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
-
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
 /**
  * White-box tests for the {@link QueueService} application facade.
@@ -46,6 +51,7 @@ class QueueServiceWhiteTest {
 
     @Mock private IQueueDomainService queueDomainService;
     @Mock private IAuth auth;
+    @Mock private ApplicationEventPublisher eventPublisher;
     @InjectMocks private QueueService service;
 
     private static final UUID   EVENT_ID    = UUID.fromString("00000000-0000-0000-0000-000000000001");
