@@ -39,63 +39,83 @@ public class ActiveOrderMaintenanceService {
     @Transactional
     @Scheduled(cron = "${active-orders.cleanup-non-active-cron:0 0 3 * * *}")
     public void deleteNonActiveOrders() {
-        List<ActiveOrder> ordersToDelete =
-                activeOrderRepository.findByStatusNotForUpdate(ActiveOrderStatus.ACTIVE);
+        try {
+            List<ActiveOrder> ordersToDelete =
+                    activeOrderRepository.findByStatusNotForUpdate(ActiveOrderStatus.ACTIVE);
 
-        if (ordersToDelete.isEmpty()) {
-            return;
+            if (ordersToDelete.isEmpty()) {
+                return;
+            }
+
+            activeOrderRepository.deleteAll(ordersToDelete);
+
+            AUDIT.info("op=deleteNonActiveOrders count={} result=ok",
+                    ordersToDelete.size());
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=deleteNonActiveOrders result=error reason={}", e.getMessage(), e);
+
+            throw e; // Rethrow to trigger transaction rollback and ensure no orders are deleted without proper handling
         }
-
-        activeOrderRepository.deleteAll(ordersToDelete);
-
-        AUDIT.info("op=deleteNonActiveOrders count={} result=ok",
-                ordersToDelete.size());
     }
 
     @Transactional
     @Scheduled(fixedDelayString = "${active-orders.expired-active-scan-ms:300000}")
     public void releaseAndDeleteExpiredActiveOrders() {
-        LocalDateTime expiredBefore = LocalDateTime.now().minusMinutes(1);
+        try {
+            LocalDateTime expiredBefore = LocalDateTime.now().minusMinutes(1);
 
-        List<ActiveOrder> expiredActiveOrders =
-                activeOrderRepository.findExpiredActiveOrdersForUpdate(
-                        ActiveOrderStatus.ACTIVE,
-                        expiredBefore
-                );
+            List<ActiveOrder> expiredActiveOrders =
+                    activeOrderRepository.findExpiredActiveOrdersForUpdate(
+                            ActiveOrderStatus.ACTIVE,
+                            expiredBefore
+                    );
 
-        if (expiredActiveOrders.isEmpty()) {
-            return;
+            if (expiredActiveOrders.isEmpty()) {
+                return;
+            }
+
+            for (ActiveOrder activeOrder : expiredActiveOrders) {
+                releaseAndDeleteExpiredActiveOrder(activeOrder);
+            }
+
+            AUDIT.info("op=releaseAndDeleteExpiredActiveOrders count={} expiredBefore={} result=ok",
+                    expiredActiveOrders.size(),
+                    expiredBefore);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=releaseAndDeleteExpiredActiveOrders result=error reason={}", e.getMessage(), e);
+
+            throw e; // Rethrow to trigger transaction rollback and ensure no orders are deleted without releasing seats
         }
-
-        for (ActiveOrder activeOrder : expiredActiveOrders) {
-            releaseAndDeleteExpiredActiveOrder(activeOrder);
-        }
-
-        AUDIT.info("op=releaseAndDeleteExpiredActiveOrders count={} expiredBefore={} result=ok",
-                expiredActiveOrders.size(),
-                expiredBefore);
     }
 
     private void releaseAndDeleteExpiredActiveOrder(ActiveOrder activeOrder) {
-
-        if (activeOrder.getOrderSeats().isEmpty()) {
+        try {
+            if (activeOrder.getOrderSeats().isEmpty()) {
             activeOrderRepository.delete(activeOrder);
             // No seats to release, skip event management call
             AUDIT.info("op=releaseAndDeleteExpiredActiveOrder order={} event={} result=no-seats-to-release",
-                    activeOrder.getOrderId(),
-                    activeOrder.getEventId());
-            return;
-        }
-
-        eventDomainService.release(
-                activeOrder.getEventId(),
-                activeOrder.getOrderId()
-        );
-
-        activeOrderRepository.delete(activeOrder);
-
-        AUDIT.info("op=releaseAndDeleteExpiredActiveOrder order={} event={} result=ok",
                 activeOrder.getOrderId(),
                 activeOrder.getEventId());
+            return;
+            }
+
+            eventDomainService.release(
+                activeOrder.getEventId(),
+                activeOrder.getOrderId()
+            );
+
+            activeOrderRepository.delete(activeOrder);
+
+            AUDIT.info("op=releaseAndDeleteExpiredActiveOrder order={} event={} result=ok",
+                activeOrder.getOrderId(),
+                activeOrder.getEventId());
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=releaseAndDeleteExpiredActiveOrder order={} event={} result=error reason={}",
+                activeOrder != null ? activeOrder.getOrderId() : null,
+                activeOrder != null ? activeOrder.getEventId() : null,
+                e.getMessage(), e);
+
+                throw e; // Rethrow to trigger transaction rollback and ensure the order isn't deleted without releasing seats
+        }
     }
 }

@@ -21,6 +21,8 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITick
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Manager;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
@@ -46,8 +48,8 @@ public class OrderHistoryService implements EventSubscriber{
     private final IAuth auth;
     private final UserDomainService userDomainService;
     private final ICompanyRepository companyRepository;
+    private final IMemberRepository memberRepository;
     private static final ConcurrentHashMap<UUID, Object> ORDER_LOCKS = new ConcurrentHashMap<>();
-
 
     public OrderHistoryService(IOrderHistoryRepository orderHistoryRepository,
                                IPaymentAPI paymentGateway,
@@ -56,7 +58,8 @@ public class OrderHistoryService implements EventSubscriber{
                                IEventRepository eventsRepository,
                                IAuth auth,
                                UserDomainService userDomainService,
-                               ICompanyRepository companyRepository) {
+                               ICompanyRepository companyRepository,
+                               IMemberRepository memberRepository) {
         this.orderHistoryRepository = orderHistoryRepository;
         this.paymentGateway = paymentGateway;
         this.ticketProvider = ticketProvider;
@@ -64,6 +67,7 @@ public class OrderHistoryService implements EventSubscriber{
         this.auth = auth;
         this.userDomainService = userDomainService;
         this.companyRepository = companyRepository;
+        this.memberRepository = memberRepository;
         eventCancelManager.subscribe(this);
     }
 
@@ -80,7 +84,7 @@ public class OrderHistoryService implements EventSubscriber{
         "op=notifyEventIsCancelled eventId={} result=no_active_orders",
                 event
         );
-}
+    }
         orderHistories.forEach(orderHistory -> cancelOrderHistory(orderHistory));
         AUDIT.info("op=notifyEventIsCancelled eventId={} cancelledOrders={}", event, orderHistories.size());
     }
@@ -190,8 +194,9 @@ public class OrderHistoryService implements EventSubscriber{
             return Map.of("ticketsSold", 0, "totalRevenue", Money.zero("USD"), "orders", List.of());
         }
         
+        Set<UUID> managedEventIds = getEventIdsManagedBy(visibleManagers, companyId);
         List<Event> filteredEvents = events.stream()
-            .filter(event -> isEventManagedByAppointedMembers(event, visibleManagers))
+            .filter(event -> managedEventIds.contains(event.eventId()))
                 .toList();
         
         if (filteredEvents.isEmpty()) {
@@ -395,19 +400,23 @@ public class OrderHistoryService implements EventSubscriber{
         );
     }
     
-    private boolean isEventManagedByAppointedMembers(Event event, List<UUID> appointedMembers) {
-        if (appointedMembers == null || appointedMembers.isEmpty()) return false;
-        for (UUID member : appointedMembers) {
-            try {
-                var opt = companyRepository.findById(event.companyId());
-                if (opt.isEmpty()) throw new CompanyNotFoundException("Company not found: " + event.companyId());
-                var company = opt.get();
-                if (company.getEventManagers(event.eventId()).contains(member)) return true;
-            } catch (CompanyNotFoundException ex) {
-                AUDIT.warn("op=isEventManagedByAppointedMembers companyNotFound eventId={} companyId={}", event.eventId(), event.companyId());
+    private Set<UUID> getEventIdsManagedBy(List<UUID> memberIds, UUID companyId) {
+        if (memberIds == null || memberIds.isEmpty()) {
+            return Set.of();
+        }
+        Set<UUID> managedEventIds = new java.util.HashSet<>();
+        for (UUID memberId : memberIds) {
+            var memberOpt = memberRepository.findById(memberId);
+            if (memberOpt.isPresent()) {
+                var member = memberOpt.get();
+                member.getAssignedRoles().stream()
+                    .filter(role -> role instanceof Manager)
+                    .map(role -> (Manager) role)
+                    .filter(manager -> companyId.equals(manager.getCompanyId()))
+                    .forEach(manager -> managedEventIds.add(manager.getEventId()));
             }
         }
-        return false;
+        return managedEventIds;
     }
 
     private boolean isFounderOrOwner(UUID callerId, UUID companyId) {

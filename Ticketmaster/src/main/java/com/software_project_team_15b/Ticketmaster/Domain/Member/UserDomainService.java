@@ -297,28 +297,24 @@ public class UserDomainService {
         return managerRole.getPermissions();
     }
 
-    @Transactional(readOnly = true)
-    public boolean hasManagerPermission(UUID managerId, UUID eventId, ManagerPermission required) {
-        if (eventId == null) {
-            throw new InvalidMemberInputException("Event ID cannot be null");
-        }
-
-        if (managerId == null) {
-            throw new InvalidMemberInputException("Manager ID cannot be null");
-        }
-
-        if (required == null) {
-            throw new InvalidMemberInputException("Required permission cannot be null");
-        }
-
+    private boolean hasManagerPermission(
+            UUID managerId,
+            UUID eventId,
+            UUID companyId,
+            ManagerPermission required
+    ) {
         Member member = getMemberOrThrow(managerId);
 
         return member.getAssignedRoles()
                 .stream()
                 .filter(role -> role instanceof Manager)
                 .map(role -> (Manager) role)
-                .filter(role -> eventId.equals(role.getEventId()))
-                .anyMatch(managerRole -> managerRole.hasPermission(required));
+                .anyMatch(manager ->
+                        manager.isAppointmentApproved()
+                                && manager.belongsToCompany(companyId)
+                                && eventId.equals(manager.getEventId())
+                                && manager.hasPermission(required)
+                );
     }
 
     @Transactional
@@ -348,31 +344,78 @@ public class UserDomainService {
     }
 
     @Transactional(readOnly = true)
-    public boolean isActiveOwner(UUID userId) {
+    public boolean isActiveOwner(UUID userId, UUID companyId) {
         Member member = getMemberOrThrow(userId);
+
         return member.getAssignedRoles()
                 .stream()
                 .anyMatch(role -> role instanceof Owner
                         && !(role instanceof Founder)
-                        && role.isAppointmentApproved());
+                        && role.isAppointmentApproved()
+                        && role.belongsToCompany(companyId));
     }
 
     @Transactional(readOnly = true)
-    public boolean isActiveManager(UUID userId) {
+    public boolean isActiveManager(UUID userId, UUID companyId, UUID eventId) {
         Member member = getMemberOrThrow(userId);
+
         return member.getAssignedRoles()
                 .stream()
-                .anyMatch(role -> role instanceof Manager
-                        && role.isAppointmentApproved());
+                .filter(role -> role instanceof Manager)
+                .map(role -> (Manager) role)
+                .anyMatch(manager -> manager.isAppointmentApproved()
+                        && manager.belongsToCompany(companyId)
+                        && eventId.equals(manager.getEventId()));
     }
 
     @Transactional(readOnly = true)
-    public boolean isActiveFounder(UUID userId) {
+    public boolean isActiveFounder(UUID userId, UUID companyId) {
         Member member = getMemberOrThrow(userId);
+
         return member.getAssignedRoles()
                 .stream()
                 .anyMatch(role -> role instanceof Founder
-                        && role.isAppointmentApproved());
+                        && role.isAppointmentApproved()
+                        && role.belongsToCompany(companyId));
+    }
+
+    @Transactional(readOnly = true)
+    public void isLegalEventManager(
+            UUID eventId,
+            UUID managerId,
+            UUID companyId,
+            ManagerPermission required
+    ) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID cannot be null");
+        }
+
+        if (managerId == null) {
+            throw new IllegalArgumentException("Manager ID cannot be null");
+        }
+
+        if (companyId == null) {
+            throw new IllegalArgumentException("Company ID cannot be null");
+        }
+
+        if (required == null) {
+            throw new IllegalArgumentException("Required permission cannot be null");
+        }
+
+        boolean isAllowed =
+                isActiveFounder(managerId, companyId)
+                        || isActiveOwner(managerId, companyId)
+                        || hasManagerPermission(managerId, eventId, companyId, required);
+
+        if (!isAllowed) {
+            throw new InvalidManagerPermissionsException(
+                    "User is not authorized for this event action. " +
+                            "managerId=" + managerId +
+                            ", companyId=" + companyId +
+                            ", eventId=" + eventId +
+                            ", requiredPermission=" + required
+            );
+        }
     }
 
     @Transactional(readOnly = true)
@@ -457,7 +500,7 @@ public class UserDomainService {
         }
     }
 
-    private void validateRawPassword(String password) {
+    public void validateRawPassword(String password) {
         if (password == null || password.isBlank()) {
             throw new InvalidMemberInputException("Password cannot be null or empty");
         }

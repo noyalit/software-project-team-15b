@@ -31,6 +31,10 @@ import com.software_project_team_15b.Ticketmaster.Infrastructure.Auth;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Manager;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
@@ -66,6 +70,9 @@ class OrderHistoryTestIT {
 
     @MockitoBean
     ICompanyRepository companyRepository;
+
+    @MockitoBean
+    IMemberRepository memberRepository;
 
     @MockitoBean(name = "auth")    
     Auth authBean;
@@ -276,8 +283,8 @@ class OrderHistoryTestIT {
         eventsRepository.save(e1);
         eventsRepository.save(e2);
 
-        when(company.getEventManagers(e1.eventId())).thenReturn(Set.of(callerId));
-        when(company.getEventManagers(e2.eventId())).thenReturn(Set.of(appointedMemberId));
+        mockMemberWithManagerRole(callerId, e1.eventId(), companyId);
+        mockMemberWithManagerRole(appointedMemberId, e2.eventId(), companyId);
 
         orderHistoryRepository.save(createOrder(userId, e1.eventId(), 3, "10.00"));
 
@@ -303,7 +310,7 @@ class OrderHistoryTestIT {
 
         Event event = createEvent(companyId);
         eventsRepository.save(event);
-        when(company.getEventManagers(event.eventId())).thenReturn(Set.of(callerId));
+        mockMemberWithManagerRole(callerId, event.eventId(), companyId);
         orderHistoryRepository.save(createOrder(userId, event.eventId(), 2, "15.00"));
 
         Map<String, Object> report = service.generateSalesReport(token, companyId);
@@ -361,8 +368,8 @@ class OrderHistoryTestIT {
     eventsRepository.save(visibleEvent);
     eventsRepository.save(hiddenEvent);
 
-    when(company.getEventManagers(visibleEvent.eventId())).thenReturn(Set.of(appointedManager));
-    when(company.getEventManagers(hiddenEvent.eventId())).thenReturn(Set.of(outsideManager));
+    mockMemberWithManagerRole(appointedManager, visibleEvent.eventId(), companyId);
+    mockMemberWithManagerRole(outsideManager, hiddenEvent.eventId(), companyId);
 
     orderHistoryRepository.save(createOrder(userId, visibleEvent.eventId(), 2, "10.00"));
     orderHistoryRepository.save(createOrder(userId, hiddenEvent.eventId(), 5, "50.00"));
@@ -393,7 +400,7 @@ class OrderHistoryTestIT {
 
     eventsRepository.save(appointedManagerEvent);
 
-    when(company.getEventManagers(appointedManagerEvent.eventId())).thenReturn(Set.of(appointedManager));
+    mockMemberWithManagerRole(appointedManager, appointedManagerEvent.eventId(), companyId);
 
     orderHistoryRepository.save(createOrder(userId,appointedManagerEvent.eventId(), 4, "25.00"));
 
@@ -419,7 +426,7 @@ class OrderHistoryTestIT {
 
     Event event = createEvent(companyId);
     eventsRepository.save(event);
-    when(company.getEventManagers(event.eventId())).thenReturn(Set.of(callerId));
+    mockMemberWithManagerRole(callerId, event.eventId(), companyId);
 
     OrderHistory activeOrder = createOrder(userId, event.eventId(), 2, "15.00");
     OrderHistory cancelledOrder = createOrder(userId, event.eventId(), 3, "10.00");
@@ -680,6 +687,15 @@ class OrderHistoryTestIT {
     // =========================================================
     // helpers
     // =========================================================
+
+    private void mockMemberWithManagerRole(UUID memberId, UUID eventId, UUID companyId) {
+        Member member = org.mockito.Mockito.mock(Member.class);
+        Manager manager = new Manager(UUID.randomUUID(), companyId, eventId, Set.of(ManagerPermission.GENERATE_SALES_REPORTS));
+        Set<com.software_project_team_15b.Ticketmaster.Domain.Member.Role> roles = new HashSet<>();
+        roles.add(manager);
+        when(member.getAssignedRoles()).thenReturn(roles);
+        when(memberRepository.findById(memberId)).thenReturn(java.util.Optional.of(member));
+    }
 
     private Event createEvent(UUID companyId) {
 

@@ -13,6 +13,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurc
 
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PessimisticLockException;
+import org.apache.commons.lang3.NotImplementedException;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.PessimisticLockingFailureException;
@@ -317,19 +318,20 @@ public class EventDomainServiceImpl implements IEventDomainService {
             LocalDate birthDate,
             String couponCode
     ) {
-        Event event = requireEvent(eventId);
-        EventArea area = requireArea(event, areaId);
-        Money subtotal = area.basePrice().multiply(quantity);
-        PurchaseRequest request = new PurchaseRequest(
-                eventId, areaId, buyerId, birthDate,
-                quantity, List.of(), couponCode
-        );
-        Money eventTotal = event.cheapestPriceFor(areaId, quantity, request);
-        // TODO: We need @OrMalky cheapestPriceFor() func for evaluating the price with the polices to return final price
-        Money companyTotal = companyService.cheapestPriceFor(event.companyId(), subtotal, request);
-        Money total = eventTotal.amount().compareTo(companyTotal.amount()) <= 0 ? eventTotal : companyTotal;
-        Money discount = subtotal.subtract(total);
-        return new PriceBreakdown(area.basePrice(), subtotal, discount, total);
+        throw new NotImplementedException();
+//        Event event = requireEvent(eventId);
+//        EventArea area = requireArea(event, areaId);
+//        Money subtotal = area.basePrice().multiply(quantity);
+//        PurchaseRequest request = new PurchaseRequest(
+//                eventId, areaId, buyerId, birthDate,
+//                quantity, List.of(), couponCode
+//        );
+//        Money eventTotal = event.cheapestPriceFor(areaId, quantity, request);
+//        // TODO: We need @OrMalky cheapestPriceFor() func for evaluating the price with the polices to return final price
+//        Money companyTotal = companyService.cheapestPriceFor(event.companyId(), subtotal, request);
+//        Money total = eventTotal.amount().compareTo(companyTotal.amount()) <= 0 ? eventTotal : companyTotal;
+//        Money discount = subtotal.subtract(total);
+//        return new PriceBreakdown(area.basePrice(), subtotal, discount, total);
     }
 
     // ---- Holds / confirmations ----------------------------------------------
@@ -444,12 +446,13 @@ public class EventDomainServiceImpl implements IEventDomainService {
     @Override
     @Transactional(readOnly = true)
     public void validatePurchaseEligibility(UUID eventId, PurchaseRequest request) {
-        Objects.requireNonNull(request, "request");
-        Event event = requireEvent(eventId);
-        for (IEventPurchasePolicy policy : event.purchasePolicies()) {
-            policy.validate(request, event);
-        }
-        companyService.validatePurchaseEligibility(event.companyId(), request);
+        throw new NotImplementedException();
+//        Objects.requireNonNull(request, "request");
+//        Event event = requireEvent(eventId);
+//        for (IEventPurchasePolicy policy : event.purchasePolicies()) {
+//            policy.validate(request, event);
+//        }
+//        companyService.validatePurchaseEligibility(event.companyId(), request);
     }
 
     // ---- Helpers -------------------------------------------------------------
