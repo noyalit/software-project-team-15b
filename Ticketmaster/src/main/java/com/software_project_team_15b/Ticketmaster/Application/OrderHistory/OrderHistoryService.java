@@ -107,6 +107,92 @@ public class OrderHistoryService implements EventSubscriber{
         return Collections.unmodifiableList(dtos);
     }
 
+    @Transactional(readOnly = true)
+    public List<OrderHistoryDTO> getAllOrderHistoryForSystemAdmin(String token) {
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
+        }
+        validateUser(token);
+        if (!auth.isSystemAdmin(token)) {
+            throw new IllegalArgumentException("Only a system admin can view all order history");
+        }
+        UUID adminId = auth.extractUserId(token);
+        AUDIT.info("op=getAllOrderHistoryForSystemAdmin adminId={}", adminId);
+
+        List<OrderHistory> histories = orderHistoryRepository.findAll();
+        List<OrderHistoryDTO> dtos = histories.stream().map(this::toOrderHistoryDTO).collect(Collectors.toList());
+        AUDIT.info("op=getAllOrderHistoryForSystemAdmin adminId={} orders={}", adminId, dtos.size());
+        return Collections.unmodifiableList(dtos);
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderHistoryDTO> getOrderHistoryForUserBySystemAdmin(String token, UUID userId) {
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
+        }
+        if (userId == null) {
+            throw new IllegalArgumentException("userId cannot be null");
+        }
+        validateUser(token);
+        if (!auth.isSystemAdmin(token)) {
+            throw new IllegalArgumentException("Only a system admin can view a user's order history");
+        }
+        UUID adminId = auth.extractUserId(token);
+        AUDIT.info("op=getOrderHistoryForUserBySystemAdmin adminId={} userId={}", adminId, userId);
+
+        List<OrderHistory> histories = orderHistoryRepository.findByUserId(userId);
+        List<OrderHistoryDTO> dtos = histories.stream().map(this::toOrderHistoryDTO).collect(Collectors.toList());
+        AUDIT.info("op=getOrderHistoryForUserBySystemAdmin adminId={} userId={} orders={}", adminId, userId, dtos.size());
+        return Collections.unmodifiableList(dtos);
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderHistoryDTO> getOrderHistoryForEventBySystemAdmin(String token, UUID eventId) {
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
+        }
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+        validateUser(token);
+        if (!auth.isSystemAdmin(token)) {
+            throw new IllegalArgumentException("Only a system admin can view an event's order history");
+        }
+        UUID adminId = auth.extractUserId(token);
+        AUDIT.info("op=getOrderHistoryForEventBySystemAdmin adminId={} eventId={}", adminId, eventId);
+
+        List<OrderHistory> histories = orderHistoryRepository.findByEventId(eventId);
+        List<OrderHistoryDTO> dtos = histories.stream().map(this::toOrderHistoryDTO).collect(Collectors.toList());
+        AUDIT.info("op=getOrderHistoryForEventBySystemAdmin adminId={} eventId={} orders={}", adminId, eventId, dtos.size());
+        return Collections.unmodifiableList(dtos);
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderHistoryDTO> getOrderHistoryForCompanyBySystemAdmin(String token, UUID companyId) {
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
+        }
+        if (companyId == null) {
+            throw new IllegalArgumentException("companyId cannot be null");
+        }
+        validateUser(token);
+        if (!auth.isSystemAdmin(token)) {
+            throw new IllegalArgumentException("Only a system admin can view a company's order history");
+        }
+        UUID adminId = auth.extractUserId(token);
+        AUDIT.info("op=getOrderHistoryForCompanyBySystemAdmin adminId={} companyId={}", adminId, companyId);
+
+        List<Event> events = eventsRepository.searchByCompany(companyId, SearchCriteria.empty());
+        if (events.isEmpty()) {
+            return List.of();
+        }
+        List<UUID> eventIds = events.stream().map(Event::eventId).toList();
+        List<OrderHistory> histories = orderHistoryRepository.findByEventIdIn(eventIds);
+        List<OrderHistoryDTO> dtos = histories.stream().map(this::toOrderHistoryDTO).collect(Collectors.toList());
+        AUDIT.info("op=getOrderHistoryForCompanyBySystemAdmin adminId={} companyId={} orders={}", adminId, companyId, dtos.size());
+        return Collections.unmodifiableList(dtos);
+    }
+
 
     private void validateUser(String token) {
         if (token == null) {

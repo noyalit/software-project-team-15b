@@ -8,6 +8,26 @@ export type EventStatus = string;
 
 export type CompanyStatus = 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
 
+export type MoneyDTO = {
+  amount: string;
+  currency: string;
+};
+
+export type TicketDTO = {
+  seatId: string;
+  basePrice: MoneyDTO | null;
+};
+
+export type OrderHistoryDTO = {
+  orderId: string;
+  userId: string;
+  eventId: string;
+  areaId: string;
+  totalPrice: MoneyDTO | null;
+  tickets: TicketDTO[];
+  cancelled: boolean;
+};
+
 export type EventAreaView = {
   areaId: string;
   name: string;
