@@ -17,6 +17,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.UserType;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.SiteQueueSnapshotDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 import java.time.LocalDate;
 import java.util.*;
@@ -111,6 +112,15 @@ class UserServiceConcurrencyTest {
 
         @Override
         public void addUserToSiteQueue(String token) {
+        }
+
+        @Override
+        public SiteQueueSnapshotDTO getSiteQueueSnapshot() {
+            return new SiteQueueSnapshotDTO(0, 0, 0);
+        }
+
+        @Override
+        public void updateSiteQueueSettings(int maxVisitors) {
         }
 
         @Override
