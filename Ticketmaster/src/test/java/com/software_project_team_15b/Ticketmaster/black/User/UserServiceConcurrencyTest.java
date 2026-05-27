@@ -1,4 +1,4 @@
-package com.software_project_team_15b.Ticketmaster.black.Application;
+package com.software_project_team_15b.Ticketmaster.black.User;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

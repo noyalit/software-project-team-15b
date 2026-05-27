@@ -219,7 +219,6 @@ class EventCatalogMutabilityIT {
 
     @Test
     void replacePurchasePolicies_loosening_lets_request_pass() {
-        Setup s = createDraftSeatingEvent(1, "10.00");
         UUID company = UUID.randomUUID();
         UUID caller = UUID.randomUUID();
         UUID strict = service.createEvent(new CreateEventCommand(
