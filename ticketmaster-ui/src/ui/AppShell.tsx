@@ -1,5 +1,6 @@
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../ui/authStore';
+import logo from '../assets/Ticket4U_logo.jpeg';
 
 function NavLink({ to, label }: { to: string; label: string }) {
   const { pathname } = useLocation();
@@ -25,8 +26,9 @@ export default function AppShell() {
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-slate-200/70 bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-          <Link to="/" className="text-lg font-extrabold tracking-tight text-slate-900">
-            Ticket4U
+          <Link to="/" className="flex items-center">
+            <img src={logo} alt="Ticket4U" className="h-10 w-auto" />
+            <span className="sr-only">Ticket4U</span>
           </Link>
 
           <nav className="flex items-center gap-1">
