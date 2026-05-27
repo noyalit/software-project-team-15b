@@ -45,25 +45,31 @@ export default function EventSearchPage() {
       {search.isPending && <div className="text-slate-600">Loading…</div>}
       {search.isError && <div className="text-red-300">{(search.error as Error).message}</div>}
 
-      <div className="grid gap-4 md:grid-cols-2">
-        {filtered.map((e: EventDTO) => (
-          <Link
-            key={e.eventId}
-            to={`/events/${e.eventId}`}
-            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-slate-300"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-sm text-slate-500">{new Date(e.startsAt).toLocaleString()}</div>
-                <div className="mt-1 text-lg font-semibold text-slate-900">{e.name}</div>
-                <div className="mt-1 text-sm text-slate-600">{e.artist}</div>
-                <div className="mt-2 text-sm text-slate-500">{e.location}</div>
+      {!search.isPending && !search.isError && filtered.length === 0 ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-600 shadow-sm">
+          no events are currently available
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {filtered.map((e: EventDTO) => (
+            <Link
+              key={e.eventId}
+              to={`/events/${e.eventId}`}
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm hover:border-slate-300"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-sm text-slate-500">{new Date(e.startsAt).toLocaleString()}</div>
+                  <div className="mt-1 text-lg font-semibold text-slate-900">{e.name}</div>
+                  <div className="mt-1 text-sm text-slate-600">{e.artist}</div>
+                  <div className="mt-2 text-sm text-slate-500">{e.location}</div>
+                </div>
+                <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">{e.status}</div>
               </div>
-              <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">{e.status}</div>
-            </div>
-          </Link>
-        ))}
-      </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
