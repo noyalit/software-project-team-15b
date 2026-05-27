@@ -7,10 +7,12 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
+import com.software_project_team_15b.Ticketmaster.Application.events.TempTokenAcceptedFromQueueEvent;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
@@ -154,6 +156,28 @@ public class UserService {
         auth.exitSystem(tempToken);
         AUDIT.info("op=exit-queue success=true");
         return enterAsGuest();
+    }
+
+    @EventListener
+    public void handleTempTokenAcceptedFromQueue(TempTokenAcceptedFromQueueEvent event) {
+        try {
+            String guestToken = tryEnterFromQueue(event.tempToken());
+
+            AUDIT.info(
+                    "op=queue-token-accepted tempToken={} guestTokenIssued={}",
+                    event.tempToken(),
+                    guestToken != null
+            );
+
+        } catch (RuntimeException e) {
+            AUDIT.warn(
+                    "op=queue-token-accepted tempToken={} result=rejected reason={}",
+                    event.tempToken(),
+                    e.getMessage()
+            );
+
+            throw e;
+        }
     }
 
     /**
