@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { http } from '../api/http';
 import { getApiErrorMessage } from '../api/errors';
-import type { ApiResponse, CompanyDTO, CompanyStatus } from '../api/types';
+import type { ApiResponse, CompanyDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 
 type CompaniesResponse = ApiResponse<CompanyDTO[]>;
@@ -16,7 +16,6 @@ export default function AdminCompaniesPage() {
   const { token, userType, clearAuth } = useAuthStore();
 
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
-  const [status, setStatus] = useState<CompanyStatus>('ACTIVE');
 
   const companiesQuery = useQuery({
     queryKey: ['admin', 'companies', token],
@@ -51,10 +50,11 @@ export default function AdminCompaniesPage() {
   const changeStatusMutation = useMutation({
     mutationFn: async () => {
       if (!selectedCompanyId.trim()) throw new Error('Company is required.');
-      if (!status.trim()) throw new Error('Status is required.');
-
       try {
-        const res = await http.patch<ChangeStatusResponse>(`/api/companies/${selectedCompanyId.trim()}/status`, { status });
+        const res = await http.patch<ChangeStatusResponse>(
+          `/api/companies/${selectedCompanyId.trim()}/status`,
+          { status: 'SUSPENDED' }
+        );
         if (res.data.error) throw new Error(res.data.error);
         if (!res.data.data) throw new Error('No company returned');
         return res.data.data;
@@ -126,19 +126,12 @@ export default function AdminCompaniesPage() {
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="text-lg font-semibold text-slate-900">Change status</div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
+        <div className="mt-4 grid gap-3 md:grid-cols-3 items-end">
           <label className="block md:col-span-2">
             <div className="text-sm font-medium text-slate-700">Company</div>
             <select
               value={selectedCompanyId}
-              onChange={(e) => {
-                const nextId = e.target.value;
-                setSelectedCompanyId(nextId);
-                const selected = companiesQuery.data?.find((c) => c.companyId === nextId);
-                if (selected) {
-                  setStatus(selected.status);
-                }
-              }}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
               disabled={companiesQuery.isPending || companiesQuery.isError}
               className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm disabled:opacity-60"
             >
@@ -150,25 +143,13 @@ export default function AdminCompaniesPage() {
               ))}
             </select>
           </label>
-          <label className="block">
-            <div className="text-sm font-medium text-slate-700">Status</div>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as CompanyStatus)}
-              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
-            >
-              <option value="ACTIVE">ACTIVE</option>
-              <option value="SUSPENDED">SUSPENDED</option>
-              <option value="CLOSED">CLOSED</option>
-            </select>
-          </label>
-          <div className="md:col-span-3">
+          <div className="md:col-span-1 flex items-end">
             <button
               onClick={() => changeStatusMutation.mutate()}
-              disabled={changeStatusMutation.isPending}
-              className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+              disabled={changeStatusMutation.isPending || !selectedCompanyId.trim()}
+              className="w-full rounded-md bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
             >
-              {changeStatusMutation.isPending ? 'Saving…' : 'Save'}
+              {changeStatusMutation.isPending ? 'Suspending…' : 'Suspend company'}
             </button>
           </div>
         </div>
@@ -180,7 +161,7 @@ export default function AdminCompaniesPage() {
         )}
         {changeStatusMutation.isSuccess && !changeStatusMutation.isError && (
           <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-            Company updated.
+            Company suspended.
           </div>
         )}
       </div>
