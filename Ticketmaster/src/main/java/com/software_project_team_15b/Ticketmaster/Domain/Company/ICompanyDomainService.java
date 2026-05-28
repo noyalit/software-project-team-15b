@@ -58,28 +58,26 @@ public interface ICompanyDomainService {
      * may perform this action.
      *
      * @param companyId the target company's id; must not be null
-     * @param callerId  the id of the caller; must not be null
      * @param policy    the new purchase policy; must not be null
      * @return the updated, persisted company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException
      *                                            if the caller is not an owner or founder
      */
-    Company updatePurchasePolicy(UUID companyId, UUID callerId, ICompanyPurchasePolicy policy);
+    Company updatePurchasePolicy(UUID companyId, ICompanyPurchasePolicy policy);
 
     /**
      * Replaces the company's discount policy. Only an owner or founder of the company
      * may perform this action.
      *
      * @param companyId the target company's id; must not be null
-     * @param callerId  the id of the caller; must not be null
      * @param policy    the new discount policy; must not be null
      * @return the updated, persisted company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException
      *                                            if the caller is not an owner or founder
      */
-    Company updateDiscountPolicy(UUID companyId, UUID callerId, ICompanyDiscountPolicy policy);
+    Company updateDiscountPolicy(UUID companyId, ICompanyDiscountPolicy policy);
 
     /**
      * Transitions the company to the given status. Only the founder or a system admin
@@ -87,15 +85,13 @@ public interface ICompanyDomainService {
      * events belonging to the company are cancelled.
      *
      * @param companyId     the target company's id; must not be null
-     * @param callerId      the id of the caller, or {@code null} if caller is not a member
-     * @param isSystemAdmin {@code true} if the caller holds system-admin privileges
      * @param newStatus     the status to transition to; must not be null
      * @return the updated, persisted company
      * @throws CompanyNotFoundException           if no company with {@code companyId} exists
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException
      *                                            if the caller is neither the founder nor a system admin
      */
-    Company changeStatus(UUID companyId, UUID callerId, boolean isSystemAdmin, CompanyStatus newStatus);
+    Company changeStatus(UUID companyId, CompanyStatus newStatus);
 
     /**
      * Loads a company by id, failing if it does not exist.

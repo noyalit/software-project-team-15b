@@ -64,17 +64,41 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         }
     }
 
+    /**
+     * Creates a new active company with the given name and founder, persists it, and returns it.
+     *
+     * @param name      the company's display name; must not be null
+     * @param founderId the id of the founding member; must not be null
+     * @return the newly persisted company
+     * @throws IllegalArgumentException if {@code name} or {@code founderId} is null
+     */
     @Override
     @Transactional
     public Company createCompany(String name, UUID founderId) {
+        if (name == null) {
+            throw new IllegalArgumentException("name cannot be null");
+        }
+        if (founderId == null) {
+            throw new IllegalArgumentException("founderId cannot be null");
+        }
         Company company = new Company(name, founderId);
         company = companyRepository.save(company);
         return company;
     }
 
+    /**
+     * Returns all companies whose founder matches {@code founderId}.
+     *
+     * @param founderId the founder to search by; must not be null
+     * @return a non-null, possibly empty list of matching companies
+     * @throws IllegalArgumentException if {@code founderId} is null
+     */
     @Override
     @Transactional(readOnly = true)
     public List<Company> findCompaniesByFounder(UUID founderId) {
+        if (founderId == null) {
+            throw new IllegalArgumentException("founderId cannot be null");
+        }
         List<Company> result = companyRepository.findByFounder(founderId);
         if (result == null) {
             throw new IllegalStateException("Repository returned null for findByFounder; expected an empty list");
@@ -82,30 +106,91 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         return result;
     }
 
+    /**
+     * Replaces the company's purchase policy. The company must be {@link CompanyStatus#ACTIVE}.
+     *
+     * @param companyId the target company's id; must not be null
+     * @param policy    the new purchase policy; must not be null
+     * @return the updated, persisted company
+     * @throws IllegalArgumentException  if {@code companyId} or {@code policy} is null
+     * @throws IllegalStateException     if the company is not active
+     * @throws CompanyNotFoundException  if no company exists with the given id
+     */
     @Override
     @Transactional
-    public Company updatePurchasePolicy(UUID companyId, UUID callerId, ICompanyPurchasePolicy policy) {
+    public Company updatePurchasePolicy(UUID companyId, ICompanyPurchasePolicy policy) {
+        if (companyId == null) {
+            throw new IllegalArgumentException("companyId cannot be null");
+        }
+        if (policy == null) {
+            throw new IllegalArgumentException("policy cannot be null");
+        }
         Company company = getCompanyOrThrow(companyId);
         company.updatePurchasePolicy(policy);
         return companyRepository.save(company);
     }
 
+    /**
+     * Replaces the company's discount policy. The company must be {@link CompanyStatus#ACTIVE}.
+     *
+     * @param companyId the target company's id; must not be null
+     * @param policy    the new discount policy; must not be null
+     * @return the updated, persisted company
+     * @throws IllegalArgumentException if {@code companyId} or {@code policy} is null
+     * @throws IllegalStateException    if the company is not active
+     * @throws CompanyNotFoundException if no company exists with the given id
+     */
     @Override
     @Transactional
-    public Company updateDiscountPolicy(UUID companyId, UUID callerId, ICompanyDiscountPolicy policy) {
+    public Company updateDiscountPolicy(UUID companyId, ICompanyDiscountPolicy policy) {
+        if  (companyId == null) {
+            throw new IllegalArgumentException("companyId cannot be null");
+        }
+        if (policy == null) {
+            throw new IllegalArgumentException("policy cannot be null");
+        }
         Company company = getCompanyOrThrow(companyId);
         company.updateDiscountPolicy(policy);
         return companyRepository.save(company);
     }
 
+    /**
+     * Transitions the company to the given status and persists the change.
+     *
+     * @param companyId the target company's id; must not be null
+     * @param newStatus the status to transition to; must not be null
+     * @return the updated, persisted company
+     * @throws IllegalArgumentException if {@code companyId} or {@code newStatus} is null
+     * @throws CompanyNotFoundException if no company exists with the given id
+     */
     @Override
-    public Company changeStatus(UUID companyId, UUID callerId, boolean isSystemAdmin, CompanyStatus newStatus) {
-        return null;
+    @Transactional
+    public Company changeStatus(UUID companyId, CompanyStatus newStatus) {
+        if (companyId == null) {
+            throw new IllegalArgumentException("companyId cannot be null");
+        }
+        if (newStatus == null) {
+            throw new IllegalArgumentException("newStatus cannot be null");
+        }
+        Company company = getCompanyOrThrow(companyId);
+        company.changeStatus(newStatus);
+        return companyRepository.save(company);
     }
 
+    /**
+     * Loads a company by id, throwing if it does not exist.
+     *
+     * @param companyId the company's id; must not be null
+     * @return the company with the given id
+     * @throws IllegalArgumentException if {@code companyId} is null
+     * @throws CompanyNotFoundException if no company exists with the given id
+     */
     @Override
     @Transactional(readOnly = true)
     public Company getCompany(UUID companyId) {
+        if (companyId == null) {
+            throw new IllegalArgumentException("companyId cannot be null");
+        }
         return getCompanyOrThrow(companyId);
     }
 

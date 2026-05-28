@@ -25,10 +25,10 @@ import com.software_project_team_15b.Ticketmaster.Application.Company.CompanySer
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyDomainServiceImpl;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
@@ -39,6 +39,7 @@ class CompanyServiceWhiteTest {
     private ICompanyRepository repo;
     private IAuth auth;
     private UserDomainService userDomainService;
+    private IEventDomainService eventDomainService;
     private ICompanyDomainService domainService;
     private CompanyService service;
 
@@ -62,10 +63,13 @@ class CompanyServiceWhiteTest {
 
         auth = mock(IAuth.class);
         userDomainService = mock(UserDomainService.class);
+        eventDomainService = mock(IEventDomainService.class);
         when(userDomainService.isActiveOwner(any(), any())).thenReturn(true);
+        when(userDomainService.isActiveFounder(any(), any())).thenReturn(true);
+        when(eventDomainService.searchInCompany(any(), any())).thenReturn(List.of());
 
         domainService = new CompanyDomainServiceImpl(repo);
-        service = new CompanyService(domainService, userDomainService, auth);
+        service = new CompanyService(domainService, userDomainService, eventDomainService, auth);
     }
 
     private Company saveToRepo(Company company) {
@@ -106,19 +110,25 @@ class CompanyServiceWhiteTest {
 
     @Test
     void constructor_throws_when_domainService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(null, userDomainService, auth))
+        assertThatThrownBy(() -> new CompanyService(null, userDomainService, eventDomainService, auth))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_userDomainService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(domainService, null, auth))
+        assertThatThrownBy(() -> new CompanyService(domainService, null, eventDomainService, auth))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void constructor_throws_when_eventDomainService_is_null() {
+        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, null, auth))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_auth_is_null() {
-        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, null))
+        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, eventDomainService, null))
                 .isInstanceOf(NullPointerException.class);
     }
 
@@ -196,7 +206,7 @@ class CompanyServiceWhiteTest {
     }
 
     @Test
-    void concurrent_changeStatus_does_not_throw() throws Exception {
+    void concurrent_suspendCompany_does_not_throw() throws Exception {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         Company company = service.createCompany(founderToken, "Acme");
@@ -206,14 +216,12 @@ class CompanyServiceWhiteTest {
         ExecutorService pool = Executors.newFixedThreadPool(16);
         CountDownLatch start = new CountDownLatch(1);
         AtomicInteger failures = new AtomicInteger();
-        CompanyStatus[] statuses = {CompanyStatus.ACTIVE, CompanyStatus.SUSPENDED, CompanyStatus.CLOSED};
 
         for (int i = 0; i < N; i++) {
-            final CompanyStatus target = statuses[i % statuses.length];
             pool.submit(() -> {
                 try {
                     start.await();
-                    service.changeStatus(adminToken, company.getId(), target);
+                    service.suspendCompany(adminToken, company.getId());
                 } catch (Exception e) {
                     failures.incrementAndGet();
                 }

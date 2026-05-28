@@ -25,8 +25,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyDomainServiceImpl;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
@@ -224,6 +226,166 @@ class CompanyDomainServiceImplTest {
         assertThatThrownBy(() -> service.validatePurchaseEligibility(UUID.randomUUID(), makeRequest()))
                 .isInstanceOf(PolicyViolationException.class)
                 .hasMessageContaining("denied");
+    }
+
+    // ===========================================================================================
+    // createCompany — negative
+
+    @Test
+    void createCompany_throws_when_name_is_null() {
+        assertThatThrownBy(() -> service.createCompany(null, UUID.randomUUID()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("name");
+    }
+
+    @Test
+    void createCompany_throws_when_founderId_is_null() {
+        assertThatThrownBy(() -> service.createCompany("Acme", null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("founderId");
+    }
+
+    // ===========================================================================================
+    // findCompaniesByFounder — negative
+
+    @Test
+    void findCompaniesByFounder_throws_when_founderId_is_null() {
+        assertThatThrownBy(() -> service.findCompaniesByFounder(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("founderId");
+    }
+
+    // ===========================================================================================
+    // updatePurchasePolicy — positive
+
+    @Test
+    void updatePurchasePolicy_saves_and_returns_updated_company() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        ICompanyPurchasePolicy policy = (req, c) -> {};
+
+        Company result = service.updatePurchasePolicy(UUID.randomUUID(), policy);
+
+        assertThat(result.getPurchasePolicies()).containsExactly(policy);
+    }
+
+    // updatePurchasePolicy — negative
+
+    @Test
+    void updatePurchasePolicy_throws_when_companyId_is_null() {
+        assertThatThrownBy(() -> service.updatePurchasePolicy(null, (req, c) -> {}))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("companyId");
+    }
+
+    @Test
+    void updatePurchasePolicy_throws_when_policy_is_null() {
+        assertThatThrownBy(() -> service.updatePurchasePolicy(UUID.randomUUID(), (ICompanyPurchasePolicy) null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("policy");
+    }
+
+    @Test
+    void updatePurchasePolicy_throws_when_company_not_found() {
+        when(repo.findById(any())).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.updatePurchasePolicy(UUID.randomUUID(), (req, c) -> {}))
+                .isInstanceOf(CompanyNotFoundException.class);
+    }
+
+    @Test
+    void updatePurchasePolicy_throws_when_company_is_not_active() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        company.changeStatus(CompanyStatus.SUSPENDED);
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+
+        assertThatThrownBy(() -> service.updatePurchasePolicy(UUID.randomUUID(), (req, c) -> {}))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    // ===========================================================================================
+    // updateDiscountPolicy — positive
+
+    @Test
+    void updateDiscountPolicy_saves_and_returns_updated_company() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        ICompanyDiscountPolicy policy = (subtotal, req) -> subtotal;
+
+        Company result = service.updateDiscountPolicy(UUID.randomUUID(), policy);
+
+        assertThat(result.getDiscountPolicies()).containsExactly(policy);
+    }
+
+    // updateDiscountPolicy — negative
+
+    @Test
+    void updateDiscountPolicy_throws_when_companyId_is_null() {
+        assertThatThrownBy(() -> service.updateDiscountPolicy(null, (subtotal, req) -> subtotal))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("companyId");
+    }
+
+    @Test
+    void updateDiscountPolicy_throws_when_policy_is_null() {
+        assertThatThrownBy(() -> service.updateDiscountPolicy(UUID.randomUUID(), (ICompanyDiscountPolicy) null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("policy");
+    }
+
+    @Test
+    void updateDiscountPolicy_throws_when_company_not_found() {
+        when(repo.findById(any())).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.updateDiscountPolicy(UUID.randomUUID(), (subtotal, req) -> subtotal))
+                .isInstanceOf(CompanyNotFoundException.class);
+    }
+
+    // ===========================================================================================
+    // changeStatus — positive
+
+    @Test
+    void changeStatus_updates_and_saves_company() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Company result = service.changeStatus(UUID.randomUUID(), CompanyStatus.SUSPENDED);
+
+        assertThat(result.getStatus()).isEqualTo(CompanyStatus.SUSPENDED);
+    }
+
+    // changeStatus — negative
+
+    @Test
+    void changeStatus_throws_when_companyId_is_null() {
+        assertThatThrownBy(() -> service.changeStatus(null, CompanyStatus.SUSPENDED))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("companyId");
+    }
+
+    @Test
+    void changeStatus_throws_when_newStatus_is_null() {
+        assertThatThrownBy(() -> service.changeStatus(UUID.randomUUID(), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("newStatus");
+    }
+
+    @Test
+    void changeStatus_throws_when_company_not_found() {
+        when(repo.findById(any())).thenReturn(Optional.empty());
+        assertThatThrownBy(() -> service.changeStatus(UUID.randomUUID(), CompanyStatus.SUSPENDED))
+                .isInstanceOf(CompanyNotFoundException.class);
+    }
+
+    // ===========================================================================================
+    // getCompany — negative
+
+    @Test
+    void getCompany_throws_when_companyId_is_null() {
+        assertThatThrownBy(() -> service.getCompany(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("companyId");
     }
 
     // ===========================================================================================
