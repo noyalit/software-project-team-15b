@@ -86,6 +86,112 @@ class PurchasingDomainServiceTest {
     }
 
     @Test
+    void requirePurchaseAccessShouldRejectEachNullArgument() {
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
+
+        assertThrows(IllegalArgumentException.class, () ->
+                domainService.requirePurchaseAccess(null, eventId, eligibility, true)
+        );
+        assertThrows(IllegalArgumentException.class, () ->
+                domainService.requirePurchaseAccess(userId, null, eligibility, true)
+        );
+        assertThrows(IllegalArgumentException.class, () ->
+                domainService.requirePurchaseAccess(userId, eventId, null, true)
+        );
+    }
+
+    @Test
+    void requireRequestedSeatsAvailableShouldRejectNullAvailability() {
+        assertThrows(IllegalArgumentException.class, () ->
+                domainService.requireRequestedSeatsAvailable(null, Set.of(seatId1))
+        );
+    }
+
+    @Test
+    void syncOrderSeatsAvailabilityShouldRejectNullAvailabilityForOrderWithSeats() {
+        ActiveOrder activeOrder = new ActiveOrder(orderId, userId, eventId, areaId);
+        activeOrder.addSeats(Set.of(seatId1));
+
+        assertThrows(IllegalArgumentException.class, () ->
+                domainService.syncOrderSeatsAvailability(activeOrder, null)
+        );
+    }
+
+    @Test
+    void finalizeCheckoutShouldRejectNullPricing() {
+        ActiveOrder activeOrder = new ActiveOrder(orderId, userId, eventId, areaId);
+        activeOrder.addSeats(Set.of(seatId1));
+        activeOrder.startCheckout(LocalDateTime.now().plusMinutes(10));
+
+        assertThrows(IllegalArgumentException.class, () ->
+                domainService.finalizeCheckout(activeOrder, null)
+        );
+    }
+
+    @Test
+    void getActiveOrdersOfUserForUpdateShouldRejectNullUserId() {
+        assertThrows(IllegalArgumentException.class, () ->
+                domainService.getActiveOrdersOfUserForUpdate(null)
+        );
+    }
+
+    @Test
+    void activeOrderArgumentsAndSeatIdsShouldRejectNulls() {
+        Set<UUID> seatsWithNull = new java.util.HashSet<>();
+        seatsWithNull.add(null);
+
+        assertThrows(IllegalArgumentException.class, () ->
+                domainService.validateOrderIsActive(null)
+        );
+        assertThrows(IllegalArgumentException.class, () ->
+                domainService.addSeatsToOrder(new ActiveOrder(orderId, userId, eventId, areaId), seatsWithNull)
+        );
+    }
+
+    @Test
+    void releaseDecisionHelpersShouldCoverFalseBranches() {
+        ActiveOrder canceledOrder = new ActiveOrder(orderId, userId, eventId, areaId);
+        canceledOrder.cancel();
+
+        ActiveOrder checkoutWithoutSeats = new ActiveOrder(UUID.randomUUID(), userId, eventId, areaId);
+
+        assertFalse(domainService.shouldReleaseSeatsForExpiredActiveOrder(canceledOrder));
+        assertFalse(domainService.shouldReleaseHoldBeforeCancel(checkoutWithoutSeats));
+    }
+
+    @Test
+    void releaseDecisionHelpersShouldCoverShortCircuitBranches() {
+        ActiveOrder activeNotExpired = mock(ActiveOrder.class);
+        when(activeNotExpired.getStatus()).thenReturn(ActiveOrderStatus.ACTIVE);
+        when(activeNotExpired.hasTimeExpired()).thenReturn(false);
+        assertFalse(domainService.shouldReleaseSeatsForExpiredActiveOrder(activeNotExpired));
+
+        ActiveOrder activeAlreadyExpired = mock(ActiveOrder.class);
+        when(activeAlreadyExpired.getStatus()).thenReturn(ActiveOrderStatus.ACTIVE);
+        when(activeAlreadyExpired.hasTimeExpired()).thenReturn(true);
+        when(activeAlreadyExpired.isExpired()).thenReturn(true);
+        assertFalse(domainService.shouldReleaseSeatsForExpiredActiveOrder(activeAlreadyExpired));
+
+        ActiveOrder checkoutWithoutSeats = mock(ActiveOrder.class);
+        when(checkoutWithoutSeats.getStatus()).thenReturn(ActiveOrderStatus.ACTIVE);
+        when(checkoutWithoutSeats.getExpiresAt()).thenReturn(LocalDateTime.now().plusMinutes(10));
+        when(checkoutWithoutSeats.getOrderSeats()).thenReturn(Set.of());
+        assertFalse(domainService.shouldReleaseHoldBeforeCancel(checkoutWithoutSeats));
+    }
+
+    @Test
+    void requireSeatIdsShouldRejectNullAndEmptySets() {
+        ActiveOrder order = activeOrder();
+
+        assertThrows(IllegalArgumentException.class, () ->
+                domainService.addSeatsToOrder(order, null)
+        );
+        assertThrows(IllegalArgumentException.class, () ->
+                domainService.addSeatsToOrder(order, Set.of())
+        );
+    }
+
+    @Test
     void requireEventCanBeBookedShouldPassWhenEventIsAvailable() {
         assertDoesNotThrow(() ->
                 domainService.requireEventCanBeBooked(eventId, EventAvailability.AVAILABLE)
@@ -434,6 +540,124 @@ class PurchasingDomainServiceTest {
         when(order.getOrderSeats()).thenReturn(Set.of());
 
         assertFalse(domainService.shouldReleaseSeatsForExpiredActiveOrder(order));
+    }
+
+    @Test
+    void shouldReleaseHoldBeforeCancelShouldReturnFalseWhenOrderHasNoSeats() {
+        ActiveOrder order = mock(ActiveOrder.class);
+
+        when(order.getStatus()).thenReturn(ActiveOrderStatus.ACTIVE);
+        when(order.getExpiresAt()).thenReturn(LocalDateTime.now().plusMinutes(10));
+        when(order.getOrderSeats()).thenReturn(Set.of());
+
+        assertFalse(domainService.shouldReleaseHoldBeforeCancel(order));
+    }
+
+    @Test
+    void shouldReleaseHoldBeforeCancelShouldReturnFalseWhenOrderIsNotActive() {
+        ActiveOrder order = mock(ActiveOrder.class);
+
+        when(order.getStatus()).thenReturn(ActiveOrderStatus.CANCELED);
+
+        assertFalse(domainService.shouldReleaseHoldBeforeCancel(order));
+        verify(order, never()).getExpiresAt();
+        verify(order, never()).getOrderSeats();
+    }
+
+    @Test
+    void validateOrderIsActiveShouldPassForActiveOrder() {
+        assertDoesNotThrow(() -> domainService.validateOrderIsActive(activeOrder()));
+    }
+
+    @Test
+    void validateOrderIsActiveShouldThrowWhenOrderHasExpiredTime() {
+        ActiveOrder order = mock(ActiveOrder.class);
+
+        doThrow(new TimeExpiredException("expired"))
+                .when(order)
+                .ensureOrderIsActive();
+
+        assertThrows(TimeExpiredException.class, () -> domainService.validateOrderIsActive(order));
+    }
+
+    @Test
+    void validateOrderIsModifiableShouldPassForOrderWithoutCheckout() {
+        assertDoesNotThrow(() -> domainService.validateOrderIsModifiable(activeOrder()));
+    }
+
+    @Test
+    void validateOrderIsInCheckoutShouldPassForOrderInCheckout() {
+        ActiveOrder order = activeOrderWithSeats(seatId1);
+        order.startCheckout(LocalDateTime.now().plusMinutes(10));
+
+        assertDoesNotThrow(() -> domainService.validateOrderIsInCheckout(order));
+    }
+
+    @Test
+    void getOwnedActiveOrderForUpdateShouldReturnOrderWhenOrderIsActive() {
+        ActiveOrder order = activeOrder();
+
+        when(activeOrderRepository.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
+
+        ActiveOrder result = domainService.getOwnedActiveOrderForUpdate(userId, orderId);
+
+        assertSame(order, result);
+    }
+
+    @Test
+    void getOwnedModifiableOrderForUpdateShouldReturnOrderWhenOrderIsModifiable() {
+        ActiveOrder order = activeOrder();
+
+        when(activeOrderRepository.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
+
+        ActiveOrder result = domainService.getOwnedModifiableOrderForUpdate(userId, orderId);
+
+        assertSame(order, result);
+    }
+
+    @Test
+    void getOwnedCheckoutOrderForUpdateShouldReturnOrderWhenOrderIsInCheckout() {
+        ActiveOrder order = activeOrderWithSeats(seatId1);
+        order.startCheckout(LocalDateTime.now().plusMinutes(10));
+
+        when(activeOrderRepository.findByIdForUpdate(orderId)).thenReturn(Optional.of(order));
+
+        ActiveOrder result = domainService.getOwnedCheckoutOrderForUpdate(userId, orderId);
+
+        assertSame(order, result);
+    }
+
+    @Test
+    void removeUnavailableSeatsFromOrderShouldReturnFalseWhenNoSeatsAreUnavailable() {
+        ActiveOrder order = activeOrderWithSeats(seatId1, seatId2);
+
+        boolean result = domainService.removeUnavailableSeatsFromOrder(order, Set.of());
+
+        assertFalse(result);
+        assertEquals(Set.of(seatId1, seatId2), order.getOrderSeats());
+        verify(activeOrderRepository, never()).save(any());
+    }
+
+    @Test
+    void removeUnavailableSeatsFromOrderShouldThrowWhenUnavailableSeatsAreNull() {
+        ActiveOrder order = activeOrderWithSeats(seatId1);
+
+        assertThrows(IllegalArgumentException.class, () ->
+                domainService.removeUnavailableSeatsFromOrder(order, null)
+        );
+    }
+
+    @Test
+    void syncOrderSeatsAvailabilityShouldReturnFalseWhenOrderHasNoSeats() {
+        ActiveOrder order = activeOrder();
+
+        boolean result = domainService.syncOrderSeatsAvailability(
+                order,
+                Map.of(true, Set.of(seatId1), false, Set.of())
+        );
+
+        assertFalse(result);
+        verify(activeOrderRepository, never()).save(any());
     }
 
     private ActiveOrder activeOrder() {

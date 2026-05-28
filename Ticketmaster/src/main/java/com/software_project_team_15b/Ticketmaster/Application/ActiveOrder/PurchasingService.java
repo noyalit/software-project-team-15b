@@ -293,7 +293,7 @@ public class PurchasingService {
             );
 
         } catch (RuntimeException e) {
-            if (holdCreated && activeOrder != null) {
+            if (holdCreated) {
                 releaseHold(activeOrder);
             }
 
@@ -456,7 +456,11 @@ public class PurchasingService {
                     activeOrder.getOrderId(), activeOrder.getUserId(), activeOrder.getEventId());
         }
 
-        if (finalizeDone && paymentSucceeded && ticketsIssued && !confirmed) {
+        boolean shouldReleaseHold = finalizeDone;
+        shouldReleaseHold &= paymentSucceeded;
+        shouldReleaseHold &= ticketsIssued;
+        shouldReleaseHold &= !confirmed;
+        if (shouldReleaseHold) {
             releaseHold(activeOrder);
             AUDIT.info("op=releaseSeats order={} user={} event={} result=ok",
                     activeOrder.getOrderId(), activeOrder.getUserId(), activeOrder.getEventId());

@@ -8,6 +8,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -55,6 +56,15 @@ public class ActiveOrderTest {
         assertEquals(areaId, order.getAreaId());
         assertEquals(Boolean.TRUE, order.getActiveUniquenessKey());
         assertEquals(ActiveOrderStatus.ACTIVE, order.getStatus());
+    }
+
+    @Test
+    void constructor_shouldInitializeLifecycleFields() {
+        assertNotNull(order.getCreatedAt());
+        assertNull(order.getExpiresAt());
+        assertNull(order.getVersion());
+        assertFalse(order.isExpired());
+        assertFalse(order.isInCheckout());
     }
 
     @Test
@@ -149,6 +159,70 @@ public class ActiveOrderTest {
 
         assertThrows(TimeExpiredException.class,
             () -> expiredOrder.addSeats(Set.of(seatId1)));
+    }
+
+    @Test
+    void ensureOrderIsActive_shouldThrowWhenOrderIsCanceled() {
+        order.cancel();
+
+        assertThrows(UnactiveOrderException.class, order::ensureOrderIsActive);
+    }
+
+    @Test
+    void ensureOrderIsModifiable_shouldThrowWhenOrderIsInCheckout() {
+        order.addSeats(Set.of(seatId1));
+        order.startCheckout(LocalDateTime.now().plusMinutes(10));
+
+        assertThrows(IllegalStateException.class, order::ensureOrderIsModifiable);
+    }
+
+    @Test
+    void ensureOrderIsInCheckout_shouldThrowWhenOrderIsNotInCheckout() {
+        assertThrows(IllegalStateException.class, order::ensureOrderIsInCheckout);
+    }
+
+    @Test
+    void ensureOrderIsInCheckout_shouldThrowWhenCheckoutHasExpired() {
+        ActiveOrder expiredOrder = new ActiveOrder(
+                orderId,
+                userId,
+                eventId,
+                now.minusMinutes(11),
+                now.minusMinutes(1)
+        );
+
+        assertThrows(TimeExpiredException.class, expiredOrder::ensureOrderIsInCheckout);
+    }
+
+    @Test
+    void isInCheckoutAndIsExpiredShouldReflectOrderLifecycle() {
+        order.addSeats(Set.of(seatId1));
+
+        assertFalse(order.isInCheckout());
+        assertFalse(order.isExpired());
+
+        order.startCheckout(LocalDateTime.now().plusMinutes(10));
+
+        assertTrue(order.isInCheckout());
+        assertFalse(order.isExpired());
+
+        order.complete();
+
+        assertFalse(order.isInCheckout());
+        assertFalse(order.isExpired());
+
+        ActiveOrder expiredOrder = new ActiveOrder(
+                UUID.randomUUID(),
+                userId,
+                eventId,
+                now.minusMinutes(11),
+                now.minusMinutes(1)
+        );
+
+        assertFalse(expiredOrder.isExpired());
+        expiredOrder.expire();
+        assertTrue(expiredOrder.isExpired());
+        assertFalse(expiredOrder.isInCheckout());
     }
     
 

@@ -4,6 +4,8 @@ import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Purcha
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
@@ -198,6 +200,20 @@ class CreateActiveOrderBlackTest {
         );
 
         assertTrue(exception.getMessage().contains("User already has an active order"));
+    }
+
+    @Test
+    void requestAccessToCreateActiveOrderShouldReturnQueueAccessWhenTokenIsValid() {
+        mockValidUser();
+
+        QueueAccessDTO queueAccess = new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null);
+
+        when(queueDomainService.requestAccess(token, eventId)).thenReturn(queueAccess);
+
+        QueueAccessDTO result = service.requestAccessToCreateActiveOrder(token, eventId);
+
+        assertEquals(queueAccess, result);
+        verify(queueDomainService).requestAccess(token, eventId);
     }
 
     private void mockValidUser() {
