@@ -98,8 +98,8 @@ class CompanyDomainServiceImplTest {
     @Test
     void cheapestPriceFor_picks_minimum_across_multiple_discount_policies() {
         Company company = new Company("Acme", UUID.randomUUID());
-        ICompanyDiscountPolicy twentyOff = (subtotal, req) -> Money.of("80.00", "USD");
-        ICompanyDiscountPolicy tenOff = (subtotal, req) -> Money.of("90.00", "USD");
+        ICompanyDiscountPolicy twentyOff = (subtotal, ctx) -> Money.of("20.00", "USD");
+        ICompanyDiscountPolicy tenOff = (subtotal, ctx) -> Money.of("10.00", "USD");
         setDiscountPolicies(company, List.of(twentyOff, tenOff));
         when(repo.findById(any())).thenReturn(Optional.of(company));
 
@@ -122,7 +122,7 @@ class CompanyDomainServiceImplTest {
     @Test
     void cheapestPriceFor_does_not_raise_price_above_subtotal() {
         Company company = new Company("Acme", UUID.randomUUID());
-        company.updateDiscountPolicy((subtotal, req) -> Money.of("200.00", "USD"));
+        company.updateDiscountPolicy((subtotal, ctx) -> Money.zero(subtotal.currency()));
         when(repo.findById(any())).thenReturn(Optional.of(company));
         Money subtotal = Money.of("100.00", "USD");
 
