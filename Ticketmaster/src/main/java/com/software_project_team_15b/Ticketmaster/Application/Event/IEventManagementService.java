@@ -333,5 +333,26 @@ public interface IEventManagementService {
     /** Token-authenticated variant of {@link #replaceDiscountPolicies(UUID, List, UUID)}. */
     void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies, String token);
 
+    /**
+     * Returns the event's current purchase-policy chain in order. Read-only.
+     * <p>
+     * Requirement: {@code II.4.3} (manage purchase policy — UI display).
+     *
+     * @param eventId event id
+     * @return immutable view of the chain
+     * @throws InvalidEventStateException if the event is not found
+     */
+    List<IEventPurchasePolicy> getPurchasePolicies(UUID eventId);
+
+    /**
+     * Returns the event's current discount-policy chain in order. Read-only.
+     * <p>
+     * Requirement: {@code II.4.3} (manage discount policy — UI display).
+     *
+     * @param eventId event id
+     * @return immutable view of the chain
+     * @throws InvalidEventStateException if the event is not found
+     */
+    List<IEventDiscountPolicy> getDiscountPolicies(UUID eventId);
 
 }
