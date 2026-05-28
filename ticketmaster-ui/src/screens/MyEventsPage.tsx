@@ -293,38 +293,42 @@ export default function MyEventsPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => {
-                        setEditingEventId(event.eventId);
-                        setEditName(event.name);
-                        setEditArtist(event.artist);
-                        setEditCategory(event.category);
-                        setEditStartsAt(event.startsAt?.slice(0, 16) ?? '');
-                        setEditLocation(event.location);
-                      }}
-                      className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
-                    >
-                      Edit
-                    </button>
+                    {event.status !== 'CANCELLED' && (
+                        <>
+                        <button
+                            onClick={() => {
+                            setEditingEventId(event.eventId);
+                            setEditName(event.name);
+                            setEditArtist(event.artist);
+                            setEditCategory(event.category);
+                            setEditStartsAt(event.startsAt?.slice(0, 16) ?? '');
+                            setEditLocation(event.location);
+                            }}
+                            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                        >
+                            Edit
+                        </button>
 
-                    <button
-                      onClick={() => publishMutation.mutate(event.eventId)}
-                      disabled={publishMutation.isPending}
-                      className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                    >
-                      Publish
-                    </button>
+                        <button
+                            onClick={() => publishMutation.mutate(event.eventId)}
+                            disabled={publishMutation.isPending}
+                            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                        >
+                            Publish
+                        </button>
 
-                    <button
-                      onClick={() => cancelMutation.mutate(event.eventId)}
-                      disabled={cancelMutation.isPending}
-                      className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 disabled:opacity-60"
-                    >
-                      Cancel event
-                    </button>
-                  </div>
-                </div>
-
+                        <button
+                            onClick={() => cancelMutation.mutate(event.eventId)}
+                            disabled={cancelMutation.isPending}
+                            className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 disabled:opacity-60"
+                        >
+                            Cancel event
+                        </button>
+                        </>
+                    )}
+                    </div>
+                    </div>
+                    
                 {editingEventId === event.eventId && (
                   <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
                     <div className="font-semibold text-slate-900">Edit event</div>
