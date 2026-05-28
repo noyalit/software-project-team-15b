@@ -59,6 +59,7 @@ export default function AppShell() {
           <nav className="flex items-center gap-1">
             {userType !== 'system-admin' && <NavLink to="/events" label="Discover Events" />}
             {userType === 'member' && <NavLink to="/companies/me" label="My Companies" />}
+            {userType === 'member' && <NavLink to="/my-events" label="My Events" />}
             {userType === 'member' && <NavLink to="/me" label="Profile" />}
             {userType === 'system-admin' && <NavLink to="/admin/queues" label="Site Queue" />}
             {userType === 'system-admin' && <NavLink to="/admin/event-queues" label="Event Queues" />}

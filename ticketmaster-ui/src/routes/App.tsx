@@ -14,6 +14,7 @@ import AdminOrdersPage from '../screens/AdminOrdersPage';
 import CreateCompanyPage from '../screens/CreateCompanyPage';
 import CompanyPage from '../screens/CompanyPage';
 import AdminEventQueuesPage from '../screens/AdminEventQueuesPage';
+import MyEventsPage from '../screens/MyEventsPage';
 
 export default function App() {
   return (
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/companies/me" element={<MyCompaniesPage />} />
         <Route path="/companies/new" element={<CreateCompanyPage />} />
         <Route path="/companies/:companyId" element={<CompanyPage />} />
+        <Route path="/my-events" element={<MyEventsPage />} />
         <Route path="/admin/queues" element={<AdminQueuesPage />} />
         <Route path="/admin/companies" element={<AdminCompaniesPage />} />
         <Route path="/admin/members" element={<AdminMembersPage />} />
