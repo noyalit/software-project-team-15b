@@ -472,7 +472,7 @@ public class EventDomainServiceImpl implements IEventDomainService {
 
     @Override
     public UUID getCompanyIdForEventId(UUID eventId) {
-        return events.findById(eventId).get().companyId();
+        return requireEvent(eventId).companyId();
     }
 
     private Event requireEvent(UUID eventId) {
