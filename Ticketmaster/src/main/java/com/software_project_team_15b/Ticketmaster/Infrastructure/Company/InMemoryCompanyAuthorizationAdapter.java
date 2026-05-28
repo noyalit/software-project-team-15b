@@ -27,8 +27,8 @@ import org.springframework.stereotype.Component;
  *   <li>Company unknown to the repository: permit. Preserves backward
  *       compatibility with callers that predate the Company aggregate; the
  *       production JPA adapter is expected to fail closed instead.</li>
- *   <li>Caller is in {@code company.ownerIds} and holds an approved Owner or
- *       Founder role: full bypass — every {@link EventAction} allowed.</li>
+ *   <li>Caller holds an approved {@link Owner} or {@link Founder} role for
+ *       this company: full bypass — every {@link EventAction} allowed.</li>
  *   <li>{@link EventAction#PUBLISH} and {@link EventAction#CANCEL} are
  *       reserved for owners/founders; managers are rejected here.</li>
  *   <li>Otherwise the caller must hold an approved {@link Manager} role
@@ -87,12 +87,10 @@ public class InMemoryCompanyAuthorizationAdapter implements ICompanyAuthorizatio
     }
 
     private boolean isCompanyOwnerOrFounder(Member caller, Company company) {
-        if (!company.getOwnerIds().contains(caller.getUserId())) {
-            return false;
-        }
         return caller.getAssignedRoles().stream()
                 .filter(Role::isAppointmentApproved)
-                .anyMatch(r -> r instanceof Owner || r instanceof Founder);
+                .anyMatch(r -> (r instanceof Owner || r instanceof Founder)
+                        && r.belongsToCompany(company.getId()));
     }
 
     private boolean hasManagerPermission(Member caller, Company company, ManagerPermission required) {
@@ -102,8 +100,17 @@ public class InMemoryCompanyAuthorizationAdapter implements ICompanyAuthorizatio
                 .filter(Role::isAppointmentApproved)
                 .filter(m -> m.belongsToCompany(company.getId()))
                 .filter(m -> m.getAppointedBy() != null
-                        && company.getOwnerIds().contains(m.getAppointedBy()))
+                        && isActiveOwnerOfCompany(m.getAppointedBy(), company.getId()))
                 .anyMatch(m -> m.hasPermission(required));
+    }
+
+    private boolean isActiveOwnerOfCompany(UUID memberId, UUID companyId) {
+        return memberRepository.findById(memberId)
+                .map(m -> m.getAssignedRoles().stream()
+                        .filter(Role::isAppointmentApproved)
+                        .anyMatch(r -> (r instanceof Owner || r instanceof Founder)
+                                && r.belongsToCompany(companyId)))
+                .orElse(false);
     }
 
     private ManagerPermission mapToPermission(EventAction action) {

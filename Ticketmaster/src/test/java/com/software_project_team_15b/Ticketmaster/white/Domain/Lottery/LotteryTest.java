@@ -24,12 +24,7 @@ public class LotteryTest {
         lottery = new Lottery(eventId);
     }
 
-    // --- Constructor ---
-
-    @Test
-    void constructorShouldThrowWhenEventIdIsNull() {
-        assertThrows(IllegalArgumentException.class, () -> new Lottery(null));
-    }
+    // --- Constructor (positive) ---
 
     @Test
     void constructorShouldCreateEmptyLottery() {
@@ -37,7 +32,74 @@ public class LotteryTest {
         assertNull(l.popRandom());
     }
 
-    // --- add ---
+    @Test
+    void constructorShouldStoreProvidedEventId() {
+        Lottery l = new Lottery(eventId);
+        assertEquals(eventId, l.getEventId());
+    }
+
+    @Test
+    void constructorShouldDefaultCapacityToIntegerMaxValueWhenUnbounded() {
+        Lottery l = new Lottery(eventId);
+        assertEquals(Integer.MAX_VALUE, l.getCapacity());
+    }
+
+    @Test
+    void constructorWithCapacityShouldStoreProvidedCapacity() {
+        Lottery l = new Lottery(eventId, 5);
+        assertEquals(5, l.getCapacity());
+    }
+
+    @Test
+    void constructorWithCapacityShouldAllowZeroCapacity() {
+        Lottery l = new Lottery(eventId, 0);
+        assertEquals(0, l.getCapacity());
+        assertTrue(l.isFull());
+    }
+
+    // --- Constructor (negative) ---
+
+    @Test
+    void constructorShouldThrowWhenEventIdIsNull() {
+        assertThrows(IllegalArgumentException.class, () -> new Lottery(null));
+    }
+
+    @Test
+    void constructorWithCapacityShouldThrowWhenEventIdIsNull() {
+        assertThrows(IllegalArgumentException.class, () -> new Lottery(null, 10));
+    }
+
+    @Test
+    void constructorWithCapacityShouldThrowWhenCapacityIsNegative() {
+        assertThrows(IllegalArgumentException.class, () -> new Lottery(eventId, -1));
+    }
+
+    // --- isFull ---
+
+    @Test
+    void isFullShouldReturnFalseForNewUnboundedLottery() {
+        assertFalse(lottery.isFull());
+    }
+
+    @Test
+    void isFullShouldReturnTrueWhenSizeEqualsCapacity() {
+        Lottery bounded = new Lottery(eventId, 2);
+        bounded.add(ALICE);
+        assertFalse(bounded.isFull());
+        bounded.add(BOB);
+        assertTrue(bounded.isFull());
+    }
+
+    @Test
+    void isFullShouldReturnFalseAgainAfterPop() {
+        Lottery bounded = new Lottery(eventId, 1);
+        bounded.add(ALICE);
+        assertTrue(bounded.isFull());
+        bounded.pop(ALICE);
+        assertFalse(bounded.isFull());
+    }
+
+    // --- add (positive) ---
 
     @Test
     void addShouldReturnTrueForNewOption() {
@@ -51,21 +113,39 @@ public class LotteryTest {
     }
 
     @Test
+    void addShouldAcceptMultipleDistinctOptions() {
+        assertTrue(lottery.add(ALICE));
+        assertTrue(lottery.add(BOB));
+        assertTrue(lottery.add(CAROL));
+    }
+
+    // --- add (negative) ---
+
+    @Test
     void addShouldThrowWhenOptionIsNull() {
         assertThrows(IllegalArgumentException.class, () -> lottery.add(null));
     }
 
-    // --- pop ---
+    @Test
+    void addShouldThrowIllegalStateWhenLotteryIsFull() {
+        Lottery bounded = new Lottery(eventId, 2);
+        bounded.add(ALICE);
+        bounded.add(BOB);
+        assertThrows(IllegalStateException.class, () -> bounded.add(CAROL));
+    }
+
+    @Test
+    void addShouldThrowImmediatelyOnZeroCapacityLottery() {
+        Lottery zero = new Lottery(eventId, 0);
+        assertThrows(IllegalStateException.class, () -> zero.add(ALICE));
+    }
+
+    // --- pop (positive) ---
 
     @Test
     void popShouldReturnOptionWhenItExists() {
         lottery.add(ALICE);
         assertEquals(ALICE, lottery.pop(ALICE));
-    }
-
-    @Test
-    void popShouldReturnNullWhenOptionDoesNotExist() {
-        assertNull(lottery.pop(ALICE));
     }
 
     @Test
@@ -76,16 +156,25 @@ public class LotteryTest {
     }
 
     @Test
+    void popShouldNotAddRemovedOptionToWinners() {
+        lottery.add(ALICE);
+        lottery.pop(ALICE);
+        assertTrue(lottery.getWinners().isEmpty());
+    }
+
+    // --- pop (negative) ---
+
+    @Test
+    void popShouldReturnNullWhenOptionDoesNotExist() {
+        assertNull(lottery.pop(ALICE));
+    }
+
+    @Test
     void popShouldThrowWhenOptionIsNull() {
         assertThrows(IllegalArgumentException.class, () -> lottery.pop(null));
     }
 
-    // --- popRandom() ---
-
-    @Test
-    void popRandomShouldReturnNullWhenLotteryIsEmpty() {
-        assertNull(lottery.popRandom());
-    }
+    // --- popRandom() (positive) ---
 
     @Test
     void popRandomShouldReturnAnExistingOption() {
@@ -115,22 +204,19 @@ public class LotteryTest {
         assertNull(lottery.popRandom());
     }
 
-    // --- popRandom(int count) ---
+    // --- popRandom() (negative) ---
 
     @Test
-    void popRandomCountShouldThrowWhenCountIsNegative() {
-        assertThrows(IllegalArgumentException.class, () -> lottery.popRandom(-1));
+    void popRandomShouldReturnNullWhenLotteryIsEmpty() {
+        assertNull(lottery.popRandom());
     }
+
+    // --- popRandom(int count) (positive) ---
 
     @Test
     void popRandomCountShouldReturnEmptySetWhenCountIsZero() {
         lottery.add(ALICE);
         assertTrue(lottery.popRandom(0).isEmpty());
-    }
-
-    @Test
-    void popRandomCountShouldReturnEmptySetWhenLotteryIsEmpty() {
-        assertTrue(lottery.popRandom(3).isEmpty());
     }
 
     @Test
@@ -156,19 +242,6 @@ public class LotteryTest {
     }
 
     @Test
-    void popRandomCountShouldRemoveReturnedEntriesFromLottery() {
-        lottery.add(ALICE);
-        lottery.add(BOB);
-        lottery.add(CAROL);
-
-        Set<UUID> result = lottery.popRandom(2);
-
-        for (UUID entry : result) {
-            assertNull(lottery.pop(entry));
-        }
-    }
-
-    @Test
     void popRandomCountShouldReturnUniqueEntries() {
         lottery.add(ALICE);
         lottery.add(BOB);
@@ -177,6 +250,18 @@ public class LotteryTest {
         Set<UUID> result = lottery.popRandom(3);
 
         assertEquals(3, result.size());
+    }
+
+    // --- popRandom(int count) (negative) ---
+
+    @Test
+    void popRandomCountShouldThrowWhenCountIsNegative() {
+        assertThrows(IllegalArgumentException.class, () -> lottery.popRandom(-1));
+    }
+
+    @Test
+    void popRandomCountShouldReturnEmptySetWhenLotteryIsEmpty() {
+        assertTrue(lottery.popRandom(3).isEmpty());
     }
 
     // --- winners ---
@@ -220,6 +305,47 @@ public class LotteryTest {
     }
 
     @Test
+    void drawnLotteryShouldRejectAddAfterDraw() {
+        lottery.add(ALICE);
+        lottery.add(BOB);
+
+        lottery.popRandom(2);
+
+        assertTrue(lottery.isDrawn());
+        assertThrows(IllegalStateException.class, () -> lottery.add(CAROL));
+    }
+
+    @Test
+    void drawnLotteryShouldRejectPopAfterDraw() {
+        lottery.add(ALICE);
+
+        lottery.popRandom(1);
+
+        assertTrue(lottery.isDrawn());
+        assertThrows(IllegalStateException.class, () -> lottery.pop(ALICE));
+    }
+
+    @Test
+    void drawnLotteryShouldRejectPopRandomAfterDraw() {
+        lottery.add(ALICE);
+
+        lottery.popRandom(1);
+
+        assertTrue(lottery.isDrawn());
+        assertThrows(IllegalStateException.class, lottery::popRandom);
+    }
+
+    @Test
+    void drawnLotteryShouldRejectPopRandomCountAfterDraw() {
+        lottery.add(ALICE);
+
+        lottery.popRandom(1);
+
+        assertTrue(lottery.isDrawn());
+        assertThrows(IllegalStateException.class, () -> lottery.popRandom(1));
+    }
+
+    @Test
     void popRandomOnEmptyLotteryShouldNotAddToWinners() {
         lottery.popRandom();
 
@@ -245,6 +371,7 @@ public class LotteryTest {
         lottery.clearWinners();
 
         assertTrue(lottery.getWinners().isEmpty());
+        assertFalse(lottery.isDrawn());
     }
 
     @Test
@@ -264,5 +391,13 @@ public class LotteryTest {
 
         assertFalse(lottery.getWinners().contains(ALICE));
         assertTrue(lottery.getWinners().contains(BOB));
+    }
+
+    @Test
+    void winnersShouldPersistAfterEntryAlsoDrainedSeparately() {
+        lottery.add(ALICE);
+        UUID drawn = lottery.popRandom();
+        assertEquals(ALICE, drawn);
+        assertTrue(lottery.getWinners().contains(ALICE));
     }
 }

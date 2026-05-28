@@ -2,6 +2,9 @@ package com.software_project_team_15b.Ticketmaster.black.Application.OrderHistor
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -27,6 +30,10 @@ import com.software_project_team_15b.Ticketmaster.Infrastructure.Auth;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Manager;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
@@ -62,6 +69,9 @@ class OrderHistoryTestIT {
 
     @MockitoBean
     ICompanyRepository companyRepository;
+
+    @MockitoBean
+    IMemberRepository memberRepository;
 
     @MockitoBean(name = "auth")    
     Auth authBean;
@@ -104,7 +114,7 @@ class OrderHistoryTestIT {
     // =========================================================
 
     @Test
-    void getOrderHistoryByUserId_returns_orders_for_user() {
+    void getOrderHistoryByUserId_returnsOrders_whenMember() {
 
         when(auth.extractUserId(token)).thenReturn(userId);
 
@@ -127,7 +137,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getOrderHistoryByUserId_throws_when_token_is_invalid() {
+    void getOrderHistoryByUserId_throwsIllegalArgumentException_whenTokenInvalid() {
 
         when(auth.isTokenValid(token)).thenReturn(false);
 
@@ -138,7 +148,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getOrderHistoryByUserId_does_not_extract_user_id_when_token_invalid() {
+    void getOrderHistoryByUserId_doesNotExtractUserId_whenTokenInvalid() {
 
     when(auth.isTokenValid(token)).thenReturn(false);
 
@@ -154,7 +164,7 @@ class OrderHistoryTestIT {
     // =========================================================
 
     @Test
-    void getSoldTicketsForCompany_returns_tickets_grouped_by_event_when_user_is_founder() {
+    void getSoldTicketsForCompany_returnsTicketsGroupedByEvent_whenUserIsFounder() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
         when(company.getId()).thenReturn(companyId);
@@ -186,7 +196,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getSoldTicketsForCompany_returns_tickets_grouped_by_event_when_user_is_owner() {
+    void getSoldTicketsForCompany_returnsTicketsGroupedByEvent_whenUserIsOwner() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
         when(company.getId()).thenReturn(companyId);
@@ -205,7 +215,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getSoldTicketsForCompany_throws_when_user_is_not_founder_and_not_owner() {
+    void getSoldTicketsForCompany_throwsUnauthorizedCompanyActionException_whenNotFounderOrOwner() {
 
         when(companyRepository.findByFounder(callerId)).thenReturn(List.of());
         when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
@@ -217,7 +227,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getSoldTicketsForCompany_excludes_cancelled_orders() {
+    void getSoldTicketsForCompany_excludesCancelledOrders_whenCalled() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
         when(company.getId()).thenReturn(companyId);
@@ -240,7 +250,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void getOrderHistoryByUserId_throws_when_user_is_not_member() {
+    void getOrderHistoryByUserId_throwsIllegalArgumentException_whenUserNotMember() {
 
     when(auth.isMember(token)).thenReturn(false);
 
@@ -255,7 +265,7 @@ class OrderHistoryTestIT {
     // =========================================================
 
     @Test
-    void generateSalesReport_returns_correct_totals_when_user_is_founder() {
+    void generateSalesReport_returnsCorrectTotals_whenUserIsFounder() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
         when(company.getId()).thenReturn(companyId);
@@ -272,8 +282,8 @@ class OrderHistoryTestIT {
         eventsRepository.save(e1);
         eventsRepository.save(e2);
 
-        when(company.getEventManagers(e1.eventId())).thenReturn(Set.of(callerId));
-        when(company.getEventManagers(e2.eventId())).thenReturn(Set.of(appointedMemberId));
+        mockMemberWithManagerRole(callerId, e1.eventId(), companyId);
+        mockMemberWithManagerRole(appointedMemberId, e2.eventId(), companyId);
 
         orderHistoryRepository.save(createOrder(userId, e1.eventId(), 3, "10.00"));
 
@@ -288,7 +298,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void generateSalesReport_returns_correct_totals_when_user_is_owner() {
+    void generateSalesReport_returnsCorrectTotals_whenUserIsOwner() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
         when(company.getId()).thenReturn(companyId);
@@ -299,7 +309,7 @@ class OrderHistoryTestIT {
 
         Event event = createEvent(companyId);
         eventsRepository.save(event);
-        when(company.getEventManagers(event.eventId())).thenReturn(Set.of(callerId));
+        mockMemberWithManagerRole(callerId, event.eventId(), companyId);
         orderHistoryRepository.save(createOrder(userId, event.eventId(), 2, "15.00"));
 
         Map<String, Object> report = service.generateSalesReport(token, companyId);
@@ -311,7 +321,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void generateSalesReport_returns_zero_when_no_events_exist() {
+    void generateSalesReport_returnsZero_whenNoEvents() {
 
         Company company = org.mockito.Mockito.mock(Company.class);
         when(company.getId()).thenReturn(companyId);
@@ -327,7 +337,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void generateSalesReport_throws_when_user_is_not_founder_and_not_owner() {
+    void generateSalesReport_throwsUnauthorizedCompanyActionException_whenNotFounderOrOwner() {
 
         when(companyRepository.findByFounder(callerId)).thenReturn(List.of());
         when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
@@ -338,7 +348,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void generateSalesReport_does_not_include_events_managed_by_outside_manager() {
+    void generateSalesReport_excludesEventsManagedByOutsideManager_whenCalled() {
 
     Company company = org.mockito.Mockito.mock(Company.class);
     when(company.getId()).thenReturn(companyId);
@@ -357,8 +367,8 @@ class OrderHistoryTestIT {
     eventsRepository.save(visibleEvent);
     eventsRepository.save(hiddenEvent);
 
-    when(company.getEventManagers(visibleEvent.eventId())).thenReturn(Set.of(appointedManager));
-    when(company.getEventManagers(hiddenEvent.eventId())).thenReturn(Set.of(outsideManager));
+    mockMemberWithManagerRole(appointedManager, visibleEvent.eventId(), companyId);
+    mockMemberWithManagerRole(outsideManager, hiddenEvent.eventId(), companyId);
 
     orderHistoryRepository.save(createOrder(userId, visibleEvent.eventId(), 2, "10.00"));
     orderHistoryRepository.save(createOrder(userId, hiddenEvent.eventId(), 5, "50.00"));
@@ -373,7 +383,7 @@ class OrderHistoryTestIT {
     }
 
     @Test
-    void generateSalesReport_includes_events_managed_by_appointed_members() {
+    void generateSalesReport_includesEventsManagedByAppointedMembers_whenCalled() {
 
     Company company = org.mockito.Mockito.mock(Company.class);
 
@@ -389,7 +399,7 @@ class OrderHistoryTestIT {
 
     eventsRepository.save(appointedManagerEvent);
 
-    when(company.getEventManagers(appointedManagerEvent.eventId())).thenReturn(Set.of(appointedManager));
+    mockMemberWithManagerRole(appointedManager, appointedManagerEvent.eventId(), companyId);
 
     orderHistoryRepository.save(createOrder(userId,appointedManagerEvent.eventId(), 4, "25.00"));
 
@@ -403,8 +413,8 @@ class OrderHistoryTestIT {
     assertThat(orders).hasSize(1);
     }
 
-@Test
-void generateSalesReport_excludes_cancelled_orders_from_totals() {
+    @Test
+    void generateSalesReport_excludesCancelledOrdersFromTotals_whenCalled() {
 
     Company company = org.mockito.Mockito.mock(Company.class);
     when(company.getId()).thenReturn(companyId);
@@ -415,7 +425,7 @@ void generateSalesReport_excludes_cancelled_orders_from_totals() {
 
     Event event = createEvent(companyId);
     eventsRepository.save(event);
-    when(company.getEventManagers(event.eventId())).thenReturn(Set.of(callerId));
+    mockMemberWithManagerRole(callerId, event.eventId(), companyId);
 
     OrderHistory activeOrder = createOrder(userId, event.eventId(), 2, "15.00");
     OrderHistory cancelledOrder = createOrder(userId, event.eventId(), 3, "10.00");
@@ -437,7 +447,7 @@ void generateSalesReport_excludes_cancelled_orders_from_totals() {
     // =========================================================
 
     @Test
-    void notifyEventIsCancelled_refunds_payment_and_cancels_tickets() {
+    void notifyEventIsCancelled_refundsAndCancelsTickets_whenActiveOrders() {
 
         UUID eventId = UUID.randomUUID();
         OrderHistory order =
@@ -450,7 +460,7 @@ void generateSalesReport_excludes_cancelled_orders_from_totals() {
     }
 
     @Test
-    void notifyEventIsCancelled_marks_orders_as_cancelled() {
+    void notifyEventIsCancelled_marksOrdersAsCancelled_whenCalled() {
 
     UUID eventId = UUID.randomUUID();
 
@@ -468,7 +478,7 @@ void generateSalesReport_excludes_cancelled_orders_from_totals() {
     }
 
     @Test
-    void notifyEventIsCancelled_throws_when_event_id_is_null() {
+    void notifyEventIsCancelled_throwsIllegalArgumentException_whenEventIdNull() {
 
     assertThatThrownBy(() ->
             service.notifyEventIsCancelled(null))
@@ -476,7 +486,7 @@ void generateSalesReport_excludes_cancelled_orders_from_totals() {
     }
 
     @Test
-    void notifyEventIsCancelled_does_not_refund_already_cancelled_orders() {
+    void notifyEventIsCancelled_doesNotRefundAlreadyCancelledOrders_whenCalled() {
 
     UUID eventId = UUID.randomUUID();
 
@@ -497,8 +507,194 @@ void generateSalesReport_excludes_cancelled_orders_from_totals() {
     }
 
     // =========================================================
+    // getGlobalPurchaseHistoryByBuyers
+    // =========================================================
+
+    @Test
+    void getGlobalPurchaseHistoryByBuyers_returnsGroupedOrders_whenAdmin() {
+
+        UUID user1 = UUID.randomUUID();
+        UUID user2 = UUID.randomUUID();
+
+        String token = "admin-token";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isSystemAdmin(token)).thenReturn(true);
+
+        OrderHistory order1 = createOrder(user1, UUID.randomUUID(), 2, "10.00");
+        OrderHistory order2 = createOrder(user2, UUID.randomUUID(), 1, "20.00");
+        
+        orderHistoryRepository.save(order1);
+        orderHistoryRepository.save(order2);
+
+        Map<UUID, List<OrderHistoryDTO>> result =
+                service.getGlobalPurchaseHistoryByBuyers(token);
+
+        assertTrue(result.containsKey(user1), "Result should contain user1");
+        assertTrue(result.containsKey(user2), "Result should contain user2");
+        assertEquals(1, result.get(user1).size(), "user1 should have exactly 1 order");
+        assertEquals(1, result.get(user2).size(), "user2 should have exactly 1 order");
+    }
+
+    @Test
+    void getGlobalPurchaseHistoryByBuyers_throwsUnauthorizedCompanyActionException_whenNonAdmin() {
+
+        String token = "member-token";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isSystemAdmin(token)).thenReturn(false);
+
+        assertThrows(
+                UnauthorizedCompanyActionException.class,
+                () -> service.getGlobalPurchaseHistoryByBuyers(token)
+        );
+    }
+
+    @Test
+    void getGlobalPurchaseHistoryByBuyers_throwsIllegalArgumentException_whenInvalidToken() {
+
+        String token = "invalid-token";
+
+        when(auth.isTokenValid(token)).thenReturn(false);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.getGlobalPurchaseHistoryByBuyers(token)
+        );
+    }
+
+    // =========================================================
+    // getGlobalPurchaseHistoryByEvents
+    // =========================================================
+
+    @Test
+    void getGlobalPurchaseHistoryByEvents_returnsGroupedOrders_whenAdmin() {
+
+        UUID event1 = UUID.randomUUID();
+        UUID event2 = UUID.randomUUID();
+        String token = "admin-token-events";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isSystemAdmin(token)).thenReturn(true);
+
+        orderHistoryRepository.save(createOrder(userId, event1, 2, "10.00"));
+        orderHistoryRepository.save(createOrder(userId, event1, 1, "15.00"));
+        orderHistoryRepository.save(createOrder(userId, event2, 1, "20.00"));
+
+        Map<UUID, List<OrderHistoryDTO>> result = service.getGlobalPurchaseHistoryByEvents(token);
+
+        assertTrue(result.containsKey(event1));
+        assertTrue(result.containsKey(event2));
+        assertEquals(2, result.get(event1).size());
+        assertEquals(1, result.get(event2).size());
+    }
+
+    @Test
+    void getGlobalPurchaseHistoryByEvents_throwsUnauthorizedCompanyActionException_whenNonAdmin() {
+
+        String token = "member-token-events";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isSystemAdmin(token)).thenReturn(false);
+
+        assertThrows(
+                UnauthorizedCompanyActionException.class,
+                () -> service.getGlobalPurchaseHistoryByEvents(token)
+        );
+    }
+
+    @Test
+    void getGlobalPurchaseHistoryByEvents_throwsIllegalArgumentException_whenInvalidToken() {
+
+        String token = "invalid-token-events";
+
+        when(auth.isTokenValid(token)).thenReturn(false);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.getGlobalPurchaseHistoryByEvents(token)
+        );
+    }
+
+    // =========================================================
+    // getGlobalPurchaseHistoryByCompanies
+    // =========================================================
+
+    @Test
+    void getGlobalPurchaseHistoryByCompanies_returnsGroupedOrders_whenAdmin() {
+
+        UUID company1 = UUID.randomUUID();
+        UUID company2 = UUID.randomUUID();
+        String token = "admin-token-companies";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isSystemAdmin(token)).thenReturn(true);
+
+        Event event1 = createEvent(company1);
+        Event event2 = createEvent(company2);
+        event1 = eventsRepository.save(event1);
+        event2 = eventsRepository.save(event2);
+
+        OrderHistory order1_1 = createOrder(userId, event1.eventId(), 2, "10.00");
+        OrderHistory order1_2 = createOrder(userId, event1.eventId(), 1, "12.00");
+        OrderHistory order2_1 = createOrder(userId, event2.eventId(), 1, "20.00");
+        
+        orderHistoryRepository.save(order1_1);
+        orderHistoryRepository.save(order1_2);
+        orderHistoryRepository.save(order2_1);
+
+        Map<UUID, List<OrderHistoryDTO>> result = service.getGlobalPurchaseHistoryByCompanies(token);
+
+        assertTrue(result.containsKey(company1), "Result should contain company1");
+        assertTrue(result.containsKey(company2), "Result should contain company2");
+        assertThat(result.get(company1)).hasSize(2);
+        assertThat(result.get(company2)).hasSize(1);
+    }
+
+    @Test
+    void getGlobalPurchaseHistoryByCompanies_throwsUnauthorizedCompanyActionException_whenNonAdmin() {
+
+        String token = "member-token-companies";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isSystemAdmin(token)).thenReturn(false);
+
+        assertThrows(
+                UnauthorizedCompanyActionException.class,
+                () -> service.getGlobalPurchaseHistoryByCompanies(token)
+        );
+    }
+
+    @Test
+    void getGlobalPurchaseHistoryByCompanies_throwsIllegalArgumentException_whenInvalidToken() {
+
+        String token = "invalid-token-companies";
+
+        when(auth.isTokenValid(token)).thenReturn(false);
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> service.getGlobalPurchaseHistoryByCompanies(token)
+        );
+    }
+
+
+
+
+
+
+    // =========================================================
     // helpers
     // =========================================================
+
+    private void mockMemberWithManagerRole(UUID memberId, UUID eventId, UUID companyId) {
+        Member member = org.mockito.Mockito.mock(Member.class);
+        Manager manager = new Manager(UUID.randomUUID(), companyId, eventId, Set.of(ManagerPermission.GENERATE_SALES_REPORTS));
+        Set<com.software_project_team_15b.Ticketmaster.Domain.Member.Role> roles = new HashSet<>();
+        roles.add(manager);
+        when(member.getAssignedRoles()).thenReturn(roles);
+        when(memberRepository.findById(memberId)).thenReturn(java.util.Optional.of(member));
+    }
 
     private Event createEvent(UUID companyId) {
 
@@ -516,6 +712,21 @@ void generateSalesReport_excludes_cancelled_orders_from_totals() {
     }
 
     private OrderHistory createOrder(UUID userId,UUID eventId,int ticketCount,String price) {
+        // ensure an Event exists for this eventId so repository-level validation passes
+        if (eventId != null && eventsRepository.findById(eventId).isEmpty()) {
+            Event e = new Event(
+                    eventId,
+                    companyId,
+                    "Auto Event",
+                    "Auto Artist",
+                    Category.CONCERT,
+                    Instant.now().plusSeconds(3600),
+                    "Auto Location",
+                    List.of(),
+                    List.of()
+            );
+            eventsRepository.save(e);
+        }
         Money basePrice = Money.of(price, "USD");
         Set<Ticket> tickets = new HashSet<>();
         for (int i = 0; i < ticketCount; i++) {

@@ -1,54 +1,59 @@
-package com.software_project_team_15b.Ticketmaster.black.Application;
+package com.software_project_team_15b.Ticketmaster.black.User;
 
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
-
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyOwnerInCompanyException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AppointmentCycleDetectedException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidManagerPermissionsException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidCredentialsException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.MemberNotFoundException;
-import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Application.IPasswordEncoder;
-import com.software_project_team_15b.Ticketmaster.Application.UserService;
-import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.RoleNotAssignedException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UsernameAlreadyExistsException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
-import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.Founder;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.Manager;
-import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.Mockito;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
-import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainServiceImpl;
+
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyOwnerInCompanyException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AppointmentCycleDetectedException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidCredentialsException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidManagerPermissionsException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.MemberNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.RoleNotAssignedException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UsernameAlreadyExistsException;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.IPasswordEncoder;
+import com.software_project_team_15b.Ticketmaster.Application.UserService;
+import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
+import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Founder;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Manager;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Queue.QueueDomainServiceImpl;
 
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
-
-    private static final String DEFAULT_ENTRANCE_TOKEN = "entrance";
-    private static final String DEFAULT_USERNAME = "john";
-    private static final String DEFAULT_PASSWORD = "Password1";
-    private static final LocalDate DEFAULT_BIRTH_DATE = LocalDate.of(2000, 1, 1);
 
     @Mock private IMemberRepository memberRepository;
     @Mock private ISystemAdminRepository systemAdminRepository;
@@ -60,17 +65,8 @@ class UserServiceTest {
     private UserService service;
     private UserDomainService userDomainService;
 
-    private String entranceToken;
-    private String username;
-    private String password;
-    private LocalDate birthDate;
-
     @BeforeEach
     void setUp() {
-        entranceToken = DEFAULT_ENTRANCE_TOKEN;
-        username = DEFAULT_USERNAME;
-        password = DEFAULT_PASSWORD;
-        birthDate = DEFAULT_BIRTH_DATE;
 
         userDomainService = Mockito.spy(new UserDomainService(memberRepository));
         service = new UserService(userDomainService, auth, passwordEncoder, queueDomainService, systemAdminRepository, eventPublisher);
@@ -129,7 +125,8 @@ class UserServiceTest {
                 .isInstanceOf(InvalidMemberInputException.class)
                 .hasMessageContaining("Password cannot be null or empty");
 
-        verifyNoInteractions(userDomainService);
+        verify(userDomainService).validateRawPassword(null);
+        verify(userDomainService, never()).registerMember(any(), any(), any());
         verify(passwordEncoder, never()).encode(any());
     }
 
@@ -148,8 +145,9 @@ class UserServiceTest {
                 .isInstanceOf(InvalidMemberInputException.class)
                 .hasMessageContaining("Password must be at least 8 characters long");
 
-        verifyNoInteractions(userDomainService);
-        verifyNoInteractions(passwordEncoder);
+        verify(userDomainService).validateRawPassword("Pass1");
+        verify(userDomainService, never()).registerMember(any(), any(), any());
+        verify(passwordEncoder, never()).encode(any());
     }
 
     @Test
@@ -167,8 +165,9 @@ class UserServiceTest {
                 .isInstanceOf(InvalidMemberInputException.class)
                 .hasMessageContaining("Password must contain at least one uppercase letter and one number");
 
-        verifyNoInteractions(userDomainService);
-        verifyNoInteractions(passwordEncoder);
+        verify(userDomainService).validateRawPassword("password");
+        verify(userDomainService, never()).registerMember(any(), any(), any());
+        verify(passwordEncoder, never()).encode(any());
     }
 
     @Test
@@ -203,7 +202,7 @@ class UserServiceTest {
                 "Password1",
                 LocalDate.of(2000, 1, 1)
         ))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidTokenException.class)
                 .hasMessageContaining("Only guest");
 
         verifyNoInteractions(userDomainService);
@@ -268,7 +267,7 @@ class UserServiceTest {
         when(auth.isTokenValid(entranceToken)).thenReturn(false);
 
         assertThatThrownBy(() -> service.login(entranceToken, "john", "Password1"))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidTokenException.class)
                 .hasMessageContaining("Invalid or expired token");
 
         verifyNoInteractions(userDomainService);
@@ -364,7 +363,7 @@ class UserServiceTest {
         when(auth.isTokenValid(expiredToken)).thenReturn(false);
 
         assertThatThrownBy(() -> service.logout(expiredToken))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidTokenException.class)
                 .hasMessageContaining("Invalid or expired token");
 
         verify(auth, never()).logout(anyString());
@@ -377,7 +376,7 @@ class UserServiceTest {
         when(auth.isTokenValid(token)).thenReturn(false);
 
         assertThatThrownBy(() -> service.logout(token))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidTokenException.class)
                 .hasMessageContaining("Invalid or expired token");
 
         verify(auth, never()).logout(anyString());
@@ -454,7 +453,7 @@ class UserServiceTest {
         when(auth.isMember(guestToken)).thenReturn(false);
 
         assertThatThrownBy(() -> service.watchPersonalDetails(guestToken))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidTokenException.class)
                 .hasMessageContaining("Only members can perform this action");
 
         verify(memberRepository, never()).findById(any());
@@ -520,6 +519,7 @@ class UserServiceTest {
 
         MemberDTO saved = service.changePassword(token, "NewPassword1");
 
+        assertThat(saved.getUserId()).isEqualTo(memberId);
         verify(memberRepository).save(member);
     }
 
@@ -1126,7 +1126,7 @@ class UserServiceTest {
         when(auth.isSystemAdmin(memberToken)).thenReturn(false);
 
         assertThatThrownBy(() -> service.cancelMemberAccountBySystemAdmin(memberToken, memberId))
-                .isInstanceOf(IllegalArgumentException.class)
+                .isInstanceOf(InvalidTokenException.class)
                 .hasMessageContaining("Only a system admin can cancel member accounts");
 
         verify(memberRepository, never()).deleteById(any());

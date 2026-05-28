@@ -1,322 +1,582 @@
 package com.software_project_team_15b.Ticketmaster.black.Application.Queue;
 
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueIsFullException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
-import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
-import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
-import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
-import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.Queue.VirtualQueue;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
-import org.junit.jupiter.api.BeforeEach;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.context.ApplicationEventPublisher;
 
-import java.time.LocalDateTime;
-import java.util.UUID;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
+import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
-
+/**
+ * Black-box tests for the {@link QueueService} application facade.
+ *
+ * <p>The facade is exercised purely through its public API and observed through
+ * return values and propagated exceptions. The underlying {@link IQueueDomainService}
+ * is stubbed to drive each scenario; tests do not verify call ordering, count, or
+ * argument forwarding — those concerns belong to the white-box suite.
+ *
+ * <p>All mutating operations ({@code createEventQueue}, {@code deleteEventQueue},
+ * {@code clearEventQueue}, {@code updateEventQueueSettings}) and admin reads
+ * ({@code getQueueSnapshot}, {@code getAllQueueSnapshots}) require the caller to be
+ * a system admin as determined by {@link IAuth#isSystemAdmin}.
+ *
+ * <p>Site-queue admission ({@code acceptUsersFromSiteQueue}) is a scheduled internal
+ * method that coordinates auth-based eviction with the domain service; it is not
+ * directly invokable through the public API and is therefore not tested here.
+ */
 @ExtendWith(MockitoExtension.class)
 class QueueServiceBlackTest {
 
-    @Mock private IQueueRepository queueRepository;
+    @Mock private IQueueDomainService queueDomainService;
     @Mock private IAuth auth;
+    @Mock private ApplicationEventPublisher eventPublisher;
     @InjectMocks private QueueService service;
 
-    @BeforeEach
-    void injectSelf() {
-        ReflectionTestUtils.setField(service, "self", service);
-    }
-
-    private static final UUID EVENT_ID = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    private static final UUID USER_A   = UUID.fromString("00000000-0000-0000-0000-000000000002");
-    private static final UUID USER_B   = UUID.fromString("00000000-0000-0000-0000-000000000003");
-    private static final UUID USER_C   = UUID.fromString("00000000-0000-0000-0000-000000000004");
+    private static final UUID   EVENT_ID        = UUID.fromString("00000000-0000-0000-0000-000000000001");
+    private static final String ADMIN_TOKEN     = "admin-token";
+    private static final String NON_ADMIN_TOKEN = "non-admin-token";
 
     // =========================================================================
-    // Site queue — behavior tests
+    // createEventQueue — positive
     // =========================================================================
 
+    /**
+     * A system admin with valid arguments should be able to create an event queue
+     * without any exception being thrown.
+     */
     @Test
-    void validateAndExitQueue_returnsFalse_whenTokenNotYetAdmitted() {
-        service.addUserToSiteQueue("token-a");
-        assertThat(service.validateAndExitQueue("token-a")).isFalse();
+    void createEventQueue_positive_returnsNormally() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+
+        assertThatCode(() -> service.createEventQueue(ADMIN_TOKEN, EVENT_ID, 1000, 100))
+                .doesNotThrowAnyException();
     }
 
-    @Test
-    void canAccessWebsite_returnsTrue_whenEmpty() {
-        assertThat(service.canAccessWebsite()).isTrue();
-    }
+    // =========================================================================
+    // createEventQueue — negative
+    // =========================================================================
 
+    /**
+     * A null token must be rejected before any auth or domain call is made.
+     */
     @Test
-    void addUserToSiteQueue_nullToken_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.addUserToSiteQueue(null))
+    void createEventQueue_negative_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.createEventQueue(null, EVENT_ID, 1000, 100))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /**
+     * A null eventId must be rejected before any auth or domain call is made.
+     */
     @Test
-    void addUserToSiteQueue_duplicateToken_throwsIllegalArgument() {
-        service.addUserToSiteQueue("token-a");
-        assertThatThrownBy(() -> service.addUserToSiteQueue("token-a"))
+    void createEventQueue_negative_nullEventId_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.createEventQueue(ADMIN_TOKEN, null, 1000, 100))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /**
+     * A negative capacity must be rejected with an {@link IllegalArgumentException}.
+     * Zero is permitted for creation (the queue can be expanded later via update).
+     */
     @Test
-    void validateAndExitQueue_nullToken_throwsIllegalArgument() {
-        assertThatThrownBy(() -> service.validateAndExitQueue(null))
+    void createEventQueue_negative_negativeCapacity_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.createEventQueue(ADMIN_TOKEN, EVENT_ID, -1, 100))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    // =========================================================================
-    // getPositionInEventQueue — behavior tests
-    // =========================================================================
-
+    /**
+     * A negative max-accepted value must be rejected with an {@link IllegalArgumentException}.
+     * Zero is permitted for creation (the limit can be set later via update).
+     */
     @Test
-    void getPositionInEventQueue_returnsCorrectPosition() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        queue.push("token-b");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-
-        assertThat(service.getPositionInEventQueue("token-a", EVENT_ID)).isEqualTo(0);
-        assertThat(service.getPositionInEventQueue("token-b", EVENT_ID)).isEqualTo(1);
+    void createEventQueue_negative_negativeMaxAccepted_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.createEventQueue(ADMIN_TOKEN, EVENT_ID, 1000, -1))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /**
+     * An invalid or expired token must cause an {@link InvalidTokenException} before the
+     * admin check is reached.
+     */
     @Test
-    void getPositionInEventQueue_queueNotFound_throwsQueueNotFoundException() {
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
+    void createEventQueue_negative_invalidToken_throwsInvalidTokenException() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(false);
 
-        assertThatThrownBy(() -> service.getPositionInEventQueue("token-a", EVENT_ID))
+        assertThatThrownBy(() -> service.createEventQueue(NON_ADMIN_TOKEN, EVENT_ID, 1000, 100))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    /**
+     * A caller who is not a system admin must receive an {@link UnauthorizedException}.
+     */
+    @Test
+    void createEventQueue_negative_notAdmin_throwsUnauthorized() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(NON_ADMIN_TOKEN)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.createEventQueue(NON_ADMIN_TOKEN, EVENT_ID, 1000, 100))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    // =========================================================================
+    // deleteEventQueue — positive
+    // =========================================================================
+
+    /**
+     * A system admin with a valid eventId should be able to delete an event queue
+     * without any exception being thrown.
+     */
+    @Test
+    void deleteEventQueue_positive_returnsNormally() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+
+        assertThatCode(() -> service.deleteEventQueue(ADMIN_TOKEN, EVENT_ID))
+                .doesNotThrowAnyException();
+    }
+
+    // =========================================================================
+    // deleteEventQueue — negative
+    // =========================================================================
+
+    /**
+     * A {@link QueueNotFoundException} thrown by the domain service must propagate
+     * to the caller unchanged.
+     */
+    @Test
+    void deleteEventQueue_negative_propagatesQueueNotFound() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+        doThrow(new QueueNotFoundException("missing"))
+                .when(queueDomainService).deleteEventQueue(EVENT_ID);
+
+        assertThatThrownBy(() -> service.deleteEventQueue(ADMIN_TOKEN, EVENT_ID))
+                .isInstanceOf(QueueNotFoundException.class);
+    }
+
+    /**
+     * An invalid or expired token must cause an {@link InvalidTokenException} before the
+     * admin check is reached.
+     */
+    @Test
+    void deleteEventQueue_negative_invalidToken_throwsInvalidTokenException() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.deleteEventQueue(NON_ADMIN_TOKEN, EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    /**
+     * A caller who is not a system admin must receive an {@link UnauthorizedException}
+     * when attempting to delete an event queue.
+     */
+    @Test
+    void deleteEventQueue_negative_notAdmin_throwsUnauthorized() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(NON_ADMIN_TOKEN)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.deleteEventQueue(NON_ADMIN_TOKEN, EVENT_ID))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    // =========================================================================
+    // clearEventQueue — positive
+    // =========================================================================
+
+    /**
+     * A system admin with a valid eventId should be able to clear an event queue
+     * without any exception being thrown.
+     */
+    @Test
+    void clearEventQueue_positive_returnsNormally() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+
+        assertThatCode(() -> service.clearEventQueue(ADMIN_TOKEN, EVENT_ID))
+                .doesNotThrowAnyException();
+    }
+
+    // =========================================================================
+    // clearEventQueue — negative
+    // =========================================================================
+
+    /**
+     * A null token must be rejected before any auth or domain call is made.
+     */
+    @Test
+    void clearEventQueue_negative_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.clearEventQueue(null, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /**
+     * A null eventId must be rejected before any auth or domain call is made.
+     */
+    @Test
+    void clearEventQueue_negative_nullEventId_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.clearEventQueue(ADMIN_TOKEN, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /**
+     * An invalid or expired token must cause an {@link InvalidTokenException} before the
+     * admin check is reached.
+     */
+    @Test
+    void clearEventQueue_negative_invalidToken_throwsInvalidTokenException() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.clearEventQueue(NON_ADMIN_TOKEN, EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    /**
+     * A caller who is not a system admin must receive an {@link UnauthorizedException}.
+     */
+    @Test
+    void clearEventQueue_negative_notAdmin_throwsUnauthorized() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(NON_ADMIN_TOKEN)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.clearEventQueue(NON_ADMIN_TOKEN, EVENT_ID))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    /**
+     * A {@link QueueNotFoundException} thrown by the domain service must propagate
+     * to the caller unchanged.
+     */
+    @Test
+    void clearEventQueue_negative_propagatesQueueNotFound() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+        doThrow(new QueueNotFoundException("missing"))
+                .when(queueDomainService).clearEventQueue(EVENT_ID);
+
+        assertThatThrownBy(() -> service.clearEventQueue(ADMIN_TOKEN, EVENT_ID))
                 .isInstanceOf(QueueNotFoundException.class);
     }
 
     // =========================================================================
-    // popFromEventQueue — behavior tests
+    // getQueueSnapshot — positive
     // =========================================================================
 
+    /**
+     * A system admin should receive the {@link QueueSnapshotDTO} returned by the
+     * domain service, with all fields preserved.
+     */
     @Test
-    void popFromEventQueue_removesUserFromQueue() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+    void getQueueSnapshot_positive_returnsSnapshot() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+        QueueSnapshotDTO expected = new QueueSnapshotDTO(EVENT_ID, 500, 50, 12, 8, Map.of());
+        when(queueDomainService.getQueueSnapshot(EVENT_ID)).thenReturn(expected);
 
-        service.popFromEventQueue(EVENT_ID);
+        QueueSnapshotDTO result = service.getQueueSnapshot(ADMIN_TOKEN, EVENT_ID);
 
-        assertThat(queue.isEmpty()).isTrue();
-    }
-
-    @Test
-    void popFromEventQueue_maintainsFifoOrder() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        queue.push("token-b");
-        queue.push("token-c");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-
-        assertThat(service.popFromEventQueue(EVENT_ID)).isEqualTo("token-a");
-        assertThat(service.popFromEventQueue(EVENT_ID)).isEqualTo("token-b");
-        assertThat(service.popFromEventQueue(EVENT_ID)).isEqualTo("token-c");
+        assertThat(result.eventId()).isEqualTo(EVENT_ID);
+        assertThat(result.capacity()).isEqualTo(500);
+        assertThat(result.maxAccepted()).isEqualTo(50);
+        assertThat(result.waitingCount()).isEqualTo(12);
+        assertThat(result.admittedCount()).isEqualTo(8);
     }
 
     // =========================================================================
-    // Queue advancement / eventAccess — behavior tests
+    // getQueueSnapshot — negative
     // =========================================================================
 
+    /**
+     * A null token must be rejected before any auth or domain call is made.
+     */
     @Test
-    void createEventQueue_advancesPreLoadedUsersIntoEventAccess() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID);
-
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isTrue();
-    }
-
-    @Test
-    void pushToEventQueue_promotesUserToEventAccessWhenSlotAvailable() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID);
-        service.pushToEventQueue(EVENT_ID, "token-a");
-
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isTrue();
-    }
-
-    // =========================================================================
-    // hasAccess — behavior tests
-    // =========================================================================
-
-    @Test
-    void hasAccess_returnsTrueWhenUserIsInEventAccess() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID);
-
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isTrue();
-    }
-
-    @Test
-    void hasAccess_returnsFalseWhenUserIsNotInEventAccess() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID);
-
-        assertThat(service.hasAccess("token-a", EVENT_ID)).isFalse();
-    }
-
-    @Test
-    void hasAccess_invalidToken_throwsInvalidTokenException() {
-        when(auth.isTokenValid("bad-token")).thenReturn(false);
-
-        assertThatThrownBy(() -> service.hasAccess("bad-token", EVENT_ID))
-                .isInstanceOf(InvalidTokenException.class);
-    }
-
-    // =========================================================================
-    // getQueueAccessView — behavior tests
-    // =========================================================================
-
-    @Test
-    void getQueueAccessView_returnsNoQueue_whenNoQueueExistsForEvent() {
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        QueueAccessDTO view = service.getQueueAccessView("token-a", EVENT_ID);
-
-        assertThat(view.status()).isEqualTo(QueueAccessStatus.NO_QUEUE);
-        assertThat(view.position()).isNull();
-        assertThat(view.accessExpiresAt()).isNull();
-        assertThat(view.canCreateActiveOrder()).isTrue();
-    }
-
-    @Test
-    void getQueueAccessView_returnsAdmitted_withFutureExpiryAndCanCreateOrder() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        queue.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID);
-
-        QueueAccessDTO view = service.getQueueAccessView("token-a", EVENT_ID);
-
-        assertThat(view.status()).isEqualTo(QueueAccessStatus.ADMITTED);
-        assertThat(view.position()).isNull();
-        assertThat(view.accessExpiresAt()).isNotNull().isAfter(LocalDateTime.now());
-        assertThat(view.canCreateActiveOrder()).isTrue();
-    }
-
-    @Test
-    void getQueueAccessView_returnsWaiting_withCorrectPosition_whenUserNotYetAdmitted() {
-        VirtualQueue emptyForAdvance = new VirtualQueue(EVENT_ID);
-        VirtualQueue withUserForPosition = new VirtualQueue(EVENT_ID);
-        withUserForPosition.push("token-a");
-        when(queueRepository.getQueue(EVENT_ID))
-                .thenReturn(emptyForAdvance)
-                .thenReturn(withUserForPosition);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID);
-
-        QueueAccessDTO view = service.getQueueAccessView("token-a", EVENT_ID);
-
-        assertThat(view.status()).isEqualTo(QueueAccessStatus.WAITING);
-        assertThat(view.position()).isEqualTo(0);
-        assertThat(view.accessExpiresAt()).isNull();
-        assertThat(view.canCreateActiveOrder()).isFalse();
-    }
-
-    @Test
-    void getQueueAccessView_invalidToken_throwsInvalidTokenException() {
-        when(auth.isTokenValid("bad-token")).thenReturn(false);
-
-        assertThatThrownBy(() -> service.getQueueAccessView("bad-token", EVENT_ID))
-                .isInstanceOf(InvalidTokenException.class);
-    }
-
-    @Test
-    void getQueueAccessView_userNotInQueueAndNotAdmitted_throwsIllegalArgument() {
-        VirtualQueue emptyQueue = new VirtualQueue(EVENT_ID);
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(emptyQueue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID);
-
-        assertThatThrownBy(() -> service.getQueueAccessView("token-a", EVENT_ID))
+    void getQueueSnapshot_negative_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.getQueueSnapshot(null, EVENT_ID))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    // =========================================================================
-    // requestAccess — behavior tests
-    // =========================================================================
-
+    /**
+     * A null eventId must be rejected before any auth or domain call is made.
+     */
     @Test
-    void requestAccess_returnsAdmittedView_whenUserIsImmediatelyPromoted() {
-        VirtualQueue queue = new VirtualQueue(EVENT_ID);
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
-
-        service.createEventQueue(EVENT_ID);
-
-        QueueAccessDTO view = service.requestAccess("token-a", EVENT_ID);
-
-        assertThat(view.status()).isEqualTo(QueueAccessStatus.ADMITTED);
-        assertThat(view.accessExpiresAt()).isNotNull().isAfter(LocalDateTime.now());
-        assertThat(view.canCreateActiveOrder()).isTrue();
+    void getQueueSnapshot_negative_nullEventId_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.getQueueSnapshot(ADMIN_TOKEN, null))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
+    /**
+     * An invalid or expired token must cause an {@link InvalidTokenException} before the
+     * admin check is reached.
+     */
     @Test
-    void requestAccess_invalidToken_throwsInvalidTokenException() {
-        when(auth.isTokenValid("bad-token")).thenReturn(false);
+    void getQueueSnapshot_negative_invalidToken_throwsInvalidTokenException() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(false);
 
-        assertThatThrownBy(() -> service.requestAccess("bad-token", EVENT_ID))
+        assertThatThrownBy(() -> service.getQueueSnapshot(NON_ADMIN_TOKEN, EVENT_ID))
                 .isInstanceOf(InvalidTokenException.class);
     }
 
+    /**
+     * A caller who is not a system admin must receive an {@link UnauthorizedException}.
+     */
     @Test
-    void requestAccess_noQueueForEvent_throwsQueueNotFoundException() {
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+    void getQueueSnapshot_negative_notAdmin_throwsUnauthorized() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(NON_ADMIN_TOKEN)).thenReturn(false);
 
-        assertThatThrownBy(() -> service.requestAccess("token-a", EVENT_ID))
+        assertThatThrownBy(() -> service.getQueueSnapshot(NON_ADMIN_TOKEN, EVENT_ID))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    /**
+     * A {@link QueueNotFoundException} thrown by the domain service must propagate
+     * to the caller unchanged.
+     */
+    @Test
+    void getQueueSnapshot_negative_propagatesQueueNotFound() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+        doThrow(new QueueNotFoundException("missing"))
+                .when(queueDomainService).getQueueSnapshot(EVENT_ID);
+
+        assertThatThrownBy(() -> service.getQueueSnapshot(ADMIN_TOKEN, EVENT_ID))
                 .isInstanceOf(QueueNotFoundException.class);
     }
 
-    @Test
-    void requestAccess_queueFull_throwsQueueIsFullException() {
-        VirtualQueue fullQueue = new VirtualQueue(EVENT_ID, 1);
-        fullQueue.push("token-b");
-        when(queueRepository.getQueue(EVENT_ID)).thenReturn(fullQueue);
-        when(auth.isTokenValid("token-a")).thenReturn(true);
-        when(auth.extractUserId("token-a")).thenReturn(USER_A);
+    // =========================================================================
+    // updateEventQueueSettings — positive
+    // =========================================================================
 
-        assertThatThrownBy(() -> service.requestAccess("token-a", EVENT_ID))
-                .isInstanceOf(QueueIsFullException.class);
+    /**
+     * A system admin with valid arguments should be able to update queue settings
+     * without any exception being thrown.
+     */
+    @Test
+    void updateEventQueueSettings_positive_returnsNormally() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+
+        assertThatCode(() -> service.updateEventQueueSettings(ADMIN_TOKEN, EVENT_ID, 200, 20))
+                .doesNotThrowAnyException();
+    }
+
+    // =========================================================================
+    // updateEventQueueSettings — negative
+    // =========================================================================
+
+    /**
+     * A null eventId must be rejected before any auth or domain call is made.
+     */
+    @Test
+    void updateEventQueueSettings_negative_nullEventId_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.updateEventQueueSettings(ADMIN_TOKEN, null, 200, 20))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /**
+     * A non-positive capacity must be rejected with an {@link IllegalArgumentException}.
+     */
+    @Test
+    void updateEventQueueSettings_negative_negativeCapacity_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.updateEventQueueSettings(ADMIN_TOKEN, EVENT_ID, -1, 20))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /**
+     * A non-positive max-accepted value must be rejected with an {@link IllegalArgumentException}.
+     */
+    @Test
+    void updateEventQueueSettings_negative_negativeMaxAccepted_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.updateEventQueueSettings(ADMIN_TOKEN, EVENT_ID, 200, -1))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /**
+     * An invalid or expired token must cause an {@link InvalidTokenException} before the
+     * admin check is reached.
+     */
+    @Test
+    void updateEventQueueSettings_negative_invalidToken_throwsInvalidTokenException() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.updateEventQueueSettings(NON_ADMIN_TOKEN, EVENT_ID, 200, 20))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    /**
+     * A caller who is not a system admin must receive an {@link UnauthorizedException}.
+     */
+    @Test
+    void updateEventQueueSettings_negative_notAdmin_throwsUnauthorized() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(NON_ADMIN_TOKEN)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.updateEventQueueSettings(NON_ADMIN_TOKEN, EVENT_ID, 200, 20))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    /**
+     * A {@link QueueNotFoundException} thrown by the domain service must propagate
+     * to the caller unchanged.
+     */
+    @Test
+    void updateEventQueueSettings_negative_propagatesQueueNotFound() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+        doThrow(new QueueNotFoundException("missing"))
+                .when(queueDomainService).updateQueueSettings(EVENT_ID, 200, 20);
+
+        assertThatThrownBy(() -> service.updateEventQueueSettings(ADMIN_TOKEN, EVENT_ID, 200, 20))
+                .isInstanceOf(QueueNotFoundException.class);
+    }
+
+    // =========================================================================
+    // getAllQueueSnapshots — positive
+    // =========================================================================
+
+    /**
+     * A system admin should receive the list of {@link QueueSnapshotDTO} objects
+     * returned by the domain service.
+     */
+    @Test
+    void getAllQueueSnapshots_positive_returnsAllSnapshots() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+        QueueSnapshotDTO snap = new QueueSnapshotDTO(EVENT_ID, 100, 10, 3, 2, Map.of());
+        when(queueDomainService.getAllQueueSnapshots()).thenReturn(List.of(snap));
+
+        List<QueueSnapshotDTO> result = service.getAllQueueSnapshots(ADMIN_TOKEN);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).eventId()).isEqualTo(EVENT_ID);
+    }
+
+    // =========================================================================
+    // getAllQueueSnapshots — negative
+    // =========================================================================
+
+    /**
+     * A null token must be rejected before any auth or domain call is made.
+     */
+    @Test
+    void getAllQueueSnapshots_negative_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.getAllQueueSnapshots(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /**
+     * An invalid or expired token must cause an {@link InvalidTokenException} before the
+     * admin check is reached.
+     */
+    @Test
+    void getAllQueueSnapshots_negative_invalidToken_throwsInvalidTokenException() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getAllQueueSnapshots(NON_ADMIN_TOKEN))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    /**
+     * A caller who is not a system admin must receive an {@link UnauthorizedException}.
+     */
+    @Test
+    void getAllQueueSnapshots_negative_notAdmin_throwsUnauthorized() {
+        when(auth.isTokenValid(NON_ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(NON_ADMIN_TOKEN)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getAllQueueSnapshots(NON_ADMIN_TOKEN))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    // =========================================================================
+    // getQueueAccessView — positive
+    // =========================================================================
+
+    /**
+     * When the event has no queue the domain service returns a {@code NO_QUEUE} DTO;
+     * the facade must return it unchanged with {@code canCreateActiveOrder() == true}.
+     */
+    @Test
+    void getQueueAccessView_positive_returnsNoQueueDTOFromDomain() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        QueueAccessDTO expected = new QueueAccessDTO(EVENT_ID, QueueAccessStatus.NO_QUEUE, null, null);
+        when(queueDomainService.getQueueAccessView("token-a", EVENT_ID)).thenReturn(expected);
+
+        QueueAccessDTO result = service.getQueueAccessView("token-a", EVENT_ID);
+
+        assertThat(result.status()).isEqualTo(QueueAccessStatus.NO_QUEUE);
+        assertThat(result.position()).isNull();
+        assertThat(result.accessExpiresAt()).isNull();
+        assertThat(result.canCreateActiveOrder()).isTrue();
+    }
+
+    /**
+     * When the user has been admitted, the facade returns a DTO whose expiry is in
+     * the future and {@code canCreateActiveOrder() == true}.
+     */
+    @Test
+    void getQueueAccessView_positive_returnsAdmittedDTOFromDomain() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        QueueAccessDTO expected = new QueueAccessDTO(EVENT_ID, QueueAccessStatus.ADMITTED, null, LocalDateTime.now().plusSeconds(100));
+        when(queueDomainService.getQueueAccessView("token-a", EVENT_ID)).thenReturn(expected);
+
+        QueueAccessDTO result = service.getQueueAccessView("token-a", EVENT_ID);
+
+        assertThat(result.status()).isEqualTo(QueueAccessStatus.ADMITTED);
+        assertThat(result.accessExpiresAt()).isAfter(LocalDateTime.now());
+        assertThat(result.canCreateActiveOrder()).isTrue();
+    }
+
+    /**
+     * When the user is still waiting, the facade returns a DTO with the correct
+     * position and {@code canCreateActiveOrder() == false}.
+     */
+    @Test
+    void getQueueAccessView_positive_returnsWaitingDTOFromDomain() {
+        when(auth.isTokenValid("token-a")).thenReturn(true);
+        QueueAccessDTO expected = new QueueAccessDTO(EVENT_ID, QueueAccessStatus.WAITING, 5, null);
+        when(queueDomainService.getQueueAccessView("token-a", EVENT_ID)).thenReturn(expected);
+
+        QueueAccessDTO result = service.getQueueAccessView("token-a", EVENT_ID);
+
+        assertThat(result.status()).isEqualTo(QueueAccessStatus.WAITING);
+        assertThat(result.position()).isEqualTo(5);
+        assertThat(result.canCreateActiveOrder()).isFalse();
+    }
+
+    // =========================================================================
+    // getQueueAccessView — negative
+    // =========================================================================
+
+    /**
+     * An invalid token must cause an {@link InvalidTokenException} to be thrown
+     * before any domain-service call is made.
+     */
+    @Test
+    void getQueueAccessView_negative_throwsInvalidTokenException_forInvalidToken() {
+        when(auth.isTokenValid("bad")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getQueueAccessView("bad", EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
     }
 }
