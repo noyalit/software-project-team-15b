@@ -61,6 +61,16 @@ export type MemberDTO = {
   assignedRoles?: string[];
 };
 
+export type ManagerPermission =
+  | 'MANAGE_EVENTS'
+  | 'CONFIGURE_HALLS_AND_SEATS'
+  | 'UPDATE_EVENT_MAP'
+  | 'DEFINE_PURCHASE_POLICY'
+  | 'DEFINE_DISCOUNT_POLICY'
+  | 'HANDLE_INQUIRIES'
+  | 'VIEW_PURCHASE_AND_ORDER_HISTORY'
+  | 'GENERATE_SALES_REPORTS';
+
 export type QueueSnapshotDTO = {
   eventId: string;
   capacity: number;

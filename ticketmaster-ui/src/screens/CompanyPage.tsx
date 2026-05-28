@@ -4,7 +4,13 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getApiErrorMessage } from '../api/errors';
 import { http } from '../api/http';
-import type { ApiResponse, CompanyDTO, MemberDTO } from '../api/types';
+import type {
+  ApiResponse,
+  CompanyDTO,
+  EventDTO,
+  ManagerPermission,
+  MemberDTO,
+} from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 
 export default function CompanyPage() {
@@ -17,6 +23,17 @@ export default function CompanyPage() {
   const [removeOwnerSuccessMessage, setRemoveOwnerSuccessMessage] = useState<string | null>(null);
   const [resignSuccessMessage, setResignSuccessMessage] = useState<string | null>(null);
   const [statusSuccessMessage, setStatusSuccessMessage] = useState<string | null>(null);
+  const [managerUsername, setManagerUsername] = useState('');
+  const [managerEventId, setManagerEventId] = useState('');
+  const [managerPermissions, setManagerPermissions] = useState<ManagerPermission[]>([]);
+
+  const [removeManagerUsername, setRemoveManagerUsername] = useState('');
+  const [removeManagerEventId, setRemoveManagerEventId] = useState('');
+
+  const [managerSuccessMessage, setManagerSuccessMessage] = useState<string | null>(null);
+  const [removeManagerSuccessMessage, setRemoveManagerSuccessMessage] = useState<string | null>(null);
+
+
 
   const companyQuery = useQuery({
     queryKey: ['company', companyId, token],
@@ -73,6 +90,24 @@ export default function CompanyPage() {
       }
     },
     enabled: Boolean(token) && userType === 'member',
+  });
+
+  const eventsQuery = useQuery({
+    queryKey: ['company-events', companyId],
+    queryFn: async () => {
+      if (!companyId) return [];
+
+      const res = await http.get<ApiResponse<EventDTO[]>>(
+        `/api/events/company/${companyId}`
+      );
+
+      if (res.data.error) {
+        throw new Error(res.data.error);
+      }
+
+      return res.data.data ?? [];
+    },
+    enabled: Boolean(companyId),
   });
 
   const appointOwnerMutation = useMutation({
@@ -168,6 +203,124 @@ export default function CompanyPage() {
     onSuccess: () => {
       setRemoveOwnerUsername('');
       setRemoveOwnerSuccessMessage('Owner removed.');
+    },
+  });
+
+  const appointManagerMutation = useMutation({
+    mutationFn: async () => {
+      setManagerSuccessMessage(null);
+
+      if (!companyId) {
+        throw new Error('Company ID is missing.');
+      }
+
+      if (!managerEventId) {
+        throw new Error('Please select an event.');
+      }
+
+      const username = managerUsername.trim();
+
+      if (!username) {
+        throw new Error('Please enter a username.');
+      }
+
+      const resolved = await http.get<ApiResponse<MemberDTO>>(
+        '/api/users/members/resolve',
+        {
+          params: { username },
+        }
+      );
+
+      if (resolved.data.error) {
+        throw new Error(resolved.data.error);
+      }
+
+      const memberId = resolved.data.data?.userId;
+
+      if (!memberId) {
+        throw new Error('Member not found.');
+      }
+
+      const res = await http.post<ApiResponse<MemberDTO>>(
+        '/api/users/roles/manager',
+        {
+          memberId,
+          companyId,
+          eventId: managerEventId,
+          permissions: managerPermissions,
+        }
+      );
+
+      if (res.data.error) {
+        throw new Error(res.data.error);
+      }
+
+      return res.data.data;
+    },
+
+    onSuccess: () => {
+      setManagerUsername('');
+      setManagerPermissions([]);
+      setManagerEventId('');
+      setManagerSuccessMessage('Manager appointed successfully.');
+    },
+  });
+
+  const removeManagerMutation = useMutation({
+    mutationFn: async () => {
+      setRemoveManagerSuccessMessage(null);
+
+      if (!companyId) {
+        throw new Error('Company ID is missing.');
+      }
+
+      if (!removeManagerEventId) {
+        throw new Error('Please select an event.');
+      }
+
+      const username = removeManagerUsername.trim();
+
+      if (!username) {
+        throw new Error('Please enter a username.');
+      }
+
+      const resolved = await http.get<ApiResponse<MemberDTO>>(
+        '/api/users/members/resolve',
+        {
+          params: { username },
+        }
+      );
+
+      if (resolved.data.error) {
+        throw new Error(resolved.data.error);
+      }
+
+      const memberToRemoveId = resolved.data.data?.userId;
+
+      if (!memberToRemoveId) {
+        throw new Error('Member not found.');
+      }
+
+      const res = await http.post<ApiResponse<MemberDTO>>(
+        '/api/users/roles/manager/remove',
+        {
+          memberToRemoveId,
+          companyId,
+          eventId: removeManagerEventId,
+        }
+      );
+
+      if (res.data.error) {
+        throw new Error(res.data.error);
+      }
+
+      return res.data.data;
+    },
+
+    onSuccess: () => {
+      setRemoveManagerUsername('');
+      setRemoveManagerEventId('');
+      setRemoveManagerSuccessMessage('Manager removed successfully.');
     },
   });
 
@@ -296,8 +449,19 @@ export default function CompanyPage() {
     );
   }
 
+  const me = meQuery.data;
   const company = companyQuery.data;
   const isFounder = Boolean(meQuery.data?.userId) && meQuery.data?.userId === company.founderId;
+  const allPermissions: ManagerPermission[] = [
+    'MANAGE_EVENTS',
+    'CONFIGURE_HALLS_AND_SEATS',
+    'UPDATE_EVENT_MAP',
+    'DEFINE_PURCHASE_POLICY',
+    'DEFINE_DISCOUNT_POLICY',
+    'HANDLE_INQUIRIES',
+    'VIEW_PURCHASE_AND_ORDER_HISTORY',
+    'GENERATE_SALES_REPORTS',
+  ];
 
   return (
     <div className="space-y-4">
@@ -428,6 +592,149 @@ export default function CompanyPage() {
             {removeOwnerSuccessMessage}
           </div>
         )}
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="text-slate-900 font-semibold">Add manager</div>
+
+        <div className="mt-4 grid gap-4">
+          <div>
+            <div className="text-sm font-medium text-slate-700">Username</div>
+
+            <input
+              value={managerUsername}
+              onChange={(e) => setManagerUsername(e.target.value)}
+              placeholder="e.g. alice"
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <div className="text-sm font-medium text-slate-700">Event</div>
+
+            <select
+              value={managerEventId}
+              onChange={(e) => setManagerEventId(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Select event...</option>
+
+              {eventsQuery.data?.map((event) => (
+                <option key={event.eventId} value={event.eventId}>
+                  {event.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <div className="text-sm font-medium text-slate-700">
+              Permissions
+            </div>
+
+            <div className="mt-2 grid gap-2 md:grid-cols-2">
+              {allPermissions.map((permission) => (
+                <label
+                  key={permission}
+                  className="flex items-center gap-2 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={managerPermissions.includes(permission)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setManagerPermissions((prev) => [...prev, permission]);
+                      } else {
+                        setManagerPermissions((prev) =>
+                          prev.filter((p) => p !== permission)
+                        );
+                      }
+                    }}
+                  />
+
+                  {permission}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={() => appointManagerMutation.mutate()}
+            disabled={appointManagerMutation.isPending}
+            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            Add manager
+          </button>
+
+          {appointManagerMutation.isError && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              {(appointManagerMutation.error as Error).message}
+            </div>
+          )}
+
+          {managerSuccessMessage && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {managerSuccessMessage}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="text-slate-900 font-semibold">
+          Remove manager appointment
+        </div>
+
+        <div className="mt-4 grid gap-4">
+          <div>
+            <div className="text-sm font-medium text-slate-700">Username</div>
+
+            <input
+              value={removeManagerUsername}
+              onChange={(e) => setRemoveManagerUsername(e.target.value)}
+              placeholder="e.g. alice"
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <div className="text-sm font-medium text-slate-700">Event</div>
+
+            <select
+              value={removeManagerEventId}
+              onChange={(e) => setRemoveManagerEventId(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Select event...</option>
+
+              {eventsQuery.data?.map((event) => (
+                <option key={event.eventId} value={event.eventId}>
+                  {event.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={() => removeManagerMutation.mutate()}
+            disabled={removeManagerMutation.isPending}
+            className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 hover:bg-rose-100"
+          >
+            Remove manager
+          </button>
+
+          {removeManagerMutation.isError && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              {(removeManagerMutation.error as Error).message}
+            </div>
+          )}
+
+          {removeManagerSuccessMessage && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {removeManagerSuccessMessage}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
