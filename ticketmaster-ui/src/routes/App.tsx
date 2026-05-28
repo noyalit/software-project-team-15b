@@ -13,6 +13,7 @@ import AdminMembersPage from '../screens/AdminMembersPage';
 import AdminOrdersPage from '../screens/AdminOrdersPage';
 import CreateCompanyPage from '../screens/CreateCompanyPage';
 import CompanyPage from '../screens/CompanyPage';
+import AdminEventQueuesPage from '../screens/AdminEventQueuesPage';
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/admin/companies" element={<AdminCompaniesPage />} />
         <Route path="/admin/members" element={<AdminMembersPage />} />
         <Route path="/admin/orders" element={<AdminOrdersPage />} />
+        <Route path="/admin/event-queues" element={<AdminEventQueuesPage />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
