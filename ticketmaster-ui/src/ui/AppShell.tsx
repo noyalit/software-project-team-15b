@@ -24,6 +24,7 @@ function NavLink({ to, label }: { to: string; label: string }) {
 
 export default function AppShell() {
   const { token, userType, username, logout } = useAuthStore();
+  const location = useLocation();
 
   const meQuery = useQuery({
     queryKey: ['me', token],
@@ -75,7 +76,10 @@ export default function AppShell() {
                   </span>
                 )}
                 <button
-                  onClick={logout}
+                  onClick={() => {
+                    logout();
+                    window.location.href = '/';
+                  }}
                   className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                 >
                   Logout
