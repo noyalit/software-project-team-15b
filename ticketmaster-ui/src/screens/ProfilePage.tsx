@@ -299,13 +299,13 @@ export default function ProfilePage() {
             </span>
           )}
 
-          {(me.assignedRoles ?? []).map((r) => (
+          {[...new Set(me.assignedRoles ?? [])].map((r) => (
             <span key={r} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
               {r}
             </span>
           ))}
 
-          {!me.activeRole && (me.assignedRoles ?? []).length === 0 && (
+          {!me.activeRole && [...new Set(me.assignedRoles ?? [])].length === 0 && (
             <div className="text-sm text-slate-600">No roles assigned.</div>
           )}
         </div>
