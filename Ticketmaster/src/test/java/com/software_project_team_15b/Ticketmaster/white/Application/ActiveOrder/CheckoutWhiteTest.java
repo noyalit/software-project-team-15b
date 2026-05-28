@@ -13,12 +13,14 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -28,6 +30,135 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
+
+        @Test
+        void startCheckoutForMemberShouldUseMemberBirthDate() {
+                mockValidUser();
+                when(auth.isMember(token)).thenReturn(true);
+
+                Member member = mock(Member.class);
+                LocalDate birthDate = LocalDate.of(1990, 1, 1);
+                when(member.getBirthDate()).thenReturn(birthDate);
+                when(memberRepository.findById(userId)).thenReturn(Optional.of(member));
+
+                ActiveOrder order = activeOrderWithSeats(seatId1);
+                when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
+                mockPurchaseAccessAllowed();
+
+                Map<Boolean, Set<java.util.UUID>> seatsAvailability = Map.of(true, Set.of(seatId1), false, Set.of());
+                when(eventDomainService.getSeatsAvailability(eventId, areaId, order.getOrderSeats()))
+                                .thenReturn(seatsAvailability);
+                when(purchasingDomainService.syncOrderSeatsAvailability(order, seatsAvailability))
+                                .thenReturn(false);
+
+                PurchaseRequest purchaseRequest = mock(PurchaseRequest.class);
+                when(purchasingDomainService.buildPurchaseRequest(order, birthDate)).thenReturn(purchaseRequest);
+                when(eventDomainService.holdSeats(eq(eventId), eq(areaId), anyList(), eq(orderId)))
+                                .thenReturn(mock(HoldReceipt.class));
+
+                java.time.LocalDateTime expiresAt = java.time.LocalDateTime.now().plusMinutes(10);
+                when(purchasingDomainService.startCheckout(order)).thenReturn(expiresAt);
+
+                CheckoutStartedDTO result = service.startCheckoutForMember(token, orderId);
+
+                assertEquals(expiresAt, result.expiresAt());
+                verify(purchasingDomainService).buildPurchaseRequest(order, birthDate);
+        }
+
+        @Test
+        void startCheckoutForMemberShouldRejectNonMember() {
+                mockValidUser();
+                when(auth.isMember(token)).thenReturn(false);
+
+                assertThrows(IllegalStateException.class, () ->
+                                service.startCheckoutForMember(token, orderId)
+                );
+
+                verifyNoInteractions(memberRepository);
+        }
+
+        @Test
+        void startCheckoutForGuestShouldRejectNonGuest() {
+                mockValidUser();
+                when(auth.isGuest(token)).thenReturn(false);
+
+                assertThrows(IllegalStateException.class, () ->
+                                service.startCheckoutForGuest(token, orderId, LocalDate.of(2000, 1, 1))
+                );
+        }
+
+        @Test
+        void completeCheckoutForMemberShouldPayIssueFinalizeAndConfirm() {
+                mockValidUser();
+                when(auth.isMember(token)).thenReturn(true);
+
+                Member member = mock(Member.class);
+                LocalDate birthDate = LocalDate.of(1990, 1, 1);
+                when(member.getBirthDate()).thenReturn(birthDate);
+                when(memberRepository.findById(userId)).thenReturn(Optional.of(member));
+
+                ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
+                when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
+
+                PriceBreakdown priceBreakdown = priceBreakdown("100.00");
+                Money total = money("100.00");
+                when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, "coupon"))
+                                .thenReturn(priceBreakdown);
+                Response<Boolean> successfulPayment = successfulResponse();
+                Response<Boolean> successfulTicketIssue = successfulResponse();
+                when(paymentGateway.chargePayment(token, total)).thenReturn(successfulPayment);
+                when(ticketProvider.issueTickets(eventId, areaId, Set.of(seatId1))).thenReturn(successfulTicketIssue);
+                when(purchasingDomainService.finalizeCheckout(order, priceBreakdown)).thenReturn(order);
+
+                ConfirmationReceipt receipt = mock(ConfirmationReceipt.class);
+                when(receipt.areaId()).thenReturn(areaId);
+                when(receipt.quantity()).thenReturn(1);
+                when(eventDomainService.confirm(eventId, orderId)).thenReturn(receipt);
+
+                assertEquals(orderId, service.completeCheckoutForMember(token, orderId, "coupon").orderId());
+        }
+
+        @Test
+        void completeCheckoutForMemberShouldRejectNonMember() {
+                mockValidUser();
+                when(auth.isMember(token)).thenReturn(false);
+
+                assertThrows(IllegalStateException.class, () ->
+                                service.completeCheckoutForMember(token, orderId, null)
+                );
+        }
+
+        @Test
+        void completeCheckoutForMemberShouldRejectNullOrderId() {
+                assertThrows(IllegalArgumentException.class, () ->
+                                service.completeCheckoutForMember(token, null, null)
+                );
+        }
+
+        @Test
+        void startCheckoutShouldNotReleaseHoldWhenNoHoldReceiptWasCreated() {
+                mockValidGuest();
+
+                ActiveOrder order = activeOrderWithSeats(seatId1);
+                LocalDate birthDate = LocalDate.of(2000, 1, 1);
+
+                when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
+                mockPurchaseAccessAllowed();
+
+                Map<Boolean, Set<java.util.UUID>> seatsAvailability = Map.of(true, Set.of(seatId1), false, Set.of());
+                when(eventDomainService.getSeatsAvailability(eventId, areaId, order.getOrderSeats()))
+                                .thenReturn(seatsAvailability);
+                when(purchasingDomainService.syncOrderSeatsAvailability(order, seatsAvailability)).thenReturn(false);
+                when(purchasingDomainService.buildPurchaseRequest(order, birthDate)).thenReturn(mock(PurchaseRequest.class));
+                when(eventDomainService.holdSeats(eq(eventId), eq(areaId), anyList(), eq(orderId))).thenReturn(null);
+                when(purchasingDomainService.startCheckout(order)).thenThrow(new RuntimeException("start failed"));
+
+                assertThrows(RuntimeException.class, () ->
+                                service.startCheckoutForGuest(token, orderId, birthDate)
+                );
+
+                verify(eventDomainService, never()).release(eventId, orderId);
+        }
 
         @Test
         void completeCheckoutForGuestShouldRejectNullOrderId() {
