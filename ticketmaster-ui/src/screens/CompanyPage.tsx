@@ -26,6 +26,10 @@ export default function CompanyPage() {
   const [managerUsername, setManagerUsername] = useState('');
   const [managerEventId, setManagerEventId] = useState('');
   const [managerPermissions, setManagerPermissions] = useState<ManagerPermission[]>([]);
+  const [changeManagerUsername, setChangeManagerUsername] = useState('');
+  const [changeManagerEventId, setChangeManagerEventId] = useState('');
+  const [newManagerPermissions, setNewManagerPermissions] = useState<ManagerPermission[]>([]);
+  const [changeManagerSuccessMessage, setChangeManagerSuccessMessage] = useState<string | null>(null);
 
   const [removeManagerUsername, setRemoveManagerUsername] = useState('');
   const [removeManagerEventId, setRemoveManagerEventId] = useState('');
@@ -321,6 +325,55 @@ export default function CompanyPage() {
       setRemoveManagerUsername('');
       setRemoveManagerEventId('');
       setRemoveManagerSuccessMessage('Manager removed successfully.');
+    },
+  });
+
+  const changeManagerPermissionsMutation = useMutation({
+    mutationFn: async () => {
+      setChangeManagerSuccessMessage(null);
+
+      if (!changeManagerEventId) {
+        throw new Error('Please select an event.');
+      }
+
+      const username = changeManagerUsername.trim();
+
+      if (!username) {
+        throw new Error('Please enter a username.');
+      }
+
+      const resolved = await http.get<ApiResponse<MemberDTO>>(
+        '/api/users/members/resolve',
+        { params: { username } }
+      );
+
+      if (resolved.data.error) throw new Error(resolved.data.error);
+
+      const managerId = resolved.data.data?.userId;
+
+      if (!managerId) {
+        throw new Error('Manager not found.');
+      }
+
+      const res = await http.post<ApiResponse<MemberDTO>>(
+        '/api/users/roles/manager/permissions',
+        {
+          managerId,
+          eventId: changeManagerEventId,
+          newPermissions: newManagerPermissions,
+        }
+      );
+
+      if (res.data.error) throw new Error(res.data.error);
+
+      return res.data.data;
+    },
+
+    onSuccess: () => {
+      setChangeManagerUsername('');
+      setChangeManagerEventId('');
+      setNewManagerPermissions([]);
+      setChangeManagerSuccessMessage('Manager permissions updated successfully.');
     },
   });
 
@@ -651,8 +704,10 @@ export default function CompanyPage() {
                       }
                     }}
                   />
-
-                  {permission}
+                  {permission
+                    .toLowerCase()
+                    .replaceAll('_', ' ')
+                    .replace(/\b\w/g, (c) => c.toUpperCase())}
                 </label>
               ))}
             </div>
@@ -675,6 +730,92 @@ export default function CompanyPage() {
           {managerSuccessMessage && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
               {managerSuccessMessage}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="text-slate-900 font-semibold">Change manager permissions</div>
+
+        <div className="mt-4 grid gap-4">
+          <div>
+            <div className="text-sm font-medium text-slate-700">Username</div>
+
+            <input
+              value={changeManagerUsername}
+              onChange={(e) => setChangeManagerUsername(e.target.value)}
+              placeholder="e.g. alice"
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <div className="text-sm font-medium text-slate-700">Event</div>
+
+            <select
+              value={changeManagerEventId}
+              onChange={(e) => setChangeManagerEventId(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="">Select event...</option>
+
+              {eventsQuery.data?.map((event) => (
+                <option key={event.eventId} value={event.eventId}>
+                  {event.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <div className="text-sm font-medium text-slate-700">New permissions</div>
+
+            <div className="mt-2 grid gap-2 md:grid-cols-2">
+              {allPermissions.map((permission) => (
+                <label key={permission} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={newManagerPermissions.includes(permission)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setNewManagerPermissions((prev) => [...prev, permission]);
+                      } else {
+                        setNewManagerPermissions((prev) =>
+                          prev.filter((p) => p !== permission)
+                        );
+                      }
+                    }}
+                  />
+
+                  {permission
+                    .toLowerCase()
+                    .replaceAll('_', ' ')
+                    .replace(/\b\w/g, (c) => c.toUpperCase())}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <button
+            onClick={() => changeManagerPermissionsMutation.mutate()}
+            disabled={changeManagerPermissionsMutation.isPending}
+            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            {changeManagerPermissionsMutation.isPending
+              ? 'Updating...'
+              : 'Change permissions'}
+          </button>
+
+          {changeManagerPermissionsMutation.isError && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              {(changeManagerPermissionsMutation.error as Error).message}
+            </div>
+          )}
+
+          {changeManagerSuccessMessage && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {changeManagerSuccessMessage}
             </div>
           )}
         </div>
