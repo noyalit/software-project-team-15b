@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 class EventCheapestPriceTest {
 
     @Test
-    void empty_discount_list_returns_subtotal() {
+    void GivenNoDiscounts_WhenCheapestPriceFor_ThenReturnsSubtotal() {
         SeatingEventArea area = EventTestFixtures.seatingArea(5, "20.00");
         Event event = newPublished(List.of(), area);
 
@@ -29,7 +29,7 @@ class EventCheapestPriceTest {
     }
 
     @Test
-    void picks_lowest_among_multiple_discounts() {
+    void GivenMultipleDiscountPolicies_WhenCheapestPriceFor_ThenReturnsLowestTotal() {
         SeatingEventArea area = EventTestFixtures.seatingArea(5, "100.00");
         Event event = newPublished(List.of(
                 new EarlyBirdDiscountPolicy(BigDecimal.valueOf(10),
@@ -45,7 +45,7 @@ class EventCheapestPriceTest {
     }
 
     @Test
-    void does_not_combine_discounts() {
+    void GivenTwoActiveDiscounts_WhenCheapestPriceFor_ThenDoesNotCombineThem() {
         SeatingEventArea area = EventTestFixtures.seatingArea(5, "100.00");
         // 20% + 30% would be 50 if combined; cheapest single is 30% -> 70
         Event event = newPublished(List.of(
@@ -61,7 +61,7 @@ class EventCheapestPriceTest {
     }
 
     @Test
-    void inactive_discount_is_ignored_when_an_active_one_is_present() {
+    void GivenExpiredAndActiveDiscounts_WhenCheapestPriceFor_ThenIgnoresExpiredOne() {
         SeatingEventArea area = EventTestFixtures.seatingArea(5, "100.00");
         Event event = newPublished(List.of(
                 new EarlyBirdDiscountPolicy(BigDecimal.valueOf(50),
@@ -76,7 +76,7 @@ class EventCheapestPriceTest {
     }
 
     @Test
-    void coupon_only_applies_when_code_matches_otherwise_picks_other_active_discount() {
+    void GivenCouponAndEarlyBird_WhenCheapestPriceFor_ThenAppliesCouponOnlyWhenCodeMatches() {
         SeatingEventArea area = EventTestFixtures.seatingArea(5, "100.00");
         Event event = newPublished(List.of(
                 new CouponDiscountPolicy("PROMO", BigDecimal.valueOf(40)),
@@ -103,7 +103,7 @@ class EventCheapestPriceTest {
 
     @Disabled
     @Test
-    void misbehaving_discount_that_increases_price_is_clamped_to_subtotal() {
+    void GivenDiscountThatIncreasesPrice_WhenCheapestPriceFor_ThenIsClampedToSubtotal() {
         SeatingEventArea area = EventTestFixtures.seatingArea(5, "100.00");
         IEventDiscountPolicy bumpUp = (subtotal, req) ->
                 subtotal.add(Money.of("50.00", subtotal.currency()));

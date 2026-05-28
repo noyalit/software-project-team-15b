@@ -15,6 +15,8 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
+import com.software_project_team_15b.Ticketmaster.black.Application.Event.EventTestAuthSupport.FounderActor;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -31,14 +33,16 @@ class EventLifecycleIT {
     @org.springframework.beans.factory.annotation.Autowired
     IEventDomainService eventDomainService;
 
+    @Autowired
+    IMemberRepository memberRepository;
+
     @Test
-    void full_round_trip_create_publish_hold_confirm() {
-        UUID caller = UUID.randomUUID();
-        UUID companyId = UUID.randomUUID();
+    void GivenDraftEventWithSeatingArea_WhenPublishHoldAndConfirm_ThenSeatsAreSoldAndAvailabilityDecreases() {
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
 
         UUID eventId = service.createEvent(new CreateEventCommand(
-                companyId, "Rock Show", "The Band", Category.CONCERT,
-                Instant.now().plusSeconds(86400), "Arena", null, null), caller);
+                actor.companyId(), "Rock Show", "The Band", Category.CONCERT,
+                Instant.now().plusSeconds(86400), "Arena", null, null), actor.memberId());
 
         UUID areaId = service.addArea(eventId, new AddAreaCommand(
                 "Floor", Money.of("50.00", "USD"),
@@ -47,9 +51,9 @@ class EventLifecycleIT {
                         new AddAreaCommand.SeatSpec("A", "1"),
                         new AddAreaCommand.SeatSpec("A", "2"),
                         new AddAreaCommand.SeatSpec("A", "3")
-                )), caller);
+                )), actor.memberId());
 
-        service.publish(eventId, caller);
+        service.publish(eventId, actor.memberId());
 
         List<UUID> seatIds = seatIdsIn(service.getEvent(eventId), areaId);
         UUID token = UUID.randomUUID();
@@ -64,35 +68,33 @@ class EventLifecycleIT {
     }
 
     @Test
-    void cancel_prevents_confirm() {
-        UUID caller = UUID.randomUUID();
-        UUID companyId = UUID.randomUUID();
+    void GivenHeldSeatsOnPublishedEvent_WhenEventIsCancelled_ThenConfirmFailsWithInvalidEventState() {
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
-                companyId, "Show", "X", Category.OTHER,
-                Instant.now().plusSeconds(3600), "Hall", null, null), caller);
+                actor.companyId(), "Show", "X", Category.OTHER,
+                Instant.now().plusSeconds(3600), "Hall", null, null), actor.memberId());
         UUID areaId = service.addArea(eventId, new AddAreaCommand(
                 "Pit", Money.of("20.00", "USD"),
                 AddAreaCommand.AreaType.SEATING, null,
-                List.of(new AddAreaCommand.SeatSpec("A", "1"))), caller);
-        service.publish(eventId, caller);
+                List.of(new AddAreaCommand.SeatSpec("A", "1"))), actor.memberId());
+        service.publish(eventId, actor.memberId());
 
         List<UUID> seatIds = seatIdsIn(service.getEvent(eventId), areaId);
         UUID token = UUID.randomUUID();
         eventDomainService.hold(eventId, new HoldCommand(areaId, seatIds, null, token));
 
-        service.cancel(eventId, caller);
+        service.cancel(eventId, actor.memberId());
 
         assertThatThrownBy(() -> eventDomainService.confirm(eventId, token))
                 .isInstanceOf(InvalidEventStateException.class);
     }
 
     @Test
-    void search_finds_event_by_name() {
-        UUID caller = UUID.randomUUID();
-        UUID companyId = UUID.randomUUID();
+    void GivenEventWithMatchingName_WhenSearchByName_ThenReturnsMatchingEvent() {
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
         service.createEvent(new CreateEventCommand(
-                companyId, "Taylor Swift Eras Tour", "Taylor", Category.CONCERT,
-                Instant.now().plusSeconds(86400), "Stadium", null, null), caller);
+                actor.companyId(), "Taylor Swift Eras Tour", "Taylor", Category.CONCERT,
+                Instant.now().plusSeconds(86400), "Stadium", null, null), actor.memberId());
 
         List<EventDTO> results = service.search(new SearchCriteria(
                 "eras", null, null, null, null, null, null, null));
@@ -101,32 +103,30 @@ class EventLifecycleIT {
     }
 
     @Test
-    void search_by_company_scopes_results() {
-        UUID caller = UUID.randomUUID();
-        UUID company1 = UUID.randomUUID();
-        UUID company2 = UUID.randomUUID();
+    void GivenEventsInTwoCompanies_WhenSearchInCompany_ThenOnlyReturnsThatCompanysEvents() {
+        FounderActor founder1 = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor founder2 = EventTestAuthSupport.newFounder(memberRepository);
         service.createEvent(new CreateEventCommand(
-                company1, "Company 1 Show", "A", Category.OTHER,
-                Instant.now().plusSeconds(86400), "L", null, null), caller);
+                founder1.companyId(), "Company 1 Show", "A", Category.OTHER,
+                Instant.now().plusSeconds(86400), "L", null, null), founder1.memberId());
         service.createEvent(new CreateEventCommand(
-                company2, "Company 2 Show", "B", Category.OTHER,
-                Instant.now().plusSeconds(86400), "L", null, null), caller);
+                founder2.companyId(), "Company 2 Show", "B", Category.OTHER,
+                Instant.now().plusSeconds(86400), "L", null, null), founder2.memberId());
 
-        List<EventDTO> c1 = service.searchInCompany(company1, SearchCriteria.empty());
-        assertThat(c1).extracting(EventDTO::companyId).containsOnly(company1);
+        List<EventDTO> c1 = service.searchInCompany(founder1.companyId(), SearchCriteria.empty());
+        assertThat(c1).extracting(EventDTO::companyId).containsOnly(founder1.companyId());
     }
 
     @Test
-    void search_by_category_and_date() {
-        UUID caller = UUID.randomUUID();
-        UUID companyId = UUID.randomUUID();
+    void GivenEventsInTwoCategories_WhenSearchByCategoryAndDate_ThenReturnsOnlyMatchingCategory() {
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
         Instant target = Instant.now().plusSeconds(86400);
         service.createEvent(new CreateEventCommand(
-                companyId, "Search Concert", "SC", Category.CONCERT,
-                target, "Venue", null, null), caller);
+                actor.companyId(), "Search Concert", "SC", Category.CONCERT,
+                target, "Venue", null, null), actor.memberId());
         service.createEvent(new CreateEventCommand(
-                companyId, "Search Sports", "SS", Category.SPORTS,
-                target, "Venue", null, null), caller);
+                actor.companyId(), "Search Sports", "SS", Category.SPORTS,
+                target, "Venue", null, null), actor.memberId());
 
         List<EventDTO> results = service.search(new SearchCriteria(
                 null, null, Category.CONCERT,

@@ -16,6 +16,9 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.SeatUnavailableException;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
+import com.software_project_team_15b.Ticketmaster.black.Application.Event.EventTestAuthSupport;
+import com.software_project_team_15b.Ticketmaster.black.Application.Event.EventTestAuthSupport.FounderActor;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -42,6 +45,7 @@ class EventLockRaceTest {
     @Autowired EventManagementService service;
     @Autowired IEventDomainService eventDomainService;
     @Autowired IEventRepository events;
+    @Autowired IMemberRepository memberRepository;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Scenario 1
@@ -51,7 +55,7 @@ class EventLockRaceTest {
     // Invariant: held count == N (== successes), no seat is double-booked.
     // ─────────────────────────────────────────────────────────────────────────
     @RepeatedTest(30)
-    void non_overlapping_concurrent_holds_all_succeed() throws InterruptedException {
+    void GivenDistinctSeatsPerThread_WhenConcurrentHolds_ThenAllSucceedAndHeldCountMatches() throws InterruptedException {
         SeatingSetup setup = buildSeatingEvent(10, "10.00");
         List<UUID> seats = new ArrayList<>(setup.seatIds());
         Collections.shuffle(seats); // randomise order each repetition
@@ -100,7 +104,7 @@ class EventLockRaceTest {
     // Invariant: successes == 1, held count == seat count (not 0, not 2x).
     // ─────────────────────────────────────────────────────────────────────────
     @RepeatedTest(30)
-    void overlapping_concurrent_holds_only_one_winner_no_double_booking() throws InterruptedException {
+    void GivenSameSeatSet_WhenManyThreadsRaceToHold_ThenExactlyOneWinsAndNoDoubleBooking() throws InterruptedException {
         SeatingSetup setup = buildSeatingEvent(3, "10.00");
         int THREADS = 25;
 
@@ -146,7 +150,7 @@ class EventLockRaceTest {
     // Invariant: event.status() == SOLD_OUT after both confirms, every time.
     // ─────────────────────────────────────────────────────────────────────────
     @RepeatedTest(50)
-    void sold_out_is_always_set_when_last_holds_confirmed_simultaneously() throws InterruptedException {
+    void GivenLastSeatsHeldInTwoAreas_WhenSimultaneousConfirms_ThenEventIsAlwaysSoldOut() throws InterruptedException {
         DualAreaSetup setup = buildDualAreaEvent();
 
         // Each area has exactly 1 seat — hold both before the race.
@@ -190,7 +194,7 @@ class EventLockRaceTest {
     // count == 0 and available count == N (no seat lost or double-released).
     // ─────────────────────────────────────────────────────────────────────────
     @RepeatedTest(30)
-    void concurrent_partial_releases_of_distinct_seats_produce_consistent_state() throws InterruptedException {
+    void GivenManyHeldSeats_WhenConcurrentPartialReleasesByEachOwner_ThenAreaStateIsConsistent() throws InterruptedException {
         SeatingSetup setup = buildSeatingEvent(8, "10.00");
         UUID token = UUID.randomUUID();
         eventDomainService.hold(setup.eventId(), new HoldCommand(setup.areaId(), setup.seatIds(), null, token));
@@ -230,7 +234,7 @@ class EventLockRaceTest {
     // Invariant: held count is either 0 (A released first) or N (B re-held first).
     // ─────────────────────────────────────────────────────────────────────────
     @RepeatedTest(30)
-    void hold_and_release_race_always_produces_a_legal_state() throws InterruptedException {
+    void GivenHoldAndReleaseRace_WhenThreadsAReleaseAndBHold_ThenEndStateIsOneOfTwoLegalStates() throws InterruptedException {
         SeatingSetup setup = buildSeatingEvent(4, "10.00");
         UUID tokenA = UUID.randomUUID();
         UUID tokenB = UUID.randomUUID();
@@ -297,17 +301,17 @@ class EventLockRaceTest {
     private record DualAreaSetup(UUID eventId, UUID areaA, UUID seatA, UUID areaB, UUID seatB) {}
 
     private SeatingSetup buildSeatingEvent(int seatCount, String price) {
-        UUID caller = UUID.randomUUID();
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
-                UUID.randomUUID(), "Race Event", "Artist", Category.CONCERT,
-                Instant.now().plusSeconds(86400), "Venue", null, null), caller);
+                actor.companyId(), "Race Event", "Artist", Category.CONCERT,
+                Instant.now().plusSeconds(86400), "Venue", null, null), actor.memberId());
         List<AddAreaCommand.SeatSpec> specs = new ArrayList<>();
         for (int i = 1; i <= seatCount; i++) {
             specs.add(new AddAreaCommand.SeatSpec("A", String.valueOf(i)));
         }
         UUID areaId = service.addArea(eventId, new AddAreaCommand(
-                "Main", Money.of(price, "USD"), AddAreaCommand.AreaType.SEATING, null, specs), caller);
-        service.publish(eventId, caller);
+                "Main", Money.of(price, "USD"), AddAreaCommand.AreaType.SEATING, null, specs), actor.memberId());
+        service.publish(eventId, actor.memberId());
 
         List<UUID> seatIds = service.getEvent(eventId).areas().stream()
                 .filter(a -> a.areaId().equals(areaId))
@@ -319,17 +323,17 @@ class EventLockRaceTest {
     }
 
     private DualAreaSetup buildDualAreaEvent() {
-        UUID caller = UUID.randomUUID();
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
-                UUID.randomUUID(), "Dual Area", "Artist", Category.CONCERT,
-                Instant.now().plusSeconds(86400), "Venue", null, null), caller);
+                actor.companyId(), "Dual Area", "Artist", Category.CONCERT,
+                Instant.now().plusSeconds(86400), "Venue", null, null), actor.memberId());
         UUID areaA = service.addArea(eventId, new AddAreaCommand(
                 "A", Money.of("10.00", "USD"), AddAreaCommand.AreaType.SEATING, null,
-                List.of(new AddAreaCommand.SeatSpec("A", "1"))), caller);
+                List.of(new AddAreaCommand.SeatSpec("A", "1"))), actor.memberId());
         UUID areaB = service.addArea(eventId, new AddAreaCommand(
                 "B", Money.of("10.00", "USD"), AddAreaCommand.AreaType.SEATING, null,
-                List.of(new AddAreaCommand.SeatSpec("B", "1"))), caller);
-        service.publish(eventId, caller);
+                List.of(new AddAreaCommand.SeatSpec("B", "1"))), actor.memberId());
+        service.publish(eventId, actor.memberId());
 
         EventDTO view = service.getEvent(eventId);
         UUID seatA = seatIn(view, areaA);

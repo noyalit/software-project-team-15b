@@ -11,16 +11,14 @@ import org.junit.jupiter.api.Test;
 
 class EventLifecycleTest {
 
-    // ─── Status transitions ────────────────────────────────────────────────────
-
     @Test
-    void new_event_is_in_draft_status() {
+    void GivenNewlyCreatedEvent_WhenStatus_ThenIsDraft() {
         Event event = EventTestFixtures.draft();
         assertThat(event.status()).isEqualTo(EventStatus.DRAFT);
     }
 
     @Test
-    void publish_transitions_draft_to_published() {
+    void GivenDraftEventWithArea_WhenPublish_ThenStatusBecomesPublished() {
         SeatingEventArea area = EventTestFixtures.seatingArea(1, "10.00");
         Event event = EventTestFixtures.draft();
         event.addArea(area);
@@ -29,7 +27,7 @@ class EventLifecycleTest {
     }
 
     @Test
-    void publish_from_published_throws() {
+    void GivenPublishedEvent_WhenPublishAgain_ThenThrowsInvalidEventState() {
         SeatingEventArea area = EventTestFixtures.seatingArea(1, "10.00");
         Event event = EventTestFixtures.published(area);
         assertThatThrownBy(event::publish)
@@ -37,7 +35,7 @@ class EventLifecycleTest {
     }
 
     @Test
-    void cancel_transitions_to_cancelled() {
+    void GivenPublishedEvent_WhenCancel_ThenStatusBecomesCancelled() {
         SeatingEventArea area = EventTestFixtures.seatingArea(1, "10.00");
         Event event = EventTestFixtures.published(area);
         event.cancel();
@@ -45,7 +43,7 @@ class EventLifecycleTest {
     }
 
     @Test
-    void cancel_is_idempotent() {
+    void GivenCancelledEvent_WhenCancelAgain_ThenStaysCancelled() {
         Event event = EventTestFixtures.draft();
         event.cancel();
         event.cancel();
@@ -53,16 +51,14 @@ class EventLifecycleTest {
     }
 
     @Test
-    void cancel_draft_event_transitions_to_cancelled() {
+    void GivenDraftEvent_WhenCancel_ThenStatusBecomesCancelled() {
         Event event = EventTestFixtures.draft();
         event.cancel();
         assertThat(event.status()).isEqualTo(EventStatus.CANCELLED);
     }
 
-    // ─── Area management ──────────────────────────────────────────────────────
-
     @Test
-    void addArea_after_publish_throws() {
+    void GivenPublishedEvent_WhenAddArea_ThenThrowsInvalidEventState() {
         SeatingEventArea area1 = EventTestFixtures.seatingArea(1, "10.00");
         Event event = EventTestFixtures.published(area1);
         SeatingEventArea area2 = EventTestFixtures.seatingArea(2, "20.00");
@@ -71,7 +67,7 @@ class EventLifecycleTest {
     }
 
     @Test
-    void addArea_duplicate_areaId_throws() {
+    void GivenDraftEventWithArea_WhenAddSameAreaAgain_ThenThrowsInvalidEventState() {
         Event event = EventTestFixtures.draft();
         SeatingEventArea area = EventTestFixtures.seatingArea(1, "10.00");
         event.addArea(area);
@@ -79,10 +75,8 @@ class EventLifecycleTest {
                 .isInstanceOf(InvalidEventStateException.class);
     }
 
-    // ─── Pricing ──────────────────────────────────────────────────────────────
-
     @Test
-    void priceFor_returns_base_price_times_quantity() {
+    void GivenArea_WhenPriceFor_ThenReturnsBasePriceTimesQuantity() {
         SeatingEventArea area = EventTestFixtures.seatingArea(5, "30.00");
         Event event = EventTestFixtures.published(area);
         Money price = event.priceFor(area.areaId(), 3);
@@ -90,17 +84,15 @@ class EventLifecycleTest {
     }
 
     @Test
-    void priceFor_unknown_area_throws() {
+    void GivenUnknownAreaId_WhenPriceFor_ThenThrowsInvalidEventState() {
         SeatingEventArea area = EventTestFixtures.seatingArea(2, "10.00");
         Event event = EventTestFixtures.published(area);
         assertThatThrownBy(() -> event.priceFor(UUID.randomUUID(), 1))
                 .isInstanceOf(InvalidEventStateException.class);
     }
 
-    // ─── heldCountIn ──────────────────────────────────────────────────────────
-
     @Test
-    void heldCountIn_seating_area_returns_held_seat_count() {
+    void GivenSeatingAreaWithHeldSeats_WhenHeldCountIn_ThenReturnsHeldSeatCount() {
         SeatingEventArea area = EventTestFixtures.seatingArea(3, "10.00");
         Event event = EventTestFixtures.published(area);
         List<UUID> ids = area.seats().keySet().stream().limit(2).toList();
@@ -109,7 +101,7 @@ class EventLifecycleTest {
     }
 
     @Test
-    void heldCountIn_standing_area_returns_held_quantity() {
+    void GivenStandingAreaWithHeldQuantity_WhenHeldCountIn_ThenReturnsHeldQuantity() {
         StandingEventArea area = EventTestFixtures.standingArea(10, "10.00");
         Event event = EventTestFixtures.published(new StandingEventArea[]{area}, new SeatingEventArea[0]);
         event.holdStanding(area.areaId(), 4, UUID.randomUUID());
@@ -117,17 +109,15 @@ class EventLifecycleTest {
     }
 
     @Test
-    void heldCountIn_unknown_area_throws() {
+    void GivenUnknownAreaId_WhenHeldCountIn_ThenThrowsInvalidEventState() {
         SeatingEventArea area = EventTestFixtures.seatingArea(1, "10.00");
         Event event = EventTestFixtures.published(area);
         assertThatThrownBy(() -> event.heldCountIn(UUID.randomUUID()))
                 .isInstanceOf(InvalidEventStateException.class);
     }
 
-    // ─── Validation ───────────────────────────────────────────────────────────
-
     @Test
-    void holdSeats_with_duplicate_seatIds_throws() {
+    void GivenDuplicateSeatIdsInList_WhenHoldSeats_ThenThrowsInvalidEventState() {
         SeatingEventArea area = EventTestFixtures.seatingArea(2, "10.00");
         Event event = EventTestFixtures.published(area);
         UUID seatId = area.seats().keySet().iterator().next();
@@ -136,7 +126,7 @@ class EventLifecycleTest {
     }
 
     @Test
-    void holdSeats_on_standing_area_throws() {
+    void GivenStandingArea_WhenHoldSeats_ThenThrowsInvalidEventState() {
         StandingEventArea area = EventTestFixtures.standingArea(5, "10.00");
         Event event = EventTestFixtures.published(new StandingEventArea[]{area}, new SeatingEventArea[0]);
         assertThatThrownBy(() -> event.holdSeats(area.areaId(), List.of(UUID.randomUUID()), UUID.randomUUID()))
@@ -144,7 +134,7 @@ class EventLifecycleTest {
     }
 
     @Test
-    void holdStanding_on_seating_area_throws() {
+    void GivenSeatingArea_WhenHoldStanding_ThenThrowsInvalidEventState() {
         SeatingEventArea area = EventTestFixtures.seatingArea(2, "10.00");
         Event event = EventTestFixtures.published(area);
         assertThatThrownBy(() -> event.holdStanding(area.areaId(), 1, UUID.randomUUID()))
@@ -152,7 +142,7 @@ class EventLifecycleTest {
     }
 
     @Test
-    void confirmHold_on_cancelled_event_throws() {
+    void GivenCancelledEventWithHold_WhenConfirmHold_ThenThrowsInvalidEventState() {
         SeatingEventArea area = EventTestFixtures.seatingArea(1, "10.00");
         Event event = EventTestFixtures.published(area);
         UUID seatId = area.seats().keySet().iterator().next();
@@ -164,16 +154,14 @@ class EventLifecycleTest {
     }
 
     @Test
-    void releaseHold_unknown_token_returns_false() {
+    void GivenUnknownToken_WhenReleaseHold_ThenReturnsFalse() {
         SeatingEventArea area = EventTestFixtures.seatingArea(1, "10.00");
         Event event = EventTestFixtures.published(area);
         assertThat(event.releaseHold(UUID.randomUUID())).isFalse();
     }
 
-    // ─── SOLD_OUT transition ──────────────────────────────────────────────────
-
     @Test
-    void event_transitions_to_sold_out_when_last_seat_confirmed() {
+    void GivenLastSeatConfirmed_WhenStatus_ThenTransitionsToSoldOut() {
         SeatingEventArea area = EventTestFixtures.seatingArea(1, "10.00");
         Event event = EventTestFixtures.published(area);
         UUID seatId = area.seats().keySet().iterator().next();
@@ -184,7 +172,7 @@ class EventLifecycleTest {
     }
 
     @Test
-    void sold_out_event_rejects_new_seat_holds() {
+    void GivenSoldOutEvent_WhenHoldSeats_ThenThrowsInvalidEventState() {
         SeatingEventArea area = EventTestFixtures.seatingArea(1, "10.00");
         Event event = EventTestFixtures.published(area);
         UUID seatId = area.seats().keySet().iterator().next();
@@ -199,7 +187,7 @@ class EventLifecycleTest {
     }
 
     @Test
-    void event_does_not_transition_to_sold_out_while_capacity_remains() {
+    void GivenCapacityRemains_WhenSeatConfirmed_ThenStatusStaysPublished() {
         SeatingEventArea area = EventTestFixtures.seatingArea(2, "10.00");
         Event event = EventTestFixtures.published(area);
         List<UUID> ids = area.seats().keySet().stream().toList();
@@ -210,7 +198,7 @@ class EventLifecycleTest {
     }
 
     @Test
-    void standing_event_transitions_to_sold_out_when_all_capacity_confirmed() {
+    void GivenAllStandingCapacityConfirmed_WhenStatus_ThenTransitionsToSoldOut() {
         StandingEventArea area = EventTestFixtures.standingArea(3, "10.00");
         Event event = EventTestFixtures.published(new StandingEventArea[]{area}, new SeatingEventArea[0]);
         UUID token = UUID.randomUUID();

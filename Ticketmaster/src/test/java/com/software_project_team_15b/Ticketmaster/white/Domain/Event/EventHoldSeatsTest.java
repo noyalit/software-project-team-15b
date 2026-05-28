@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 class EventHoldSeatsTest {
 
     @Test
-    void holds_all_seats_atomically() {
+    void GivenAvailableSeats_WhenHoldSeats_ThenAllAreHeldAtomically() {
         SeatingEventArea area = EventTestFixtures.seatingArea(3, "50.00");
         Event event = EventTestFixtures.published(area);
         List<UUID> ids = area.seats().keySet().stream().toList();
@@ -26,7 +26,7 @@ class EventHoldSeatsTest {
     }
 
     @Test
-    void all_or_nothing_when_one_seat_taken() {
+    void GivenOneSeatTaken_WhenHoldSeatsForAll_ThenThrowsAndOtherSeatsStayAvailable() {
         SeatingEventArea area = EventTestFixtures.seatingArea(3, "50.00");
         Event event = EventTestFixtures.published(area);
         List<UUID> ids = area.seats().keySet().stream().toList();
@@ -41,7 +41,7 @@ class EventHoldSeatsTest {
     }
 
     @Test
-    void cancelled_event_rejects_hold() {
+    void GivenCancelledEvent_WhenHoldSeats_ThenThrowsInvalidEventState() {
         SeatingEventArea area = EventTestFixtures.seatingArea(1, "10.00");
         Event event = EventTestFixtures.published(area);
         event.cancel();
@@ -51,7 +51,7 @@ class EventHoldSeatsTest {
     }
 
     @Test
-    void draft_event_rejects_hold() {
+    void GivenDraftEvent_WhenHoldSeats_ThenThrowsInvalidEventState() {
         SeatingEventArea area = EventTestFixtures.seatingArea(1, "10.00");
         Event event = EventTestFixtures.draft();
         event.addArea(area);
@@ -61,7 +61,7 @@ class EventHoldSeatsTest {
     }
 
     @Test
-    void confirm_sells_all_held_seats_for_token() {
+    void GivenHeldSeats_WhenConfirmHold_ThenAllHeldSeatsBecomeSold() {
         SeatingEventArea area = EventTestFixtures.seatingArea(2, "25.00");
         Event event = EventTestFixtures.published(area);
         List<UUID> ids = area.seats().keySet().stream().toList();
@@ -75,7 +75,7 @@ class EventHoldSeatsTest {
     }
 
     @Test
-    void release_returns_held_seats_to_available() {
+    void GivenHeldSeats_WhenReleaseHold_ThenSeatsReturnToAvailable() {
         SeatingEventArea area = EventTestFixtures.seatingArea(2, "25.00");
         Event event = EventTestFixtures.published(area);
         List<UUID> ids = area.seats().keySet().stream().toList();
@@ -86,20 +86,19 @@ class EventHoldSeatsTest {
     }
 
     @Test
-    void external_release_frees_seat_for_reuse() {
+    void GivenReleasedSeat_WhenHeldAgainByDifferentToken_ThenHoldSucceeds() {
         SeatingEventArea area = EventTestFixtures.seatingArea(1, "10.00");
         Event event = EventTestFixtures.published(area);
         UUID seatId = area.seats().keySet().iterator().next();
         UUID firstToken = UUID.randomUUID();
         event.holdSeats(area.areaId(), List.of(seatId), firstToken);
-        // External reservation-timer component decides the hold expired and releases it.
         event.releaseHold(firstToken);
         HoldReceipt second = event.holdSeats(area.areaId(), List.of(seatId), UUID.randomUUID());
         assertThat(second.seatIds()).containsExactly(seatId);
     }
 
     @Test
-    void confirm_without_active_hold_throws() {
+    void GivenNoActiveHoldForToken_WhenConfirmHold_ThenThrowsHoldNotFound() {
         SeatingEventArea area = EventTestFixtures.seatingArea(1, "10.00");
         Event event = EventTestFixtures.published(area);
         assertThatThrownBy(() -> event.confirmHold(UUID.randomUUID()))
@@ -107,7 +106,7 @@ class EventHoldSeatsTest {
     }
 
     @Test
-    void standing_hold_decrements_available_capacity() {
+    void GivenStandingAreaWithCapacity_WhenHoldStanding_ThenAvailableCapacityDecreases() {
         StandingEventArea area = EventTestFixtures.standingArea(5, "10.00");
         Event event = EventTestFixtures.published(new StandingEventArea[]{area}, new SeatingEventArea[0]);
         event.holdStanding(area.areaId(), 3, UUID.randomUUID());
@@ -115,7 +114,7 @@ class EventHoldSeatsTest {
     }
 
     @Test
-    void standing_hold_fails_if_insufficient_capacity() {
+    void GivenStandingAreaWithInsufficientCapacity_WhenHoldStanding_ThenThrowsSeatUnavailable() {
         StandingEventArea area = EventTestFixtures.standingArea(2, "10.00");
         Event event = EventTestFixtures.published(new StandingEventArea[]{area}, new SeatingEventArea[0]);
         assertThatThrownBy(() -> event.holdStanding(area.areaId(), 3, UUID.randomUUID()))
@@ -123,7 +122,7 @@ class EventHoldSeatsTest {
     }
 
     @Test
-    void publish_requires_at_least_one_area() {
+    void GivenDraftEventWithoutAreas_WhenPublish_ThenThrowsInvalidEventState() {
         Event event = EventTestFixtures.draft();
         assertThatThrownBy(event::publish).isInstanceOf(InvalidEventStateException.class);
     }
