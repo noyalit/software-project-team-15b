@@ -22,6 +22,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyReposit
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
 /**
@@ -229,7 +230,7 @@ public class CompanyService {
             UUID callerId = auth.extractUserId(token);
             company.changeStatus(newStatus);
             if (newStatus == CompanyStatus.CLOSED) {
-                eventManagementService.searchInCompany(companyId, null)
+                eventManagementService.searchInCompany(companyId, SearchCriteria.empty())
                         .forEach(event -> eventManagementService.cancel(event.eventId()));
             }
             Company saved = companyRepository.save(company);
