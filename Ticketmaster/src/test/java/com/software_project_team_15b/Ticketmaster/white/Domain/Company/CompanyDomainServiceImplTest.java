@@ -30,23 +30,19 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyDomainSe
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
 @ExtendWith(MockitoExtension.class)
 class CompanyDomainServiceImplTest {
 
     @Mock private ICompanyRepository repo;
-    @Mock private UserDomainService userDomainService;
-    @Mock private IEventDomainService eventDomainService;
     private CompanyDomainServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new CompanyDomainServiceImpl(repo, userDomainService, eventDomainService);
+        service = new CompanyDomainServiceImpl(repo);
     }
 
     private PurchaseRequest makeRequest() {

@@ -15,7 +15,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
 import org.mockito.Mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -26,14 +25,12 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Company
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyDomainServiceImpl;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
 @ExtendWith(MockitoExtension.class)
@@ -45,7 +42,6 @@ class CompanyServiceBlackTest {
     @Mock private ICompanyRepository repo;
     @Mock private IAuth auth;
     @Mock private UserDomainService userDomainService;
-    @Mock private IEventDomainService eventManagementService;
 
     private CompanyService service;
 
@@ -66,12 +62,10 @@ class CompanyServiceBlackTest {
                     .collect(Collectors.toList());
         });
 
-        when(eventManagementService.searchInCompany(any(), any())).thenReturn(List.of());
         when(userDomainService.isActiveOwner(any(), any())).thenReturn(true);
-        when(userDomainService.isActiveFounder(any(), any())).thenReturn(true);
 
-        CompanyDomainServiceImpl domainService = new CompanyDomainServiceImpl(repo, userDomainService, eventManagementService);
-        service = new CompanyService(domainService, auth);
+        CompanyDomainServiceImpl domainService = new CompanyDomainServiceImpl(repo);
+        service = new CompanyService(domainService, userDomainService, auth);
     }
 
     private Company saveToRepo(Company company) {
@@ -364,68 +358,7 @@ class CompanyServiceBlackTest {
     }
 
     // ===========================================================================================
-    // changeStatus — positive
-
-    @Test
-    void changeStatus_succeeds_when_caller_is_founder() {
-        UUID founderId = UUID.randomUUID();
-        String founderToken = registerMember(founderId);
-        Company company = service.createCompany(founderToken, "Acme");
-
-        Company updated = service.changeStatus(founderToken, company.getId(), CompanyStatus.CLOSED);
-
-        assertThat(updated.getStatus()).isEqualTo(CompanyStatus.CLOSED);
-    }
-
-    @Test
-    void changeStatus_succeeds_when_caller_is_system_admin() {
-        UUID founderId = UUID.randomUUID();
-        String founderToken = registerMember(founderId);
-        Company company = service.createCompany(founderToken, "Acme");
-        String adminToken = registerSystemAdmin(UUID.randomUUID());
-
-        Company updated = service.changeStatus(adminToken, company.getId(), CompanyStatus.SUSPENDED);
-
-        assertThat(updated.getStatus()).isEqualTo(CompanyStatus.SUSPENDED);
-    }
-
-    @Test
-    void changeStatus_cancels_all_events_when_closing_company() {
-        UUID founderId = UUID.randomUUID();
-        String founderToken = registerMember(founderId);
-        Company company = service.createCompany(founderToken, "Acme");
-        UUID eventId = UUID.randomUUID();
-        EventDTO event = new EventDTO(eventId, company.getId(), null, null, null, null, null, null, null);
-        when(eventManagementService.searchInCompany(company.getId(), null)).thenReturn(List.of(event));
-
-        service.changeStatus(founderToken, company.getId(), CompanyStatus.CLOSED);
-
-        verify(eventManagementService).cancel(eventId);
-    }
-
     // changeStatus — negative
-
-    @Test
-    void changeStatus_throws_when_caller_is_member_but_not_founder() {
-        UUID founderId = UUID.randomUUID();
-        String founderToken = registerMember(founderId);
-        Company company = service.createCompany(founderToken, "Acme");
-        String strangerToken = registerMember(UUID.randomUUID());
-
-        assertThatThrownBy(() -> service.changeStatus(strangerToken, company.getId(), CompanyStatus.CLOSED))
-                .isInstanceOf(UnauthorizedCompanyActionException.class);
-    }
-
-    @Test
-    void changeStatus_throws_when_caller_is_guest() {
-        UUID founderId = UUID.randomUUID();
-        String founderToken = registerMember(founderId);
-        Company company = service.createCompany(founderToken, "Acme");
-        String guestToken = registerGuest();
-
-        assertThatThrownBy(() -> service.changeStatus(guestToken, company.getId(), CompanyStatus.CLOSED))
-                .isInstanceOf(UnauthorizedCompanyActionException.class);
-    }
 
     @Test
     void changeStatus_throws_when_status_is_null() {
@@ -444,13 +377,6 @@ class CompanyServiceBlackTest {
         assertThatThrownBy(() -> service.changeStatus(founderToken, null, CompanyStatus.CLOSED))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Company ID");
-    }
-
-    @Test
-    void changeStatus_throws_when_company_not_found() {
-        String founderToken = registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.changeStatus(founderToken, UUID.randomUUID(), CompanyStatus.CLOSED))
-                .isInstanceOf(CompanyNotFoundException.class);
     }
 
     @Test

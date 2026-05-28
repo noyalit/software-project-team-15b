@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -29,10 +30,12 @@ public class CompanyService {
     private static final Logger AUDIT = LoggerFactory.getLogger("audit.company");
 
     private final ICompanyDomainService companyDomainService;
+    private final UserDomainService userDomainService;
     private final IAuth auth;
 
-    public CompanyService(ICompanyDomainService companyDomainService, IAuth auth) {
+    public CompanyService(ICompanyDomainService companyDomainService, UserDomainService userDomainService, IAuth auth) {
         this.companyDomainService = Objects.requireNonNull(companyDomainService, "companyDomainService cannot be null");
+        this.userDomainService = Objects.requireNonNull(userDomainService, "userDomainService cannot be null");
         this.auth = Objects.requireNonNull(auth, "auth cannot be null");
     }
 
@@ -88,6 +91,9 @@ public class CompanyService {
             requireNonNull(companyId, "Company ID");
             requireNonNull(policy, "Purchase policy");
             UUID callerId = requireAuthenticatedMember(token);
+            if (!userDomainService.isActiveOwner(callerId, companyId)) {
+                throw new UnauthorizedCompanyActionException("Only active owners can update the purchase policy");
+            }
             Company saved = companyDomainService.updatePurchasePolicy(companyId, callerId, policy);
             AUDIT.info("op=updatePurchasePolicy callerId={} companyId={} result=ok", callerId, companyId);
             return saved;
@@ -112,6 +118,9 @@ public class CompanyService {
             requireNonNull(companyId, "Company ID");
             requireNonNull(policy, "Discount policy");
             UUID callerId = requireAuthenticatedMember(token);
+            if  (!userDomainService.isActiveOwner(callerId, companyId)) {
+                throw new UnauthorizedCompanyActionException("Only active owners can update the discount policy");
+            }
             Company saved = companyDomainService.updateDiscountPolicy(companyId, callerId, policy);
             AUDIT.info("op=updateDiscountPolicy callerId={} companyId={} result=ok", callerId, companyId);
             return saved;
@@ -122,14 +131,15 @@ public class CompanyService {
     }
 
     /**
-     * Transitions the company to the given status. Only the founder or a system admin may perform this action.
+     * Transitions the company to the given status.
+     * Validates the token, resolves the caller identity, and delegates to
+     * {@link ICompanyDomainService#changeStatus} which enforces authorization rules.
      *
-     * @param token     an active member or system-admin token; must not be null or blank
+     * @param token     a valid token; must not be null or blank
      * @param companyId the target company's id; must not be null
      * @param newStatus the status to transition to; must not be null
-     * @return the updated, persisted company
-     * @throws InvalidTokenException             if the token is null, blank, or not valid
-     * @throws UnauthorizedCompanyActionException if the caller is neither the founder nor a system admin
+     * @return the updated company as returned by the domain service
+     * @throws InvalidTokenException if the token is null, blank, or not valid
      */
     public Company changeStatus(String token, UUID companyId, CompanyStatus newStatus) {
         try {
