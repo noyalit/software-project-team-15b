@@ -30,6 +30,17 @@ public sealed interface DiscountPolicyDTO {
 
     IEventDiscountPolicy toDomain();
 
+    static DiscountPolicyDTO fromDomain(IEventDiscountPolicy policy) {
+        if (policy instanceof CouponDiscountPolicy c) {
+            return new Coupon(c.code(), c.percentage(), c.expiresAt());
+        }
+        if (policy instanceof EarlyBirdDiscountPolicy e) {
+            return new EarlyBird(e.percentage(), e.until());
+        }
+        throw new IllegalArgumentException(
+                "Unsupported discount policy type for wire format: " + policy.getClass().getName());
+    }
+
     record Coupon(String code, BigDecimal percentage, Instant expiresAt) implements DiscountPolicyDTO {
         @Override
         public IEventDiscountPolicy toDomain() {
