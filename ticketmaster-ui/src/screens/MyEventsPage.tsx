@@ -7,6 +7,13 @@ import { useAuthStore } from '../ui/authStore';
 
 const categories = ['CONCERT', 'SPORTS', 'THEATER', 'CONFERENCE', 'FESTIVAL', 'OTHER'];
 
+type AreaType = 'SEATING' | 'STANDING';
+
+type SeatSpec = {
+  row: string;
+  number: string;
+};
+
 export default function MyEventsPage() {
   const qc = useQueryClient();
   const { token, userType } = useAuthStore();
@@ -25,6 +32,21 @@ export default function MyEventsPage() {
   const [editCategory, setEditCategory] = useState('');
   const [editStartsAt, setEditStartsAt] = useState('');
   const [editLocation, setEditLocation] = useState('');
+
+  const [areaEventId, setAreaEventId] = useState<string | null>(null);
+  const [areaName, setAreaName] = useState('');
+  const [areaType, setAreaType] = useState<AreaType>('SEATING');
+  const [areaPrice, setAreaPrice] = useState('');
+  const [areaCurrency, setAreaCurrency] = useState('ILS');
+  const [standingCapacity, setStandingCapacity] = useState('');
+  const [seatRows, setSeatRows] = useState('');
+  const [seatsPerRow, setSeatsPerRow] = useState('');
+
+  const [editingAreaId, setEditingAreaId] = useState<string | null>(null);
+  const [editAreaName, setEditAreaName] = useState('');
+  const [editAreaPrice, setEditAreaPrice] = useState('');
+  const [editAreaCurrency, setEditAreaCurrency] = useState('ILS');
+  const [editStandingCapacity, setEditStandingCapacity] = useState('');
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -115,11 +137,6 @@ export default function MyEventsPage() {
     },
     onSuccess: async () => {
       setEditingEventId(null);
-      setEditName('');
-      setEditArtist('');
-      setEditCategory('');
-      setEditStartsAt('');
-      setEditLocation('');
       setSuccessMessage('Event updated successfully.');
       await qc.invalidateQueries({ queryKey: ['company-events', selectedCompanyId] });
     },
@@ -143,6 +160,105 @@ export default function MyEventsPage() {
     },
     onSuccess: async () => {
       setSuccessMessage('Event cancelled successfully.');
+      await qc.invalidateQueries({ queryKey: ['company-events', selectedCompanyId] });
+    },
+  });
+
+  const addAreaMutation = useMutation({
+    mutationFn: async () => {
+      if (!areaEventId) throw new Error('No event selected.');
+      if (!areaName.trim()) throw new Error('Area name is required.');
+      if (!areaPrice.trim()) throw new Error('Base price is required.');
+
+      let seats: SeatSpec[] = [];
+      let capacity: number | null = null;
+
+      if (areaType === 'SEATING') {
+        const rows = Number(seatRows);
+        const perRow = Number(seatsPerRow);
+
+        if (!rows || rows <= 0) throw new Error('Number of rows must be positive.');
+        if (!perRow || perRow <= 0) throw new Error('Seats per row must be positive.');
+
+        for (let r = 1; r <= rows; r++) {
+          const rowName = String.fromCharCode(64 + r);
+          for (let s = 1; s <= perRow; s++) {
+            seats.push({ row: rowName, number: String(s) });
+          }
+        }
+      } else {
+        capacity = Number(standingCapacity);
+        if (!capacity || capacity <= 0) {
+          throw new Error('Standing capacity must be positive.');
+        }
+      }
+
+      const body = {
+        name: areaName.trim(),
+        basePrice: {
+          amount: Number(areaPrice),
+          currency: areaCurrency.trim() || 'ILS',
+        },
+        type: areaType,
+        standingCapacity: areaType === 'STANDING' ? capacity : undefined,
+        seats: areaType === 'SEATING' ? seats : undefined,
+      };
+
+      const res = await http.post<ApiResponse<string>>(`/api/events/${areaEventId}/areas`, body);
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data;
+    },
+    onSuccess: async () => {
+      setAreaName('');
+      setAreaPrice('');
+      setStandingCapacity('');
+      setSeatRows('');
+      setSeatsPerRow('');
+      setSuccessMessage('Area added successfully.');
+      await qc.invalidateQueries({ queryKey: ['company-events', selectedCompanyId] });
+    },
+  });
+
+  const updateAreaMutation = useMutation({
+    mutationFn: async () => {
+      if (!areaEventId) throw new Error('No event selected.');
+      if (!editingAreaId) throw new Error('No area selected.');
+
+      const body = {
+        name: editAreaName.trim() || null,
+        basePrice: editAreaPrice.trim()
+          ? {
+              amount: editAreaPrice.trim(),
+              currency: editAreaCurrency.trim() || 'ILS',
+            }
+          : null,
+        standingCapacity: editStandingCapacity ? Number(editStandingCapacity) : null,
+      };
+
+      const res = await http.patch<ApiResponse<null>>(
+        `/api/events/${areaEventId}/areas/${editingAreaId}`,
+        body
+      );
+
+      if (res.data.error) throw new Error(res.data.error);
+    },
+    onSuccess: async () => {
+      setEditingAreaId(null);
+      setEditAreaName('');
+      setEditAreaPrice('');
+      setEditStandingCapacity('');
+      setSuccessMessage('Area updated successfully.');
+      await qc.invalidateQueries({ queryKey: ['company-events', selectedCompanyId] });
+    },
+  });
+
+  const removeAreaMutation = useMutation({
+    mutationFn: async ({ eventId, areaId }: { eventId: string; areaId: string }) => {
+      const res = await http.delete<ApiResponse<null>>(`/api/events/${eventId}/areas/${areaId}`);
+      if (res.data.error) throw new Error(res.data.error);
+    },
+    onSuccess: async () => {
+      setSuccessMessage('Area removed successfully.');
       await qc.invalidateQueries({ queryKey: ['company-events', selectedCompanyId] });
     },
   });
@@ -176,14 +292,17 @@ export default function MyEventsPage() {
     createEventMutation.error ||
     updateEventMutation.error ||
     publishMutation.error ||
-    cancelMutation.error;
+    cancelMutation.error ||
+    addAreaMutation.error ||
+    updateAreaMutation.error ||
+    removeAreaMutation.error;
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-extrabold text-slate-900">My Events</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Select a company, create events, edit events, publish them, or cancel them.
+          Select a company, create events, manage areas, and define the event map.
         </p>
       </div>
 
@@ -196,11 +315,11 @@ export default function MyEventsPage() {
             setSelectedCompanyId(e.target.value);
             setSuccessMessage(null);
             setEditingEventId(null);
+            setAreaEventId(null);
           }}
           className="mt-3 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
         >
           <option value="">Select company...</option>
-
           {companiesQuery.data?.map((company) => (
             <option key={company.companyId} value={company.companyId}>
               {company.name}
@@ -214,46 +333,18 @@ export default function MyEventsPage() {
           <h2 className="text-lg font-semibold text-slate-900">Create event</h2>
 
           <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Event name"
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm"
-            />
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Event name" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
+            <input value={artist} onChange={(e) => setArtist(e.target.value)} placeholder="Artist" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
 
-            <input
-              value={artist}
-              onChange={(e) => setArtist(e.target.value)}
-              placeholder="Artist"
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm"
-            />
-
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-            >
+            <select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
               <option value="">Select category...</option>
               {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c.charAt(0) + c.slice(1).toLowerCase()}
-                </option>
+                <option key={c} value={c}>{c.charAt(0) + c.slice(1).toLowerCase()}</option>
               ))}
             </select>
 
-            <input
-              type="datetime-local"
-              value={startsAt}
-              onChange={(e) => setStartsAt(e.target.value)}
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm"
-            />
-
-            <input
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="Location"
-              className="rounded-md border border-slate-200 px-3 py-2 text-sm md:col-span-2"
-            />
+            <input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
+            <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Location" className="rounded-md border border-slate-200 px-3 py-2 text-sm md:col-span-2" />
           </div>
 
           <button
@@ -270,132 +361,257 @@ export default function MyEventsPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Company events</h2>
 
-          {eventsQuery.isPending && (
-            <div className="mt-4 text-sm text-slate-600">Loading events…</div>
-          )}
-
           <div className="mt-4 grid gap-3">
             {eventsQuery.data?.length === 0 && (
               <div className="text-sm text-slate-600">No events found.</div>
             )}
 
-            {eventsQuery.data?.map((event) => (
-              <div key={event.eventId} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="font-semibold text-slate-900">{event.name}</div>
-                    <div className="mt-1 text-sm text-slate-600">
-                      {event.artist} | {event.location} | {event.status}
-                    </div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      {event.category} | {event.startsAt}
-                    </div>
-                  </div>
+            {eventsQuery.data?.map((event) => {
+              const isCancelled = event.status === 'CANCELLED';
+              const areas = event.areas ?? [];
 
-                  <div className="flex flex-wrap gap-2">
-                    {event.status !== 'CANCELLED' && (
+              return (
+                <div key={event.eventId} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-slate-900">{event.name}</div>
+                      <div className="mt-1 text-sm text-slate-600">
+                        {event.artist} | {event.location} | {event.status}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {event.category} | {event.startsAt}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {!isCancelled && (
                         <>
-                        <button
+                          <button
                             onClick={() => {
-                            setEditingEventId(event.eventId);
-                            setEditName(event.name);
-                            setEditArtist(event.artist);
-                            setEditCategory(event.category);
-                            setEditStartsAt(event.startsAt?.slice(0, 16) ?? '');
-                            setEditLocation(event.location);
+                              setEditingEventId(event.eventId);
+                              setEditName(event.name);
+                              setEditArtist(event.artist);
+                              setEditCategory(event.category);
+                              setEditStartsAt(event.startsAt?.slice(0, 16) ?? '');
+                              setEditLocation(event.location);
                             }}
                             className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
-                        >
+                          >
                             Edit
-                        </button>
+                          </button>
 
-                        <button
+                          <button
+                            onClick={() => {
+                              setAreaEventId(areaEventId === event.eventId ? null : event.eventId);
+                              setEditingAreaId(null);
+                            }}
+                            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                          >
+                            Manage map
+                          </button>
+
+                          <button
                             onClick={() => publishMutation.mutate(event.eventId)}
                             disabled={publishMutation.isPending}
                             className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                        >
+                          >
                             Publish
-                        </button>
+                          </button>
 
-                        <button
+                          <button
                             onClick={() => cancelMutation.mutate(event.eventId)}
                             disabled={cancelMutation.isPending}
                             className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 disabled:opacity-60"
-                        >
+                          >
                             Cancel event
-                        </button>
+                          </button>
                         </>
-                    )}
-                    </div>
-                    </div>
-                    
-                {editingEventId === event.eventId && (
-                  <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
-                    <div className="font-semibold text-slate-900">Edit event</div>
-
-                    <div className="mt-3 grid gap-3 md:grid-cols-2">
-                      <input
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        placeholder="Event name"
-                        className="rounded-md border border-slate-200 px-3 py-2 text-sm"
-                      />
-
-                      <input
-                        value={editArtist}
-                        onChange={(e) => setEditArtist(e.target.value)}
-                        placeholder="Artist"
-                        className="rounded-md border border-slate-200 px-3 py-2 text-sm"
-                      />
-
-                      <select
-                        value={editCategory}
-                        onChange={(e) => setEditCategory(e.target.value)}
-                        className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                      >
-                        <option value="">Select category...</option>
-                        {categories.map((c) => (
-                          <option key={c} value={c}>
-                            {c.charAt(0) + c.slice(1).toLowerCase()}
-                          </option>
-                        ))}
-                      </select>
-
-                      <input
-                        type="datetime-local"
-                        value={editStartsAt}
-                        onChange={(e) => setEditStartsAt(e.target.value)}
-                        className="rounded-md border border-slate-200 px-3 py-2 text-sm"
-                      />
-
-                      <input
-                        value={editLocation}
-                        onChange={(e) => setEditLocation(e.target.value)}
-                        placeholder="Location"
-                        className="rounded-md border border-slate-200 px-3 py-2 text-sm md:col-span-2"
-                      />
-                    </div>
-
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        onClick={() => updateEventMutation.mutate()}
-                        disabled={updateEventMutation.isPending}
-                        className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                      >
-                        {updateEventMutation.isPending ? 'Saving...' : 'Save changes'}
-                      </button>
-
-                      <button
-                        onClick={() => setEditingEventId(null)}
-                        className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
-                      >
-                        Cancel edit
-                      </button>
+                      )}
                     </div>
                   </div>
-                )}
-              </div>
-            ))}
+
+                  {editingEventId === event.eventId && !isCancelled && (
+                    <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+                      <div className="font-semibold text-slate-900">Edit event</div>
+
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Event name" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
+                        <input value={editArtist} onChange={(e) => setEditArtist(e.target.value)} placeholder="Artist" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
+
+                        <select value={editCategory} onChange={(e) => setEditCategory(e.target.value)} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
+                          <option value="">Select category...</option>
+                          {categories.map((c) => (
+                            <option key={c} value={c}>{c.charAt(0) + c.slice(1).toLowerCase()}</option>
+                          ))}
+                        </select>
+
+                        <input type="datetime-local" value={editStartsAt} onChange={(e) => setEditStartsAt(e.target.value)} className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
+                        <input value={editLocation} onChange={(e) => setEditLocation(e.target.value)} placeholder="Location" className="rounded-md border border-slate-200 px-3 py-2 text-sm md:col-span-2" />
+                      </div>
+
+                      <div className="mt-3 flex gap-2">
+                        <button onClick={() => updateEventMutation.mutate()} disabled={updateEventMutation.isPending} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">
+                          {updateEventMutation.isPending ? 'Saving...' : 'Save changes'}
+                        </button>
+
+                        <button onClick={() => setEditingEventId(null)} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
+                          Cancel edit
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+                    <div className="font-semibold text-slate-900">Event map</div>
+
+                    {areas.length === 0 ? (
+                      <div className="mt-2 text-sm text-slate-600">No areas defined yet.</div>
+                    ) : (
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        {areas.map((area) => (
+                          <div key={area.areaId} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="font-semibold text-slate-900">{area.name}</div>
+                                <div className="mt-1 text-xs text-slate-600">
+                                  {area.type} | Available: {area.availableCapacity}
+                                </div>
+                                <div className="mt-1 text-xs text-slate-600">
+                                  Price: {area.basePrice?.amount ?? '—'} {area.basePrice?.currency ?? ''}
+                                </div>
+                              </div>
+
+                              {!isCancelled && (
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setAreaEventId(event.eventId);
+                                      setEditingAreaId(area.areaId);
+                                      setEditAreaName(area.name);
+                                      setEditAreaPrice(area.basePrice?.amount ?? '');
+                                      setEditAreaCurrency(area.basePrice?.currency ?? 'ILS');
+                                      setEditStandingCapacity(String(area.availableCapacity ?? ''));
+                                    }}
+                                    className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-900"
+                                  >
+                                    Edit
+                                  </button>
+
+                                  <button
+                                    onClick={() => removeAreaMutation.mutate({ eventId: event.eventId, areaId: area.areaId })}
+                                    className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-900"
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {area.type === 'SEATING' && area.seats?.length > 0 && (
+                              <div className="mt-3 overflow-x-auto">
+                                <div className="mb-2 rounded bg-slate-200 px-3 py-1 text-center text-xs font-semibold text-slate-700">
+                                  Stage / Screen
+                                </div>
+
+                                <div className="space-y-2">
+                                  {Object.entries(
+                                    area.seats.reduce<Record<string, typeof area.seats>>((acc, seat) => {
+                                      acc[seat.row] = acc[seat.row] ?? [];
+                                      acc[seat.row].push(seat);
+                                      return acc;
+                                    }, {})
+                                  ).map(([row, seats]) => (
+                                    <div key={row} className="flex items-center gap-2">
+                                      <div className="w-6 text-xs font-semibold text-slate-600">{row}</div>
+                                      <div className="flex flex-wrap gap-1">
+                                        {seats.map((seat) => (
+                                          <span
+                                            key={seat.seatId}
+                                            className="inline-flex h-7 min-w-7 items-center justify-center rounded border border-slate-300 bg-white px-1 text-xs text-slate-700"
+                                            title={seat.status}
+                                          >
+                                            {seat.number}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {area.type === 'STANDING' && (
+                              <div className="mt-3 rounded-lg border border-dashed border-slate-300 bg-white p-4 text-center text-sm text-slate-700">
+                                Standing area<br />
+                                {area.availableCapacity} tickets available
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {areaEventId === event.eventId && !isCancelled && (
+                    <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+                      <div className="font-semibold text-slate-900">Add area / map section</div>
+
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <input value={areaName} onChange={(e) => setAreaName(e.target.value)} placeholder="Area name" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
+
+                        <select value={areaType} onChange={(e) => setAreaType(e.target.value as AreaType)} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
+                          <option value="SEATING">Seating area</option>
+                          <option value="STANDING">Standing area</option>
+                        </select>
+
+                        <input value={areaPrice} onChange={(e) => setAreaPrice(e.target.value)} placeholder="Base price" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
+                        <input value={areaCurrency} onChange={(e) => setAreaCurrency(e.target.value)} placeholder="Currency" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
+
+                        {areaType === 'SEATING' ? (
+                          <>
+                            <input value={seatRows} onChange={(e) => setSeatRows(e.target.value)} placeholder="Number of rows, e.g. 5" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
+                            <input value={seatsPerRow} onChange={(e) => setSeatsPerRow(e.target.value)} placeholder="Seats per row, e.g. 10" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
+                          </>
+                        ) : (
+                          <input value={standingCapacity} onChange={(e) => setStandingCapacity(e.target.value)} placeholder="Standing tickets amount" className="rounded-md border border-slate-200 px-3 py-2 text-sm md:col-span-2" />
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => addAreaMutation.mutate()}
+                        disabled={addAreaMutation.isPending}
+                        className="mt-3 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                      >
+                        {addAreaMutation.isPending ? 'Adding...' : 'Add area'}
+                      </button>
+                    </div>
+                  )}
+
+                  {editingAreaId && areaEventId === event.eventId && !isCancelled && (
+                    <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+                      <div className="font-semibold text-slate-900">Edit area</div>
+
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <input value={editAreaName} onChange={(e) => setEditAreaName(e.target.value)} placeholder="Area name" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
+                        <input value={editAreaPrice} onChange={(e) => setEditAreaPrice(e.target.value)} placeholder="Base price" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
+                        <input value={editAreaCurrency} onChange={(e) => setEditAreaCurrency(e.target.value)} placeholder="Currency" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
+                        <input value={editStandingCapacity} onChange={(e) => setEditStandingCapacity(e.target.value)} placeholder="Standing capacity only" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
+                      </div>
+
+                      <div className="mt-3 flex gap-2">
+                        <button onClick={() => updateAreaMutation.mutate()} disabled={updateAreaMutation.isPending} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">
+                          Save area
+                        </button>
+
+                        <button onClick={() => setEditingAreaId(null)} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {successMessage && (

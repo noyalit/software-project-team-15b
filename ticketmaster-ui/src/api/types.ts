@@ -28,10 +28,20 @@ export type OrderHistoryDTO = {
   cancelled: boolean;
 };
 
+export type SeatView = {
+  seatId: string;
+  row: string;
+  number: string;
+  status: string;
+};
+
 export type EventAreaView = {
   areaId: string;
   name: string;
-  [k: string]: unknown;
+  basePrice: MoneyDTO | null;
+  type: 'SEATING' | 'STANDING' | string;
+  availableCapacity: number;
+  seats: SeatView[];
 };
 
 export type EventDTO = {
@@ -85,3 +95,6 @@ export type SiteQueueSnapshotDTO = {
   waitingCount: number;
   admittedCount: number;
 };
+
+
+
