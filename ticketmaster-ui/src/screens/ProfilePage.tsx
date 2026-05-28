@@ -1,10 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AxiosError } from 'axios';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { http } from '../api/http';
 import { getApiErrorMessage } from '../api/errors';
-import type { ApiResponse, MemberDTO } from '../api/types';
+import type { ApiResponse, MemberDTO, CompanyDTO, EventDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 
 export default function ProfilePage() {
@@ -14,6 +14,9 @@ export default function ProfilePage() {
   const [newUsername, setNewUsername] = useState('');
   const [newBirthDate, setNewBirthDate] = useState('');
   const [newPassword, setNewPassword] = useState('');
+
+  const [companyId, setCompanyId] = useState('');
+  const [eventId, setEventId] = useState('');
 
   const meQuery = useQuery({
     queryKey: ['me', token],
@@ -43,12 +46,41 @@ export default function ProfilePage() {
     enabled: userType === 'member' && Boolean(token),
   });
 
+  const companiesQuery = useQuery({
+    queryKey: ['profile', 'companies', token],
+    queryFn: async () => {
+      const res = await http.get<ApiResponse<CompanyDTO[]>>('/api/companies/me');
+
+      if (res.data.error) throw new Error(res.data.error);
+
+      return res.data.data ?? [];
+    },
+    enabled: Boolean(token) && userType === 'member',
+  });
+
+  const eventsQuery = useQuery({
+    queryKey: ['profile', 'events', token],
+    queryFn: async () => {
+      const res = await http.get<ApiResponse<EventDTO[]>>('/api/events');
+
+      if (res.data.error) throw new Error(res.data.error);
+
+      return res.data.data ?? [];
+    },
+    enabled: Boolean(token) && userType === 'member',
+  });
+
   useEffect(() => {
     if (meQuery.data) {
       setNewUsername(meQuery.data.username ?? '');
       setNewBirthDate(meQuery.data.birthDate ?? '');
     }
   }, [meQuery.data]);
+
+  const refreshProfile = async () => {
+    await qc.invalidateQueries({ queryKey: ['me'] });
+    await qc.invalidateQueries({ queryKey: ['profile', 'companies'] });
+  };
 
   const changeUsernameMutation = useMutation({
     mutationFn: async () => {
@@ -57,28 +89,18 @@ export default function ProfilePage() {
           throw new Error('Username cannot be empty.');
         }
 
-        const res = await http.post<ApiResponse<MemberDTO>>(
-          '/api/users/me/username',
-          {
-            newUsername,
-          }
-        );
+        const res = await http.post<ApiResponse<MemberDTO>>('/api/users/me/username', {
+          newUsername,
+        });
 
-        if (res.data.error) {
-          throw new Error(res.data.error);
-        }
-
-        if (!res.data.data) {
-          throw new Error('No profile data returned');
-        }
+        if (res.data.error) throw new Error(res.data.error);
+        if (!res.data.data) throw new Error('No profile data returned');
 
         return res.data.data;
-
       } catch (e) {
         const message = getApiErrorMessage<MemberDTO>(e, {
           fallback: 'Failed to change username.',
-          serverFallback:
-            'Username is unavailable or already exists.',
+          serverFallback: 'Username is unavailable or already exists.',
         });
 
         if (
@@ -91,6 +113,10 @@ export default function ProfilePage() {
 
         throw new Error(message);
       }
+    },
+    onSuccess: async (updated) => {
+      setUsername(updated.username);
+      await refreshProfile();
     },
   });
 
@@ -112,16 +138,14 @@ export default function ProfilePage() {
 
       if (res.data.error) throw new Error(res.data.error);
       if (!res.data.data) throw new Error('No profile data returned');
+
       return res.data.data;
     },
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ['me'] });
-    },
+    onSuccess: refreshProfile,
   });
 
   const changePasswordMutation = useMutation({
     mutationFn: async () => {
-
       if (
         newPassword.length < 8 ||
         !/[A-Z]/.test(newPassword) ||
@@ -132,22 +156,47 @@ export default function ProfilePage() {
         );
       }
 
-      const res = await http.post<ApiResponse<MemberDTO>>(
-        '/api/users/me/password',
-        {
-          newPassword,
-        }
-      );
+      const res = await http.post<ApiResponse<MemberDTO>>('/api/users/me/password', {
+        newPassword,
+      });
 
       if (res.data.error) throw new Error(res.data.error);
       if (!res.data.data) throw new Error('No profile data returned');
 
       return res.data.data;
     },
-
     onSuccess: () => {
       setNewPassword('');
     },
+  });
+
+  const changeRoleMutation = useMutation({
+    mutationFn: async (role: string) => {
+      let url = '';
+
+      if (role === 'RegularMember') {
+        url = '/api/users/me/roles/regular';
+      } else if (role === 'Owner') {
+        if (!companyId.trim()) throw new Error('Please select a company first.');
+        url = `/api/users/me/roles/owner/${companyId.trim()}`;
+      } else if (role === 'Founder') {
+        if (!companyId.trim()) throw new Error('Please select a company first.');
+        url = `/api/users/me/roles/founder/${companyId.trim()}`;
+      } else if (role === 'Manager') {
+        if (!eventId.trim()) throw new Error('Event ID is required to switch to Manager.');
+        url = `/api/users/me/roles/manager/${eventId.trim()}`;
+      } else {
+        throw new Error(`Role ${role} is not supported.`);
+      }
+
+      const res = await http.post<ApiResponse<MemberDTO>>(url);
+
+      if (res.data.error) throw new Error(res.data.error);
+      if (!res.data.data) throw new Error('No profile data returned');
+
+      return res.data.data;
+    },
+    onSuccess: refreshProfile,
   });
 
   if (userType !== 'member') {
@@ -190,6 +239,19 @@ export default function ProfilePage() {
   }
 
   const me = meQuery.data;
+
+  const roles = useMemo(() => {
+    const allRoles = ['RegularMember', me.activeRole, ...(me.assignedRoles ?? [])].filter(Boolean) as string[];
+    return [...new Set(allRoles)];
+  }, [me.activeRole, me.assignedRoles]);
+
+  const shouldShowCompanySelect =
+    roles.includes('Owner') || roles.includes('Founder');
+
+  const updateError =
+    changeUsernameMutation.error ??
+    changeBirthDateMutation.error ??
+    changePasswordMutation.error;
 
   return (
     <div className="space-y-4">
@@ -273,42 +335,108 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {(changeUsernameMutation.isError ||
-          changeBirthDateMutation.isError ||
-          changePasswordMutation.isError) && (() => {
-            const error =
-              changeUsernameMutation.error ??
-              changeBirthDateMutation.error ??
-              changePasswordMutation.error;
-
-            return (
-              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-                {error instanceof Error ? error.message : 'Failed to update profile.'}
-              </div>
-            );
-          })()}
+        {updateError && (
+          <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            {updateError instanceof Error ? updateError.message : 'Failed to update profile.'}
+          </div>
+        )}
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Roles</h2>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          {me.activeRole && (
-            <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
-              {me.activeRole}
-            </span>
-          )}
+        <p className="mt-1 text-sm text-slate-600">
+          Current active role: <span className="font-semibold">{me.activeRole ?? 'RegularMember'}</span>
+        </p>
 
-          {[...new Set(me.assignedRoles ?? [])].map((r) => (
-            <span key={r} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-              {r}
-            </span>
-          ))}
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {roles.map((role) => {
+            const isActive = role === (me.activeRole ?? 'RegularMember');
 
-          {!me.activeRole && [...new Set(me.assignedRoles ?? [])].length === 0 && (
-            <div className="text-sm text-slate-600">No roles assigned.</div>
-          )}
+            return (
+              <div key={role} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-slate-900">{role}</div>
+                    {isActive && (
+                      <div className="mt-1 text-xs font-semibold text-emerald-700">
+                        Active now
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => changeRoleMutation.mutate(role)}
+                    disabled={isActive || changeRoleMutation.isPending}
+                    className={
+                      isActive
+                        ? 'rounded-md bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-800'
+                        : 'rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60'
+                    }
+                  >
+                    {isActive ? 'Active' : 'Switch to this role'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
+
+        {shouldShowCompanySelect && (
+          <label className="mt-4 block">
+            <div className="text-sm font-medium text-slate-700">
+              Company for Owner / Founder role
+            </div>
+
+            <select
+              value={companyId}
+              onChange={(e) => setCompanyId(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
+            >
+              <option value="">Select company…</option>
+
+              {companiesQuery.data?.map((company) => (
+                <option key={company.companyId} value={company.companyId}>
+                  {company.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {roles.includes('Manager') && (
+          <label className="mt-4 block">
+            <div className="text-sm font-medium text-slate-700">
+              Event for Manager role
+            </div>
+
+            <select
+              value={eventId}
+              onChange={(e) => setEventId(e.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
+            >
+              <option value="">Select event…</option>
+
+              {eventsQuery.data?.map((event) => (
+                <option key={event.eventId} value={event.eventId}>
+                  {event.name} — {event.artist}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
+        {changeRoleMutation.isSuccess && (
+          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            Active role changed successfully.
+          </div>
+        )}
+
+        {changeRoleMutation.isError && (
+          <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            {(changeRoleMutation.error as Error).message}
+          </div>
+        )}
       </div>
     </div>
   );
