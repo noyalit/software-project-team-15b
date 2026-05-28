@@ -37,6 +37,10 @@ public interface IEventDomainService {
 
     void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies);
 
+    List<IEventPurchasePolicy> getPurchasePolicies(UUID eventId);
+
+    List<IEventDiscountPolicy> getDiscountPolicies(UUID eventId);
+
     // ---- Reads ---------------------------------------------------------------
 
     EventDTO getEvent(UUID eventId);
