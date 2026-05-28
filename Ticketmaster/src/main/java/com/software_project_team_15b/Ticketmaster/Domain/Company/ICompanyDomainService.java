@@ -25,6 +25,21 @@ public interface ICompanyDomainService {
     Money cheapestPriceFor(UUID companyId, Money subtotal, PurchaseRequest request);
 
     /**
+     * Aggregate discount AMOUNT (not post-discount price) produced by the company's
+     * discount policy tree for the given subtotal. Returns zero in the subtotal's
+     * currency when no policy applies or the company cannot be found.
+     */
+    Money discountAmountFor(UUID companyId, Money subtotal, PurchaseRequest request);
+
+    /**
+     * @return the company's configured strategy for combining event-level and
+     *         company-level discounts, defaulting to
+     *         {@link com.software_project_team_15b.Ticketmaster.Domain.Company.DiscountCombineStrategy#SUM SUM}
+     *         when the company is unknown.
+     */
+    DiscountCombineStrategy discountCombineStrategyFor(UUID companyId);
+
+    /**
      * Validates a purchase request against the company's own purchase policy.
      * Mirrors {@link com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy}
      * but for the company side of the transaction.
