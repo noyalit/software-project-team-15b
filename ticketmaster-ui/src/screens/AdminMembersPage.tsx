@@ -85,6 +85,11 @@ export default function AdminMembersPage() {
     },
     onSuccess: (ok) => {
       setCancelResult(ok);
+
+      if (ok) {
+        setResolvedMember(null);
+        setUsername('');
+      }
     },
   });
 
@@ -136,7 +141,10 @@ export default function AdminMembersPage() {
             <div className="text-sm font-medium text-slate-700">Username</div>
             <input
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => {
+                setUsername(e.target.value);
+                setCancelResult(null);
+              }}
               placeholder="username"
               className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
             />
@@ -155,6 +163,12 @@ export default function AdminMembersPage() {
         {resolveQuery.isError && (
           <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
             {(resolveQuery.error as Error).message}
+          </div>
+        )}
+
+        {cancelResult === true && (
+          <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+            Member suspended successfully. Please search again to manage another member.
           </div>
         )}
 
@@ -187,12 +201,6 @@ export default function AdminMembersPage() {
             {cancelMemberMutation.isError && (
               <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
                 {(cancelMemberMutation.error as Error).message}
-              </div>
-            )}
-
-            {cancelResult === true && (
-              <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-                Member suspended.
               </div>
             )}
 
