@@ -68,6 +68,16 @@ export default function ProfilePage() {
 
   const changeBirthDateMutation = useMutation({
     mutationFn: async () => {
+      const selectedDate = new Date(newBirthDate);
+      const today = new Date();
+
+      today.setHours(0, 0, 0, 0);
+      selectedDate.setHours(0, 0, 0, 0);
+
+      if (selectedDate > today) {
+        throw new Error('Birth date cannot be in the future.');
+      }
+
       const res = await http.post<ApiResponse<MemberDTO>>('/api/users/me/birth-date', {
         newBirthDate,
       });
@@ -83,14 +93,30 @@ export default function ProfilePage() {
 
   const changePasswordMutation = useMutation({
     mutationFn: async () => {
-      const res = await http.post<ApiResponse<MemberDTO>>('/api/users/me/password', {
-        newPassword,
-      });
+
+      if (
+        newPassword.length < 8 ||
+        !/[A-Z]/.test(newPassword) ||
+        !/\d/.test(newPassword)
+      ) {
+        throw new Error(
+          'Password must be at least 8 characters long and include at least 1 uppercase letter and 1 number.'
+        );
+      }
+
+      const res = await http.post<ApiResponse<MemberDTO>>(
+        '/api/users/me/password',
+        {
+          newPassword,
+        }
+      );
 
       if (res.data.error) throw new Error(res.data.error);
       if (!res.data.data) throw new Error('No profile data returned');
+
       return res.data.data;
     },
+
     onSuccess: () => {
       setNewPassword('');
     },
