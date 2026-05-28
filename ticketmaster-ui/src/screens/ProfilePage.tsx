@@ -52,17 +52,45 @@ export default function ProfilePage() {
 
   const changeUsernameMutation = useMutation({
     mutationFn: async () => {
-      const res = await http.post<ApiResponse<MemberDTO>>('/api/users/me/username', {
-        newUsername,
-      });
+      try {
+        if (!newUsername.trim()) {
+          throw new Error('Username cannot be empty.');
+        }
 
-      if (res.data.error) throw new Error(res.data.error);
-      if (!res.data.data) throw new Error('No profile data returned');
-      return res.data.data;
-    },
-    onSuccess: async (updated) => {
-      setUsername(updated.username);
-      await qc.invalidateQueries({ queryKey: ['me'] });
+        const res = await http.post<ApiResponse<MemberDTO>>(
+          '/api/users/me/username',
+          {
+            newUsername,
+          }
+        );
+
+        if (res.data.error) {
+          throw new Error(res.data.error);
+        }
+
+        if (!res.data.data) {
+          throw new Error('No profile data returned');
+        }
+
+        return res.data.data;
+
+      } catch (e) {
+        const message = getApiErrorMessage<MemberDTO>(e, {
+          fallback: 'Failed to change username.',
+          serverFallback:
+            'Username is unavailable or already exists.',
+        });
+
+        if (
+          message.toLowerCase().includes('exists') ||
+          message.toLowerCase().includes('taken') ||
+          message.toLowerCase().includes('duplicate')
+        ) {
+          throw new Error('This username is already taken.');
+        }
+
+        throw new Error(message);
+      }
     },
   });
 
