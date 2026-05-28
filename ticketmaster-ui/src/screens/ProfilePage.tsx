@@ -15,9 +15,6 @@ export default function ProfilePage() {
   const [newBirthDate, setNewBirthDate] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
-  const [companyId, setCompanyId] = useState('');
-  const [eventId, setEventId] = useState('');
-
   const meQuery = useQuery({
     queryKey: ['me', token],
     queryFn: async () => {
@@ -28,9 +25,7 @@ export default function ProfilePage() {
         return res.data.data;
       } catch (e) {
         const err = e as AxiosError<ApiResponse<MemberDTO>>;
-        const status = err.response?.status;
-
-        if (status === 401) {
+        if (err.response?.status === 401) {
           clearAuth();
           throw new Error('Your session expired. Please log in again.');
         }
@@ -50,24 +45,31 @@ export default function ProfilePage() {
     queryKey: ['profile', 'companies', token],
     queryFn: async () => {
       const res = await http.get<ApiResponse<CompanyDTO[]>>('/api/companies/me');
-
       if (res.data.error) throw new Error(res.data.error);
-
       return res.data.data ?? [];
     },
     enabled: Boolean(token) && userType === 'member',
   });
 
-  const eventsQuery = useQuery({
-    queryKey: ['profile', 'events', token],
+  const companyEventsQuery = useQuery({
+    queryKey: ['profile', 'company-events', token, companiesQuery.data?.map((c) => c.companyId).join(',')],
     queryFn: async () => {
-      const res = await http.get<ApiResponse<EventDTO[]>>('/api/events');
+      const companies = companiesQuery.data ?? [];
 
-      if (res.data.error) throw new Error(res.data.error);
+      const result = await Promise.all(
+        companies.map(async (company) => {
+          const res = await http.get<ApiResponse<EventDTO[]>>(`/api/companies/${company.companyId}/events`);
+          if (res.data.error) throw new Error(res.data.error);
+          return {
+            company,
+            events: res.data.data ?? [],
+          };
+        })
+      );
 
-      return res.data.data ?? [];
+      return result;
     },
-    enabled: Boolean(token) && userType === 'member',
+    enabled: Boolean(token) && userType === 'member' && Boolean(companiesQuery.data?.length),
   });
 
   useEffect(() => {
@@ -80,14 +82,13 @@ export default function ProfilePage() {
   const refreshProfile = async () => {
     await qc.invalidateQueries({ queryKey: ['me'] });
     await qc.invalidateQueries({ queryKey: ['profile', 'companies'] });
+    await qc.invalidateQueries({ queryKey: ['profile', 'company-events'] });
   };
 
   const changeUsernameMutation = useMutation({
     mutationFn: async () => {
       try {
-        if (!newUsername.trim()) {
-          throw new Error('Username cannot be empty.');
-        }
+        if (!newUsername.trim()) throw new Error('Username cannot be empty.');
 
         const res = await http.post<ApiResponse<MemberDTO>>('/api/users/me/username', {
           newUsername,
@@ -146,11 +147,7 @@ export default function ProfilePage() {
 
   const changePasswordMutation = useMutation({
     mutationFn: async () => {
-      if (
-        newPassword.length < 8 ||
-        !/[A-Z]/.test(newPassword) ||
-        !/\d/.test(newPassword)
-      ) {
+      if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/\d/.test(newPassword)) {
         throw new Error(
           'Password must be at least 8 characters long and include at least 1 uppercase letter and 1 number.'
         );
@@ -171,22 +168,22 @@ export default function ProfilePage() {
   });
 
   const changeRoleMutation = useMutation({
-    mutationFn: async (role: string) => {
+    mutationFn: async (roleTarget: string) => {
       let url = '';
 
-      if (role === 'RegularMember') {
+      if (roleTarget === 'RegularMember') {
         url = '/api/users/me/roles/regular';
-      } else if (role === 'Owner') {
-        if (!companyId.trim()) throw new Error('Please select a company first.');
-        url = `/api/users/me/roles/owner/${companyId.trim()}`;
-      } else if (role === 'Founder') {
-        if (!companyId.trim()) throw new Error('Please select a company first.');
-        url = `/api/users/me/roles/founder/${companyId.trim()}`;
-      } else if (role === 'Manager') {
-        if (!eventId.trim()) throw new Error('Event ID is required to switch to Manager.');
-        url = `/api/users/me/roles/manager/${eventId.trim()}`;
+      } else if (roleTarget.startsWith('Founder:')) {
+        const companyId = roleTarget.replace('Founder:', '');
+        url = `/api/users/me/roles/founder/${companyId}`;
+      } else if (roleTarget.startsWith('Owner:')) {
+        const companyId = roleTarget.replace('Owner:', '');
+        url = `/api/users/me/roles/owner/${companyId}`;
+      } else if (roleTarget.startsWith('Manager:')) {
+        const eventId = roleTarget.replace('Manager:', '');
+        url = `/api/users/me/roles/manager/${eventId}`;
       } else {
-        throw new Error(`Role ${role} is not supported.`);
+        throw new Error('Unsupported role.');
       }
 
       const res = await http.post<ApiResponse<MemberDTO>>(url);
@@ -239,19 +236,41 @@ export default function ProfilePage() {
   }
 
   const me = meQuery.data;
+  const companies = companiesQuery.data ?? [];
 
-  const roles = useMemo(() => {
-    const allRoles = ['RegularMember', me.activeRole, ...(me.assignedRoles ?? [])].filter(Boolean) as string[];
-    return [...new Set(allRoles)];
-  }, [me.activeRole, me.assignedRoles]);
+  const founderCompanies = companies.filter((company) => company.founderId === me.userId);
+  const ownerCompanies = companies.filter((company) => company.founderId !== me.userId);
+  const managedEvents = companyEventsQuery.data?.flatMap((entry) =>
+    entry.events.map((event) => ({
+      ...event,
+      companyName: entry.company.name,
+    }))
+  ) ?? [];
 
-  const shouldShowCompanySelect =
-    roles.includes('Owner') || roles.includes('Founder');
+  const currentRole = me.activeRole ?? 'RegularMember';
+
+  const hasFounderRole = founderCompanies.length > 0 || (me.assignedRoles ?? []).includes('Founder') || currentRole === 'Founder';
+  const hasOwnerRole = ownerCompanies.length > 0 || (me.assignedRoles ?? []).includes('Owner') || currentRole === 'Owner';
+  const hasManagerRole = (me.assignedRoles ?? []).includes('Manager') || currentRole === 'Manager';
 
   const updateError =
     changeUsernameMutation.error ??
     changeBirthDateMutation.error ??
     changePasswordMutation.error;
+
+  const renderRoleButton = (isActive: boolean, target: string, small = false) => (
+    <button
+      onClick={() => changeRoleMutation.mutate(target)}
+      disabled={isActive || changeRoleMutation.isPending}
+      className={
+        isActive
+          ? `rounded-md bg-emerald-100 ${small ? 'px-3 py-1.5 text-xs' : 'px-3 py-2 text-sm'} font-semibold text-emerald-800`
+          : `rounded-md bg-slate-900 ${small ? 'px-3 py-1.5 text-xs' : 'px-3 py-2 text-sm'} font-semibold text-white hover:bg-slate-800 disabled:opacity-60`
+      }
+    >
+      {isActive ? 'Active' : small ? 'Switch' : 'Switch to this role'}
+    </button>
+  );
 
   return (
     <div className="space-y-4">
@@ -346,85 +365,99 @@ export default function ProfilePage() {
         <h2 className="text-lg font-semibold text-slate-900">Roles</h2>
 
         <p className="mt-1 text-sm text-slate-600">
-          Current active role: <span className="font-semibold">{me.activeRole ?? 'RegularMember'}</span>
+          Current active role: <span className="font-semibold">{currentRole}</span>
         </p>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {roles.map((role) => {
-            const isActive = role === (me.activeRole ?? 'RegularMember');
-
-            return (
-              <div key={role} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="font-semibold text-slate-900">{role}</div>
-                    {isActive && (
-                      <div className="mt-1 text-xs font-semibold text-emerald-700">
-                        Active now
-                      </div>
-                    )}
-                  </div>
-
-                  <button
-                    onClick={() => changeRoleMutation.mutate(role)}
-                    disabled={isActive || changeRoleMutation.isPending}
-                    className={
-                      isActive
-                        ? 'rounded-md bg-emerald-100 px-3 py-2 text-sm font-semibold text-emerald-800'
-                        : 'rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60'
-                    }
-                  >
-                    {isActive ? 'Active' : 'Switch to this role'}
-                  </button>
-                </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="font-semibold text-slate-900">RegularMember</div>
+                {currentRole === 'RegularMember' && (
+                  <div className="mt-1 text-xs font-semibold text-emerald-700">Active now</div>
+                )}
               </div>
-            );
-          })}
+              {renderRoleButton(currentRole === 'RegularMember', 'RegularMember')}
+            </div>
+          </div>
+
+          {hasFounderRole && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="font-semibold text-slate-900">Founder</div>
+              {currentRole === 'Founder' && (
+                <div className="mt-1 text-xs font-semibold text-emerald-700">Active now</div>
+              )}
+
+              <div className="mt-3 space-y-2">
+                {founderCompanies.length === 0 ? (
+                  <div className="text-sm text-slate-600">No founder companies found.</div>
+                ) : (
+                  founderCompanies.map((company) => (
+                    <div
+                      key={company.companyId}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2"
+                    >
+                      <span className="text-sm font-medium text-slate-800">{company.name}</span>
+                      {renderRoleButton(currentRole === 'Founder', `Founder:${company.companyId}`, true)}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {hasOwnerRole && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="font-semibold text-slate-900">Owner</div>
+              {currentRole === 'Owner' && (
+                <div className="mt-1 text-xs font-semibold text-emerald-700">Active now</div>
+              )}
+
+              <div className="mt-3 space-y-2">
+                {ownerCompanies.length === 0 ? (
+                  <div className="text-sm text-slate-600">No owner companies found.</div>
+                ) : (
+                  ownerCompanies.map((company) => (
+                    <div
+                      key={company.companyId}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2"
+                    >
+                      <span className="text-sm font-medium text-slate-800">{company.name}</span>
+                      {renderRoleButton(currentRole === 'Owner', `Owner:${company.companyId}`, true)}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {hasManagerRole && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="font-semibold text-slate-900">Manager</div>
+              {currentRole === 'Manager' && (
+                <div className="mt-1 text-xs font-semibold text-emerald-700">Active now</div>
+              )}
+
+              <div className="mt-3 space-y-2">
+                {managedEvents.length === 0 ? (
+                  <div className="text-sm text-slate-600">No managed events found.</div>
+                ) : (
+                  managedEvents.map((event) => (
+                    <div
+                      key={event.eventId}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2"
+                    >
+                      <span className="text-sm font-medium text-slate-800">
+                        {event.name} — {event.companyName}
+                      </span>
+                      {renderRoleButton(currentRole === 'Manager', `Manager:${event.eventId}`, true)}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
-
-        {shouldShowCompanySelect && (
-          <label className="mt-4 block">
-            <div className="text-sm font-medium text-slate-700">
-              Company for Owner / Founder role
-            </div>
-
-            <select
-              value={companyId}
-              onChange={(e) => setCompanyId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
-            >
-              <option value="">Select company…</option>
-
-              {companiesQuery.data?.map((company) => (
-                <option key={company.companyId} value={company.companyId}>
-                  {company.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        {roles.includes('Manager') && (
-          <label className="mt-4 block">
-            <div className="text-sm font-medium text-slate-700">
-              Event for Manager role
-            </div>
-
-            <select
-              value={eventId}
-              onChange={(e) => setEventId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm"
-            >
-              <option value="">Select event…</option>
-
-              {eventsQuery.data?.map((event) => (
-                <option key={event.eventId} value={event.eventId}>
-                  {event.name} — {event.artist}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
 
         {changeRoleMutation.isSuccess && (
           <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
