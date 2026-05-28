@@ -14,6 +14,7 @@ import com.software_project_team_15b.Ticketmaster.DTO.EventAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.SeatsAvailabilityDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
@@ -25,6 +26,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+
+import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -48,13 +52,15 @@ public class EventManagementService implements IEventManagementService, EventSub
     private static final Logger AUDIT = LoggerFactory.getLogger("audit.event-management");
 
     private final IEventDomainService eventDomainService;
+    private final UserDomainService userDomainService;
     private final EventCancelManager cancelManager;
     private final IAuth auth;
 
-    public EventManagementService(IEventDomainService eventDomainService,
+    public EventManagementService(IEventDomainService eventDomainService, UserDomainService userDomainService,
                                   EventCancelManager cancelManager,
                                   IAuth auth) {
         this.eventDomainService = eventDomainService;
+        this.userDomainService = userDomainService;
         this.cancelManager = cancelManager;
         this.auth = auth;
         try {
@@ -65,9 +71,10 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     public UUID createEvent(CreateEventCommand cmd, UUID callerId) {
-        // TODO: authorize caller — require ManagerPermission.MANAGE_EVENTS on cmd.companyId()
+        // authorize caller — require ManagerPermission.MANAGE_EVENTS on cmd.companyId()
         //       (owner/founder bypass; manager needs the listed permission)
         try {
+//            userDomainService.hasManagerPermission(callerId, cmd.companyId(), cmd.companyId(), ManagerPermission.MANAGE_EVENTS);
             UUID id = eventDomainService.createEvent(cmd);
             AUDIT.info("op=createEvent event={} caller={} result=ok", id, callerId);
             return id;
@@ -81,6 +88,8 @@ public class EventManagementService implements IEventManagementService, EventSub
         // TODO: authorize caller — require ManagerPermission.CONFIGURE_HALLS_AND_SEATS on event's company
         //       (owner/founder bypass; manager needs the listed permission)
         try {
+            UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
+//            userDomainService.hasManagerPermission(callerId, eventId , companyId, ManagerPermission.MANAGE_EVENTS);
             UUID areaId = eventDomainService.addArea(eventId, cmd);
             AUDIT.info("op=addArea event={} area={} caller={} result=ok", eventId, areaId, callerId);
             return areaId;
@@ -324,6 +333,20 @@ public class EventManagementService implements IEventManagementService, EventSub
                     eventId, callerId, e.getMessage());
             throw e;
         }
+    }
+
+    public UUID getCompanyIdForEventId(UUID eventId) {
+        return eventDomainService.getCompanyIdForEventId(eventId);
+    }
+
+    @Override
+    public List<IEventPurchasePolicy> getPurchasePolicies(UUID eventId) {
+        return eventDomainService.getPurchasePolicies(eventId);
+    }
+
+    @Override
+    public List<IEventDiscountPolicy> getDiscountPolicies(UUID eventId) {
+        return eventDomainService.getDiscountPolicies(eventId);
     }
 
     @Override
