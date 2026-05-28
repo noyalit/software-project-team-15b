@@ -14,6 +14,8 @@ export default function ProfilePage() {
   const [newUsername, setNewUsername] = useState('');
   const [newBirthDate, setNewBirthDate] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [appointmentApproved, setAppointmentApproved] = useState(false);
+  const [approvedAppointmentTarget, setApprovedAppointmentTarget] = useState<string | null>(null);
 
   const meQuery = useQuery({
     queryKey: ['me', token],
@@ -196,6 +198,22 @@ export default function ProfilePage() {
     onSuccess: refreshProfile,
   });
 
+  const approveAppointmentMutation = useMutation({
+    mutationFn: async (targetName: string) => {
+      const res = await http.post<ApiResponse<MemberDTO>>('/api/users/roles/approve');
+
+      if (res.data.error) throw new Error(res.data.error);
+      if (!res.data.data) throw new Error('No profile data returned');
+
+      return targetName;
+    },
+
+    onSuccess: async (targetName) => {
+      setApprovedAppointmentTarget(targetName);
+      await refreshProfile();
+    },
+  });
+
   if (userType !== 'member') {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -237,17 +255,20 @@ export default function ProfilePage() {
 
   const me = meQuery.data;
   const companies = companiesQuery.data ?? [];
+  const currentRole = me.activeRole ?? 'RegularMember';
 
+  const assignedRoles = me.assignedRoles ?? [];
   const founderCompanies = companies.filter((company) => company.founderId === me.userId);
-  const ownerCompanies = companies.filter((company) => company.founderId !== me.userId);
+  const ownerCompanies = assignedRoles.includes('Owner') || currentRole === 'Owner'
+    ? companies
+    : [];
+
   const managedEvents = companyEventsQuery.data?.flatMap((entry) =>
     entry.events.map((event) => ({
       ...event,
       companyName: entry.company.name,
     }))
   ) ?? [];
-
-  const currentRole = me.activeRole ?? 'RegularMember';
 
   const hasFounderRole = founderCompanies.length > 0 || (me.assignedRoles ?? []).includes('Founder') || currentRole === 'Founder';
   const hasOwnerRole = ownerCompanies.length > 0 || (me.assignedRoles ?? []).includes('Owner') || currentRole === 'Owner';
@@ -368,6 +389,12 @@ export default function ProfilePage() {
           Current active role: <span className="font-semibold">{currentRole}</span>
         </p>
 
+        {approveAppointmentMutation.isError && (
+          <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            {(approveAppointmentMutation.error as Error).message}
+          </div>
+        )}
+
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="flex items-center justify-between gap-3">
@@ -423,7 +450,23 @@ export default function ProfilePage() {
                       className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2"
                     >
                       <span className="text-sm font-medium text-slate-800">{company.name}</span>
-                      {renderRoleButton(currentRole === 'Owner', `Owner:${company.companyId}`, true)}
+                      <div className="flex items-center gap-2">
+                        {approvedAppointmentTarget === company.companyId ? (
+                          <span className="rounded-md bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-800">
+                            Appointment approved
+                          </span>
+                        ) : currentRole === 'Owner' ? (
+                          <button
+                            onClick={() => approveAppointmentMutation.mutate(company.companyId)}
+                            disabled={approveAppointmentMutation.isPending}
+                            className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                          >
+                            Approve appointment
+                          </button>
+                        ) : null}
+
+                        {renderRoleButton(currentRole === 'Owner', `Owner:${company.companyId}`, true)}
+                      </div>
                     </div>
                   ))
                 )}
@@ -450,7 +493,23 @@ export default function ProfilePage() {
                       <span className="text-sm font-medium text-slate-800">
                         {event.name} — {event.companyName}
                       </span>
-                      {renderRoleButton(currentRole === 'Manager', `Manager:${event.eventId}`, true)}
+                      <div className="flex items-center gap-2">
+                        {approvedAppointmentTarget === event.eventId ? (
+                          <span className="rounded-md bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-800">
+                            Appointment approved
+                          </span>
+                        ) : currentRole === 'Manager' ? (
+                          <button
+                            onClick={() => approveAppointmentMutation.mutate(event.eventId)}
+                            disabled={approveAppointmentMutation.isPending}
+                            className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                          >
+                            Approve appointment
+                          </button>
+                        ) : null}
+
+                        {renderRoleButton(currentRole === 'Manager', `Manager:${event.eventId}`, true)}
+                      </div>
                     </div>
                   ))
                 )}
