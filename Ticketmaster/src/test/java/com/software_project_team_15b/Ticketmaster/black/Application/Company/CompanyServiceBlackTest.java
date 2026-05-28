@@ -28,6 +28,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Unautho
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyDomainServiceImpl;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
@@ -68,7 +69,9 @@ class CompanyServiceBlackTest {
         when(eventManagementService.searchInCompany(any(), any())).thenReturn(List.of());
         when(userDomainService.isActiveOwner(any(), any())).thenReturn(true);
         when(userDomainService.isActiveFounder(any(), any())).thenReturn(true);
-        service = new CompanyService(repo, userDomainService, eventManagementService, auth);
+
+        CompanyDomainServiceImpl domainService = new CompanyDomainServiceImpl(repo, userDomainService, eventManagementService);
+        service = new CompanyService(domainService, auth);
     }
 
     private Company saveToRepo(Company company) {
