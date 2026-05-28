@@ -32,6 +32,20 @@ public sealed interface PurchasePolicyDTO {
 
     IEventPurchasePolicy toDomain();
 
+    static PurchasePolicyDTO fromDomain(IEventPurchasePolicy policy) {
+        if (policy instanceof MaxTicketsPerOrderPolicy m) {
+            return new MaxTicketsPerOrder(m.max());
+        }
+        if (policy instanceof AgeRestrictionPolicy a) {
+            return new AgeRestriction(a.minAge());
+        }
+        if (policy instanceof NoLonelySeatPolicy) {
+            return new NoLonelySeat();
+        }
+        throw new IllegalArgumentException(
+                "Unsupported purchase policy type for wire format: " + policy.getClass().getName());
+    }
+
     record MaxTicketsPerOrder(int max) implements PurchasePolicyDTO {
         @Override
         public IEventPurchasePolicy toDomain() {
