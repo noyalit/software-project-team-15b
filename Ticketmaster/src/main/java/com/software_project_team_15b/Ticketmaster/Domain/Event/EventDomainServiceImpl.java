@@ -7,6 +7,8 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Hol
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.DiscountCombineStrategy;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
@@ -47,16 +49,16 @@ import java.util.concurrent.locks.ReentrantLock;
 public class EventDomainServiceImpl implements IEventDomainService {
 
     private final IEventRepository events;
-    private final CompanyService companyService;
+    private final ICompanyDomainService companyDomainService;
     private final EventLockRegistry locks;
     private final TransactionTemplate txTemplate;
 
     public EventDomainServiceImpl(IEventRepository events,
-                                  @Lazy CompanyService companyService,
+                                  @Lazy ICompanyDomainService companyDomainService,
                                   EventLockRegistry locks,
                                   PlatformTransactionManager txManager) {
         this.events = Objects.requireNonNull(events);
-        this.companyService = Objects.requireNonNull(companyService); // TODO: to be removed once @OrMalky have a domain service
+        this.companyDomainService = Objects.requireNonNull(companyDomainService);
         this.locks = Objects.requireNonNull(locks);
         this.txTemplate = new TransactionTemplate(Objects.requireNonNull(txManager));
     }
@@ -324,12 +326,13 @@ public class EventDomainServiceImpl implements IEventDomainService {
                 eventId, areaId, buyerId, birthDate,
                 quantity, List.of(), couponCode
         );
-        Money eventTotal = event.cheapestPriceFor(areaId, quantity, request);
-        // TODO: We need @OrMalky cheapestPriceFor() func for evaluating the price with the polices to return final price
-        Money companyTotal = companyService.cheapestPriceFor(event.companyId(), subtotal, request);
-        Money total = eventTotal.amount().compareTo(companyTotal.amount()) <= 0 ? eventTotal : companyTotal;
-        Money discount = subtotal.subtract(total);
-        return new PriceBreakdown(area.basePrice(), subtotal, discount, total);
+        Money eventDiscount = event.discountAmountFor(areaId, quantity, request);
+        Money companyDiscount = companyDomainService.discountAmountFor(event.companyId(), subtotal, request);
+        DiscountCombineStrategy strategy =
+                companyDomainService.discountCombineStrategyFor(event.companyId());
+        Money totalDiscount = strategy.combine(eventDiscount, companyDiscount, subtotal);
+        Money total = subtotal.subtract(totalDiscount);
+        return new PriceBreakdown(area.basePrice(), subtotal, totalDiscount, total);
     }
 
     // ---- Holds / confirmations ----------------------------------------------
@@ -437,6 +440,18 @@ public class EventDomainServiceImpl implements IEventDomainService {
         } finally {
             lock.unlock();
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<IEventPurchasePolicy> getPurchasePolicies(UUID eventId) {
+        return requireEvent(eventId).purchasePolicies();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<IEventDiscountPolicy> getDiscountPolicies(UUID eventId) {
+        return requireEvent(eventId).discountPolicies();
     }
 
     // ---- Validation ----------------------------------------------------------
