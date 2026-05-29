@@ -1,6 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Company;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
@@ -172,26 +173,47 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         if (newStatus == null) {
             throw new IllegalArgumentException("newStatus cannot be null");
         }
+
         Company company = getCompanyOrThrow(companyId);
+        CompanyStatus currentStatus = company.getStatus();
+        if (newStatus == CompanyStatus.CLOSED && currentStatus != CompanyStatus.ACTIVE) {
+            throw new IllegalStateException("Company must be active to be closed");
+        } else if (newStatus == CompanyStatus.SUSPENDED && currentStatus != CompanyStatus.ACTIVE) {
+            throw new IllegalStateException("Company must be active to be suspended");
+        } else if (newStatus == CompanyStatus.ACTIVE
+                && currentStatus != CompanyStatus.CLOSED
+                && currentStatus != CompanyStatus.SUSPENDED) {
+            throw new IllegalStateException("Company must be closed or suspended to be reactivated");
+        }
+
         company.changeStatus(newStatus);
         return companyRepository.save(company);
     }
 
     /**
-     * Loads a company by id, throwing if it does not exist.
+     * Loads a company by id. Closed companies are only visible when {@code canViewClosed} is {@code true}.
      *
-     * @param companyId the company's id; must not be null
+     * @param companyId     the company's id; must not be null
+     * @param canViewClosed whether the caller is permitted to see closed companies
+     *                      (pass {@code true} for admins, founders, and owners)
      * @return the company with the given id
-     * @throws IllegalArgumentException if {@code companyId} is null
-     * @throws CompanyNotFoundException if no company exists with the given id
+     * @throws IllegalArgumentException          if {@code companyId} is null
+     * @throws CompanyNotFoundException          if no company exists with the given id
+     * @throws UnauthorizedCompanyActionException if the company is closed and
+     *                                            {@code canViewClosed} is {@code false}
      */
     @Override
     @Transactional(readOnly = true)
-    public Company getCompany(UUID companyId) {
+    public Company getCompany(UUID companyId, boolean canViewClosed) {
         if (companyId == null) {
             throw new IllegalArgumentException("companyId cannot be null");
         }
-        return getCompanyOrThrow(companyId);
+        Company company = getCompanyOrThrow(companyId);
+        if (company.getStatus() == CompanyStatus.CLOSED && !canViewClosed) {
+            throw new UnauthorizedCompanyActionException(
+                    "Company with id " + companyId + " is closed and cannot be viewed");
+        }
+        return company;
     }
 
     @Override

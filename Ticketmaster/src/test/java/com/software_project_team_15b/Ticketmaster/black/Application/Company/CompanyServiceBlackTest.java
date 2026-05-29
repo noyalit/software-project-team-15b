@@ -547,7 +547,23 @@ class CompanyServiceBlackTest {
         String founderToken = registerMember(founderId);
         CompanyDTO dto = service.createCompany(founderToken, "Acme");
 
-        assertThat(service.getCompany(dto.companyId()).companyId()).isEqualTo(dto.companyId());
+        assertThat(service.getCompany(founderToken, dto.companyId()).companyId()).isEqualTo(dto.companyId());
+    }
+
+    @Test
+    void getCompany_hides_closed_company_from_non_privileged_caller() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+        service.closeCompany(founderToken, dto.companyId());
+        UUID strangerId = UUID.randomUUID();
+        String strangerToken = registerMember(strangerId);
+        when(userDomainService.isActiveFounder(strangerId, dto.companyId())).thenReturn(false);
+        when(userDomainService.isActiveOwner(strangerId, dto.companyId())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getCompany(strangerToken, dto.companyId()))
+                .isInstanceOf(com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException.class);
     }
 
     @Test
@@ -568,13 +584,15 @@ class CompanyServiceBlackTest {
 
     @Test
     void getCompany_throws_when_not_found() {
-        assertThatThrownBy(() -> service.getCompany(UUID.randomUUID()))
+        String token = registerMember(UUID.randomUUID());
+        assertThatThrownBy(() -> service.getCompany(token, UUID.randomUUID()))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
     @Test
     void getCompany_throws_when_id_is_null() {
-        assertThatThrownBy(() -> service.getCompany(null))
+        String token = registerMember(UUID.randomUUID());
+        assertThatThrownBy(() -> service.getCompany(token, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 

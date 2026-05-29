@@ -59,11 +59,16 @@ public class CompanyController {
     @Operation(summary = "Get a company by ID")
     @GetMapping("/{companyId}")
     public ResponseEntity<ApiResponse<CompanyDTO>> getCompany(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
             @PathVariable UUID companyId
     ) {
         try {
-            CompanyDTO company = companyService.getCompany(companyId);
+            CompanyDTO company = companyService.getCompany(token, companyId);
             return ResponseEntity.ok(new ApiResponse<>(company, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
         } catch (CompanyNotFoundException ex) {
             return notFound(ex);
         } catch (IllegalArgumentException ex) {

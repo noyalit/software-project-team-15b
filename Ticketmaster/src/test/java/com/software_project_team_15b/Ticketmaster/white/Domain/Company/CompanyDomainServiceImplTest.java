@@ -26,6 +26,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyDomainServiceImpl;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
@@ -379,13 +380,77 @@ class CompanyDomainServiceImplTest {
     }
 
     // ===========================================================================================
+    // changeStatus — state machine
+
+    @Test
+    void changeStatus_allows_transition_from_suspended_to_active() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        company.changeStatus(CompanyStatus.SUSPENDED);
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Company result = service.changeStatus(UUID.randomUUID(), CompanyStatus.ACTIVE);
+
+        assertThat(result.getStatus()).isEqualTo(CompanyStatus.ACTIVE);
+    }
+
+    @Test
+    void changeStatus_throws_when_closing_non_active_company() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        company.changeStatus(CompanyStatus.SUSPENDED);
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+
+        assertThatThrownBy(() -> service.changeStatus(UUID.randomUUID(), CompanyStatus.CLOSED))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void changeStatus_throws_when_suspending_non_active_company() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        company.changeStatus(CompanyStatus.SUSPENDED);
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+
+        assertThatThrownBy(() -> service.changeStatus(UUID.randomUUID(), CompanyStatus.SUSPENDED))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    // ===========================================================================================
+    // getCompany — positive
+
+    @Test
+    void getCompany_returns_active_company() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+
+        assertThat(service.getCompany(UUID.randomUUID(), false).getStatus()).isEqualTo(CompanyStatus.ACTIVE);
+    }
+
+    @Test
+    void getCompany_returns_closed_company_when_canViewClosed_is_true() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        company.changeStatus(CompanyStatus.CLOSED);
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+
+        assertThat(service.getCompany(UUID.randomUUID(), true).getStatus()).isEqualTo(CompanyStatus.CLOSED);
+    }
+
     // getCompany — negative
 
     @Test
     void getCompany_throws_when_companyId_is_null() {
-        assertThatThrownBy(() -> service.getCompany(null))
+        assertThatThrownBy(() -> service.getCompany(null, false))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("companyId");
+    }
+
+    @Test
+    void getCompany_throws_UnauthorizedCompanyActionException_when_closed_and_canViewClosed_is_false() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        company.changeStatus(CompanyStatus.CLOSED);
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+
+        assertThatThrownBy(() -> service.getCompany(UUID.randomUUID(), false))
+                .isInstanceOf(UnauthorizedCompanyActionException.class);
     }
 
     // ===========================================================================================

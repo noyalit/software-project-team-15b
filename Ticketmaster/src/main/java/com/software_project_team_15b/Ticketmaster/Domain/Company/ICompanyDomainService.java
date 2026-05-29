@@ -54,53 +54,50 @@ public interface ICompanyDomainService {
     List<Company> findCompaniesByFounder(UUID founderId);
 
     /**
-     * Replaces the company's purchase policy. Only an owner or founder of the company
-     * may perform this action.
+     * Replaces the company's purchase policy. The company must be {@link CompanyStatus#ACTIVE}.
      *
      * @param companyId the target company's id; must not be null
      * @param policy    the new purchase policy; must not be null
      * @return the updated, persisted company
-     * @throws CompanyNotFoundException           if no company with {@code companyId} exists
-     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException
-     *                                            if the caller is not an owner or founder
+     * @throws CompanyNotFoundException if no company with {@code companyId} exists
+     * @throws IllegalStateException    if the company is not active
      */
     Company updatePurchasePolicy(UUID companyId, ICompanyPurchasePolicy policy);
 
     /**
-     * Replaces the company's discount policy. Only an owner or founder of the company
-     * may perform this action.
+     * Replaces the company's discount policy. The company must be {@link CompanyStatus#ACTIVE}.
      *
      * @param companyId the target company's id; must not be null
      * @param policy    the new discount policy; must not be null
      * @return the updated, persisted company
-     * @throws CompanyNotFoundException           if no company with {@code companyId} exists
-     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException
-     *                                            if the caller is not an owner or founder
+     * @throws CompanyNotFoundException if no company with {@code companyId} exists
+     * @throws IllegalStateException    if the company is not active
      */
     Company updateDiscountPolicy(UUID companyId, ICompanyDiscountPolicy policy);
 
     /**
-     * Transitions the company to the given status. Only the founder or a system admin
-     * may perform this action. When transitioning to {@link CompanyStatus#CLOSED}, all
-     * events belonging to the company are cancelled.
+     * Transitions the company to the given status and persists the change.
+     * Valid transitions: {@code ACTIVE → CLOSED}, {@code ACTIVE → SUSPENDED},
+     * {@code CLOSED → ACTIVE}, {@code SUSPENDED → ACTIVE}.
      *
-     * @param companyId     the target company's id; must not be null
-     * @param newStatus     the status to transition to; must not be null
+     * @param companyId the target company's id; must not be null
+     * @param newStatus the status to transition to; must not be null
      * @return the updated, persisted company
-     * @throws CompanyNotFoundException           if no company with {@code companyId} exists
-     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException
-     *                                            if the caller is neither the founder nor a system admin
+     * @throws CompanyNotFoundException if no company with {@code companyId} exists
+     * @throws IllegalStateException    if the requested transition is not permitted
      */
     Company changeStatus(UUID companyId, CompanyStatus newStatus);
 
     /**
-     * Loads a company by id, failing if it does not exist.
+     * Loads a company by id. Closed companies are only visible when {@code canViewClosed} is {@code true};
+     * passing {@code false} for a closed company throws an unauthorized exception.
      *
-     * @param companyId the company's id; must not be null
+     * @param companyId     the company's id; must not be null
+     * @param canViewClosed whether the caller may see closed companies
      * @return the company with the given id
      * @throws CompanyNotFoundException if no company with {@code companyId} exists
      */
-    Company getCompany(UUID companyId);
+    Company getCompany(UUID companyId, boolean canViewClosed);
 
     /**
      * Looks up a company by id without throwing when absent.
