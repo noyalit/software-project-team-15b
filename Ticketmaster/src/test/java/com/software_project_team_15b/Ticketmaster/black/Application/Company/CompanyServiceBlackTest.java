@@ -31,6 +31,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
 
@@ -43,6 +44,7 @@ class CompanyServiceBlackTest {
     @Mock private ICompanyRepository repo;
     @Mock private IAuth auth;
     @Mock private UserDomainService userDomainService;
+    @Mock private IEventDomainService eventDomainService;
 
     private CompanyService service;
 
@@ -64,9 +66,10 @@ class CompanyServiceBlackTest {
         });
 
         when(userDomainService.isActiveOwner(any(), any())).thenReturn(true);
+        when(eventDomainService.searchInCompany(any(), any())).thenReturn(List.of());
 
         CompanyDomainServiceImpl domainService = new CompanyDomainServiceImpl(repo);
-        service = new CompanyService(domainService, userDomainService, auth);
+        service = new CompanyService(domainService, userDomainService, eventDomainService, auth);
     }
 
     private Company saveToRepo(Company company) {
@@ -359,41 +362,180 @@ class CompanyServiceBlackTest {
     }
 
     // ===========================================================================================
-    // changeStatus — negative
+    // suspendCompany
 
     @Test
-    void changeStatus_throws_when_status_is_null() {
+    void suspendCompany_by_admin_sets_status_to_suspended() {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        String adminToken = registerSystemAdmin(UUID.randomUUID());
 
-        assertThatThrownBy(() -> service.changeStatus(founderToken, dto.companyId(), null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Company status");
+        CompanyDTO result = service.suspendCompany(adminToken, dto.companyId());
+
+        assertThat(result.status()).isEqualTo(CompanyStatus.SUSPENDED);
     }
 
     @Test
-    void changeStatus_throws_when_companyId_is_null() {
-        String founderToken = registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.changeStatus(founderToken, null, CompanyStatus.CLOSED))
+    void suspendCompany_throws_when_companyId_is_null() {
+        String adminToken = registerSystemAdmin(UUID.randomUUID());
+        assertThatThrownBy(() -> service.suspendCompany(adminToken, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Company ID");
     }
 
     @Test
-    void changeStatus_throws_when_token_invalid() {
+    void suspendCompany_throws_when_token_invalid() {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         CompanyDTO dto = service.createCompany(founderToken, "Acme");
-
-        assertThatThrownBy(() -> service.changeStatus("bad", dto.companyId(), CompanyStatus.CLOSED))
+        assertThatThrownBy(() -> service.suspendCompany("bad", dto.companyId()))
                 .isInstanceOf(InvalidTokenException.class);
     }
 
     @Test
-    void changeStatus_throws_InvalidTokenException_before_CompanyNotFoundException_when_token_invalid() {
-        assertThatThrownBy(() -> service.changeStatus("bad", UUID.randomUUID(), CompanyStatus.CLOSED))
+    void suspendCompany_throws_InvalidTokenException_before_CompanyNotFoundException_when_token_invalid() {
+        assertThatThrownBy(() -> service.suspendCompany("bad", UUID.randomUUID()))
                 .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void suspendCompany_throws_when_caller_is_not_system_admin() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        assertThatThrownBy(() -> service.suspendCompany(founderToken, dto.companyId()))
+                .isInstanceOf(UnauthorizedCompanyActionException.class)
+                .hasMessageContaining("system admin");
+    }
+
+    // ===========================================================================================
+    // closeCompany
+
+    @Test
+    void closeCompany_by_founder_sets_status_to_closed() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+
+        CompanyDTO result = service.closeCompany(founderToken, dto.companyId());
+
+        assertThat(result.status()).isEqualTo(CompanyStatus.CLOSED);
+    }
+
+    @Test
+    void closeCompany_throws_when_companyId_is_null() {
+        String founderToken = registerMember(UUID.randomUUID());
+        assertThatThrownBy(() -> service.closeCompany(founderToken, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Company ID");
+    }
+
+    @Test
+    void closeCompany_throws_when_token_invalid() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        assertThatThrownBy(() -> service.closeCompany("bad", dto.companyId()))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void closeCompany_throws_when_caller_is_not_founder() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        UUID strangerId = UUID.randomUUID();
+        String strangerToken = registerMember(strangerId);
+        when(userDomainService.isActiveFounder(strangerId, dto.companyId())).thenReturn(false);
+        assertThatThrownBy(() -> service.closeCompany(strangerToken, dto.companyId()))
+                .isInstanceOf(UnauthorizedCompanyActionException.class)
+                .hasMessageContaining("founder");
+    }
+
+    // ===========================================================================================
+    // activateCompany
+
+    @Test
+    void activateCompany_admin_can_reactivate_suspended_company() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        String adminToken = registerSystemAdmin(UUID.randomUUID());
+        service.suspendCompany(adminToken, dto.companyId());
+
+        CompanyDTO result = service.activateCompany(adminToken, dto.companyId());
+
+        assertThat(result.status()).isEqualTo(CompanyStatus.ACTIVE);
+    }
+
+    @Test
+    void activateCompany_founder_can_reactivate_closed_company() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+        service.closeCompany(founderToken, dto.companyId());
+
+        CompanyDTO result = service.activateCompany(founderToken, dto.companyId());
+
+        assertThat(result.status()).isEqualTo(CompanyStatus.ACTIVE);
+    }
+
+    @Test
+    void activateCompany_throws_when_company_is_already_active() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        String adminToken = registerSystemAdmin(UUID.randomUUID());
+        assertThatThrownBy(() -> service.activateCompany(adminToken, dto.companyId()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("already active");
+    }
+
+    @Test
+    void activateCompany_throws_when_companyId_is_null() {
+        String adminToken = registerSystemAdmin(UUID.randomUUID());
+        assertThatThrownBy(() -> service.activateCompany(adminToken, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Company ID");
+    }
+
+    @Test
+    void activateCompany_throws_when_token_invalid() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        assertThatThrownBy(() -> service.activateCompany("bad", dto.companyId()))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void activateCompany_throws_when_non_admin_tries_to_reactivate_suspended_company() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        String adminToken = registerSystemAdmin(UUID.randomUUID());
+        service.suspendCompany(adminToken, dto.companyId());
+        assertThatThrownBy(() -> service.activateCompany(founderToken, dto.companyId()))
+                .isInstanceOf(UnauthorizedCompanyActionException.class)
+                .hasMessageContaining("system admin");
+    }
+
+    @Test
+    void activateCompany_throws_when_non_founder_tries_to_reactivate_closed_company() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+        service.closeCompany(founderToken, dto.companyId());
+        UUID strangerId = UUID.randomUUID();
+        String strangerToken = registerMember(strangerId);
+        when(userDomainService.isActiveFounder(strangerId, dto.companyId())).thenReturn(false);
+        assertThatThrownBy(() -> service.activateCompany(strangerToken, dto.companyId()))
+                .isInstanceOf(UnauthorizedCompanyActionException.class)
+                .hasMessageContaining("founder");
     }
 
     // ===========================================================================================

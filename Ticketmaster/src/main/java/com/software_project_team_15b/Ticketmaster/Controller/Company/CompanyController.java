@@ -6,8 +6,6 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Invalid
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -82,10 +80,8 @@ public class CompanyController {
             @PathVariable UUID companyId
     ) {
         try {
-            CompanyDTO company = companyService.changeStatus(token, companyId, request.status());
+            CompanyDTO company = companyService.suspendCompany(token, companyId);
             return ResponseEntity.ok(new ApiResponse<>(company, null));
-            Company company = companyService.suspendCompany(token, companyId);
-            return ResponseEntity.ok(new ApiResponse<>(CompanyDTO.from(company), null));
         } catch (InvalidTokenException ex) {
             return unauthorized(ex);
         } catch (UnauthorizedCompanyActionException ex) {
@@ -106,8 +102,8 @@ public class CompanyController {
             @PathVariable UUID companyId
     ) {
         try {
-            Company company = companyService.closeCompany(token, companyId);
-            return ResponseEntity.ok(new ApiResponse<>(CompanyDTO.from(company), null));
+            CompanyDTO company = companyService.closeCompany(token, companyId);
+            return ResponseEntity.ok(new ApiResponse<>(company, null));
         } catch (InvalidTokenException ex) {
             return unauthorized(ex);
         } catch (UnauthorizedCompanyActionException ex) {
@@ -128,8 +124,8 @@ public class CompanyController {
             @PathVariable UUID companyId
     ) {
         try {
-            Company company = companyService.activateCompany(token, companyId);
-            return ResponseEntity.ok(new ApiResponse<>(CompanyDTO.from(company), null));
+            CompanyDTO company = companyService.activateCompany(token, companyId);
+            return ResponseEntity.ok(new ApiResponse<>(company, null));
         } catch (InvalidTokenException ex) {
             return unauthorized(ex);
         } catch (UnauthorizedCompanyActionException ex) {
@@ -144,8 +140,6 @@ public class CompanyController {
     }
 
     public record CreateCompanyRequest(String name) {}
-
-    public record ChangeStatusRequest(CompanyStatus status) {}
 
     private <T> ResponseEntity<ApiResponse<T>> badRequest(Exception ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)

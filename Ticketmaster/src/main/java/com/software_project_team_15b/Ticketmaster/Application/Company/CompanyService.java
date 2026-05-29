@@ -5,7 +5,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
+import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,11 +33,13 @@ public class CompanyService {
 
     private final ICompanyDomainService companyDomainService;
     private final UserDomainService userDomainService;
+    private final IEventDomainService eventDomainService;
     private final IAuth auth;
 
-    public CompanyService(ICompanyDomainService companyDomainService, UserDomainService userDomainService, IAuth auth) {
+    public CompanyService(ICompanyDomainService companyDomainService, UserDomainService userDomainService, IEventDomainService eventDomainService, IAuth auth) {
         this.companyDomainService = Objects.requireNonNull(companyDomainService, "companyDomainService cannot be null");
         this.userDomainService = Objects.requireNonNull(userDomainService, "userDomainService cannot be null");
+        this.eventDomainService = Objects.requireNonNull(eventDomainService, "eventDomainService cannot be null");
         this.auth = Objects.requireNonNull(auth, "auth cannot be null");
     }
 
@@ -69,7 +73,7 @@ public class CompanyService {
             if (!userDomainService.isActiveOwner(callerId, companyId)) {
                 throw new UnauthorizedCompanyActionException("Only active owners can update the purchase policy");
             }
-            var saved = companyDomainService.updatePurchasePolicy(companyId, callerId, policy);
+            var saved = companyDomainService.updatePurchasePolicy(companyId, policy);
             AUDIT.info("op=updatePurchasePolicy callerId={} companyId={} result=ok", callerId, companyId);
             return CompanyDTO.from(saved);
         } catch (RuntimeException e) {
@@ -86,7 +90,7 @@ public class CompanyService {
             if (!userDomainService.isActiveOwner(callerId, companyId)) {
                 throw new UnauthorizedCompanyActionException("Only active owners can update the discount policy");
             }
-            var saved = companyDomainService.updateDiscountPolicy(companyId, callerId, policy);
+            var saved = companyDomainService.updateDiscountPolicy(companyId, policy);
             AUDIT.info("op=updateDiscountPolicy callerId={} companyId={} result=ok", callerId, companyId);
             return CompanyDTO.from(saved);
         } catch (RuntimeException e) {
@@ -100,17 +104,17 @@ public class CompanyService {
      *
      * @param token     a valid system-admin token; must not be null or blank
      * @param companyId the target company's id; must not be null
-     * @return the company with status {@link CompanyStatus#SUSPENDED}
+     * @return the updated company with status {@link CompanyStatus#SUSPENDED}
      * @throws InvalidTokenException             if the token is null, blank, or not valid
      * @throws UnauthorizedCompanyActionException if the caller is not a system admin
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
      *                                           if no company with {@code companyId} exists
      */
-    public Company suspendCompany(String token, UUID companyId) {
+    public CompanyDTO suspendCompany(String token, UUID companyId) {
         try {
             requireNonNull(companyId, "Company ID");
             requireValidToken(token);
-            if(!auth.isSystemAdmin(token)) {
+            if (!auth.isSystemAdmin(token)) {
                 throw new UnauthorizedCompanyActionException("Only system admins can suspend companies");
             }
             companyDomainService.changeStatus(companyId, CompanyStatus.SUSPENDED);
@@ -118,10 +122,10 @@ public class CompanyService {
                     .forEach(event -> eventDomainService.cancel(event.eventId()));
             UUID callerId = auth.extractUserId(token);
             AUDIT.info("op=suspendCompany callerId={} companyId={} result=ok", callerId, companyId);
-            return companyDomainService.getCompany(companyId);
+            return CompanyDTO.from(companyDomainService.getCompany(companyId));
         } catch (RuntimeException e) {
-             AUDIT.warn("op=suspendCompany companyId={} result=rejected reason={}", companyId, e.getMessage());
-             throw e;
+            AUDIT.warn("op=suspendCompany companyId={} result=rejected reason={}", companyId, e.getMessage());
+            throw e;
         }
     }
 
@@ -130,25 +134,25 @@ public class CompanyService {
      *
      * @param token     a valid member token for the founder; must not be null or blank
      * @param companyId the target company's id; must not be null
-     * @return the company with status {@link CompanyStatus#CLOSED}
+     * @return the updated company with status {@link CompanyStatus#CLOSED}
      * @throws InvalidTokenException             if the token is null, blank, or not valid
      * @throws UnauthorizedCompanyActionException if the caller is not the founder
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
      *                                           if no company with {@code companyId} exists
      */
-    public Company closeCompany(String token, UUID companyId) {
+    public CompanyDTO closeCompany(String token, UUID companyId) {
         try {
             requireNonNull(companyId, "Company ID");
             requireValidToken(token);
             UUID callerId = auth.extractUserId(token);
-            if(!userDomainService.isActiveFounder(callerId, companyId)) {
+            if (!userDomainService.isActiveFounder(callerId, companyId)) {
                 throw new UnauthorizedCompanyActionException("Only company founder can close the company");
             }
             companyDomainService.changeStatus(companyId, CompanyStatus.CLOSED);
             eventDomainService.searchInCompany(companyId, null)
                     .forEach(event -> eventDomainService.cancel(event.eventId()));
             AUDIT.info("op=closeCompany callerId={} companyId={} result=ok", callerId, companyId);
-            return companyDomainService.getCompany(companyId);
+            return CompanyDTO.from(companyDomainService.getCompany(companyId));
         } catch (RuntimeException e) {
             AUDIT.warn("op=closeCompany companyId={} result=rejected reason={}", companyId, e.getMessage());
             throw e;
@@ -165,26 +169,34 @@ public class CompanyService {
      *
      * @param token     a valid token; must not be null or blank
      * @param companyId the target company's id; must not be null
-     * @return the company with status {@link CompanyStatus#ACTIVE}
+     * @return the updated company with status {@link CompanyStatus#ACTIVE}
      * @throws InvalidTokenException             if the token is null, blank, or not valid
      * @throws UnauthorizedCompanyActionException if the caller lacks permission for the current status
      * @throws IllegalArgumentException          if the company is already active
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
      *                                           if no company with {@code companyId} exists
      */
-    public Company activateCompany(String token, UUID companyId) {
+    public CompanyDTO activateCompany(String token, UUID companyId) {
         try {
             requireNonNull(companyId, "Company ID");
-            requireNonNull(newStatus, "Company status");
             requireValidToken(token);
-            boolean isSystemAdmin = auth.isSystemAdmin(token);
             UUID callerId = auth.isMember(token) ? auth.extractUserId(token) : null;
-            Company saved = companyDomainService.changeStatus(companyId, callerId, isSystemAdmin, newStatus);
-            AUDIT.info("op=changeStatus callerId={} companyId={} newStatus={} result=ok", callerId, companyId, newStatus);
-            return saved;
+            Company company = companyDomainService.getCompany(companyId);
+            CompanyStatus currentStatus = company.getStatus();
+            if (currentStatus == CompanyStatus.ACTIVE) {
+                throw new IllegalArgumentException("Company is already active");
+            }
+            if (currentStatus == CompanyStatus.SUSPENDED && !auth.isSystemAdmin(token)) {
+                throw new UnauthorizedCompanyActionException("Only system admins can reactivate a suspended company");
+            }
+            if (currentStatus == CompanyStatus.CLOSED && (callerId == null || !userDomainService.isActiveFounder(callerId, companyId))) {
+                throw new UnauthorizedCompanyActionException("Only company founder can reactivate a closed company");
+            }
+            Company saved = companyDomainService.changeStatus(companyId, CompanyStatus.ACTIVE);
+            AUDIT.info("op=activateCompany callerId={} companyId={} result=ok", callerId, companyId);
+            return CompanyDTO.from(saved);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=changeStatus companyId={} newStatus={} result=rejected reason={}",
-                    companyId, newStatus, e.getMessage());
+            AUDIT.warn("op=activateCompany companyId={} result=rejected reason={}", companyId, e.getMessage());
             throw e;
         }
     }
