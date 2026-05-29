@@ -5,6 +5,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHisto
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -19,12 +20,46 @@ import org.springframework.stereotype.Repository;
 public class InMemoryOrderHistoryRepository implements IOrderHistoryRepository {
 
     private final Map<UUID, OrderHistory> storage = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, ReentrantLock> locks = new ConcurrentHashMap<>();
 
     @Override
     public OrderHistory save(OrderHistory orderHistory) {
         if (orderHistory == null)
             throw new IllegalArgumentException("orderHistory cannot be null");
-        storage.put(orderHistory.getOrderId(), orderHistory);
+        UUID id = orderHistory.getOrderId();
+
+        // Ensure we either hold the lock or acquire it now. If another thread holds the
+        // lock, fail fast so callers can retry or handle contention.
+        ReentrantLock lock = locks.computeIfAbsent(id, key -> new ReentrantLock());
+        boolean acquiredHere = false;
+        if (!lock.isHeldByCurrentThread()) {
+            // Block until the lock is available so saves serialize and the thread
+            // that acquires the lock can determine whether it performed the cancel.
+            lock.lock();
+            acquiredHere = true;
+        }
+
+        try {
+            // If the stored entity is already cancelled, do nothing and return null
+            // to indicate we did not perform the cancel.
+            OrderHistory existing = storage.get(id);
+            if (existing != null && existing.isCancelled() && orderHistory.isCancelled()) {
+                return null;
+            }
+            storage.put(id, orderHistory);
+        } finally {
+            // If we acquired the lock here, release it immediately.
+            if (acquiredHere) {
+                try {
+                    lock.unlock();
+                } catch (IllegalMonitorStateException ignored) {
+                }
+                if (!lock.isLocked() && !lock.hasQueuedThreads()) {
+                    locks.remove(id, lock);
+                }
+            }
+        }
+
         return orderHistory;
     }
 
@@ -32,7 +67,26 @@ public class InMemoryOrderHistoryRepository implements IOrderHistoryRepository {
     public Optional<OrderHistory> findById(UUID orderId) {
         if (orderId == null)
             throw new IllegalArgumentException("orderId cannot be null");
-        return Optional.ofNullable(storage.get(orderId));
+        // Return a defensive copy of the stored entity so callers can modify the
+        // returned instance without mutating the repository until save() is called.
+        OrderHistory stored = storage.get(orderId);
+        if (stored == null) return Optional.empty();
+        return Optional.of(copyOf(stored));
+    }
+
+    private OrderHistory copyOf(OrderHistory src) {
+        OrderHistory copy = new OrderHistory(
+                src.getOrderId(),
+                src.getUserId(),
+                src.getEventId(),
+                src.getAreaId(),
+                src.getTotalPrice(),
+                src.getTickets()
+        );
+        if (src.isCancelled()) {
+            copy.cancel();
+        }
+        return copy;
     }
 
     @Override
