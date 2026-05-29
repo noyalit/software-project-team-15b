@@ -144,15 +144,23 @@ export default function MyEventsPage() {
   });
 
   const publishMutation = useMutation({
-    mutationFn: async (eventId: string) => {
-      const res = await http.post<ApiResponse<null>>(`/api/events/${eventId}/publish`);
-      if (res.data.error) throw new Error(res.data.error);
+    mutationFn: async (event: EventDTO) => {
+        if (!event.areas || event.areas.length === 0) {
+        throw new Error('You must add at least one area to the event map before publishing.');
+        }
+
+        const res = await http.post<ApiResponse<null>>(
+        `/api/events/${event.eventId}/publish`
+        );
+
+        if (res.data.error) throw new Error(res.data.error);
     },
+
     onSuccess: async () => {
-      setSuccessMessage('Event published successfully.');
-      await qc.invalidateQueries({ queryKey: ['company-events', selectedCompanyId] });
+        setSuccessMessage('Event published successfully.');
+        await qc.invalidateQueries({ queryKey: ['company-events', selectedCompanyId] });
     },
-  });
+   });
 
   const cancelMutation = useMutation({
     mutationFn: async (eventId: string) => {
@@ -413,7 +421,7 @@ export default function MyEventsPage() {
                           </button>
 
                           <button
-                            onClick={() => publishMutation.mutate(event.eventId)}
+                            onClick={() => publishMutation.mutate(event)}
                             disabled={publishMutation.isPending}
                             className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
                           >

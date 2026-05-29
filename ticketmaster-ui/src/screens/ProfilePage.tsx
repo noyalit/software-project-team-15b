@@ -410,10 +410,21 @@ export default function ProfilePage() {
 
           {hasFounderRole && (
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="font-semibold text-slate-900">Founder</div>
-              {currentRole === 'Founder' && (
-                <div className="mt-1 text-xs font-semibold text-emerald-700">Active now</div>
-              )}
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-slate-900">Founder</div>
+                  {currentRole === 'Founder' && (
+                    <div className="mt-1 text-xs font-semibold text-emerald-700">
+                      Active now
+                    </div>
+                  )}
+                </div>
+
+                {renderRoleButton(
+                  currentRole === 'Founder',
+                  `Founder:${founderCompanies[0]?.companyId}`
+                )}
+              </div>
 
               <div className="mt-3 space-y-2">
                 {founderCompanies.length === 0 ? (
@@ -425,7 +436,6 @@ export default function ProfilePage() {
                       className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2"
                     >
                       <span className="text-sm font-medium text-slate-800">{company.name}</span>
-                      {renderRoleButton(currentRole === 'Founder', `Founder:${company.companyId}`, true)}
                     </div>
                   ))
                 )}
@@ -435,10 +445,23 @@ export default function ProfilePage() {
 
           {hasOwnerRole && (
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="font-semibold text-slate-900">Owner</div>
-              {currentRole === 'Owner' && (
-                <div className="mt-1 text-xs font-semibold text-emerald-700">Active now</div>
-              )}
+
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-slate-900">Owner</div>
+
+                  {currentRole === 'Owner' && (
+                    <div className="mt-1 text-xs font-semibold text-emerald-700">
+                      Active now
+                    </div>
+                  )}
+                </div>
+
+                {renderRoleButton(
+                  currentRole === 'Owner',
+                  `Owner:${ownerCompanies[0]?.companyId}`
+                )}
+              </div>
 
               <div className="mt-3 space-y-2">
                 {ownerCompanies.length === 0 ? (
@@ -464,8 +487,6 @@ export default function ProfilePage() {
                             Approve appointment
                           </button>
                         ) : null}
-
-                        {renderRoleButton(currentRole === 'Owner', `Owner:${company.companyId}`, true)}
                       </div>
                     </div>
                   ))
@@ -476,10 +497,23 @@ export default function ProfilePage() {
 
           {hasManagerRole && (
             <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <div className="font-semibold text-slate-900">Manager</div>
-              {currentRole === 'Manager' && (
-                <div className="mt-1 text-xs font-semibold text-emerald-700">Active now</div>
-              )}
+
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-slate-900">Manager</div>
+
+                  {currentRole === 'Manager' && (
+                    <div className="mt-1 text-xs font-semibold text-emerald-700">
+                      Active now
+                    </div>
+                  )}
+                </div>
+
+                {renderRoleButton(
+                  currentRole === 'Manager',
+                  `Manager:${managedEvents[0]?.eventId}`
+                )}
+              </div>
 
               <div className="mt-3 space-y-2">
                 {managedEvents.length === 0 ? (
