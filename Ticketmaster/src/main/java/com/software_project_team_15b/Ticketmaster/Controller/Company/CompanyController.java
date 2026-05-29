@@ -36,27 +36,6 @@ public class CompanyController {
         this.companyService = companyService;
     }
 
-    @Operation(summary = "List all companies (system admin only)")
-    @GetMapping
-    public ResponseEntity<ApiResponse<List<CompanyDTO>>> listAllCompanies(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
-    ) {
-        try {
-            List<CompanyDTO> result = companyService.listAllCompanies(token).stream()
-                    .map(CompanyDTO::from)
-                    .toList();
-            return ResponseEntity.ok(new ApiResponse<>(result, null));
-        } catch (InvalidTokenException ex) {
-            return unauthorized(ex);
-        } catch (UnauthorizedCompanyActionException ex) {
-            return forbidden(ex);
-        } catch (IllegalArgumentException ex) {
-            return badRequest(ex);
-        } catch (Exception ex) {
-            return internalServerError(ex);
-        }
-    }
-
     @Operation(summary = "Create a new company (caller becomes founder)")
     @PostMapping(consumes = "application/json")
     public ResponseEntity<ApiResponse<CompanyDTO>> createCompany(
@@ -67,27 +46,6 @@ public class CompanyController {
             CompanyDTO company = companyService.createCompany(token, request.name());
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(new ApiResponse<>(company, null));
-        } catch (InvalidTokenException ex) {
-            return unauthorized(ex);
-        } catch (UnauthorizedCompanyActionException ex) {
-            return forbidden(ex);
-        } catch (IllegalArgumentException ex) {
-            return badRequest(ex);
-        } catch (Exception ex) {
-            return internalServerError(ex);
-        }
-    }
-
-    @Operation(summary = "List companies related to the logged in member")
-    @GetMapping("/me")
-    public ResponseEntity<ApiResponse<List<CompanyDTO>>> getMyCompanies(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
-    ) {
-        try {
-            List<CompanyDTO> result = companyService.getMyCompanies(token).stream()
-                    .map(CompanyDTO::from)
-                    .toList();
-            return ResponseEntity.ok(new ApiResponse<>(result, null));
         } catch (InvalidTokenException ex) {
             return unauthorized(ex);
         } catch (UnauthorizedCompanyActionException ex) {
@@ -164,10 +122,7 @@ public class CompanyController {
     }
 
     private <T> ResponseEntity<ApiResponse<T>> internalServerError(Exception ex) {
-        String msg = ex == null || ex.getMessage() == null || ex.getMessage().isBlank()
-                ? "The request failed due to a server error. Please try again later."
-                : ex.getMessage();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ApiResponse<>(null, msg));
+                .body(new ApiResponse<>(null, "Internal server error"));
     }
 }

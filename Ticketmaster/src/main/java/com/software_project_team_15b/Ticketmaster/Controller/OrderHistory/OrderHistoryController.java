@@ -1,5 +1,18 @@
 package com.software_project_team_15b.Ticketmaster.Controller.OrderHistory;
 
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.OrderHistory.OrderHistoryService;
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
@@ -8,20 +21,6 @@ import com.software_project_team_15b.Ticketmaster.DTO.TicketDTO;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 
 @RestController
 @RequestMapping(path = "/api/order-history", produces = "application/json")
@@ -32,69 +31,6 @@ public class OrderHistoryController {
 
     public OrderHistoryController(OrderHistoryService orderHistoryService) {
         this.orderHistoryService = orderHistoryService;
-    }
-
-    @Operation(summary = "Get all order history (system admin only)")
-    @GetMapping("/admin/all")
-    public ResponseEntity<ApiResponse<List<OrderHistoryDTO>>> getAllOrderHistory(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
-    ) {
-        try {
-            List<OrderHistoryDTO> orders = orderHistoryService.getAllOrderHistoryForSystemAdmin(token);
-            return ResponseEntity.ok(new ApiResponse<>(orders, null));
-        } catch (IllegalArgumentException ex) {
-            return badRequest(ex);
-        } catch (Exception ex) {
-            return internalServerError(ex);
-        }
-    }
-
-    @Operation(summary = "Get order history for a user (system admin only)")
-    @GetMapping("/admin/user/{userId}")
-    public ResponseEntity<ApiResponse<List<OrderHistoryDTO>>> getOrderHistoryForUser(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
-            @PathVariable UUID userId
-    ) {
-        try {
-            List<OrderHistoryDTO> orders = orderHistoryService.getOrderHistoryForUserBySystemAdmin(token, userId);
-            return ResponseEntity.ok(new ApiResponse<>(orders, null));
-        } catch (IllegalArgumentException ex) {
-            return badRequest(ex);
-        } catch (Exception ex) {
-            return internalServerError(ex);
-        }
-    }
-
-    @Operation(summary = "Get order history for an event (system admin only)")
-    @GetMapping("/admin/event/{eventId}")
-    public ResponseEntity<ApiResponse<List<OrderHistoryDTO>>> getOrderHistoryForEvent(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
-            @PathVariable UUID eventId
-    ) {
-        try {
-            List<OrderHistoryDTO> orders = orderHistoryService.getOrderHistoryForEventBySystemAdmin(token, eventId);
-            return ResponseEntity.ok(new ApiResponse<>(orders, null));
-        } catch (IllegalArgumentException ex) {
-            return badRequest(ex);
-        } catch (Exception ex) {
-            return internalServerError(ex);
-        }
-    }
-
-    @Operation(summary = "Get order history for a company (system admin only)")
-    @GetMapping("/admin/company/{companyId}")
-    public ResponseEntity<ApiResponse<List<OrderHistoryDTO>>> getOrderHistoryForCompany(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
-            @PathVariable UUID companyId
-    ) {
-        try {
-            List<OrderHistoryDTO> orders = orderHistoryService.getOrderHistoryForCompanyBySystemAdmin(token, companyId);
-            return ResponseEntity.ok(new ApiResponse<>(orders, null));
-        } catch (IllegalArgumentException ex) {
-            return badRequest(ex);
-        } catch (Exception ex) {
-            return internalServerError(ex);
-        }
     }
 
     @Operation(summary = "Get order history for the logged in user")
@@ -237,11 +173,7 @@ public class OrderHistoryController {
     }
 
     private <T> ResponseEntity<ApiResponse<T>> internalServerError(Exception ex) {
-        String msg = ex == null || ex.getMessage() == null || ex.getMessage().isBlank()
-                ? "The request failed due to a server error. Please try again later."
-                : ex.getMessage();
-
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ApiResponse<>(null, msg));
+                .body(new ApiResponse<>(null, "Internal server error"));
     }
 }
