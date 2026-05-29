@@ -84,6 +84,7 @@ export default function AppShell() {
                 )}
                 <button
                   onClick={() => {
+                    localStorage.removeItem('activeOrderId');
                     logout();
                     window.location.href = '/';
                   }}

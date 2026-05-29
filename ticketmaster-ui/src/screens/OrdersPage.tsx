@@ -17,7 +17,10 @@ export default function OrdersPage() {
         `/api/active-orders/${activeOrderId}`
       );
 
-      if (res.data.error) throw new Error(res.data.error);
+      if (res.data.error) {
+        localStorage.removeItem('activeOrderId');
+        throw new Error('You do not have an active order.');
+        }
       if (!res.data.data) throw new Error('No active order found');
 
       return res.data.data;

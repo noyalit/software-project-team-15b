@@ -35,6 +35,7 @@ export default function EventDetailsPage() {
   const [guestBirthDate, setGuestBirthDate] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(() =>localStorage.getItem('activeOrderId'));
+  const [checkoutStarted, setCheckoutStarted] = useState(false);
 
   const eventQuery = useQuery({
     queryKey: ['event', eventId],
@@ -57,7 +58,7 @@ export default function EventDetailsPage() {
       if (!res.data.data) throw new Error('Active order not found');
       return res.data.data;
     },
-    enabled: Boolean(activeOrderId) && Boolean(token),
+    enabled: false,
   });
 
   const requestAccessMutation = useMutation({
@@ -129,7 +130,7 @@ export default function EventDetailsPage() {
 
     onSuccess: async () => {
       setSuccessMessage('Seats added to active order.');
-      await qc.invalidateQueries({ queryKey: ['active-order', activeOrderId] });
+
       await qc.invalidateQueries({ queryKey: ['event', eventId] });
     },
   });
@@ -152,7 +153,6 @@ export default function EventDetailsPage() {
     onSuccess: async () => {
       setSuccessMessage('Seats removed from active order.');
       setSelectedSeatIds([]);
-      await qc.invalidateQueries({ queryKey: ['active-order', activeOrderId] });
       await qc.invalidateQueries({ queryKey: ['event', eventId] });
     },
   });
@@ -186,6 +186,7 @@ export default function EventDetailsPage() {
     },
 
     onSuccess: () => {
+      setCheckoutStarted(true);
       setSuccessMessage('Checkout started.');
     },
   });
@@ -251,8 +252,7 @@ export default function EventDetailsPage() {
     addSeatsMutation.error ||
     removeSeatsMutation.error ||
     startCheckoutMutation.error ||
-    completeCheckoutMutation.error ||
-    activeOrderQuery.error;
+    completeCheckoutMutation.error 
 
   const toggleSeat = (seatId: string) => {
     setSelectedSeatIds((prev) =>
@@ -517,7 +517,7 @@ export default function EventDetailsPage() {
 
             <button
               onClick={() => completeCheckoutMutation.mutate()}
-              disabled={completeCheckoutMutation.isPending}
+              disabled={!checkoutStarted || completeCheckoutMutation.isPending}
               className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
             >
               Complete purchase
