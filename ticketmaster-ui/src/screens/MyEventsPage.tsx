@@ -41,6 +41,7 @@ export default function MyEventsPage() {
   const [standingCapacity, setStandingCapacity] = useState('');
   const [seatRows, setSeatRows] = useState('');
   const [seatsPerRow, setSeatsPerRow] = useState('');
+  const [openEventDetailsId, setOpenEventDetailsId] = useState<string | null>(null);
 
   const [editingAreaId, setEditingAreaId] = useState<string | null>(null);
   const [editAreaName, setEditAreaName] = useState('');
@@ -181,7 +182,7 @@ export default function MyEventsPage() {
         if (!perRow || perRow <= 0) throw new Error('Seats per row must be positive.');
 
         for (let r = 1; r <= rows; r++) {
-          const rowName = String.fromCharCode(64 + r);
+          const rowName = String(r);
           for (let s = 1; s <= perRow; s++) {
             seats.push({ row: rowName, number: String(s) });
           }
@@ -228,11 +229,11 @@ export default function MyEventsPage() {
         name: editAreaName.trim() || null,
         basePrice: editAreaPrice.trim()
           ? {
-              amount: editAreaPrice.trim(),
+              amount: Number(editAreaPrice),
               currency: editAreaCurrency.trim() || 'ILS',
             }
           : null,
-        standingCapacity: editStandingCapacity ? Number(editStandingCapacity) : null,
+        standingCapacity: editStandingCapacity ? Number(editStandingCapacity) : undefined,
       };
 
       const res = await http.patch<ApiResponse<null>>(
@@ -402,8 +403,9 @@ export default function MyEventsPage() {
 
                           <button
                             onClick={() => {
-                              setAreaEventId(areaEventId === event.eventId ? null : event.eventId);
-                              setEditingAreaId(null);
+                                setOpenEventDetailsId(event.eventId);
+                                setAreaEventId(areaEventId === event.eventId ? null : event.eventId);
+                                setEditingAreaId(null);
                             }}
                             className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
                           >
@@ -416,6 +418,23 @@ export default function MyEventsPage() {
                             className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
                           >
                             Publish
+                          </button>
+
+                          <button
+                            onClick={() => {
+                                const isOpen = openEventDetailsId === event.eventId;
+
+                                setOpenEventDetailsId(isOpen ? null : event.eventId);
+
+                                if (isOpen) {
+                                setAreaEventId(null);
+                                setEditingAreaId(null);
+                                setEditingEventId(null);
+                                }
+                            }}
+                            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                            >
+                            {openEventDetailsId === event.eventId ? 'Hide details' : 'Show details'}
                           </button>
 
                           <button
@@ -454,13 +473,13 @@ export default function MyEventsPage() {
                           {updateEventMutation.isPending ? 'Saving...' : 'Save changes'}
                         </button>
 
-                        <button onClick={() => setEditingEventId(null)} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
+                        <button onClick={() => {setEditingEventId(null);}} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
                           Cancel edit
                         </button>
                       </div>
                     </div>
                   )}
-
+                {openEventDetailsId === event.eventId && (
                   <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
                     <div className="font-semibold text-slate-900">Event map</div>
 
@@ -488,9 +507,9 @@ export default function MyEventsPage() {
                                       setAreaEventId(event.eventId);
                                       setEditingAreaId(area.areaId);
                                       setEditAreaName(area.name);
-                                      setEditAreaPrice(area.basePrice?.amount ?? '');
+                                      setEditAreaPrice(String(area.basePrice?.amount ?? ''));
                                       setEditAreaCurrency(area.basePrice?.currency ?? 'ILS');
-                                      setEditStandingCapacity(String(area.availableCapacity ?? ''));
+                                      setEditStandingCapacity(area.type === 'STANDING' ? String(area.availableCapacity ?? '') : '');
                                     }}
                                     className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-900"
                                   >
@@ -516,15 +535,19 @@ export default function MyEventsPage() {
                                 <div className="space-y-2">
                                   {Object.entries(
                                     area.seats.reduce<Record<string, typeof area.seats>>((acc, seat) => {
-                                      acc[seat.row] = acc[seat.row] ?? [];
-                                      acc[seat.row].push(seat);
-                                      return acc;
+                                        acc[seat.row] = acc[seat.row] ?? [];
+                                        acc[seat.row].push(seat);
+                                        return acc;
                                     }, {})
-                                  ).map(([row, seats]) => (
+                                    )
+                                    .sort(([rowA], [rowB]) => Number(rowA) - Number(rowB))
+                                    .map(([row, seats]) => (
                                     <div key={row} className="flex items-center gap-2">
                                       <div className="w-6 text-xs font-semibold text-slate-600">{row}</div>
                                       <div className="flex flex-wrap gap-1">
-                                        {seats.map((seat) => (
+                                        {seats
+                                            .sort((a, b) => Number(a.number) - Number(b.number))
+                                            .map((seat) => (
                                           <span
                                             key={seat.seatId}
                                             className="inline-flex h-7 min-w-7 items-center justify-center rounded border border-slate-300 bg-white px-1 text-xs text-slate-700"
@@ -546,13 +569,72 @@ export default function MyEventsPage() {
                                 {area.availableCapacity} tickets available
                               </div>
                             )}
+                            {editingAreaId === area.areaId && areaEventId === event.eventId && !isCancelled && (
+                                <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+                                    <div className="font-semibold text-slate-900">Edit area</div>
+
+                                    <div className="mt-3 grid gap-3 md:grid-cols-2">
+                                    <input
+                                        value={editAreaName}
+                                        onChange={(e) => setEditAreaName(e.target.value)}
+                                        placeholder="Area name"
+                                        className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+                                    />
+
+                                    <input
+                                        value={editAreaPrice}
+                                        onChange={(e) => setEditAreaPrice(e.target.value)}
+                                        placeholder="Base price"
+                                        className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+                                    />
+
+                                    <input
+                                        value={editAreaCurrency}
+                                        onChange={(e) => setEditAreaCurrency(e.target.value)}
+                                        placeholder="Currency"
+                                        className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+                                    />
+
+                                    {area.type === 'STANDING' && (
+                                        <input
+                                        value={editStandingCapacity}
+                                        onChange={(e) => setEditStandingCapacity(e.target.value)}
+                                        placeholder="Standing capacity"
+                                        className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+                                        />
+                                    )}
+                                    </div>
+
+                                    <div className="mt-3 flex gap-2">
+                                    <button
+                                        onClick={() => updateAreaMutation.mutate()}
+                                        disabled={updateAreaMutation.isPending}
+                                        className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                                    >
+                                        Save area
+                                    </button>
+
+                                    <button
+                                        onClick={() => setEditingAreaId(null)}
+                                        className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
+                                    >
+                                        Cancel
+                                    </button>
+                                    </div>
+                                </div>
+                                )}
                           </div>
                         ))}
                       </div>
                     )}
-                  </div>
 
-                  {areaEventId === event.eventId && !isCancelled && (
+                    
+                  </div>
+                  )}
+
+                  {openEventDetailsId === event.eventId &&
+                    areaEventId === event.eventId &&
+                    !isCancelled && (
                     <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
                       <div className="font-semibold text-slate-900">Add area / map section</div>
 
@@ -587,28 +669,6 @@ export default function MyEventsPage() {
                     </div>
                   )}
 
-                  {editingAreaId && areaEventId === event.eventId && !isCancelled && (
-                    <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
-                      <div className="font-semibold text-slate-900">Edit area</div>
-
-                      <div className="mt-3 grid gap-3 md:grid-cols-2">
-                        <input value={editAreaName} onChange={(e) => setEditAreaName(e.target.value)} placeholder="Area name" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
-                        <input value={editAreaPrice} onChange={(e) => setEditAreaPrice(e.target.value)} placeholder="Base price" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
-                        <input value={editAreaCurrency} onChange={(e) => setEditAreaCurrency(e.target.value)} placeholder="Currency" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
-                        <input value={editStandingCapacity} onChange={(e) => setEditStandingCapacity(e.target.value)} placeholder="Standing capacity only" className="rounded-md border border-slate-200 px-3 py-2 text-sm" />
-                      </div>
-
-                      <div className="mt-3 flex gap-2">
-                        <button onClick={() => updateAreaMutation.mutate()} disabled={updateAreaMutation.isPending} className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">
-                          Save area
-                        </button>
-
-                        <button onClick={() => setEditingAreaId(null)} className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })}
