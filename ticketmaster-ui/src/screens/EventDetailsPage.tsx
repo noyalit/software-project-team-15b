@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useState } from 'react';
 import { http } from '../api/http';
 import type { ApiResponse, EventDTO } from '../api/types';
+import { getApiErrorMessage } from '../api/errors';
 import { useAuthStore } from '../ui/authStore';
 
 type ActiveOrderDTO = {
@@ -254,6 +255,8 @@ export default function EventDetailsPage() {
     startCheckoutMutation.error ||
     completeCheckoutMutation.error 
 
+  const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
+
   const toggleSeat = (seatId: string) => {
     setSelectedSeatIds((prev) =>
       prev.includes(seatId)
@@ -452,21 +455,41 @@ export default function EventDetailsPage() {
               </div>
             )}
             <button
-              onClick={() => addSeatsMutation.mutate()}
+              onClick={() => {
+                if (addSeatsMutation.isPending) return;
+                setSuccessMessage(null);
+                addSeatsMutation.mutate();
+              }}
               disabled={!activeOrderId || selectedSeatIds.length === 0 || addSeatsMutation.isPending}
               className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
             >
-              Add selected seats
+              {addSeatsMutation.isPending ? 'Adding...' : 'Add selected seats'}
             </button>
 
             <button
-              onClick={() => removeSeatsMutation.mutate()}
+              onClick={() => {
+                if (removeSeatsMutation.isPending) return;
+                setSuccessMessage(null);
+                removeSeatsMutation.mutate();
+              }}
               disabled={!activeOrderId || selectedSeatIds.length === 0 || removeSeatsMutation.isPending}
               className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 hover:bg-rose-100 disabled:opacity-60"
             >
-              Remove selected seats
+              {removeSeatsMutation.isPending ? 'Removing...' : 'Remove selected seats'}
             </button>
           </div>
+
+          {successMessage && (
+            <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {successMessage}
+            </div>
+          )}
+
+          {actionErrorMessage && (
+            <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              {actionErrorMessage}
+            </div>
+          )}
         </div>
       )}
 
