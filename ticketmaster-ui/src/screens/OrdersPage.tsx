@@ -13,17 +13,22 @@ export default function OrdersPage() {
   const activeOrderQuery = useQuery({
     queryKey: ['active-order', activeOrderId],
     queryFn: async () => {
-      const res = await http.get<ApiResponse<ActiveOrderDTO>>(
-        `/api/active-orders/${activeOrderId}`
-      );
+      try {
+        const res = await http.get<ApiResponse<ActiveOrderDTO>>(
+          `/api/active-orders/${activeOrderId}`
+        );
 
-      if (res.data.error) {
-        localStorage.removeItem('activeOrderId');
-        throw new Error('You do not have an active order.');
+        if (res.data.error) {
+          localStorage.removeItem('activeOrderId');
+          throw new Error('You do not have an active order.');
         }
-      if (!res.data.data) throw new Error('No active order found');
+        if (!res.data.data) throw new Error('No active order found');
 
-      return res.data.data;
+        return res.data.data;
+      } catch (e) {
+        localStorage.removeItem('activeOrderId');
+        throw e;
+      }
     },
     enabled: Boolean(activeOrderId),
   });
@@ -54,7 +59,7 @@ export default function OrdersPage() {
           </div>
 
           <Link
-            to={`/orders/${activeOrderId}`}
+            to={`/checkout/${activeOrderId}`}
             className="mt-3 inline-flex rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
           >
             Continue order

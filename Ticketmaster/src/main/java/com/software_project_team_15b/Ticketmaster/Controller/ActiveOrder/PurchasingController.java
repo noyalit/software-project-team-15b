@@ -12,6 +12,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedToIssueTicketsException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.OrderSeatsUnavailableException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.UnactiveOrderException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -118,6 +119,8 @@ public class PurchasingController {
         } catch (TimeExpiredException ex) {
             return gone(ex);
         } catch (OrderSeatsUnavailableException ex) {
+            return conflict(ex);
+        } catch (UnactiveOrderException ex) {
             return conflict(ex);
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
