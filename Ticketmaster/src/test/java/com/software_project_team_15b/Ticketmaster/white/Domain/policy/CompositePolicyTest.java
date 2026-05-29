@@ -76,15 +76,18 @@ class CompositePolicyTest {
                 new SimpleDiscountPolicy(BigDecimal.valueOf(10)),
                 new SimpleDiscountPolicy(BigDecimal.valueOf(20))
         ));
+        // Cascade: 10% then 20% off 100 -> 100 * 0.9 * 0.8 = 72; discount = 28.
         assertThat(sum.discount(usd("100.00"), ctxWith(1, null, null)))
-                .isEqualTo(usd("30.00"));
+                .isEqualTo(usd("28.00"));
 
+        // Cascade: 60% off 100 -> 40; then 60% off 40 -> 16; discount = 84. Two finite-percentage
+        // children can never push the discount above the subtotal under cascade.
         SumDiscountPolicy oversized = new SumDiscountPolicy(List.of(
                 new SimpleDiscountPolicy(BigDecimal.valueOf(60)),
                 new SimpleDiscountPolicy(BigDecimal.valueOf(60))
         ));
         assertThat(oversized.discount(usd("100.00"), ctxWith(1, null, null)))
-                .isEqualTo(usd("100.00"));
+                .isEqualTo(usd("84.00"));
     }
 
     @Test
@@ -106,8 +109,10 @@ class CompositePolicyTest {
                         new SimpleDiscountPolicy(BigDecimal.valueOf(10)),
                         new SimpleDiscountPolicy(BigDecimal.valueOf(20))))
         ));
+        // Cascade: 5% then max(10%,20%) = 20% applied to the running 95 -> 95 * 0.8 = 76;
+        // discount = 24.
         assertThat(tree.discount(usd("100.00"), ctxWith(1, null, null)))
-                .isEqualTo(usd("25.00")); // 5 + max(10,20)
+                .isEqualTo(usd("24.00"));
     }
 
     @Test
