@@ -45,6 +45,7 @@ public class CompanyService {
             requireNonBlank(name, "Company name");
             UUID founderId = requireAuthenticatedMember(token);
             var company = companyDomainService.createCompany(name, founderId);
+            userDomainService.appointFounder(founderId, company.getId());
             AUDIT.info("op=createCompany founderId={} companyId={} name={} result=ok",
                     founderId, company.getId(), name);
             return CompanyDTO.from(company);
