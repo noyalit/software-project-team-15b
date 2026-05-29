@@ -59,7 +59,8 @@ export default function AppShell() {
       const name = username || meQuery.data?.username;
       return name ? `Hello ${name}!` : 'Hello!';
     }
-    return 'Admin';
+    if (userType === 'system-admin') return 'Admin';
+    return null;
   })();
 
   return (
@@ -88,7 +89,7 @@ export default function AppShell() {
           </nav>
 
           <div className="flex items-center gap-2">
-            {token ? (
+            {token && userType !== 'guest' ? (
               <>
                 {badgeText && (
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">

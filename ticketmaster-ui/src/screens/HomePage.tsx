@@ -4,6 +4,8 @@ import { useAuthStore } from '../ui/authStore';
 export default function HomePage() {
   const { token, userType } = useAuthStore();
 
+  const isLoggedIn = Boolean(token) && userType !== 'guest';
+
   return (
     <div className="space-y-6">
       <section className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -27,7 +29,7 @@ export default function HomePage() {
                 Explore events
               </Link>
 
-              {!token ? (
+              {!isLoggedIn ? (
                 <>
                   <Link
                     to="/login"
@@ -57,14 +59,14 @@ export default function HomePage() {
                     Profile
                   </Link>
                 </>
-              ) : (
+              ) : userType === 'system-admin' ? (
                 <Link
                   to="/admin/queues"
                   className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
                 >
                   Admin tools
                 </Link>
-              )}
+              ) : null}
             </div>
           </div>
 
