@@ -122,7 +122,10 @@ class CompanyDomainServiceImplTest {
     @Test
     void cheapestPriceFor_does_not_raise_price_above_subtotal() {
         Company company = new Company("Acme", UUID.randomUUID());
-        company.updateDiscountPolicy((subtotal, ctx) -> Money.zero(subtotal.currency()));
+        // misbehaving policy returns a negative "discount" that would otherwise
+        // add to the final price; the clamp must treat it as no discount.
+        company.updateDiscountPolicy((subtotal, ctx) ->
+                Money.of("-50.00", subtotal.currency()));
         when(repo.findById(any())).thenReturn(Optional.of(company));
         Money subtotal = Money.of("100.00", "USD");
 
