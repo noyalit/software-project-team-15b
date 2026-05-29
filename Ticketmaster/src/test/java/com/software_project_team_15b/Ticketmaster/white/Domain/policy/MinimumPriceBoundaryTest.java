@@ -136,12 +136,15 @@ class MinimumPriceBoundaryTest {
         assertThat(finalPrice.isNegative()).isFalse();
     }
 
-    /** BAD: SumDiscountPolicy with stacked over-100% children — clamped at composite tree level. */
+    /**
+     * BAD: SumDiscountPolicy with one 100% child — cascade drives the running price to 0,
+     * total discount equals the subtotal.
+     */
     @Test
-    void boundary_bad_sum_tree_with_stacked_over_full_children_clamps_to_subtotal() {
+    void boundary_bad_sum_tree_with_full_off_child_clamps_to_subtotal() {
         SumDiscountPolicy eventTree = new SumDiscountPolicy(List.<IDiscountPolicy>of(
                 new SimpleDiscountPolicy(BigDecimal.valueOf(70)),
-                new SimpleDiscountPolicy(BigDecimal.valueOf(70))));
+                new SimpleDiscountPolicy(BigDecimal.valueOf(100))));
 
         Money subtotal = usd("100.00");
         Money treeDiscount = eventTree.discount(subtotal, ctx());
