@@ -58,12 +58,32 @@ export default function EventDetailsPage() {
   const activeOrderQuery = useQuery({
     queryKey: ['active-order', activeOrderId, token],
     queryFn: async () => {
-      const res = await http.get<ApiResponse<ActiveOrderDTO>>(
-        `/api/active-orders/${activeOrderId}`
-      );
-      if (res.data.error) throw new Error(res.data.error);
-      if (!res.data.data) throw new Error('Active order not found');
-      return res.data.data;
+      try {
+        const res = await http.get<ApiResponse<ActiveOrderDTO>>(
+          `/api/active-orders/${activeOrderId}`
+        );
+        if (res.data.error) throw new Error(res.data.error);
+        if (!res.data.data) throw new Error('Active order not found');
+        return res.data.data;
+      } catch (e) {
+        const msg = getApiErrorMessage(e);
+
+        // If order is no longer valid/active for the user, clear it so they can start a new one.
+        if (
+          msg.toLowerCase().includes('active order not found') ||
+          msg.toLowerCase().includes('active order not found:') ||
+          msg.toLowerCase().includes('not active') ||
+          msg.toLowerCase().includes('checkout has expired') ||
+          msg.toLowerCase().includes('is not active')
+        ) {
+          localStorage.removeItem('activeOrderId');
+          setActiveOrderId(null);
+          setCheckoutStarted(false);
+          setSelectedSeatIds([]);
+        }
+
+        throw e;
+      }
     },
     enabled: Boolean(activeOrderId) && Boolean(token),
   });

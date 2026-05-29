@@ -73,6 +73,9 @@ export default function CheckoutPage() {
       localStorage.removeItem('activeOrderId');
       await qc.invalidateQueries({ queryKey: ['event'] });
       await qc.invalidateQueries({ queryKey: ['active-order'] });
+      if (activeOrderId && token) {
+        await qc.invalidateQueries({ queryKey: ['active-order', activeOrderId, token] });
+      }
       navigate('/orders', { replace: true });
     },
   });
