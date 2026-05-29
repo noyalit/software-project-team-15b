@@ -458,16 +458,16 @@ class CompanyServiceBlackTest {
     // activateCompany
 
     @Test
-    void activateCompany_admin_can_reactivate_suspended_company() {
+    void activateCompany_admin_can_not_reactivate_suspended_company() {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         CompanyDTO dto = service.createCompany(founderToken, "Acme");
         String adminToken = registerSystemAdmin(UUID.randomUUID());
         service.suspendCompany(adminToken, dto.companyId());
 
-        CompanyDTO result = service.activateCompany(adminToken, dto.companyId());
-
-        assertThat(result.status()).isEqualTo(CompanyStatus.ACTIVE);
+        assertThatThrownBy(() -> service.activateCompany(adminToken, dto.companyId()))
+                .isInstanceOf(UnauthorizedCompanyActionException.class)
+                .hasMessageContaining("founder");
     }
 
     @Test
@@ -488,10 +488,11 @@ class CompanyServiceBlackTest {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         CompanyDTO dto = service.createCompany(founderToken, "Acme");
-        String adminToken = registerSystemAdmin(UUID.randomUUID());
-        assertThatThrownBy(() -> service.activateCompany(adminToken, dto.companyId()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("already active");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+
+        assertThatThrownBy(() -> service.activateCompany(founderToken, dto.companyId()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("reactivated");
     }
 
     @Test
@@ -512,15 +513,16 @@ class CompanyServiceBlackTest {
     }
 
     @Test
-    void activateCompany_throws_when_non_admin_tries_to_reactivate_suspended_company() {
+    void activateCompany_throws_when_tries_to_reactivate_suspended_company() {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
         String adminToken = registerSystemAdmin(UUID.randomUUID());
         service.suspendCompany(adminToken, dto.companyId());
         assertThatThrownBy(() -> service.activateCompany(founderToken, dto.companyId()))
-                .isInstanceOf(UnauthorizedCompanyActionException.class)
-                .hasMessageContaining("system admin");
+                .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Company must be closed to be reactivated");
     }
 
     @Test

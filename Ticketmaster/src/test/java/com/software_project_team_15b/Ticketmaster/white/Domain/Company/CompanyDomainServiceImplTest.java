@@ -387,11 +387,10 @@ class CompanyDomainServiceImplTest {
         Company company = new Company("Acme", UUID.randomUUID());
         company.changeStatus(CompanyStatus.SUSPENDED);
         when(repo.findById(any())).thenReturn(Optional.of(company));
-        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        Company result = service.changeStatus(UUID.randomUUID(), CompanyStatus.ACTIVE);
-
-        assertThat(result.getStatus()).isEqualTo(CompanyStatus.ACTIVE);
+        assertThatThrownBy(() -> service.changeStatus(UUID.randomUUID(), CompanyStatus.ACTIVE))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("closed");
     }
 
     @Test
