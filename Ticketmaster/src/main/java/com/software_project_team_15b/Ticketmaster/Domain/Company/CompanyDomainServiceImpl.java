@@ -208,7 +208,7 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
             throw new IllegalArgumentException("companyId cannot be null");
         }
         Company company = getCompanyOrThrow(companyId);
-        if (company.getStatus() == CompanyStatus.CLOSED && !canViewClosed) {
+        if ((company.getStatus() == CompanyStatus.CLOSED || company.getStatus() == CompanyStatus.SUSPENDED) && !canViewClosed) {
             throw new UnauthorizedCompanyActionException(
                     "Company with id " + companyId + " is closed and cannot be viewed");
         }
