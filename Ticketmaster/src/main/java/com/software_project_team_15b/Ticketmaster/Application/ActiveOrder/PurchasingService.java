@@ -23,6 +23,9 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Respo
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
+import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationType;
 import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutCompletedDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutStartedDTO;
@@ -60,6 +63,7 @@ public class PurchasingService {
     private final IPaymentAPI paymentGateway;
     private final ITicketSupplyAPI ticketProvider;
     private final IAuth auth;
+    private final INotifier notifier;
 
     public PurchasingService(
             PurchasingDomainService purchasingDomainService,
@@ -69,7 +73,8 @@ public class PurchasingService {
             ILotteryDomainService lotteryDomainService,
             IPaymentAPI paymentGateway,
             ITicketSupplyAPI ticketProvider,
-            IAuth auth
+            IAuth auth,
+            INotifier notifier
     ) {
         this.purchasingDomainService = Objects.requireNonNull(purchasingDomainService);
         this.memberRepository = Objects.requireNonNull(memberRepository);
@@ -79,6 +84,7 @@ public class PurchasingService {
         this.paymentGateway = Objects.requireNonNull(paymentGateway);
         this.ticketProvider = Objects.requireNonNull(ticketProvider);
         this.auth = Objects.requireNonNull(auth);
+        this.notifier = Objects.requireNonNull(notifier);
     }
 
     public QueueAccessDTO requestAccessToCreateActiveOrder(String token, UUID eventId) {
@@ -377,6 +383,28 @@ public class PurchasingService {
                     receipt.areaId(),
                     receipt.quantity()
             );
+
+            //for notification purposes
+
+            notifier.notifyUser(userId, new NotificationDTO(
+                    NotificationType.PURCHASE_SUCCESS,
+                    "Checkout Completed",
+                    "Your checkout for event " + eventDomainService.getEvent(activeOrder.getEventId()).name() + " has been completed successfully.",
+                    LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC))
+                );
+
+            //event sold out
+            var event = eventDomainService.getEvent(activeOrder.getEventId());
+            int remaining = event.areas().stream().mapToInt(a -> a.availableCapacity()).sum();
+            if (remaining == 0) {
+                    notifier.notifyEventManagers(activeOrder.getEventId(), new NotificationDTO(
+                    NotificationType.EVENT_SOLD_OUT,
+                    "Event Sold Out",
+                    "Event " + event.name() + " is now sold out.",
+                    LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC))
+                );
+               
+            }
 
             return new CheckoutCompletedDTO(
                     activeOrder.getOrderId(),

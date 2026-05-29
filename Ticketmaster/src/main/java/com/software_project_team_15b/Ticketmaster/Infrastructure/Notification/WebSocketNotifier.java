@@ -26,6 +26,11 @@ public class WebSocketNotifier implements INotifier {
     }
 
     @Override
+    public void notifyEventManagers(UUID eventId, NotificationDTO notification) {
+        messagingTemplate.convertAndSend("/topic/event/" + eventId + "/managers", notification);
+    }
+
+    @Override
     public void notifyEventAttendees(UUID eventId, NotificationDTO notification) {
         messagingTemplate.convertAndSend("/topic/event/" + eventId + "/attendees", notification);
     }
