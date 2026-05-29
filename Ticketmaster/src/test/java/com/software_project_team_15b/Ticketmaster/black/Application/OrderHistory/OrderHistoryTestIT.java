@@ -215,6 +215,52 @@ class OrderHistoryTestIT {
     }
 
     @Test
+    void getSoldTicketsForCompany_returnsTicketsGroupedByEvent_whenUserIsApprovedManagerWithViewPermission() {
+
+        Company company = org.mockito.Mockito.mock(Company.class);
+        when(company.getId()).thenReturn(companyId);
+        when(companyRepository.findByFounder(callerId)).thenReturn(List.of());
+        when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
+
+        Event event = createEvent(companyId);
+
+        eventsRepository.save(event);
+        orderHistoryRepository.save(createOrder(userId, event.eventId(), 2, "10.00"));
+
+        mockMemberWithManagerRole(
+                callerId,
+                event.eventId(),
+                companyId,
+                Set.of(ManagerPermission.VIEW_PURCHASE_AND_ORDER_HISTORY),
+                true);
+
+        Map<UUID, List<TicketDTO>> result = service.getSoldTicketsForCompany(token, companyId);
+
+        assertThat(result).containsKey(event.eventId());
+        assertThat(result.get(event.eventId())).hasSize(2);
+    }
+
+    @Test
+    void getSoldTicketsForCompany_throwsUnauthorizedCompanyActionException_whenManagerLacksViewPermission() {
+
+        Company company = org.mockito.Mockito.mock(Company.class);
+        when(company.getId()).thenReturn(companyId);
+        when(companyRepository.findByFounder(callerId)).thenReturn(List.of());
+        when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
+
+        mockMemberWithManagerRole(
+                callerId,
+                UUID.randomUUID(),
+                companyId,
+                Set.of(ManagerPermission.GENERATE_SALES_REPORTS),
+                true);
+
+        assertThatThrownBy(() -> service.getSoldTicketsForCompany(token, companyId))
+                .isInstanceOf(UnauthorizedCompanyActionException.class)
+                .hasMessageContaining("permission to view sold tickets");
+    }
+
+    @Test
     void getSoldTicketsForCompany_throwsUnauthorizedCompanyActionException_whenNotFounderOrOwner() {
 
         when(companyRepository.findByFounder(callerId)).thenReturn(List.of());
@@ -412,6 +458,57 @@ class OrderHistoryTestIT {
 
     assertThat(orders).hasSize(1);
     }
+
+        @Test
+        void generateSalesReport_returnsCorrectTotals_whenUserIsApprovedManagerWithGenerateSalesPermission() {
+
+        Company company = org.mockito.Mockito.mock(Company.class);
+        when(company.getId()).thenReturn(companyId);
+        when(companyRepository.findByFounder(callerId)).thenReturn(List.of());
+        when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
+        when(companyRepository.findById(companyId)).thenReturn(java.util.Optional.of(company));
+        when(userDomainService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of());
+
+        Event event = createEvent(companyId);
+        eventsRepository.save(event);
+
+        mockMemberWithManagerRole(
+            callerId,
+            event.eventId(),
+            companyId,
+            Set.of(ManagerPermission.GENERATE_SALES_REPORTS),
+            true);
+
+        orderHistoryRepository.save(createOrder(userId, event.eventId(), 3, "12.00"));
+
+        Map<String, Object> report = service.generateSalesReport(token, companyId);
+
+        assertThat(report.get("ticketsSold")).isEqualTo(3);
+        assertThat(report.get("totalRevenue")).isEqualTo(Money.of("36.00", "USD"));
+        assertThat(report.get("orders")).isInstanceOf(List.class);
+        assertThat((List<?>) report.get("orders")).hasSize(1);
+        }
+
+        @Test
+        void generateSalesReport_throwsUnauthorizedCompanyActionException_whenManagerLacksGenerateSalesPermission() {
+
+        Company company = org.mockito.Mockito.mock(Company.class);
+        when(company.getId()).thenReturn(companyId);
+        when(companyRepository.findByFounder(callerId)).thenReturn(List.of());
+        when(companyRepository.findByOwner(callerId)).thenReturn(List.of());
+        when(companyRepository.findById(companyId)).thenReturn(java.util.Optional.of(company));
+
+        mockMemberWithManagerRole(
+            callerId,
+            UUID.randomUUID(),
+            companyId,
+            Set.of(ManagerPermission.MANAGE_EVENTS),
+            true);
+
+        assertThatThrownBy(() -> service.generateSalesReport(token, companyId))
+            .isInstanceOf(UnauthorizedCompanyActionException.class)
+            .hasMessageContaining("permission to generate sales reports");
+        }
 
     @Test
     void generateSalesReport_excludesCancelledOrdersFromTotals_whenCalled() {
@@ -688,8 +785,20 @@ class OrderHistoryTestIT {
     // =========================================================
 
     private void mockMemberWithManagerRole(UUID memberId, UUID eventId, UUID companyId) {
+        mockMemberWithManagerRole(memberId, eventId, companyId, Set.of(ManagerPermission.GENERATE_SALES_REPORTS), true);
+    }
+
+    private void mockMemberWithManagerRole(
+            UUID memberId,
+            UUID eventId,
+            UUID companyId,
+            Set<ManagerPermission> permissions,
+            boolean approved) {
         Member member = org.mockito.Mockito.mock(Member.class);
-        Manager manager = new Manager(UUID.randomUUID(), companyId, eventId, Set.of(ManagerPermission.GENERATE_SALES_REPORTS));
+        Manager manager = new Manager(UUID.randomUUID(), companyId, eventId, permissions);
+        if (approved) {
+            manager.approveAppointment();
+        }
         Set<com.software_project_team_15b.Ticketmaster.Domain.Member.Role> roles = new HashSet<>();
         roles.add(manager);
         when(member.getAssignedRoles()).thenReturn(roles);

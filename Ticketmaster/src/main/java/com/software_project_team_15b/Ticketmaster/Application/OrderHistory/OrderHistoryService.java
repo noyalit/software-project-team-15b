@@ -34,6 +34,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.OrderHistoryDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.TicketDTO;
@@ -53,6 +54,7 @@ public class OrderHistoryService implements EventSubscriber{
     private final ICompanyRepository companyRepository;
     private final IMemberRepository memberRepository;
     private static final ConcurrentHashMap<UUID, LockEntry> ORDER_LOCKS = new ConcurrentHashMap<>();
+    private static final int MAX_LOCKS = 1000; // Prevent unbounded growth of locks map
     private final TransactionTemplate transactionTemplate;
 
     public OrderHistoryService(IOrderHistoryRepository orderHistoryRepository,
@@ -158,8 +160,8 @@ public class OrderHistoryService implements EventSubscriber{
             }
             validateUser(token);
             UUID callerId = auth.extractUserId(token);
-            if (!isFounderOrOwner(callerId, companyId)) {
-                throw new UnauthorizedCompanyActionException("Only the company founder or owner can view sold tickets");
+            if (!hasPermission(callerId, companyId, ManagerPermission.VIEW_PURCHASE_AND_ORDER_HISTORY)) {
+                throw new UnauthorizedCompanyActionException("Caller does not have permission to view sold tickets for this company");
             }
 
             SearchCriteria criteria = SearchCriteria.empty();
@@ -189,7 +191,6 @@ public class OrderHistoryService implements EventSubscriber{
         }
     }
 
-    //Assuming all prices are in the same currency
     @Transactional(readOnly = true)
     public Map<String, Object> generateSalesReport(String token, UUID companyId) {
         try {
@@ -202,8 +203,8 @@ public class OrderHistoryService implements EventSubscriber{
             validateUser(token);
             UUID callerId = auth.extractUserId(token);
 
-            if (!isFounderOrOwner(callerId, companyId)) {
-                throw new UnauthorizedCompanyActionException("Only the company founder or owner can view sold tickets");
+            if (!hasPermission(callerId, companyId, ManagerPermission.GENERATE_SALES_REPORTS)) {
+                throw new UnauthorizedCompanyActionException("Caller does not have permission to generate sales reports for this company");
             }
 
             List<UUID> appointedMembers = userDomainService.getAppointedMembersTree(callerId, companyId);
@@ -381,12 +382,24 @@ public class OrderHistoryService implements EventSubscriber{
         return managedEventIds;
     }
 
-    private boolean isFounderOrOwner(UUID callerId, UUID companyId) {
-        if (callerId == null || companyId == null) return false;
+    private boolean hasPermission(UUID callerId, UUID companyId, ManagerPermission requiredPermission) {
+        if (callerId == null || companyId == null || requiredPermission == null) {
+            throw new IllegalArgumentException("callerId, companyId and requiredPermission cannot be null");
+        }
+        var caller = memberRepository.findById(callerId);
+        if (caller.isEmpty()) {
+            return false;
+        }
+        var member = caller.get();
+        boolean isPermittedManager = member.getAssignedRoles().stream()
+            .filter(role -> role instanceof Manager)
+            .map(role -> (Manager) role)
+            .filter(manager -> companyId.equals(manager.getCompanyId()))
+            .filter(manager -> manager.isAppointmentApproved())
+            .anyMatch(manager -> manager.hasPermission(requiredPermission));
 
-        return companyRepository.findByFounder(callerId).stream().anyMatch(company -> companyId.equals(company.getId()))
-            || companyRepository.findByOwner(callerId).stream().anyMatch(company -> companyId.equals(company.getId()));
-    }
+        return (isPermittedManager || userDomainService.isActiveOwner(callerId, companyId) || userDomainService.isActiveFounder(callerId, companyId));
+        }
 
     
     
