@@ -473,7 +473,11 @@ public class PurchasingService {
         if (!auth.isTokenValid(token)) {
             throw new InvalidTokenException("Token is invalid or expired");
         }
-        return auth.extractUserId(token);
+        UUID userId = auth.extractUserId(token);
+        if (userId == null) {
+            throw new InvalidTokenException("Token does not contain a valid user id");
+        }
+        return userId;
     }
 
     private void requireToken(String token) {
@@ -574,7 +578,11 @@ public class PurchasingService {
         if (mem.isEmpty()) {
             throw new IllegalStateException("User not found: " + userId);
         }
-        return mem.get().getBirthDate();
+        LocalDate birthDate = mem.get().getBirthDate();
+        if (birthDate == null) {
+            throw new IllegalStateException("User birth date is missing");
+        }
+        return birthDate;
     }
 
     private PriceBreakdown getPriceBreakdown(ActiveOrder activeOrder, String couponCode, LocalDate birthDate) {
