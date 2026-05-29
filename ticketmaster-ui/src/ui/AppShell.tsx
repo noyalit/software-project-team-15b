@@ -23,8 +23,21 @@ function NavLink({ to, label }: { to: string; label: string }) {
 }
 
 export default function AppShell() {
-  const { token, userType, username, logout } = useAuthStore();
-  const location = useLocation();
+  const { token, userType, username, logout, setAuth } = useAuthStore();
+
+  useQuery({
+    queryKey: ['enter-system'],
+    queryFn: async () => {
+      const res = await http.post<ApiResponse<string>>('/api/users/enter');
+      if (res.data.error) throw new Error(res.data.error);
+      if (!res.data.data) throw new Error('No token returned');
+      setAuth(res.data.data, 'guest');
+      return res.data.data;
+    },
+    enabled: !token,
+    staleTime: Infinity,
+    retry: 1,
+  });
 
   const meQuery = useQuery({
     queryKey: ['me', token],

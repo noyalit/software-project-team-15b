@@ -247,6 +247,8 @@ export default function EventDetailsPage() {
         throw new Error('Please enter birth date for guest checkout.');
       }
 
+      localStorage.setItem('guestBirthDate', guestBirthDate);
+
       const res = await http.post<ApiResponse<CheckoutStartedDTO>>(
         `/api/active-orders/${activeOrderId}/checkout/guest/start`,
         {

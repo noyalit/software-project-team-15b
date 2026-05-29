@@ -68,7 +68,18 @@ export default function CheckoutPage() {
         return res.data.data;
       }
 
-      throw new Error('Guest checkout is not supported on this page yet.');
+      const guestBirthDate = localStorage.getItem('guestBirthDate') ?? '';
+      if (!guestBirthDate) throw new Error('Please enter birth date for guest checkout.');
+
+      const res = await http.post<ApiResponse<CheckoutCompletedDTO>>(
+        `/api/active-orders/${activeOrderId}/checkout/guest/complete`,
+        {
+          birthDate: guestBirthDate,
+          couponCode: couponCode.trim() || null,
+        }
+      );
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data;
     },
     onSuccess: async () => {
       setSuccessMessage('Purchase completed successfully.');
@@ -78,7 +89,12 @@ export default function CheckoutPage() {
       if (activeOrderId && token) {
         await qc.invalidateQueries({ queryKey: ['active-order', activeOrderId, token] });
       }
-      navigate('/orders', { replace: true });
+
+      if (userType === 'member') {
+        navigate('/orders', { replace: true });
+      } else {
+        navigate('/events', { replace: true });
+      }
     },
   });
 
