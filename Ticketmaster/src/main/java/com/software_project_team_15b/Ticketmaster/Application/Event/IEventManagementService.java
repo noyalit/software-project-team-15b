@@ -5,16 +5,16 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Cre
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
+import com.software_project_team_15b.Ticketmaster.DTO.DiscountPolicyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.PurchasePolicyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.SeatsAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 
 import java.util.List;
 import java.util.Set;
@@ -311,10 +311,10 @@ public interface IEventManagementService {
      * @throws PolicyViolationException   if {@code callerId} is not authorized
      * @throws NullPointerException       if {@code policies} or any element is {@code null}
      */
-    void replacePurchasePolicies(UUID eventId, List<IEventPurchasePolicy> policies, UUID callerId);
+    void replacePurchasePolicies(UUID eventId, List<PurchasePolicyDTO> policies, UUID callerId);
 
     /** Token-authenticated variant of {@link #replacePurchasePolicies(UUID, List, UUID)}. */
-    void replacePurchasePolicies(UUID eventId, List<IEventPurchasePolicy> policies, String token);
+    void replacePurchasePolicies(UUID eventId, List<PurchasePolicyDTO> policies, String token);
 
     /**
      * Replaces the event's discount-policy chain. An empty list clears all discounts.
@@ -328,10 +328,10 @@ public interface IEventManagementService {
      * @throws PolicyViolationException   if {@code callerId} is not authorized
      * @throws NullPointerException       if {@code policies} or any element is {@code null}
      */
-    void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies, UUID callerId);
+    void replaceDiscountPolicies(UUID eventId, List<DiscountPolicyDTO> policies, UUID callerId);
 
     /** Token-authenticated variant of {@link #replaceDiscountPolicies(UUID, List, UUID)}. */
-    void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies, String token);
+    void replaceDiscountPolicies(UUID eventId, List<DiscountPolicyDTO> policies, String token);
 
     /**
      * Returns the event's current purchase-policy chain in order. Read-only.
@@ -342,7 +342,7 @@ public interface IEventManagementService {
      * @return immutable view of the chain
      * @throws InvalidEventStateException if the event is not found
      */
-    List<IEventPurchasePolicy> getPurchasePolicies(UUID eventId);
+    List<PurchasePolicyDTO> getPurchasePolicies(UUID eventId);
 
     /**
      * Returns the event's current discount-policy chain in order. Read-only.
@@ -353,6 +353,6 @@ public interface IEventManagementService {
      * @return immutable view of the chain
      * @throws InvalidEventStateException if the event is not found
      */
-    List<IEventDiscountPolicy> getDiscountPolicies(UUID eventId);
+    List<DiscountPolicyDTO> getDiscountPolicies(UUID eventId);
 
 }
