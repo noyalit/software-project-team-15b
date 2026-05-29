@@ -31,6 +31,7 @@ import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedPaymentException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedToIssueTicketsException;
@@ -80,6 +81,26 @@ public class PurchasingService {
         this.paymentGateway = Objects.requireNonNull(paymentGateway);
         this.ticketProvider = Objects.requireNonNull(ticketProvider);
         this.auth = Objects.requireNonNull(auth);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ActiveOrderDTO> getMyActiveOrders(String token) {
+        UUID userId = null;
+        try {
+            userId = requireValidUser(token);
+            List<ActiveOrder> activeOrders = purchasingDomainService.findByUserIdAndStatus(
+                    userId,
+                    ActiveOrderStatus.ACTIVE
+            );
+            List<ActiveOrderDTO> views = activeOrders.stream()
+                    .map(this::buildActiveOrderView)
+                    .toList();
+            AUDIT.info("op=getMyActiveOrders user={} count={} result=ok", userId, views.size());
+            return List.copyOf(views);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=getMyActiveOrders user={} result=rejected reason={}", userId, e.getMessage());
+            throw e;
+        }
     }
 
     public QueueAccessDTO requestAccessToCreateActiveOrder(String token, UUID eventId) {

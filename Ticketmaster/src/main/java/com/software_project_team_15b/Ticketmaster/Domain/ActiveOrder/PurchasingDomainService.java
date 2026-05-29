@@ -100,6 +100,16 @@ public class PurchasingDomainService {
         return activeOrder;
     }
 
+    public List<ActiveOrder> findByUserIdAndStatus(UUID userId, ActiveOrderStatus status) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
+        }
+        if (status == null) {
+            throw new IllegalArgumentException("Status cannot be null");
+        }
+        return activeOrderRepository.findByUserIdAndStatus(userId, status);
+    }
+
     public void validateOrderIsActive(ActiveOrder activeOrder) {
         requireOrderIsActive(activeOrder);
     }

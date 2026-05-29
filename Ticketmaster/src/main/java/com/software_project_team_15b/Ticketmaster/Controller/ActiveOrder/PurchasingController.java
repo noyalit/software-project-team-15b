@@ -32,6 +32,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -57,6 +58,25 @@ public class PurchasingController {
 
             return ResponseEntity.ok(new ApiResponse<>(access, null));
 
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (IllegalStateException ex) {
+            return conflict(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Get all active orders for the logged in user")
+    @GetMapping("/my")
+    public ResponseEntity<ApiResponse<List<ActiveOrderDTO>>> getMyActiveOrders(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+    ) {
+        try {
+            List<ActiveOrderDTO> orders = purchasingService.getMyActiveOrders(token);
+            return ResponseEntity.ok(new ApiResponse<>(orders, null));
         } catch (InvalidTokenException ex) {
             return unauthorized(ex);
         } catch (IllegalArgumentException ex) {
