@@ -11,8 +11,9 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Composite: stacks discounts by summing each child's contribution, clamped at the
- * subtotal — implements the "stacking" rule (כפל הנחות). With no children, returns zero.
+ * Composite: stacks discounts as a multiplicative cascade — each child is evaluated
+ * against the running price left by its predecessors (כפל הנחות in the retail sense).
+ * 10% then 20% off $100 = $28 off, not $30. With no children, returns zero.
  */
 public class SumDiscountPolicy implements IEventDiscountPolicy, ICompanyDiscountPolicy {
 
@@ -31,11 +32,11 @@ public class SumDiscountPolicy implements IEventDiscountPolicy, ICompanyDiscount
 
     @Override
     public Money discount(Money subtotal, PolicyContext ctx) {
-        Money total = Money.zero(subtotal.currency());
+        Money running = subtotal;
         for (IDiscountPolicy child : children) {
-            Money d = IDiscountPolicy.clamp(child.discount(subtotal, ctx), subtotal);
-            total = total.add(d);
+            Money d = IDiscountPolicy.clamp(child.discount(running, ctx), running);
+            running = running.subtract(d);
         }
-        return IDiscountPolicy.clamp(total, subtotal);
+        return IDiscountPolicy.clamp(subtotal.subtract(running), subtotal);
     }
 }
