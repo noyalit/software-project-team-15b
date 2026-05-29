@@ -37,6 +37,8 @@ export default function CheckoutPage() {
 
   const activeOrderId = orderId ?? localStorage.getItem('activeOrderId') ?? null;
 
+  const checkoutCompleted = Boolean(successMessage);
+
   const activeOrderQuery = useQuery({
     queryKey: ['active-order', activeOrderId, token],
     queryFn: async () => {
@@ -48,7 +50,7 @@ export default function CheckoutPage() {
       if (!res.data.data) throw new Error('Active order not found');
       return res.data.data;
     },
-    enabled: Boolean(activeOrderId) && Boolean(token),
+    enabled: Boolean(activeOrderId) && Boolean(token) && !checkoutCompleted,
   });
 
   const completeCheckoutMutation = useMutation({
@@ -81,7 +83,8 @@ export default function CheckoutPage() {
   });
 
   const actionError = activeOrderQuery.error || completeCheckoutMutation.error;
-  const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
+  const actionErrorMessage =
+    !successMessage && actionError ? getApiErrorMessage(actionError) : null;
 
   const formatMoney = (m?: { amount: number; currency: string } | null) => {
     if (!m) return '—';
