@@ -14,6 +14,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -101,6 +102,19 @@ class ActiveOrderMaintenanceServiceWhiteTest {
     }
 
     @Test
+    void deleteNonActiveOrdersShouldRethrowWhenRepositoryFails() {
+        when(activeOrderRepository.findByStatusNotForUpdate(ActiveOrderStatus.ACTIVE))
+                .thenThrow(new RuntimeException("database failure"));
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                service.deleteNonActiveOrders()
+        );
+
+        assertTrue(exception.getMessage().contains("database failure"));
+        verify(activeOrderRepository, never()).deleteAll(any());
+    }
+
+    @Test
     void releaseAndDeleteExpiredActiveOrdersShouldDoNothingWhenNoOrdersFound() {
         when(activeOrderRepository.findExpiredActiveOrdersForUpdate(
                 eq(ActiveOrderStatus.ACTIVE),
@@ -181,5 +195,63 @@ class ActiveOrderMaintenanceServiceWhiteTest {
 
         assertTrue(expiredBefore.isAfter(beforeCall));
         assertTrue(expiredBefore.isBefore(afterCall));
+    }
+
+    @Test
+    void releaseAndDeleteExpiredActiveOrdersShouldRethrowWhenRepositoryFails() {
+        when(activeOrderRepository.findExpiredActiveOrdersForUpdate(
+                eq(ActiveOrderStatus.ACTIVE),
+                any(LocalDateTime.class)
+        )).thenThrow(new RuntimeException("scan failure"));
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                service.releaseAndDeleteExpiredActiveOrders()
+        );
+
+        assertTrue(exception.getMessage().contains("scan failure"));
+        verifyNoInteractions(eventDomainService);
+    }
+
+    @Test
+    void releaseAndDeleteExpiredActiveOrdersShouldRethrowWhenReleaseFails() {
+        ActiveOrder activeOrder = mock(ActiveOrder.class);
+
+        when(activeOrder.getOrderId()).thenReturn(orderId);
+        when(activeOrder.getEventId()).thenReturn(eventId);
+        when(activeOrder.getOrderSeats()).thenReturn(Set.of(seatId));
+
+        when(activeOrderRepository.findExpiredActiveOrdersForUpdate(
+                eq(ActiveOrderStatus.ACTIVE),
+                any(LocalDateTime.class)
+        )).thenReturn(List.of(activeOrder));
+
+        doThrow(new RuntimeException("release failure"))
+                .when(eventDomainService)
+                .release(eventId, orderId);
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () ->
+                service.releaseAndDeleteExpiredActiveOrders()
+        );
+
+        assertTrue(exception.getMessage().contains("release failure"));
+        verify(activeOrderRepository, never()).delete(activeOrder);
+    }
+
+    @Test
+    void releaseAndDeleteExpiredActiveOrderShouldRethrowWhenNullOrderIsPassed() throws Exception {
+        Method method = ActiveOrderMaintenanceService.class
+                .getDeclaredMethod("releaseAndDeleteExpiredActiveOrder", ActiveOrder.class);
+        method.setAccessible(true);
+
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            try {
+                method.invoke(service, (ActiveOrder) null);
+            } catch (java.lang.reflect.InvocationTargetException e) {
+                throw (RuntimeException) e.getCause();
+            }
+        });
+
+        assertTrue(exception.getMessage().contains("Cannot invoke"));
+        verifyNoInteractions(eventDomainService, activeOrderRepository);
     }
 }

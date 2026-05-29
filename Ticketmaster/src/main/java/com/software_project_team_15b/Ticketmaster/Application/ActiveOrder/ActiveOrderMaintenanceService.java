@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class ActiveOrderMaintenanceService {
@@ -110,9 +111,12 @@ public class ActiveOrderMaintenanceService {
                 activeOrder.getOrderId(),
                 activeOrder.getEventId());
         } catch (RuntimeException e) {
+            UUID orderId = activeOrder == null ? null : activeOrder.getOrderId();
+            UUID eventId = activeOrder == null ? null : activeOrder.getEventId();
+
             AUDIT.warn("op=releaseAndDeleteExpiredActiveOrder order={} event={} result=error reason={}",
-                activeOrder != null ? activeOrder.getOrderId() : null,
-                activeOrder != null ? activeOrder.getEventId() : null,
+                orderId,
+                eventId,
                 e.getMessage(), e);
 
                 throw e; // Rethrow to trigger transaction rollback and ensure the order isn't deleted without releasing seats

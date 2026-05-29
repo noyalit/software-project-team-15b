@@ -48,16 +48,13 @@ import java.util.concurrent.locks.ReentrantLock;
 public class EventDomainServiceImpl implements IEventDomainService {
 
     private final IEventRepository events;
-    private final CompanyService companyService;
     private final EventLockRegistry locks;
     private final TransactionTemplate txTemplate;
 
     public EventDomainServiceImpl(IEventRepository events,
-                                  @Lazy CompanyService companyService,
                                   EventLockRegistry locks,
                                   PlatformTransactionManager txManager) {
         this.events = Objects.requireNonNull(events);
-        this.companyService = Objects.requireNonNull(companyService); // TODO: to be removed once @OrMalky have a domain service
         this.locks = Objects.requireNonNull(locks);
         this.txTemplate = new TransactionTemplate(Objects.requireNonNull(txManager));
     }

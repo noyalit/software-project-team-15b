@@ -13,7 +13,6 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Upd
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
@@ -81,19 +80,18 @@ class EventCatalogManagementE2ETest {
         String founderToken = userService.login(userService.enterAsGuest(), founderUser, "Password1");
         founderId = mFounder.getUserId();
 
-        Company company = companyService.createCompany(founderToken, "CatTestCo_" + n);
-        companyId = company.getId();
+        companyId = companyService.createCompany(founderToken, "CatTestCo_" + n).companyId();
         userService.changeRoleToFounder(founderToken, companyId);
 
-        ownerId = registerAndApproveOwner("cat_owner_" + sfx, founderToken, company.getId());
+        ownerId = registerAndApproveOwner("cat_owner_" + sfx, founderToken, companyId);
         mgrManageEventsId = registerAndApproveManager("cat_mgr_me_" + sfx, founderToken,
-                company.getId(), Set.of(ManagerPermission.MANAGE_EVENTS));
+                companyId, Set.of(ManagerPermission.MANAGE_EVENTS));
         mgrConfigHallId = registerAndApproveManager("cat_mgr_ch_" + sfx, founderToken,
-                company.getId(), Set.of(ManagerPermission.CONFIGURE_HALLS_AND_SEATS));
+                companyId, Set.of(ManagerPermission.CONFIGURE_HALLS_AND_SEATS));
         mgrUpdateMapId = registerAndApproveManager("cat_mgr_um_" + sfx, founderToken,
-                company.getId(), Set.of(ManagerPermission.UPDATE_EVENT_MAP));
+                companyId, Set.of(ManagerPermission.UPDATE_EVENT_MAP));
         mgrWrongPermId = registerAndApproveManager("cat_mgr_wp_" + sfx, founderToken,
-                company.getId(), Set.of(ManagerPermission.HANDLE_INQUIRIES));
+                companyId, Set.of(ManagerPermission.HANDLE_INQUIRIES));
 
         String unauthUser = "cat_unauth_" + sfx;
         com.software_project_team_15b.Ticketmaster.DTO.MemberDTO mUnauth = userService.registerMember(userService.enterAsGuest(), unauthUser, "Password1", LocalDate.of(1990, 1, 1));
