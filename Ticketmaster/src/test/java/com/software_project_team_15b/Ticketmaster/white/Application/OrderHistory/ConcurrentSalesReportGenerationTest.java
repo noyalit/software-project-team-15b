@@ -16,7 +16,6 @@ import com.software_project_team_15b.Ticketmaster.Application.OrderHistory.Order
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
-import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;

@@ -51,10 +51,8 @@ public class OrderHistoryService implements EventSubscriber{
     private final IEventRepository eventsRepository;
     private final IAuth auth;
     private final UserDomainService userDomainService;
-    private final ICompanyRepository companyRepository;
     private final IMemberRepository memberRepository;
     private static final ConcurrentHashMap<UUID, LockEntry> ORDER_LOCKS = new ConcurrentHashMap<>();
-    private static final int MAX_LOCKS = 1000; // Prevent unbounded growth of locks map
     private final TransactionTemplate transactionTemplate;
 
     public OrderHistoryService(IOrderHistoryRepository orderHistoryRepository,
@@ -73,7 +71,6 @@ public class OrderHistoryService implements EventSubscriber{
         this.eventsRepository = eventsRepository;
         this.auth = auth;
         this.userDomainService = userDomainService;
-        this.companyRepository = companyRepository;
         this.memberRepository = memberRepository;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         eventCancelManager.subscribe(this);
