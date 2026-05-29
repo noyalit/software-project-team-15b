@@ -65,6 +65,7 @@ export default function AppShell() {
               (activeRole === 'Founder' || activeRole === 'Owner') && (
                 <NavLink to="/my-events" label="My Events" />
             )}
+            {userType === 'member' && <NavLink to="/orders" label="Orders" />}
             {userType === 'member' && <NavLink to="/me" label="Profile" />}
             {userType === 'system-admin' && <NavLink to="/admin/queues" label="Site Queue" />}
             {userType === 'system-admin' && <NavLink to="/admin/event-queues" label="Event Queues" />}

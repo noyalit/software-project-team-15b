@@ -31,10 +31,10 @@ export default function EventDetailsPage() {
 
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>([]);
-  const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
   const [couponCode, setCouponCode] = useState('');
   const [guestBirthDate, setGuestBirthDate] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(() =>localStorage.getItem('activeOrderId'));
 
   const eventQuery = useQuery({
     queryKey: ['event', eventId],
@@ -106,6 +106,7 @@ export default function EventDetailsPage() {
 
     onSuccess: async (orderId) => {
       setActiveOrderId(orderId);
+      localStorage.setItem('activeOrderId', orderId);
       setSuccessMessage('Active order started.');
       await qc.invalidateQueries({ queryKey: ['active-order', orderId] });
     },

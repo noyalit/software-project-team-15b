@@ -15,6 +15,7 @@ import CreateCompanyPage from '../screens/CreateCompanyPage';
 import CompanyPage from '../screens/CompanyPage';
 import AdminEventQueuesPage from '../screens/AdminEventQueuesPage';
 import MyEventsPage from '../screens/MyEventsPage';
+import OrdersPage from '../screens/OrdersPage';
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/events" element={<EventSearchPage />} />
         <Route path="/events/:eventId" element={<EventDetailsPage />} />
+        <Route path="/orders" element={<OrdersPage />} />
 
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
