@@ -3,6 +3,8 @@ package com.software_project_team_15b.Ticketmaster.Application.Event;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.DTO.DiscountPolicyDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.PurchasePolicyDTO;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
@@ -73,6 +75,8 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     public UUID createEvent(CreateEventCommand cmd, UUID callerId) {
+        Objects.requireNonNull(cmd, "cmd");
+        Objects.requireNonNull(callerId, "callerId");
         try {
             requireOwnerOrFounder(callerId, cmd.companyId(), "createEvent");
             UUID id = eventDomainService.createEvent(cmd);
@@ -85,6 +89,9 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     public UUID addArea(UUID eventId, AddAreaCommand cmd, UUID callerId) {
+        Objects.requireNonNull(eventId, "eventId");
+        Objects.requireNonNull(cmd, "cmd");
+        Objects.requireNonNull(callerId, "callerId");
         try {
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.CONFIGURE_HALLS_AND_SEATS);
@@ -98,9 +105,11 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     public void publish(UUID eventId, UUID callerId) {
+        Objects.requireNonNull(eventId, "eventId");
+        Objects.requireNonNull(callerId, "callerId");
         try {
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
-            requireOwnerOrFounder(callerId, companyId, "publish");
+            userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.MANAGE_EVENTS);
             eventDomainService.publish(eventId);
             AUDIT.info("op=publish event={} caller={} result=ok", eventId, callerId);
         } catch (RuntimeException e) {
@@ -110,9 +119,11 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     public void cancel(UUID eventId, UUID callerId) {
+        Objects.requireNonNull(eventId, "eventId");
+        Objects.requireNonNull(callerId, "callerId");
         try {
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
-            requireOwnerOrFounder(callerId, companyId, "cancel");
+            userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.MANAGE_EVENTS);
             eventDomainService.cancel(eventId);
             AUDIT.info("op=cancel event={} caller={} result=ok", eventId, callerId);
         } catch (RuntimeException e) {
@@ -249,12 +260,12 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     @Override
-    public void replacePurchasePolicies(UUID eventId, List<IEventPurchasePolicy> policies, String token) {
+    public void replacePurchasePolicies(UUID eventId, List<PurchasePolicyDTO> policies, String token) {
         replacePurchasePolicies(eventId, policies, resolveMemberCallerId(token));
     }
 
     @Override
-    public void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies, String token) {
+    public void replaceDiscountPolicies(UUID eventId, List<DiscountPolicyDTO> policies, String token) {
         replaceDiscountPolicies(eventId, policies, resolveMemberCallerId(token));
     }
 
@@ -264,7 +275,9 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     public void updateEvent(UUID eventId, UpdateEventCommand cmd, UUID callerId) {
+        Objects.requireNonNull(eventId, "eventId");
         Objects.requireNonNull(cmd, "cmd");
+        Objects.requireNonNull(callerId, "callerId");
         try {
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.MANAGE_EVENTS);
@@ -279,8 +292,10 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     public void updateArea(UUID eventId, UUID areaId, UpdateAreaCommand cmd, UUID callerId) {
-        Objects.requireNonNull(cmd, "cmd");
+        Objects.requireNonNull(eventId, "eventId");
         Objects.requireNonNull(areaId, "areaId");
+        Objects.requireNonNull(cmd, "cmd");
+        Objects.requireNonNull(callerId, "callerId");
         try {
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.UPDATE_EVENT_MAP);
@@ -295,7 +310,9 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     public void removeArea(UUID eventId, UUID areaId, UUID callerId) {
+        Objects.requireNonNull(eventId, "eventId");
         Objects.requireNonNull(areaId, "areaId");
+        Objects.requireNonNull(callerId, "callerId");
         try {
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.CONFIGURE_HALLS_AND_SEATS);
@@ -310,11 +327,17 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     public void replacePurchasePolicies(UUID eventId, List<IEventPurchasePolicy> policies, UUID callerId) {
+    public void replacePurchasePolicies(UUID eventId, List<PurchasePolicyDTO> policies, UUID callerId) {
+        Objects.requireNonNull(eventId, "eventId");
         Objects.requireNonNull(policies, "policies");
+        Objects.requireNonNull(callerId, "callerId");
         try {
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.DEFINE_PURCHASE_POLICY);
-            eventDomainService.replacePurchasePolicies(eventId, policies);
+            List<IEventPurchasePolicy> domainPolicies = policies.stream()
+                    .map(PurchasePolicyDTO::toDomain)
+                    .toList();
+            eventDomainService.replacePurchasePolicies(eventId, domainPolicies);
             AUDIT.info("op=replacePurchasePolicies event={} caller={} count={} result=ok",
                     eventId, callerId, policies.size());
         } catch (RuntimeException e) {
@@ -325,12 +348,17 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     @Override
-    public void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies, UUID callerId) {
+    public void replaceDiscountPolicies(UUID eventId, List<DiscountPolicyDTO> policies, UUID callerId) {
+        Objects.requireNonNull(eventId, "eventId");
         Objects.requireNonNull(policies, "policies");
+        Objects.requireNonNull(callerId, "callerId");
         try {
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.DEFINE_DISCOUNT_POLICY);
-            eventDomainService.replaceDiscountPolicies(eventId, policies);
+            List<IEventDiscountPolicy> domainPolicies = policies.stream()
+                    .map(DiscountPolicyDTO::toDomain)
+                    .toList();
+            eventDomainService.replaceDiscountPolicies(eventId, domainPolicies);
             AUDIT.info("op=replaceDiscountPolicies event={} caller={} count={} result=ok",
                     eventId, callerId, policies.size());
         } catch (RuntimeException e) {
@@ -345,13 +373,19 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     @Override
-    public List<IEventPurchasePolicy> getPurchasePolicies(UUID eventId) {
-        return eventDomainService.getPurchasePolicies(eventId);
+    public List<PurchasePolicyDTO> getPurchasePolicies(UUID eventId) {
+        Objects.requireNonNull(eventId, "eventId");
+        return eventDomainService.getPurchasePolicies(eventId).stream()
+                .map(PurchasePolicyDTO::fromDomain)
+                .toList();
     }
 
     @Override
-    public List<IEventDiscountPolicy> getDiscountPolicies(UUID eventId) {
-        return eventDomainService.getDiscountPolicies(eventId);
+    public List<DiscountPolicyDTO> getDiscountPolicies(UUID eventId) {
+        Objects.requireNonNull(eventId, "eventId");
+        return eventDomainService.getDiscountPolicies(eventId).stream()
+                .map(DiscountPolicyDTO::fromDomain)
+                .toList();
     }
 
     @Override
