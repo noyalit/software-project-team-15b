@@ -297,6 +297,62 @@ public class UserDomainService {
         return managerRole.getPermissions();
     }
 
+    /**
+     * Returns {@code true} if the given user holds an approved Manager role in the specified
+     * company that carries the {@link ManagerPermission#DEFINE_PURCHASE_POLICY} permission.
+     *
+     * @param userId    the ID of the member to check
+     * @param companyId the company whose purchase-policy permission is being queried
+     * @return {@code true} when the member has an approved manager role with the required
+     *         permission; {@code false} otherwise
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException
+     *         if {@code userId} is {@code null}
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.MemberNotFoundException
+     *         if no member exists with the given {@code userId}
+     */
+    @Transactional(readOnly = true)
+    public boolean canChangePurchasePolicy(UUID userId, UUID companyId) {
+        Member manager = getMemberOrThrow(userId);
+        Manager managerRole = manager.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof Manager)
+                .map(role -> (Manager) role)
+                .filter(role -> role.isAppointmentApproved())
+                .filter(role -> role.belongsToCompany(companyId))
+                .filter(role -> role.hasPermission(ManagerPermission.DEFINE_PURCHASE_POLICY))
+                .findFirst()
+                .orElse(null);
+        return managerRole != null;
+    }
+
+    /**
+     * Returns {@code true} if the given user holds an approved Manager role in the specified
+     * company that carries the {@link ManagerPermission#DEFINE_DISCOUNT_POLICY} permission.
+     *
+     * @param userId    the ID of the member to check
+     * @param companyId the company whose discount-policy permission is being queried
+     * @return {@code true} when the member has an approved manager role with the required
+     *         permission; {@code false} otherwise
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException
+     *         if {@code userId} is {@code null}
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.MemberNotFoundException
+     *         if no member exists with the given {@code userId}
+     */
+    @Transactional(readOnly = true)
+    public boolean canChangeDiscountPolicy(UUID userId, UUID companyId) {
+        Member manager = getMemberOrThrow(userId);
+        Manager managerRole = manager.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof Manager)
+                .map(role -> (Manager) role)
+                .filter(Role::isAppointmentApproved)
+                .filter(role -> role.belongsToCompany(companyId))
+                .filter(role -> role.hasPermission(ManagerPermission.DEFINE_DISCOUNT_POLICY))
+                .findFirst()
+                .orElse(null);
+        return managerRole != null;
+    }
+
     private boolean hasManagerPermission(
             UUID managerId,
             UUID eventId,

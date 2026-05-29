@@ -43,6 +43,17 @@ public class CompanyService {
         this.auth = Objects.requireNonNull(auth, "auth cannot be null");
     }
 
+    /**
+     * Creates a new production company whose founder is the authenticated caller.
+     *
+     * @param token the caller's member session token
+     * @param name  the desired company name (must not be null or blank)
+     * @return a {@link CompanyDTO} representing the newly created company
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
+     *         if the token is invalid, expired, or belongs to a non-member
+     * @throws UnauthorizedCompanyActionException if the caller is not a member
+     * @throws IllegalArgumentException           if {@code name} is null or blank
+     */
     public CompanyDTO createCompany(String token, String name) {
         try {
             requireNonBlank(name, "Company name");
@@ -57,6 +68,16 @@ public class CompanyService {
         }
     }
 
+    /**
+     * Returns all companies whose founder matches the given {@code founderId}.
+     *
+     * @param token     a valid session token (any user type)
+     * @param founderId the UUID of the founder to query
+     * @return a (possibly empty) list of matching {@link CompanyDTO}s
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
+     *         if the token is null, blank, or invalid
+     * @throws IllegalArgumentException if {@code founderId} is null
+     */
     public List<CompanyDTO> findCompaniesByFounder(String token, UUID founderId) {
         requireValidToken(token);
         requireNonNull(founderId, "Founder ID");
@@ -65,13 +86,31 @@ public class CompanyService {
                 .toList();
     }
 
+    /**
+     * Replaces the purchase policy of the specified company.
+     * The caller must be an active founder or owner of the company, or an approved manager who holds
+     * the {@link com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission#DEFINE_PURCHASE_POLICY}
+     * permission for that company.
+     *
+     * @param token     the caller's member session token
+     * @param companyId the UUID of the target company
+     * @param policy    the new purchase policy to apply (must not be null)
+     * @return a {@link CompanyDTO} reflecting the updated state
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
+     *         if the token is invalid or expired
+     * @throws UnauthorizedCompanyActionException if the caller lacks the required role or permission
+     * @throws IllegalArgumentException           if {@code companyId} or {@code policy} is null
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
+     *         if no company exists with the given {@code companyId}
+     */
     public CompanyDTO updatePurchasePolicy(String token, UUID companyId, ICompanyPurchasePolicy policy) {
         try {
             requireNonNull(companyId, "Company ID");
             requireNonNull(policy, "Purchase policy");
             UUID callerId = requireAuthenticatedMember(token);
-            if (!userDomainService.isActiveOwner(callerId, companyId)) {
-                throw new UnauthorizedCompanyActionException("Only active owners can update the purchase policy");
+            boolean isOwner = userDomainService.isActiveOwner(callerId, companyId) || userDomainService.isActiveFounder(callerId, companyId);
+            if (!isOwner && !userDomainService.canChangePurchasePolicy(callerId, companyId)) {
+                throw new UnauthorizedCompanyActionException("User does not have permission to change purchase policy");
             }
             var saved = companyDomainService.updatePurchasePolicy(companyId, policy);
             AUDIT.info("op=updatePurchasePolicy callerId={} companyId={} result=ok", callerId, companyId);
@@ -82,13 +121,31 @@ public class CompanyService {
         }
     }
 
+    /**
+     * Replaces the discount policy of the specified company.
+     * The caller must be an active founder or owner of the company, or an approved manager who holds
+     * the {@link com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission#DEFINE_DISCOUNT_POLICY}
+     * permission for that company.
+     *
+     * @param token     the caller's member session token
+     * @param companyId the UUID of the target company
+     * @param policy    the new discount policy to apply (must not be null)
+     * @return a {@link CompanyDTO} reflecting the updated state
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
+     *         if the token is invalid or expired
+     * @throws UnauthorizedCompanyActionException if the caller lacks the required role or permission
+     * @throws IllegalArgumentException           if {@code companyId} or {@code policy} is null
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
+     *         if no company exists with the given {@code companyId}
+     */
     public CompanyDTO updateDiscountPolicy(String token, UUID companyId, ICompanyDiscountPolicy policy) {
         try {
             requireNonNull(companyId, "Company ID");
             requireNonNull(policy, "Discount policy");
             UUID callerId = requireAuthenticatedMember(token);
-            if (!userDomainService.isActiveOwner(callerId, companyId)) {
-                throw new UnauthorizedCompanyActionException("Only active owners can update the discount policy");
+            boolean isOwner = userDomainService.isActiveOwner(callerId, companyId) || userDomainService.isActiveFounder(callerId, companyId);
+            if (!isOwner && !userDomainService.canChangeDiscountPolicy(callerId, companyId)) {
+                throw new UnauthorizedCompanyActionException("User does not have permission to change discount policy");
             }
             var saved = companyDomainService.updateDiscountPolicy(companyId, policy);
             AUDIT.info("op=updateDiscountPolicy callerId={} companyId={} result=ok", callerId, companyId);
@@ -203,6 +260,12 @@ public class CompanyService {
         return CompanyDTO.from(companyDomainService.getCompany(companyId, canViewClosed));
     }
 
+    /**
+     * Looks up the company with the given ID without throwing if absent.
+     *
+     * @param companyId the UUID of the company to look up (may be null)
+     * @return an {@link Optional} containing the {@link CompanyDTO}, or empty if not found
+     */
     public Optional<CompanyDTO> findCompany(UUID companyId) {
         return companyDomainService.findCompany(companyId).map(CompanyDTO::from);
     }
