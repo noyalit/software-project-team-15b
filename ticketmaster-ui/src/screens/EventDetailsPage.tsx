@@ -50,7 +50,7 @@ export default function EventDetailsPage() {
   });
 
   const activeOrderQuery = useQuery({
-    queryKey: ['active-order', activeOrderId],
+    queryKey: ['active-order', activeOrderId, token],
     queryFn: async () => {
       const res = await http.get<ApiResponse<ActiveOrderDTO>>(
         `/api/active-orders/${activeOrderId}`
@@ -59,7 +59,7 @@ export default function EventDetailsPage() {
       if (!res.data.data) throw new Error('Active order not found');
       return res.data.data;
     },
-    enabled: false,
+    enabled: Boolean(activeOrderId) && Boolean(token),
   });
 
   const requestAccessMutation = useMutation({
@@ -133,6 +133,7 @@ export default function EventDetailsPage() {
       setSuccessMessage('Seats added to active order.');
 
       await qc.invalidateQueries({ queryKey: ['event', eventId] });
+      await qc.invalidateQueries({ queryKey: ['active-order', activeOrderId, token] });
     },
   });
 
@@ -155,6 +156,7 @@ export default function EventDetailsPage() {
       setSuccessMessage('Seats removed from active order.');
       setSelectedSeatIds([]);
       await qc.invalidateQueries({ queryKey: ['event', eventId] });
+      await qc.invalidateQueries({ queryKey: ['active-order', activeOrderId, token] });
     },
   });
 
@@ -500,6 +502,50 @@ export default function EventDetailsPage() {
           <div className="mt-2 text-sm text-slate-600">
             Order ID: {activeOrderId}
           </div>
+
+          {activeOrderQuery.isPending && (
+            <div className="mt-3 text-sm text-slate-600">Loading order details…</div>
+          )}
+
+          {activeOrderQuery.data && (
+            <div className="mt-3">
+              <div className="text-sm font-medium text-slate-700">Seats in order</div>
+
+              {(() => {
+                const order = activeOrderQuery.data;
+                const seatIds = order.seatIds ?? [];
+                if (seatIds.length === 0) {
+                  return (
+                    <div className="mt-1 text-sm text-slate-600">No seats added yet.</div>
+                  );
+                }
+
+                const area = event.areas?.find((a) => a.areaId === order.areaId);
+                const seatById = new Map(
+                  (area?.seats ?? []).map((s) => [s.seatId, s] as const)
+                );
+
+                const labels = seatIds.map((id) => {
+                  const s = seatById.get(id);
+                  if (!s) return id;
+                  return `Row ${s.row} Seat ${s.number}`;
+                });
+
+                return (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {labels.map((label) => (
+                      <span
+                        key={label}
+                        className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700"
+                      >
+                        {label}
+                      </span>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
 
           {activeOrderQuery.data && (
             <pre className="mt-3 overflow-x-auto rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
