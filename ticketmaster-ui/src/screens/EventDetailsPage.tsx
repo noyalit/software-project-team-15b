@@ -11,6 +11,11 @@ type ActiveOrderDTO = {
   eventId?: string;
   areaId?: string;
   seatIds?: string[];
+  seats?: Array<{
+    seatId: string;
+    row: string | null;
+    number: string | null;
+  }>;
   totalPrice?: unknown;
   expiresAt?: string | null;
 };
@@ -123,6 +128,9 @@ export default function EventDetailsPage() {
   const addSeatsMutation = useMutation({
     mutationFn: async () => {
       if (!activeOrderId) throw new Error('Please start an order first.');
+      if (checkoutStarted) {
+        throw new Error("Checkout already started. You can't change seats now.");
+      }
       if (selectedSeatIds.length === 0) throw new Error('Please select at least one seat.');
 
       const res = await http.post<ApiResponse<null>>(
@@ -146,6 +154,9 @@ export default function EventDetailsPage() {
   const removeSeatsMutation = useMutation({
     mutationFn: async () => {
       if (!activeOrderId) throw new Error('Please start an order first.');
+      if (checkoutStarted) {
+        throw new Error("Checkout already started. You can't change seats now.");
+      }
       if (selectedSeatIds.length === 0) throw new Error('Please select at least one seat.');
 
       const res = await http.post<ApiResponse<null>>(
@@ -431,7 +442,7 @@ export default function EventDetailsPage() {
                 setSuccessMessage(null);
                 addSeatsMutation.mutate();
               }}
-              disabled={!activeOrderId || selectedSeatIds.length === 0 || addSeatsMutation.isPending}
+              disabled={!activeOrderId || checkoutStarted || selectedSeatIds.length === 0 || addSeatsMutation.isPending}
               className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
             >
               {addSeatsMutation.isPending ? 'Adding...' : 'Add selected seats'}
@@ -443,7 +454,7 @@ export default function EventDetailsPage() {
                 setSuccessMessage(null);
                 removeSeatsMutation.mutate();
               }}
-              disabled={!activeOrderId || selectedSeatIds.length === 0 || removeSeatsMutation.isPending}
+              disabled={!activeOrderId || checkoutStarted || selectedSeatIds.length === 0 || removeSeatsMutation.isPending}
               className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 hover:bg-rose-100 disabled:opacity-60"
             >
               {removeSeatsMutation.isPending ? 'Removing...' : 'Remove selected seats'}
@@ -482,44 +493,37 @@ export default function EventDetailsPage() {
 
               {(() => {
                 const order = activeOrderQuery.data;
+                const seats = order.seats ?? [];
                 const seatIds = order.seatIds ?? [];
-                if (seatIds.length === 0) {
+
+                if (seats.length === 0 && seatIds.length === 0) {
                   return (
                     <div className="mt-1 text-sm text-slate-600">No seats added yet.</div>
                   );
                 }
 
-                const area = event.areas?.find((a) => a.areaId === order.areaId);
-                const seatById = new Map(
-                  (area?.seats ?? []).map((s) => [s.seatId, s] as const)
-                );
-
-                const labels = seatIds.map((id) => {
-                  const s = seatById.get(id);
-                  if (!s) return id;
-                  return `Row ${s.row} Seat ${s.number}`;
-                });
+                const labels = (seats.length > 0 ? seats.map((s) => ({
+                  seatId: s.seatId,
+                  label: `Row ${s.row ?? '—'} Seat ${s.number ?? '—'}`,
+                })) : seatIds.map((id) => ({
+                  seatId: id,
+                  label: 'Seat (details unavailable)',
+                })));
 
                 return (
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {labels.map((label) => (
+                    {labels.map((x) => (
                       <span
-                        key={label}
+                        key={x.seatId}
                         className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700"
                       >
-                        {label}
+                        {x.label}
                       </span>
                     ))}
                   </div>
                 );
               })()}
             </div>
-          )}
-
-          {activeOrderQuery.data && (
-            <pre className="mt-3 overflow-x-auto rounded-lg bg-slate-50 p-3 text-xs text-slate-700">
-              {JSON.stringify(activeOrderQuery.data, null, 2)}
-            </pre>
           )}
 
           {userType !== 'member' && (
