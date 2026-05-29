@@ -10,7 +10,6 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Cre
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
@@ -88,27 +87,26 @@ class EventAuthorizationE2ETest {
         founderToken = userService.login(userService.enterAsGuest(), founderUser, "Password1");
         founderId = mFounder.getUserId();
 
-        Company company = companyService.createCompany(founderToken, "AuthTestCo_" + n);
-        companyId = company.getId();
+        companyId = companyService.createCompany(founderToken, "AuthTestCo_" + n).companyId();
 
         // Activate the founder's role so they can appoint others
         userService.changeRoleToFounder(founderToken, companyId);
 
         // ── Owner ─────────────────────────────────────────────────────────────
-        ownerId = registerAndApproveOwner("auth_owner_" + sfx, founderToken, company.getId());
+        ownerId = registerAndApproveOwner("auth_owner_" + sfx, founderToken, companyId);
 
         // ── Managers with specific permissions ────────────────────────────────
-        mgrManageEventsId   = registerAndApproveManager("auth_mgr_me_"  + sfx, founderToken, company.getId(),
+        mgrManageEventsId   = registerAndApproveManager("auth_mgr_me_"  + sfx, founderToken, companyId,
                 Set.of(ManagerPermission.MANAGE_EVENTS));
-        mgrConfigHallId     = registerAndApproveManager("auth_mgr_ch_"  + sfx, founderToken, company.getId(),
+        mgrConfigHallId     = registerAndApproveManager("auth_mgr_ch_"  + sfx, founderToken, companyId,
                 Set.of(ManagerPermission.CONFIGURE_HALLS_AND_SEATS));
-        mgrUpdateMapId      = registerAndApproveManager("auth_mgr_um_"  + sfx, founderToken, company.getId(),
+        mgrUpdateMapId      = registerAndApproveManager("auth_mgr_um_"  + sfx, founderToken, companyId,
                 Set.of(ManagerPermission.UPDATE_EVENT_MAP));
-        mgrPurchasePolicyId = registerAndApproveManager("auth_mgr_pp_"  + sfx, founderToken, company.getId(),
+        mgrPurchasePolicyId = registerAndApproveManager("auth_mgr_pp_"  + sfx, founderToken, companyId,
                 Set.of(ManagerPermission.DEFINE_PURCHASE_POLICY));
-        mgrDiscountPolicyId = registerAndApproveManager("auth_mgr_dp_"  + sfx, founderToken, company.getId(),
+        mgrDiscountPolicyId = registerAndApproveManager("auth_mgr_dp_"  + sfx, founderToken, companyId,
                 Set.of(ManagerPermission.DEFINE_DISCOUNT_POLICY));
-        mgrWrongPermId      = registerAndApproveManager("auth_mgr_wp_"  + sfx, founderToken, company.getId(),
+        mgrWrongPermId      = registerAndApproveManager("auth_mgr_wp_"  + sfx, founderToken, companyId,
                 Set.of(ManagerPermission.HANDLE_INQUIRIES));
 
         // ── Unauthorized plain member ─────────────────────────────────────────

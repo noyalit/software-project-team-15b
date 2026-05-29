@@ -31,6 +31,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyReposit
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
+import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
 
 class CompanyServiceWhiteTest {
 
@@ -142,8 +143,8 @@ class CompanyServiceWhiteTest {
             pool.submit(() -> {
                 try {
                     start.await();
-                    Company company = service.createCompany(token, "Acme-" + idx);
-                    ids.add(company.getId());
+                    CompanyDTO dto = service.createCompany(token, "Acme-" + idx);
+                    ids.add(dto.companyId());
                 } catch (Exception e) {
                     failures.incrementAndGet();
                 }
@@ -165,7 +166,7 @@ class CompanyServiceWhiteTest {
     void concurrent_updatePurchasePolicy_results_in_one_of_the_attempted_values() throws Exception {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
-        Company company = service.createCompany(founderToken, "Acme");
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
 
         int N = 50;
         ExecutorService pool = Executors.newFixedThreadPool(16);
@@ -179,7 +180,7 @@ class CompanyServiceWhiteTest {
             pool.submit(() -> {
                 try {
                     start.await();
-                    service.updatePurchasePolicy(founderToken, company.getId(), policy);
+                    service.updatePurchasePolicy(founderToken, dto.companyId(), policy);
                 } catch (Exception e) {
                     failures.incrementAndGet();
                 }
@@ -190,7 +191,7 @@ class CompanyServiceWhiteTest {
         pool.shutdown();
         assertThat(pool.awaitTermination(30, SECONDS)).isTrue();
         assertThat(failures.get()).isZero();
-        Company finalState = repo.findById(company.getId()).orElseThrow();
+        Company finalState = repo.findById(dto.companyId()).orElseThrow();
         assertThat(finalState.getPurchasePolicies()).hasSize(1);
         assertThat(attempted).contains(finalState.getPurchasePolicies().get(0));
     }
@@ -199,7 +200,7 @@ class CompanyServiceWhiteTest {
     void concurrent_changeStatus_does_not_throw() throws Exception {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
-        Company company = service.createCompany(founderToken, "Acme");
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
         String adminToken = registerSystemAdmin(UUID.randomUUID());
 
         int N = 40;
@@ -213,7 +214,7 @@ class CompanyServiceWhiteTest {
             pool.submit(() -> {
                 try {
                     start.await();
-                    service.changeStatus(adminToken, company.getId(), target);
+                    service.changeStatus(adminToken, dto.companyId(), target);
                 } catch (Exception e) {
                     failures.incrementAndGet();
                 }
