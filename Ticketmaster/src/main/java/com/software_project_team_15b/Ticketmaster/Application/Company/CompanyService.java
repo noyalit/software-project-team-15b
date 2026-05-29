@@ -5,9 +5,10 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
-import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -15,12 +16,13 @@ import org.springframework.stereotype.Service;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 
 /**
- * Application-level facade for company use cases.
+ * Application-level facade for {@link Company} use cases.
  * Validates tokens and resolves caller identity, then delegates all business
  * logic to {@link ICompanyDomainService}.
  */
@@ -31,11 +33,13 @@ public class CompanyService {
 
     private final ICompanyDomainService companyDomainService;
     private final UserDomainService userDomainService;
+    private final IEventDomainService eventDomainService;
     private final IAuth auth;
 
-    public CompanyService(ICompanyDomainService companyDomainService, UserDomainService userDomainService, IAuth auth) {
+    public CompanyService(ICompanyDomainService companyDomainService, UserDomainService userDomainService, IEventDomainService eventDomainService, IAuth auth) {
         this.companyDomainService = Objects.requireNonNull(companyDomainService, "companyDomainService cannot be null");
         this.userDomainService = Objects.requireNonNull(userDomainService, "userDomainService cannot be null");
+        this.eventDomainService = Objects.requireNonNull(eventDomainService, "eventDomainService cannot be null");
         this.auth = Objects.requireNonNull(auth, "auth cannot be null");
     }
 
@@ -108,7 +112,7 @@ public class CompanyService {
             if (!isOwner && !userDomainService.canChangePurchasePolicy(callerId, companyId)) {
                 throw new UnauthorizedCompanyActionException("User does not have permission to change purchase policy");
             }
-            var saved = companyDomainService.updatePurchasePolicy(companyId, callerId, policy);
+            var saved = companyDomainService.updatePurchasePolicy(companyId, policy);
             AUDIT.info("op=updatePurchasePolicy callerId={} companyId={} result=ok", callerId, companyId);
             return CompanyDTO.from(saved);
         } catch (RuntimeException e) {
@@ -143,7 +147,7 @@ public class CompanyService {
             if (!isOwner && !userDomainService.canChangeDiscountPolicy(callerId, companyId)) {
                 throw new UnauthorizedCompanyActionException("User does not have permission to change discount policy");
             }
-            var saved = companyDomainService.updateDiscountPolicy(companyId, callerId, policy);
+            var saved = companyDomainService.updateDiscountPolicy(companyId, policy);
             AUDIT.info("op=updateDiscountPolicy callerId={} companyId={} result=ok", callerId, companyId);
             return CompanyDTO.from(saved);
         } catch (RuntimeException e) {
@@ -153,49 +157,107 @@ public class CompanyService {
     }
 
     /**
-     * Changes the status of the specified company.
-     * System admins may perform any valid status transition; company founders/owners may
-     * perform member-level transitions as defined by
-     * {@link com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService#changeStatus}.
+     * Suspends the company and cancels all its events. Only a system admin may perform this action.
      *
-     * @param token     a valid session token (member or system-admin)
-     * @param companyId the UUID of the target company
-     * @param newStatus the desired new {@link CompanyStatus}
-     * @return a {@link CompanyDTO} reflecting the updated state, or {@code null} if the domain
-     *         service returns no result
-     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
-     *         if the token is null, blank, or invalid
-     * @throws IllegalArgumentException if {@code companyId} or {@code newStatus} is null
+     * @param token     a valid system-admin token; must not be null or blank
+     * @param companyId the target company's id; must not be null
+     * @return the updated company with status {@link CompanyStatus#SUSPENDED}
+     * @throws InvalidTokenException             if the token is null, blank, or not valid
+     * @throws UnauthorizedCompanyActionException if the caller is not a system admin
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
+     *                                           if no company with {@code companyId} exists
      */
-    public CompanyDTO changeStatus(String token, UUID companyId, CompanyStatus newStatus) {
+    public CompanyDTO suspendCompany(String token, UUID companyId) {
         try {
             requireNonNull(companyId, "Company ID");
-            requireNonNull(newStatus, "Company status");
             requireValidToken(token);
-            boolean isSystemAdmin = auth.isSystemAdmin(token);
-            UUID callerId = auth.isMember(token) ? auth.extractUserId(token) : null;
-            var saved = companyDomainService.changeStatus(companyId, callerId, isSystemAdmin, newStatus);
-            AUDIT.info("op=changeStatus callerId={} companyId={} newStatus={} result=ok", callerId, companyId, newStatus);
-            return saved != null ? CompanyDTO.from(saved) : null;
+            if (!auth.isSystemAdmin(token)) {
+                throw new UnauthorizedCompanyActionException("Only system admins can suspend companies");
+            }
+            Company saved = companyDomainService.changeStatus(companyId, CompanyStatus.SUSPENDED);
+            eventDomainService.searchInCompany(companyId, null)
+                    .forEach(event -> eventDomainService.cancel(event.eventId()));
+            UUID callerId = auth.extractUserId(token);
+            AUDIT.info("op=suspendCompany callerId={} companyId={} result=ok", callerId, companyId);
+            return CompanyDTO.from(saved);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=changeStatus companyId={} newStatus={} result=rejected reason={}",
-                    companyId, newStatus, e.getMessage());
+            AUDIT.warn("op=suspendCompany companyId={} result=rejected reason={}", companyId, e.getMessage());
             throw e;
         }
     }
 
     /**
-     * Returns the company with the given ID.
+     * Closes the company and cancels all its events. Only the company's founder may perform this action.
      *
-     * @param companyId the UUID of the company to retrieve
-     * @return the matching {@link CompanyDTO}
-     * @throws IllegalArgumentException if {@code companyId} is null
+     * @param token     a valid member token for the founder; must not be null or blank
+     * @param companyId the target company's id; must not be null
+     * @return the updated company with status {@link CompanyStatus#CLOSED}
+     * @throws InvalidTokenException             if the token is null, blank, or not valid
+     * @throws UnauthorizedCompanyActionException if the caller is not the founder
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
-     *         if no company exists with the given {@code companyId}
+     *                                           if no company with {@code companyId} exists
      */
-    public CompanyDTO getCompany(UUID companyId) {
+    public CompanyDTO closeCompany(String token, UUID companyId) {
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireValidToken(token);
+            UUID callerId = auth.extractUserId(token);
+            if (!userDomainService.isActiveFounder(callerId, companyId)) {
+                throw new UnauthorizedCompanyActionException("Only company founder can close the company");
+            }
+            Company saved = companyDomainService.changeStatus(companyId, CompanyStatus.CLOSED);
+            eventDomainService.searchInCompany(companyId, null)
+                    .forEach(event -> eventDomainService.cancel(event.eventId()));
+            AUDIT.info("op=closeCompany callerId={} companyId={} result=ok", callerId, companyId);
+            return CompanyDTO.from(saved);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=closeCompany companyId={} result=rejected reason={}", companyId, e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * Reactivates a suspended or closed company.
+     * <ul>
+     *   <li>A {@link CompanyStatus#SUSPENDED} company may only be reactivated by a system admin.</li>
+     *   <li>A {@link CompanyStatus#CLOSED} company may only be reopened by its founder.</li>
+     *   <li>An {@link CompanyStatus#ACTIVE} company cannot be activated again.</li>
+     * </ul>
+     *
+     * @param token     a valid token; must not be null or blank
+     * @param companyId the target company's id; must not be null
+     * @return the updated company with status {@link CompanyStatus#ACTIVE}
+     * @throws InvalidTokenException             if the token is null, blank, or not valid
+     * @throws UnauthorizedCompanyActionException if the caller lacks permission for the current status
+     * @throws IllegalArgumentException          if the company is already active
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
+     *                                           if no company with {@code companyId} exists
+     */
+    public CompanyDTO activateCompany(String token, UUID companyId) {
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireValidToken(token);
+            UUID callerId = auth.isMember(token) ? auth.extractUserId(token) : null;
+            if (!userDomainService.isActiveFounder(callerId, companyId)) {
+                throw new UnauthorizedCompanyActionException("Only a founder can reactivate a closed company");
+            }
+            Company saved = companyDomainService.changeStatus(companyId, CompanyStatus.ACTIVE);
+            AUDIT.info("op=activateCompany callerId={} companyId={} result=ok", callerId, companyId);
+            return CompanyDTO.from(saved);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=activateCompany companyId={} result=rejected reason={}", companyId, e.getMessage());
+            throw e;
+        }
+    }
+
+    public CompanyDTO getCompany(String token, UUID companyId) {
+        requireNonNull(token, "Token");
         requireNonNull(companyId, "Company ID");
-        return CompanyDTO.from(companyDomainService.getCompany(companyId));
+        UUID callerId = auth.extractUserId(token);
+        boolean canViewClosed = auth.isSystemAdmin(token)
+                || userDomainService.isActiveFounder(callerId, companyId)
+                || userDomainService.isActiveOwner(callerId, companyId);
+        return CompanyDTO.from(companyDomainService.getCompany(companyId, canViewClosed));
     }
 
     /**
