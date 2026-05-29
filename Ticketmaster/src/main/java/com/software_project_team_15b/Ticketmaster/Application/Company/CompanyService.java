@@ -84,7 +84,7 @@ public class CompanyService {
 
     /**
      * Replaces the purchase policy of the specified company.
-     * The caller must be an active owner of the company, or an approved manager who holds
+     * The caller must be an active founder or owner of the company, or an approved manager who holds
      * the {@link com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission#DEFINE_PURCHASE_POLICY}
      * permission for that company.
      *
@@ -104,7 +104,8 @@ public class CompanyService {
             requireNonNull(companyId, "Company ID");
             requireNonNull(policy, "Purchase policy");
             UUID callerId = requireAuthenticatedMember(token);
-            if (!userDomainService.isActiveOwner(callerId, companyId) && !userDomainService.canChangePurchasePolicy(callerId, companyId)) {
+            boolean isOwner = userDomainService.isActiveOwner(callerId, companyId) || userDomainService.isActiveFounder(callerId, companyId);
+            if (!isOwner && !userDomainService.canChangePurchasePolicy(callerId, companyId)) {
                 throw new UnauthorizedCompanyActionException("User does not have permission to change purchase policy");
             }
             var saved = companyDomainService.updatePurchasePolicy(companyId, callerId, policy);
@@ -118,7 +119,7 @@ public class CompanyService {
 
     /**
      * Replaces the discount policy of the specified company.
-     * The caller must be an active owner of the company, or an approved manager who holds
+     * The caller must be an active founder or owner of the company, or an approved manager who holds
      * the {@link com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission#DEFINE_DISCOUNT_POLICY}
      * permission for that company.
      *
@@ -138,7 +139,8 @@ public class CompanyService {
             requireNonNull(companyId, "Company ID");
             requireNonNull(policy, "Discount policy");
             UUID callerId = requireAuthenticatedMember(token);
-            if (!userDomainService.isActiveOwner(callerId, companyId) && !userDomainService.canChangeDiscountPolicy(callerId, companyId)) {
+            boolean isOwner = userDomainService.isActiveOwner(callerId, companyId) || userDomainService.isActiveFounder(callerId, companyId);
+            if (!isOwner && !userDomainService.canChangeDiscountPolicy(callerId, companyId)) {
                 throw new UnauthorizedCompanyActionException("User does not have permission to change discount policy");
             }
             var saved = companyDomainService.updateDiscountPolicy(companyId, callerId, policy);

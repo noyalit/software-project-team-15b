@@ -345,7 +345,7 @@ public class UserDomainService {
                 .stream()
                 .filter(role -> role instanceof Manager)
                 .map(role -> (Manager) role)
-                .filter(role -> role.isAppointmentApproved())
+                .filter(Role::isAppointmentApproved)
                 .filter(role -> role.belongsToCompany(companyId))
                 .filter(role -> role.hasPermission(ManagerPermission.DEFINE_DISCOUNT_POLICY))
                 .findFirst()
