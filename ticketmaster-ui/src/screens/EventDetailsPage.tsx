@@ -77,15 +77,31 @@ export default function EventDetailsPage() {
     mutationFn: async (areaId: string) => {
       if (!eventId) throw new Error('Event ID is missing.');
 
-      const res = await http.post<ApiResponse<string>>('/api/active-orders', {
-        eventId,
-        areaId,
-      });
+      try {
+        const res = await http.post<ApiResponse<string>>('/api/active-orders', {
+          eventId,
+          areaId,
+        });
 
-      if (res.data.error) throw new Error(res.data.error);
-      if (!res.data.data) throw new Error('No order ID returned');
+        if (res.data.error) throw new Error(res.data.error);
+        if (!res.data.data) throw new Error('No order ID returned');
 
-      return res.data.data;
+        return res.data.data;
+      } catch (e) {
+        const message =
+          e instanceof Error ? e.message : 'Failed to start order.';
+
+        if (
+          message.includes('409') ||
+          message.includes('concurrent_order')
+        ) {
+          throw new Error(
+            'You already have an active order. Please complete it or wait for it to expire before starting a new one.'
+          );
+        }
+
+        throw new Error(message);
+      }
     },
 
     onSuccess: async (orderId) => {
@@ -419,6 +435,7 @@ export default function EventDetailsPage() {
                 await createOrderMutation.mutateAsync(selectedArea.areaId);
               }}
               disabled={
+                Boolean(activeOrderId) ||
                 event.status !== 'PUBLISHED' ||
                 createOrderMutation.isPending ||
                 selectedArea.type !== 'SEATING'

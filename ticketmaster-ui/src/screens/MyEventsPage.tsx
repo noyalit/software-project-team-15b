@@ -408,7 +408,7 @@ export default function MyEventsPage() {
                           >
                             Edit
                           </button>
-
+                        
                           <button
                             onClick={() => {
                                 setOpenEventDetailsId(event.eventId);
@@ -419,7 +419,7 @@ export default function MyEventsPage() {
                           >
                             Manage map
                           </button>
-
+                        {event.status === 'DRAFT' && (
                           <button
                             onClick={() => publishMutation.mutate(event)}
                             disabled={publishMutation.isPending}
@@ -427,6 +427,7 @@ export default function MyEventsPage() {
                           >
                             Publish
                           </button>
+                        )}
 
                           <button
                             onClick={() => {
