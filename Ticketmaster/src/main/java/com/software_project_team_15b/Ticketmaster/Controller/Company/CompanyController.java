@@ -122,7 +122,7 @@ public class CompanyController {
         }
     }
 
-    @Operation(summary = "Reactivate a suspended or closed company (system admin for suspended; founder for closed)")
+    @Operation(summary = "Reactivate a closed company (founder only)")
     @PatchMapping("/{companyId}/activate")
     public ResponseEntity<ApiResponse<CompanyDTO>> activateCompany(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
