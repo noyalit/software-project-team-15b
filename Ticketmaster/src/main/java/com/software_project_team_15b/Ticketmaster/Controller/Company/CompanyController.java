@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -67,6 +68,25 @@ public class CompanyController {
             return ResponseEntity.ok(new ApiResponse<>(company, null));
         } catch (CompanyNotFoundException ex) {
             return notFound(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "List companies related to the logged in member")
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<List<CompanyDTO>>> getMyCompanies(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+    ) {
+        try {
+            List<CompanyDTO> result = companyService.getMyCompanies(token);
+            return ResponseEntity.ok(new ApiResponse<>(result, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         } catch (Exception ex) {

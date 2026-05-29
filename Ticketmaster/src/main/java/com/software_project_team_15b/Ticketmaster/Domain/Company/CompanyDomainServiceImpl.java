@@ -83,6 +83,16 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<Company> findCompaniesByOwner(UUID ownerId) {
+        List<Company> result = companyRepository.findByOwner(ownerId);
+        if (result == null) {
+            throw new IllegalStateException("Repository returned null for findByOwner; expected an empty list");
+        }
+        return result;
+    }
+
+    @Override
     @Transactional
     public Company updatePurchasePolicy(UUID companyId, UUID callerId, ICompanyPurchasePolicy policy) {
         Company company = getCompanyOrThrow(companyId);

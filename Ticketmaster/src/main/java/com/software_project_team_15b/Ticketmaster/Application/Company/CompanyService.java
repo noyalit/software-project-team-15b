@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Application.Company;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -59,6 +60,32 @@ public class CompanyService {
         return companyDomainService.findCompaniesByFounder(founderId).stream()
                 .map(CompanyDTO::from)
                 .toList();
+    }
+
+    public List<CompanyDTO> getMyCompanies(String token) {
+        requireValidToken(token);
+        UUID memberId = requireAuthenticatedMember(token);
+
+        List<CompanyDTO> asFounder = companyDomainService.findCompaniesByFounder(memberId).stream()
+                .map(CompanyDTO::from)
+                .toList();
+        List<CompanyDTO> asOwner = companyDomainService.findCompaniesByOwner(memberId).stream()
+                .map(CompanyDTO::from)
+                .toList();
+
+        LinkedHashMap<UUID, CompanyDTO> unique = new LinkedHashMap<>();
+        for (CompanyDTO dto : asFounder) {
+            if (dto != null && dto.companyId() != null) {
+                unique.put(dto.companyId(), dto);
+            }
+        }
+        for (CompanyDTO dto : asOwner) {
+            if (dto != null && dto.companyId() != null) {
+                unique.putIfAbsent(dto.companyId(), dto);
+            }
+        }
+
+        return List.copyOf(unique.values());
     }
 
     public CompanyDTO updatePurchasePolicy(String token, UUID companyId, ICompanyPurchasePolicy policy) {
