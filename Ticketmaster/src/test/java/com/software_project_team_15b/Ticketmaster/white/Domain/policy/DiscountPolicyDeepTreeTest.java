@@ -109,28 +109,28 @@ class DiscountPolicyDeepTreeTest {
     // SUNNY — typical branches active simultaneously
     // ====================================================================================
 
-    /** SUNNY: company tree alone, qty=2, no coupon — Simple(5%) + EarlyBird(20% wins the Max)
-     * + Conditional flash window (10%, active) → 35% off on $100 → $35. */
+    /** SUNNY: company tree alone, qty=2, no coupon — cascade 5% then EarlyBird 20% (wins Max)
+     * then flash 10% on $100 -> 100 * 0.95 * 0.80 * 0.90 = 68.40; discount = 31.60. */
     @Test
-    void company_tree_sunny_loyalty_plus_earlybird_plus_flash_stacks_to_35() {
+    void company_tree_sunny_loyalty_plus_earlybird_plus_flash_stacks_to_31_60() {
         SumDiscountPolicy tree = buildCompanyTree();
         PurchaseRequest r = req(2, null);
 
         Money discount = tree.discount(usd("100.00"), ctx(r));
 
-        assertThat(discount).isEqualTo(usd("35.00"));
+        assertThat(discount).isEqualTo(usd("31.60"));
     }
 
-    /** SUNNY: same tree with the VIP coupon — coupon (25%) wins inside Max over EarlyBird (20%)
-     * → Simple(5) + 25 + flash(10) = 40 off on 100. */
+    /** SUNNY: same tree with the VIP coupon — cascade 5% then coupon 25% (wins Max) then flash 10%
+     * on 100 -> 100 * 0.95 * 0.75 * 0.90 = 64.13; discount = 35.88 (rounded). */
     @Test
-    void company_tree_sunny_vip_coupon_wins_inner_max_total_40() {
+    void company_tree_sunny_vip_coupon_wins_inner_max() {
         SumDiscountPolicy tree = buildCompanyTree();
         PurchaseRequest r = req(2, "vip");
 
         Money discount = tree.discount(usd("100.00"), ctx(r));
 
-        assertThat(discount).isEqualTo(usd("40.00"));
+        assertThat(discount).isEqualTo(usd("35.88"));
     }
 
     /** SUNNY: event tree alone with qty=5 — Max(houseCombo 10%, bulk bonus 30%) → 30 off on 100. */
@@ -148,9 +148,9 @@ class DiscountPolicyDeepTreeTest {
     // RAINY — boundary / alternate branches
     // ====================================================================================
 
-    /** RAINY: qty=4 hits the Max(Conditional bulk @15%) — but EarlyBird (20%) still wins inside
-     * the Max → 20% + 5% loyalty + 10% flash = 35% off. The bulk-15 branch was on the
-     * boundary but lost to a larger sibling. */
+    /** RAINY: qty=4 lights the Max(Conditional bulk @15%) — EarlyBird (20%) still wins the Max
+     * → cascade Simple(5) → EarlyBird(20) → flash(10) -> 100 * 0.95 * 0.80 * 0.90 = 68.40;
+     * discount = 31.60. */
     @Test
     void company_tree_rainy_bulk_branch_active_at_boundary_but_earlybird_still_wins_max() {
         SumDiscountPolicy tree = buildCompanyTree();
@@ -158,7 +158,7 @@ class DiscountPolicyDeepTreeTest {
 
         Money discount = tree.discount(usd("100.00"), ctx(r));
 
-        assertThat(discount).isEqualTo(usd("35.00"));
+        assertThat(discount).isEqualTo(usd("31.60"));
     }
 
     /** RAINY: event tree at the exact MinTickets(5) boundary — bulk bonus fires → 30%. */
@@ -172,7 +172,8 @@ class DiscountPolicyDeepTreeTest {
         assertThat(discount).isEqualTo(usd("30.00"));
     }
 
-    /** RAINY: event tree just below the bulk boundary (qty=4) — houseCombo wins at 10%. */
+    /** RAINY: event tree just below the bulk boundary (qty=4) — houseCombo (cascade of 8%+2%
+     * = 100 * 0.92 * 0.98 = 90.16) wins; discount = 9.84. */
     @Test
     void event_tree_rainy_just_below_bulk_boundary_falls_back_to_house_combo() {
         MaxDiscountPolicy tree = buildEventTree();
@@ -180,7 +181,7 @@ class DiscountPolicyDeepTreeTest {
 
         Money discount = tree.discount(usd("100.00"), ctx(r));
 
-        assertThat(discount).isEqualTo(usd("10.00"));
+        assertThat(discount).isEqualTo(usd("9.84"));
     }
 
     // ====================================================================================
@@ -248,10 +249,10 @@ class DiscountPolicyDeepTreeTest {
         Money eventDiscount   = IDiscountPolicy.clamp(eventTree.discount(subtotal, ctx(r)), subtotal);
         Money total = DiscountCombineStrategy.SUM.combine(eventDiscount, companyDiscount, subtotal);
 
-        assertThat(companyDiscount).isEqualTo(usd("35.00"));
-        assertThat(eventDiscount).isEqualTo(usd("10.00"));
-        assertThat(total).isEqualTo(usd("45.00"));
-        assertThat(subtotal.subtract(total)).isEqualTo(usd("55.00"));
+        assertThat(companyDiscount).isEqualTo(usd("31.60"));
+        assertThat(eventDiscount).isEqualTo(usd("9.84"));
+        assertThat(total).isEqualTo(usd("41.44"));
+        assertThat(subtotal.subtract(total)).isEqualTo(usd("58.56"));
     }
 
     /** RAINY combined: same scenario but the company switches to MAX strategy — picks the
@@ -267,13 +268,12 @@ class DiscountPolicyDeepTreeTest {
         Money eventDiscount   = IDiscountPolicy.clamp(eventTree.discount(subtotal, ctx(r)), subtotal);
         Money total = DiscountCombineStrategy.MAX.combine(eventDiscount, companyDiscount, subtotal);
 
-        assertThat(total).isEqualTo(usd("35.00"));
-        assertThat(subtotal.subtract(total)).isEqualTo(usd("65.00"));
+        assertThat(total).isEqualTo(usd("31.60"));
+        assertThat(subtotal.subtract(total)).isEqualTo(usd("68.40"));
     }
 
     /** RAINY combined: qty=5 activates the event's bulk bonus (30%) which now beats the
-     * company tree (still 35%) only when SUM-stacked — under MAX strategy, company (35) still
-     * wins by 5 points. Asserts both strategies side-by-side. */
+     * company cascade (31.60) under MAX strategy by a small margin. Asserts both strategies. */
     @Test
     void integration_rainy_qty_5_changes_event_winner_inside_max_root() {
         SumDiscountPolicy companyTree = buildCompanyTree();
@@ -284,12 +284,12 @@ class DiscountPolicyDeepTreeTest {
         Money companyDiscount = IDiscountPolicy.clamp(companyTree.discount(subtotal, ctx(r)), subtotal);
         Money eventDiscount   = IDiscountPolicy.clamp(eventTree.discount(subtotal, ctx(r)), subtotal);
 
-        assertThat(companyDiscount).isEqualTo(usd("35.00"));
+        assertThat(companyDiscount).isEqualTo(usd("31.60"));
         assertThat(eventDiscount).isEqualTo(usd("30.00"));
         assertThat(DiscountCombineStrategy.SUM.combine(eventDiscount, companyDiscount, subtotal))
-                .isEqualTo(usd("65.00"));
+                .isEqualTo(usd("61.60"));
         assertThat(DiscountCombineStrategy.MAX.combine(eventDiscount, companyDiscount, subtotal))
-                .isEqualTo(usd("35.00"));
+                .isEqualTo(usd("31.60"));
     }
 
     /** BAD combined: build two extreme deep trees that would each return >50% off, then stack
@@ -340,8 +340,8 @@ class DiscountPolicyDeepTreeTest {
         assertThat(cheapest).isEqualTo(usd("175.00"));
     }
 
-    /** RAINY: same setup but qty=2 — bulk branch inactive; houseCombo wins at 10% → $10 off
-     * on a $100 subtotal. */
+    /** RAINY: same setup but qty=2 — bulk branch inactive; houseCombo cascade (8%+2%) wins:
+     * 100 * 0.92 * 0.98 = 90.16; discount = 9.84. */
     @Test
     void event_aggregate_drives_deep_tree_below_bulk_boundary() {
         SeatingEventArea area = EventTestFixtures.seatingArea(10, "50.00");
@@ -355,6 +355,6 @@ class DiscountPolicyDeepTreeTest {
 
         Money discount = event.discountAmountFor(area.areaId(), 2, r);
 
-        assertThat(discount).isEqualTo(usd("10.00"));
+        assertThat(discount).isEqualTo(usd("9.84"));
     }
 }

@@ -46,7 +46,7 @@ class DiscountPolicyIntegrationTest {
     // 1) Company tree in isolation (SumDiscountPolicy: stacking)
     // ====================================================================================
 
-    /** SUNNY: SUM(10% simple + 5% simple) on 100 → 15 discount. */
+    /** SUNNY: SUM cascade 10% then 5% on 100 -> 100 * 0.9 * 0.95 = 85.50; discount = 14.50. */
     @Test
     void company_tree_sunny_sum_stacks_two_simple_discounts() {
         SumDiscountPolicy companyRoot = new SumDiscountPolicy(List.<IDiscountPolicy>of(
@@ -55,7 +55,7 @@ class DiscountPolicyIntegrationTest {
 
         Money discount = companyRoot.discount(usd("100.00"), ctx(req(null)));
 
-        assertThat(discount).isEqualTo(usd("15.00"));
+        assertThat(discount).isEqualTo(usd("14.50"));
     }
 
     /** RAINY: SUM with a coupon-gated child — coupon missing means only the unconditional child contributes. */
@@ -70,7 +70,11 @@ class DiscountPolicyIntegrationTest {
         assertThat(discount).isEqualTo(usd("10.00"));
     }
 
-    /** BAD: SUM where children's sum (50 + 60) exceeds subtotal (100) → clamped to subtotal. */
+    /**
+     * BAD: SUM cascade of 50% then 60% on 100 -> 100 * 0.5 * 0.4 = 20 final; discount = 80.
+     * Under cascade, two finite percentages can never push the discount above the subtotal,
+     * so the per-step clamp keeps it well-defined and bounded.
+     */
     @Test
     void company_tree_bad_sum_clamps_when_total_exceeds_subtotal() {
         SumDiscountPolicy companyRoot = new SumDiscountPolicy(List.<IDiscountPolicy>of(
@@ -79,7 +83,7 @@ class DiscountPolicyIntegrationTest {
 
         Money discount = companyRoot.discount(usd("100.00"), ctx(req(null)));
 
-        assertThat(discount).isEqualTo(usd("100.00"));
+        assertThat(discount).isEqualTo(usd("80.00"));
     }
 
     // ====================================================================================
@@ -146,9 +150,9 @@ class DiscountPolicyIntegrationTest {
         Money total = DiscountCombineStrategy.SUM.combine(eventDiscount, companyDiscount, subtotal);
 
         assertThat(eventDiscount).isEqualTo(usd("20.00"));
-        assertThat(companyDiscount).isEqualTo(usd("15.00"));
-        assertThat(total).isEqualTo(usd("35.00"));
-        assertThat(subtotal.subtract(total)).isEqualTo(usd("65.00"));
+        assertThat(companyDiscount).isEqualTo(usd("14.50"));
+        assertThat(total).isEqualTo(usd("34.50"));
+        assertThat(subtotal.subtract(total)).isEqualTo(usd("65.50"));
     }
 
     /** SUNNY: MAX strategy returns whichever tree gives the larger discount. */
