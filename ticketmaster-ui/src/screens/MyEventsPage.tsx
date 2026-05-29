@@ -380,6 +380,7 @@ export default function MyEventsPage() {
 
             {eventsQuery.data?.map((event) => {
               const isCancelled = event.status === 'CANCELLED';
+              const canEditMap = event.status === 'DRAFT';
               const areas = event.areas ?? [];
 
               return (
@@ -415,12 +416,14 @@ export default function MyEventsPage() {
                           <button
                             onClick={() => {
                                 setOpenEventDetailsId(event.eventId);
-                                setAreaEventId(areaEventId === event.eventId ? null : event.eventId);
+                                setAreaEventId(
+                                  canEditMap && areaEventId !== event.eventId ? event.eventId : null
+                                );
                                 setEditingAreaId(null);
                             }}
                             className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
                           >
-                            Manage map
+                            {canEditMap ? 'Manage map' : 'View map'}
                           </button>
                         {event.status === 'DRAFT' && (
                           <button
@@ -512,7 +515,7 @@ export default function MyEventsPage() {
                                 </div>
                               </div>
 
-                              {!isCancelled && (
+                              {!isCancelled && canEditMap && (
                                 <div className="flex gap-2">
                                   <button
                                     onClick={() => {
@@ -581,7 +584,7 @@ export default function MyEventsPage() {
                                 {area.availableCapacity} tickets available
                               </div>
                             )}
-                            {editingAreaId === area.areaId && areaEventId === event.eventId && !isCancelled && (
+                            {editingAreaId === area.areaId && areaEventId === event.eventId && !isCancelled && canEditMap && (
                                 <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
                                     <div className="font-semibold text-slate-900">Edit area</div>
 
@@ -646,7 +649,8 @@ export default function MyEventsPage() {
 
                   {openEventDetailsId === event.eventId &&
                     areaEventId === event.eventId &&
-                    !isCancelled && (
+                    !isCancelled &&
+                    canEditMap && (
                     <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
                       <div className="font-semibold text-slate-900">Add area / map section</div>
 
