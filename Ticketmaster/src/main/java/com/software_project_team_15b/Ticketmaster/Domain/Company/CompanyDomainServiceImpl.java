@@ -181,9 +181,8 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         } else if (newStatus == CompanyStatus.SUSPENDED && currentStatus != CompanyStatus.ACTIVE) {
             throw new IllegalStateException("Company must be active to be suspended");
         } else if (newStatus == CompanyStatus.ACTIVE
-                && currentStatus != CompanyStatus.CLOSED
-                && currentStatus != CompanyStatus.SUSPENDED) {
-            throw new IllegalStateException("Company must be closed or suspended to be reactivated");
+                && currentStatus != CompanyStatus.CLOSED ){
+            throw new IllegalStateException("Company must be closed to be reactivated");
         }
 
         company.changeStatus(newStatus);

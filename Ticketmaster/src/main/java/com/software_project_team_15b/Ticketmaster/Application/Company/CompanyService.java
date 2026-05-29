@@ -180,20 +180,9 @@ public class CompanyService {
         try {
             requireNonNull(companyId, "Company ID");
             requireValidToken(token);
-            Company company = companyDomainService.getCompany(companyId, true);
-            CompanyStatus currentStatus = company.getStatus();
-            if (currentStatus == CompanyStatus.ACTIVE) {
-                throw new IllegalArgumentException("Company is already active");
-            }
             UUID callerId = auth.isMember(token) ? auth.extractUserId(token) : null;
-            if (currentStatus == CompanyStatus.SUSPENDED) {
-                if (!auth.isSystemAdmin(token)) {
-                    throw new UnauthorizedCompanyActionException("Only system admins can reactivate a suspended company");
-                }
-            } else {
-                if (!userDomainService.isActiveFounder(callerId, companyId)) {
-                    throw new UnauthorizedCompanyActionException("Only a founder can reactivate a closed company");
-                }
+            if (!userDomainService.isActiveFounder(callerId, companyId)) {
+                throw new UnauthorizedCompanyActionException("Only a founder can reactivate a closed company");
             }
             Company saved = companyDomainService.changeStatus(companyId, CompanyStatus.ACTIVE);
             AUDIT.info("op=activateCompany callerId={} companyId={} result=ok", callerId, companyId);
