@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.time.LocalDateTime;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +15,8 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Company
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
+
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
@@ -21,6 +24,9 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompany
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationType;
+
+import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 
 /**
  * Application-level service for managing {@link Company} aggregates.
@@ -49,6 +55,7 @@ public class CompanyService {
     private final UserDomainService userDomainService;
     private final IEventDomainService eventManagementService;
     private final IAuth auth;
+    private final INotifier notifier;
 
     /**
      * @param companyRepository      repository used to load and persist companies; must not be null
@@ -57,11 +64,12 @@ public class CompanyService {
      * @param auth                   authentication/authorization gateway; must not be null
      * @throws NullPointerException if any argument is null
      */
-    public CompanyService(ICompanyRepository companyRepository, UserDomainService userDomainService, IEventDomainService eventManagementService, IAuth auth) {
+    public CompanyService(ICompanyRepository companyRepository, UserDomainService userDomainService, IEventDomainService eventManagementService, IAuth auth, INotifier notifier) {
         this.companyRepository = Objects.requireNonNull(companyRepository, "companyRepository cannot be null");
         this.userDomainService = Objects.requireNonNull(userDomainService, "userDomainService cannot be null");
         this.auth = Objects.requireNonNull(auth, "auth cannot be null");
         this.eventManagementService = Objects.requireNonNull(eventManagementService, "eventManagementService cannot be null");
+        this.notifier = Objects.requireNonNull(notifier, "notifier cannot be null");
     }
 
     /**
@@ -206,6 +214,25 @@ public class CompanyService {
                         .forEach(event -> eventManagementService.cancel(event.eventId()));
             }
             Company saved = companyRepository.save(company);
+
+            if (newStatus == CompanyStatus.CLOSED) {
+                notifier.notifyCompanyManagers(companyId, new NotificationDTO(
+                        NotificationType.COMPANY_CLOSED,
+                        "Company Closed",
+                        "Company " + company.getName() + " has been closed. All events under this company have been cancelled.",
+                        LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC))
+                );
+            }
+
+            else if (newStatus == CompanyStatus.SUSPENDED) {
+                notifier.notifyCompanyManagers(companyId, new NotificationDTO(
+                        NotificationType.COMPANY_SUSPENDED,
+                        "Company Suspended",
+                        "Company " + company.getName() + " has been suspended.",
+                        LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC))
+                );
+            }
+
             AUDIT.info("op=changeStatus callerId={} companyId={} newStatus={} result=ok", callerId, companyId, newStatus);
             return saved;
         } catch (RuntimeException e) {

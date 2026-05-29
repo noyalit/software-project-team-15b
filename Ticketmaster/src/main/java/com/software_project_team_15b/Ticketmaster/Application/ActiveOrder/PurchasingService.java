@@ -386,6 +386,7 @@ public class PurchasingService {
 
             //for notification purposes
 
+            //successful purchase
             notifier.notifyUser(userId, new NotificationDTO(
                     NotificationType.PURCHASE_SUCCESS,
                     "Checkout Completed",

@@ -26,6 +26,8 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Company
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
+
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
@@ -44,6 +46,7 @@ class CompanyServiceBlackTest {
     @Mock private ICompanyRepository repo;
     @Mock private IAuth auth;
     @Mock private UserDomainService userDomainService;
+    @Mock private INotifier notifier;
     @Mock private IEventDomainService eventManagementService;
 
     private CompanyService service;
@@ -68,7 +71,7 @@ class CompanyServiceBlackTest {
         when(eventManagementService.searchInCompany(any(), any())).thenReturn(List.of());
         when(userDomainService.isActiveOwner(any(), any())).thenReturn(true);
         when(userDomainService.isActiveFounder(any(), any())).thenReturn(true);
-        service = new CompanyService(repo, userDomainService, eventManagementService, auth);
+        service = new CompanyService(repo, userDomainService, eventManagementService, auth, notifier);
     }
 
     private Company saveToRepo(Company company) {

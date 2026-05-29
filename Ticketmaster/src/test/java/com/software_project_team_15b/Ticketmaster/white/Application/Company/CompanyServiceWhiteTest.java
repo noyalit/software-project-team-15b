@@ -30,6 +30,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompany
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 
 class CompanyServiceWhiteTest {
 
@@ -40,6 +41,7 @@ class CompanyServiceWhiteTest {
     private UserDomainService userDomainService;
     private IEventDomainService eventManagementService;
     private CompanyService service;
+    private INotifier notifier;
 
     @BeforeEach
     void setUp() {
@@ -65,7 +67,8 @@ class CompanyServiceWhiteTest {
         when(userDomainService.isActiveOwner(any(), any())).thenReturn(true);
         when(userDomainService.isActiveFounder(any(), any())).thenReturn(true);
         when(eventManagementService.searchInCompany(any(), any())).thenReturn(List.of());
-        service = new CompanyService(repo, userDomainService, eventManagementService, auth);
+        notifier = mock(INotifier.class);
+        service = new CompanyService(repo, userDomainService, eventManagementService, auth, notifier);
     }
 
     private Company saveToRepo(Company company) {
@@ -106,25 +109,31 @@ class CompanyServiceWhiteTest {
 
     @Test
     void constructor_throws_when_repository_is_null() {
-        assertThatThrownBy(() -> new CompanyService(null, userDomainService, eventManagementService, auth))
+        assertThatThrownBy(() -> new CompanyService(null, userDomainService, eventManagementService, auth, notifier))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_userDomainService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(repo, null, eventManagementService, auth))
+        assertThatThrownBy(() -> new CompanyService(repo, null, eventManagementService, auth, notifier))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_eventManagementService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(repo, userDomainService, null, auth))
+        assertThatThrownBy(() -> new CompanyService(repo, userDomainService, null, auth, notifier))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_auth_is_null() {
-        assertThatThrownBy(() -> new CompanyService(repo, userDomainService, eventManagementService, null))
+        assertThatThrownBy(() -> new CompanyService(repo, userDomainService, eventManagementService, null, notifier))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void constructor_throws_when_notifier_is_null() {
+        assertThatThrownBy(() -> new CompanyService(repo, userDomainService, eventManagementService, auth, null))
                 .isInstanceOf(NullPointerException.class);
     }
 
