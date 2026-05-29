@@ -13,7 +13,6 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 class EventCheapestPriceTest {
@@ -101,17 +100,16 @@ class EventCheapestPriceTest {
         assertThat(totalWithCoupon).isEqualTo(EventTestFixtures.usd("60.00"));
     }
 
-    @Disabled
     @Test
-    void GivenDiscountThatIncreasesPrice_WhenCheapestPriceFor_ThenIsClampedToSubtotal() {
+    void GivenDiscountThatExceedsSubtotal_WhenCheapestPriceFor_ThenIsClampedToZero() {
         SeatingEventArea area = EventTestFixtures.seatingArea(5, "100.00");
-        IEventDiscountPolicy bumpUp = (subtotal, req) ->
+        IEventDiscountPolicy oversized = (subtotal, ctx) ->
                 subtotal.add(Money.of("50.00", subtotal.currency()));
-        Event event = newPublished(List.of(bumpUp), area);
+        Event event = newPublished(List.of(oversized), area);
 
         Money total = event.cheapestPriceFor(area.areaId(), 1, null);
 
-        assertThat(total).isEqualTo(EventTestFixtures.usd("100.00"));
+        assertThat(total).isEqualTo(EventTestFixtures.usd("0.00"));
     }
 
     private static Event newPublished(List<IEventDiscountPolicy> discounts, SeatingEventArea area) {
