@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { http } from '../api/http';
+import { getApiErrorMessage } from '../api/errors';
 import type { ApiResponse, CompanyDTO, EventDTO, MemberDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 
@@ -305,6 +306,8 @@ export default function MyEventsPage() {
     addAreaMutation.error ||
     updateAreaMutation.error ||
     removeAreaMutation.error;
+
+  const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
 
   return (
     <div className="space-y-4">
@@ -689,9 +692,9 @@ export default function MyEventsPage() {
             </div>
           )}
 
-          {actionError && (
+          {actionErrorMessage && (
             <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-              {(actionError as Error).message}
+              {actionErrorMessage}
             </div>
           )}
         </div>
