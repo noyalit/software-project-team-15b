@@ -23,8 +23,8 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.CouponDiscountPolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.MaxTicketsPerOrderPolicy;
+import com.software_project_team_15b.Ticketmaster.DTO.DiscountPolicyDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.PurchasePolicyDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 
 import java.math.BigDecimal;
@@ -369,7 +369,7 @@ class EventOrderFlowE2ETest {
                 "Floor", Money.of("100.00", "USD"), AddAreaCommand.AreaType.SEATING, null,
                 List.of(new AddAreaCommand.SeatSpec("A", "1"))), founderId);
         events.replaceDiscountPolicies(eventId,
-                List.of(new CouponDiscountPolicy("HALF", new BigDecimal("50"))), founderId);
+                List.of(new DiscountPolicyDTO.Coupon("HALF", new BigDecimal("50"), null)), founderId);
         events.publish(eventId, founderId);
 
         List<UUID> seatIds = events.getEvent(eventId).areas().stream()
@@ -398,7 +398,7 @@ class EventOrderFlowE2ETest {
                 List.of(new AddAreaCommand.SeatSpec("A", "1"),
                         new AddAreaCommand.SeatSpec("A", "2"))), founderId);
         events.replacePurchasePolicies(eventId,
-                List.of(new MaxTicketsPerOrderPolicy(1)), founderId);
+                List.of(new PurchasePolicyDTO.MaxTicketsPerOrder(1)), founderId);
         events.publish(eventId, founderId);
 
         List<UUID> seatIds = events.getEvent(eventId).areas().stream()
