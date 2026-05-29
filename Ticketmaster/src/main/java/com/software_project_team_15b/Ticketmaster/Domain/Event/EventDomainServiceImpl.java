@@ -291,7 +291,7 @@ public class EventDomainServiceImpl implements IEventDomainService {
         for (UUID seatId : seatIds) {
             Objects.requireNonNull(seatId, "seatIds element");
             Seat seat = seats.get(seatId);
-            if (seat != null && seat.status() == SeatStatus.AVAILABLE) {
+            if (seat != null && (seat.status() == SeatStatus.AVAILABLE || seat.status() == SeatStatus.HELD)) {
                 available.add(seatId);
             } else {
                 unavailable.add(seatId);
@@ -315,7 +315,23 @@ public class EventDomainServiceImpl implements IEventDomainService {
             LocalDate birthDate,
             String couponCode
     ) {
-        throw new NotImplementedException();
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId must not be null");
+        }
+        if (areaId == null) {
+            throw new IllegalArgumentException("areaId must not be null");
+        }
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("quantity must be positive");
+        }
+
+        Event event = requireEvent(eventId);
+        EventArea area = requireArea(event, areaId);
+        Money base = area.basePrice();
+        Money subtotal = base.multiply(quantity);
+        Money discount = Money.zero(base.currency());
+        Money total = subtotal;
+        return new PriceBreakdown(base, subtotal, discount, total);
 //        Event event = requireEvent(eventId);
 //        EventArea area = requireArea(event, areaId);
 //        Money subtotal = area.basePrice().multiply(quantity);

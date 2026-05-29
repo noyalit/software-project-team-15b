@@ -524,11 +524,9 @@ public class PurchasingService {
             EventDTO.AreaView area = event.areas().stream()
                     .filter(a -> a.areaId().equals(activeOrder.getAreaId()))
                     .findFirst()
-                    .orElseThrow(() -> new IllegalArgumentException(
-                            "Area not found in event: " + activeOrder.getAreaId()
-                    ));
+                    .orElse(null);
 
-            Money base = area.basePrice() != null
+            Money base = area != null && area.basePrice() != null
                     ? new Money(area.basePrice().amount(), area.basePrice().currency())
                     : Money.zero("ILS");
             int qty = activeOrder.getOrderSeats() == null ? 0 : activeOrder.getOrderSeats().size();
@@ -639,6 +637,23 @@ public class PurchasingService {
             throw new IllegalArgumentException("Active order cannot be null");
         }
         if (activeOrder.getOrderSeats().isEmpty()) {
+            return false;
+        }
+
+        // If the order is already in checkout, we must not mutate it (remove seats),
+        // otherwise read-only operations like GET /api/active-orders/{id} can fail with
+        // "already in checkout".
+        if (activeOrder.getExpiresAt() != null && !activeOrder.hasTimeExpired()) {
+            Map<Boolean, Set<UUID>> seatsAvailability =
+                    eventDomainService.getSeatsAvailability(
+                            activeOrder.getEventId(),
+                            activeOrder.getAreaId(),
+                            activeOrder.getOrderSeats()
+                    );
+            Set<UUID> unavailableSeats = seatsAvailability.getOrDefault(false, Set.of());
+            if (!unavailableSeats.isEmpty()) {
+                throw new OrderSeatsUnavailableException("Some seats in the order are no longer available");
+            }
             return false;
         }
 

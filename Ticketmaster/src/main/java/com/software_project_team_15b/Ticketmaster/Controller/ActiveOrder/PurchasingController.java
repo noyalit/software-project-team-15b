@@ -147,6 +147,8 @@ public class PurchasingController {
             return unauthorized(ex);
         } catch (TimeExpiredException ex) {
             return gone(ex);
+        } catch (OrderSeatsUnavailableException ex) {
+            return conflict(ex);
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         } catch (IllegalStateException ex) {
