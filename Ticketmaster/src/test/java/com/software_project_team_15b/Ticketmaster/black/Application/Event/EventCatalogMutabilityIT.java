@@ -12,9 +12,11 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Hol
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
+import com.software_project_team_15b.Ticketmaster.DTO.DiscountPolicyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.PurchasePolicyDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
@@ -214,7 +216,7 @@ class EventCatalogMutabilityIT {
     void GivenEvent_WhenReplacePurchasePoliciesWithMaxTickets_ThenOversizedRequestFails() {
         Setup s = createDraftSeatingEvent(1, "10.00");
         service.replacePurchasePolicies(s.eventId(),
-                List.of(new MaxTicketsPerOrderPolicy(2)), s.callerId());
+                List.of(new PurchasePolicyDTO.MaxTicketsPerOrder(2)), s.callerId());
 
         PurchaseRequest req = new PurchaseRequest(s.eventId(), s.areaId(), UUID.randomUUID(),
                 LocalDate.now().minusYears(30), 5, List.of(), null);
@@ -252,7 +254,7 @@ class EventCatalogMutabilityIT {
         Setup s = createPublishedSeatingEvent(1, "10.00");
         service.cancel(s.eventId(), s.callerId());
 
-        List<IEventPurchasePolicy> p = List.of();
+        List<PurchasePolicyDTO> p = List.of();
         assertThatThrownBy(() -> service.replacePurchasePolicies(s.eventId(), p, s.callerId()))
                 .isInstanceOf(InvalidEventStateException.class)
                 .hasMessageContaining("cancelled");
@@ -267,7 +269,7 @@ class EventCatalogMutabilityIT {
                 new PriceQuery(s.areaId(), 2, UUID.randomUUID(), null, null));
         assertThat(before.total()).isEqualTo(MoneyDTO.from(Money.of("200.00", "USD")));
 
-        IEventDiscountPolicy half = new EarlyBirdDiscountPolicy(
+        DiscountPolicyDTO half = new DiscountPolicyDTO.EarlyBird(
                 java.math.BigDecimal.valueOf(50),
                 Instant.now().plusSeconds(86400));
         service.replaceDiscountPolicies(s.eventId(), List.of(half), s.callerId());
@@ -295,7 +297,7 @@ class EventCatalogMutabilityIT {
     @Test
     void GivenPolicyListContainingNull_WhenReplaceDiscountPolicies_ThenThrowsNullPointerException() {
         Setup s = createDraftSeatingEvent(1, "10.00");
-        List<IEventDiscountPolicy> bad = new ArrayList<>();
+        List<DiscountPolicyDTO> bad = new ArrayList<>();
         bad.add(null);
         assertThatThrownBy(() -> service.replaceDiscountPolicies(s.eventId(), bad, s.callerId()))
                 .isInstanceOf(NullPointerException.class);

@@ -15,8 +15,8 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.MaxTicketsPerOrderPolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.CouponDiscountPolicy;
+import com.software_project_team_15b.Ticketmaster.DTO.DiscountPolicyDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.PurchasePolicyDTO;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -324,21 +324,21 @@ class EventAuthorizationE2ETest {
     @DisplayName("Founder can replace purchase policies (DEFINE_PURCHASE_POLICY)")
     void founder_can_replace_purchase_policies() {
         UUID eventId = events.createEvent(draftCmd(), founderId);
-        events.replacePurchasePolicies(eventId, List.of(new MaxTicketsPerOrderPolicy(5)), founderId);
+        events.replacePurchasePolicies(eventId, List.of(new PurchasePolicyDTO.MaxTicketsPerOrder(5)), founderId);
     }
 
     @Test
     @DisplayName("Owner can replace purchase policies")
     void owner_can_replace_purchase_policies() {
         UUID eventId = events.createEvent(draftCmd(), founderId);
-        events.replacePurchasePolicies(eventId, List.of(new MaxTicketsPerOrderPolicy(5)), ownerId);
+        events.replacePurchasePolicies(eventId, List.of(new PurchasePolicyDTO.MaxTicketsPerOrder(5)), ownerId);
     }
 
     @Test
     @DisplayName("Manager with DEFINE_PURCHASE_POLICY can replace purchase policies")
     void manager_purchase_policy_can_replace_purchase_policies() {
         UUID eventId = events.createEvent(draftCmd(), founderId);
-        events.replacePurchasePolicies(eventId, List.of(new MaxTicketsPerOrderPolicy(3)), mgrPurchasePolicyId);
+        events.replacePurchasePolicies(eventId, List.of(new PurchasePolicyDTO.MaxTicketsPerOrder(3)), mgrPurchasePolicyId);
     }
 
     @Test
@@ -346,7 +346,7 @@ class EventAuthorizationE2ETest {
     void manager_wrong_permission_cannot_replace_purchase_policies() {
         UUID eventId = events.createEvent(draftCmd(), founderId);
         assertThatThrownBy(() -> events.replacePurchasePolicies(eventId,
-                List.of(new MaxTicketsPerOrderPolicy(1)), mgrWrongPermId))
+                List.of(new PurchasePolicyDTO.MaxTicketsPerOrder(1)), mgrWrongPermId))
                 .isInstanceOf(PolicyViolationException.class);
     }
 
@@ -355,7 +355,7 @@ class EventAuthorizationE2ETest {
     void unauthorized_cannot_replace_purchase_policies() {
         UUID eventId = events.createEvent(draftCmd(), founderId);
         assertThatThrownBy(() -> events.replacePurchasePolicies(eventId,
-                List.of(new MaxTicketsPerOrderPolicy(1)), unauthorizedId))
+                List.of(new PurchasePolicyDTO.MaxTicketsPerOrder(1)), unauthorizedId))
                 .isInstanceOf(PolicyViolationException.class);
     }
 
@@ -366,7 +366,7 @@ class EventAuthorizationE2ETest {
     void founder_can_replace_discount_policies() {
         UUID eventId = events.createEvent(draftCmd(), founderId);
         events.replaceDiscountPolicies(eventId,
-                List.of(new CouponDiscountPolicy("X", new BigDecimal("10"))), founderId);
+                List.of(new DiscountPolicyDTO.Coupon("X", new BigDecimal("10"), null)), founderId);
     }
 
     @Test
@@ -374,7 +374,7 @@ class EventAuthorizationE2ETest {
     void owner_can_replace_discount_policies() {
         UUID eventId = events.createEvent(draftCmd(), founderId);
         events.replaceDiscountPolicies(eventId,
-                List.of(new CouponDiscountPolicy("Y", new BigDecimal("5"))), ownerId);
+                List.of(new DiscountPolicyDTO.Coupon("Y", new BigDecimal("5"), null)), ownerId);
     }
 
     @Test
@@ -382,7 +382,7 @@ class EventAuthorizationE2ETest {
     void manager_discount_policy_can_replace_discount_policies() {
         UUID eventId = events.createEvent(draftCmd(), founderId);
         events.replaceDiscountPolicies(eventId,
-                List.of(new CouponDiscountPolicy("Z", new BigDecimal("20"))), mgrDiscountPolicyId);
+                List.of(new DiscountPolicyDTO.Coupon("Z", new BigDecimal("20"), null)), mgrDiscountPolicyId);
     }
 
     @Test
@@ -390,7 +390,7 @@ class EventAuthorizationE2ETest {
     void manager_wrong_permission_cannot_replace_discount_policies() {
         UUID eventId = events.createEvent(draftCmd(), founderId);
         assertThatThrownBy(() -> events.replaceDiscountPolicies(eventId,
-                List.of(new CouponDiscountPolicy("W", new BigDecimal("10"))), mgrWrongPermId))
+                List.of(new DiscountPolicyDTO.Coupon("W", new BigDecimal("10"), null)), mgrWrongPermId))
                 .isInstanceOf(PolicyViolationException.class);
     }
 
@@ -399,7 +399,7 @@ class EventAuthorizationE2ETest {
     void unauthorized_cannot_replace_discount_policies() {
         UUID eventId = events.createEvent(draftCmd(), founderId);
         assertThatThrownBy(() -> events.replaceDiscountPolicies(eventId,
-                List.of(new CouponDiscountPolicy("W", new BigDecimal("10"))), unauthorizedId))
+                List.of(new DiscountPolicyDTO.Coupon("W", new BigDecimal("10"), null)), unauthorizedId))
                 .isInstanceOf(PolicyViolationException.class);
     }
 
@@ -530,7 +530,7 @@ class EventAuthorizationE2ETest {
     void manager_discount_policy_cannot_replace_purchase_policies() {
         UUID eventId = events.createEvent(draftCmd(), founderId);
         assertThatThrownBy(() -> events.replacePurchasePolicies(eventId,
-                List.of(new MaxTicketsPerOrderPolicy(2)), mgrDiscountPolicyId))
+                List.of(new PurchasePolicyDTO.MaxTicketsPerOrder(2)), mgrDiscountPolicyId))
                 .isInstanceOf(PolicyViolationException.class);
     }
 
