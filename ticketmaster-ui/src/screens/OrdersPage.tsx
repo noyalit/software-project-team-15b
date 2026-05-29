@@ -2,9 +2,23 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { http } from '../api/http';
 import type { ApiResponse } from '../api/types';
+import { getApiErrorMessage } from '../api/errors';
 
 type ActiveOrderDTO = {
   orderId: string;
+};
+
+type MoneyDTO = {
+  amount: number;
+  currency: string;
+};
+
+type OrderHistoryDTO = {
+  orderId: string;
+  eventId: string;
+  totalPrice?: MoneyDTO | null;
+  tickets: Array<{ seatId: string; basePrice?: MoneyDTO | null }>;
+  cancelled: boolean;
 };
 
 export default function OrdersPage() {
@@ -33,6 +47,22 @@ export default function OrdersPage() {
     enabled: Boolean(activeOrderId),
   });
 
+  const orderHistoryQuery = useQuery({
+    queryKey: ['order-history', 'my-orders'],
+    queryFn: async () => {
+      const res = await http.get<ApiResponse<OrderHistoryDTO[]>>(
+        '/api/order-history/my-orders'
+      );
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
+    },
+  });
+
+  const formatMoney = (m?: MoneyDTO | null) => {
+    if (!m) return '—';
+    return `${m.amount} ${m.currency}`;
+  };
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h1 className="text-2xl font-extrabold text-slate-900">My Orders</h1>
@@ -47,7 +77,7 @@ export default function OrdersPage() {
 
       {activeOrderQuery.isError && (
         <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-          {(activeOrderQuery.error as Error).message}
+          {getApiErrorMessage(activeOrderQuery.error)}
         </div>
       )}
 
