@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { http } from '../api/http';
 import type { ApiResponse, EventDTO } from '../api/types';
 import { getApiErrorMessage } from '../api/errors';
@@ -12,6 +12,7 @@ type ActiveOrderDTO = {
   areaId?: string;
   seatIds?: string[];
   totalPrice?: unknown;
+  expiresAt?: string | null;
 };
 
 type CheckoutStartedDTO = {
@@ -61,6 +62,11 @@ export default function EventDetailsPage() {
     },
     enabled: Boolean(activeOrderId) && Boolean(token),
   });
+
+  useEffect(() => {
+    const expiresAt = activeOrderQuery.data?.expiresAt;
+    setCheckoutStarted(Boolean(expiresAt));
+  }, [activeOrderQuery.data?.expiresAt]);
 
   const requestAccessMutation = useMutation({
     mutationFn: async () => {
@@ -163,6 +169,7 @@ export default function EventDetailsPage() {
   const startCheckoutMutation = useMutation({
     mutationFn: async () => {
       if (!activeOrderId) throw new Error('Please start an order first.');
+      if (checkoutStarted) throw new Error('Checkout has already started for this order.');
 
       if (userType === 'member') {
         const res = await http.post<ApiResponse<CheckoutStartedDTO>>(
@@ -577,11 +584,15 @@ export default function EventDetailsPage() {
 
           <div className="mt-4 flex flex-wrap gap-2">
             <button
-              onClick={() => startCheckoutMutation.mutate()}
-              disabled={startCheckoutMutation.isPending}
+              onClick={() => {
+                if (startCheckoutMutation.isPending || checkoutStarted) return;
+                setSuccessMessage(null);
+                startCheckoutMutation.mutate();
+              }}
+              disabled={startCheckoutMutation.isPending || checkoutStarted}
               className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
             >
-              Start checkout
+              {checkoutStarted ? 'Checkout started' : 'Start checkout'}
             </button>
 
             <button

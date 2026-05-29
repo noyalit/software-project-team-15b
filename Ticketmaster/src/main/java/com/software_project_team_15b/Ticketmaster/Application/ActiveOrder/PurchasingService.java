@@ -26,6 +26,7 @@ import com.software_project_team_15b.Ticketmaster.Application.events.GuestLogged
 import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutCompletedDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutStartedDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
@@ -513,8 +514,27 @@ public class PurchasingService {
     }
 
     private ActiveOrderDTO buildActiveOrderView(ActiveOrder activeOrder) {
-        PriceBreakdown pricing = getPriceBreakdown(activeOrder, null, null);
-        return ActiveOrderDTO.from(activeOrder, eventDomainService.getEvent(activeOrder.getEventId()), pricing);
+        EventDTO event = eventDomainService.getEvent(activeOrder.getEventId());
+        PriceBreakdown pricing;
+        try {
+            pricing = getPriceBreakdown(activeOrder, null, null);
+        } catch (RuntimeException e) {
+            // Temporary fallback so ActiveOrder view (including seats) can be returned
+            // even if pricing calculation isn't implemented yet.
+            EventDTO.AreaView area = event.areas().stream()
+                    .filter(a -> a.areaId().equals(activeOrder.getAreaId()))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalArgumentException(
+                            "Area not found in event: " + activeOrder.getAreaId()
+                    ));
+
+            Money base = area.basePrice() != null ? area.basePrice() : Money.zero("ILS");
+            int qty = activeOrder.getOrderSeats() == null ? 0 : activeOrder.getOrderSeats().size();
+            Money subtotal = base.multiply(qty);
+            pricing = new PriceBreakdown(base, subtotal, Money.zero(base.currency()), subtotal);
+        }
+
+        return ActiveOrderDTO.from(activeOrder, event, pricing);
     }
 
     private void releaseHold(ActiveOrder activeOrder) {
