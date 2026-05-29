@@ -17,7 +17,9 @@ type ActiveOrderDTO = {
     number: string | null;
   }>;
   expiresAt?: string | null;
-  totalPrice?: unknown;
+  basePricePerSeat?: { amount: number; currency: string } | null;
+  subtotal?: { amount: number; currency: string } | null;
+  total?: { amount: number; currency: string } | null;
 };
 
 type CheckoutCompletedDTO = {
@@ -78,6 +80,11 @@ export default function CheckoutPage() {
   const actionError = activeOrderQuery.error || completeCheckoutMutation.error;
   const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
 
+  const formatMoney = (m?: { amount: number; currency: string } | null) => {
+    if (!m) return '—';
+    return `${m.amount} ${m.currency}`;
+  };
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between gap-4">
@@ -125,6 +132,31 @@ export default function CheckoutPage() {
               ) : (
                 <div className="text-sm text-slate-600">No seats found.</div>
               )}
+            </div>
+
+            <div className="mt-6 grid gap-2">
+              <div className="text-sm font-semibold text-slate-900">Cost details</div>
+
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">Price per seat</span>
+                <span className="font-medium text-slate-900">
+                  {formatMoney(activeOrderQuery.data.basePricePerSeat)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">Subtotal</span>
+                <span className="font-medium text-slate-900">
+                  {formatMoney(activeOrderQuery.data.subtotal)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">Total</span>
+                <span className="font-semibold text-slate-900">
+                  {formatMoney(activeOrderQuery.data.total)}
+                </span>
+              </div>
             </div>
           </div>
 
