@@ -73,9 +73,6 @@ class ConcurrentSalesReportGenerationTest {
         when(auth.extractUserId(token)).thenReturn(callerId);
 
         when(userDomainService.getAppointedMembersTree(callerId, companyId)).thenReturn(List.of());
-        Company company = org.mockito.Mockito.mock(Company.class);
-        when(company.getId()).thenReturn(companyId);
-        when(companyRepository.findByFounder(callerId)).thenReturn(List.of(company));
 
         UUID eventId1 = UUID.randomUUID();
         UUID eventId2 = UUID.randomUUID();
