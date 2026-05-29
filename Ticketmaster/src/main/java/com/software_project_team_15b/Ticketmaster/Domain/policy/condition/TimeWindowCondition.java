@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.software_project_team_15b.Ticketmaster.Domain.policy.PolicyContext;
 import java.time.Instant;
+import java.util.Objects;
 
 /**
  * Condition: the moment of purchase ({@code ctx.now()}) falls inside the absolute
@@ -34,7 +35,8 @@ public class TimeWindowCondition implements IDiscountCondition {
 
     @Override
     public boolean test(PolicyContext ctx) {
-        Instant now = ctx != null && ctx.now() != null ? ctx.now() : Instant.now();
+        Objects.requireNonNull(ctx, "ctx");
+        Instant now = Objects.requireNonNull(ctx.now(), "ctx.now()");
         if (from != null && now.isBefore(from)) return false;
         if (to != null && now.isAfter(to)) return false;
         return true;
