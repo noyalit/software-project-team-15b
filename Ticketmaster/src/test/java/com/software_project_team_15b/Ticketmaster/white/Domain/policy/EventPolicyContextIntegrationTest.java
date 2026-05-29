@@ -57,12 +57,12 @@ class EventPolicyContextIntegrationTest {
                 new SimpleDiscountPolicy(BigDecimal.valueOf(5))));
         event.replaceDiscountPolicies(List.<IEventDiscountPolicy>of(tree));
 
-        // subtotal = $50 * 2 = $100. 15% off via stacking = $15 discount; cheapest = $85.
+        // subtotal = $50 * 2 = $100. Cascade: 100 * 0.9 * 0.95 = 85.50 final; discount = 14.50.
         Money discount = event.discountAmountFor(area.areaId(), 2, req(event.eventId(), area.areaId(), 2, null));
         Money cheapest = event.cheapestPriceFor(area.areaId(), 2, req(event.eventId(), area.areaId(), 2, null));
 
-        assertThat(discount).isEqualTo(Money.of("15.00", "USD"));
-        assertThat(cheapest).isEqualTo(Money.of("85.00", "USD"));
+        assertThat(discount).isEqualTo(Money.of("14.50", "USD"));
+        assertThat(cheapest).isEqualTo(Money.of("85.50", "USD"));
     }
 
     /** SUNNY: a Coupon discount only fires when the matching code is in the request. */
