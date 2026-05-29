@@ -240,19 +240,37 @@ class CompanyServiceBlackTest {
     // updatePurchasePolicy — negative
 
     @Test
-    void updatePurchasePolicy_throws_when_caller_is_not_owner() {
+    void updatePurchasePolicy_throws_when_caller_has_neither_owner_nor_manager_permission() {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         CompanyDTO dto = service.createCompany(founderToken, "Acme");
         UUID strangerId = UUID.randomUUID();
         String strangerToken = registerMember(strangerId);
         when(userDomainService.isActiveOwner(strangerId, dto.companyId())).thenReturn(false);
-        when(userDomainService.isActiveFounder(strangerId, dto.companyId())).thenReturn(false);
+        when(userDomainService.canChangePurchasePolicy(strangerId, dto.companyId())).thenReturn(false);
         ICompanyPurchasePolicy policy = (request, c) -> {};
 
         assertThatThrownBy(() -> service.updatePurchasePolicy(strangerToken, dto.companyId(), policy))
                 .isInstanceOf(UnauthorizedCompanyActionException.class)
-                .hasMessageContaining("owner");
+                .hasMessageContaining("permission");
+    }
+
+    @Test
+    void updatePurchasePolicy_succeeds_when_caller_is_manager_with_permission() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+
+        UUID managerId = UUID.randomUUID();
+        String managerToken = registerMember(managerId);
+        when(userDomainService.isActiveOwner(managerId, dto.companyId())).thenReturn(false);
+        when(userDomainService.canChangePurchasePolicy(managerId, dto.companyId())).thenReturn(true);
+        ICompanyPurchasePolicy policy = (request, c) -> {};
+
+        CompanyDTO result = service.updatePurchasePolicy(managerToken, dto.companyId(), policy);
+
+        assertThat(result).isNotNull();
+        assertThat(repo.findById(dto.companyId()).orElseThrow().getPurchasePolicies()).containsExactly(policy);
     }
 
     @Test
@@ -326,18 +344,37 @@ class CompanyServiceBlackTest {
     // updateDiscountPolicy — negative
 
     @Test
-    void updateDiscountPolicy_throws_when_caller_is_not_owner() {
+    void updateDiscountPolicy_throws_when_caller_has_neither_owner_nor_manager_permission() {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         CompanyDTO dto = service.createCompany(founderToken, "Acme");
         UUID strangerId = UUID.randomUUID();
         String strangerToken = registerMember(strangerId);
         when(userDomainService.isActiveOwner(strangerId, dto.companyId())).thenReturn(false);
-        when(userDomainService.isActiveFounder(strangerId, dto.companyId())).thenReturn(false);
+        when(userDomainService.canChangeDiscountPolicy(strangerId, dto.companyId())).thenReturn(false);
         ICompanyDiscountPolicy policy = (subtotal, request) -> subtotal;
 
         assertThatThrownBy(() -> service.updateDiscountPolicy(strangerToken, dto.companyId(), policy))
-                .isInstanceOf(UnauthorizedCompanyActionException.class);
+                .isInstanceOf(UnauthorizedCompanyActionException.class)
+                .hasMessageContaining("permission");
+    }
+
+    @Test
+    void updateDiscountPolicy_succeeds_when_caller_is_manager_with_permission() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+
+        UUID managerId = UUID.randomUUID();
+        String managerToken = registerMember(managerId);
+        when(userDomainService.isActiveOwner(managerId, dto.companyId())).thenReturn(false);
+        when(userDomainService.canChangeDiscountPolicy(managerId, dto.companyId())).thenReturn(true);
+        ICompanyDiscountPolicy policy = (subtotal, request) -> subtotal;
+
+        CompanyDTO result = service.updateDiscountPolicy(managerToken, dto.companyId(), policy);
+
+        assertThat(result).isNotNull();
+        assertThat(repo.findById(dto.companyId()).orElseThrow().getDiscountPolicies()).containsExactly(policy);
     }
 
     @Test
