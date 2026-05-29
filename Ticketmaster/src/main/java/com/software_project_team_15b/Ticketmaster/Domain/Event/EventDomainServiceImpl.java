@@ -443,13 +443,15 @@ public class EventDomainServiceImpl implements IEventDomainService {
     @Override
     @Transactional(readOnly = true)
     public void validatePurchaseEligibility(UUID eventId, PurchaseRequest request) {
-        throw new NotImplementedException();
+     //throw new NotImplementedException();
 //        Objects.requireNonNull(request, "request");
 //        Event event = requireEvent(eventId);
 //        for (IEventPurchasePolicy policy : event.purchasePolicies()) {
 //            policy.validate(request, event);
 //        }
 //        companyService.validatePurchaseEligibility(event.companyId(), request);
+
+        return; 
     }
 
     // ---- Helpers -------------------------------------------------------------
