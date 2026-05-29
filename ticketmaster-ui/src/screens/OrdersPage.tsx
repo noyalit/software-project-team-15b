@@ -23,8 +23,6 @@ type OrderHistoryDTO = {
 };
 
 export default function OrdersPage() {
-  const activeOrderId = localStorage.getItem('activeOrderId');
-
   const myActiveOrdersQuery = useQuery({
     queryKey: ['active-orders', 'my'],
     queryFn: async () => {
@@ -32,29 +30,6 @@ export default function OrdersPage() {
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? [];
     },
-  });
-
-  const activeOrderQuery = useQuery({
-    queryKey: ['active-order', activeOrderId],
-    queryFn: async () => {
-      try {
-        const res = await http.get<ApiResponse<ActiveOrderDTO>>(
-          `/api/active-orders/${activeOrderId}`
-        );
-
-        if (res.data.error) {
-          localStorage.removeItem('activeOrderId');
-          throw new Error('You do not have an active order.');
-        }
-        if (!res.data.data) throw new Error('No active order found');
-
-        return res.data.data;
-      } catch (e) {
-        localStorage.removeItem('activeOrderId');
-        throw e;
-      }
-    },
-    enabled: Boolean(activeOrderId),
   });
 
   const orderHistoryQuery = useQuery({
@@ -123,32 +98,6 @@ export default function OrdersPage() {
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {activeOrderQuery.isPending && activeOrderId && (
-        <p className="mt-2 text-slate-600">Loading active order...</p>
-      )}
-
-      {activeOrderQuery.isError && (
-        <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-          {getApiErrorMessage(activeOrderQuery.error)}
-        </div>
-      )}
-
-      {activeOrderQuery.data && (
-        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <div className="font-semibold text-slate-900">Active order</div>
-          <div className="mt-1 text-sm text-slate-600">
-            Order ID: {activeOrderId}
-          </div>
-
-          <Link
-            to={`/checkout/${activeOrderId}`}
-            className="mt-3 inline-flex rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white"
-          >
-            Continue order
-          </Link>
         </div>
       )}
       <div className="mt-8">
