@@ -326,7 +326,6 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     @Override
-    public void replacePurchasePolicies(UUID eventId, List<IEventPurchasePolicy> policies, UUID callerId) {
     public void replacePurchasePolicies(UUID eventId, List<PurchasePolicyDTO> policies, UUID callerId) {
         Objects.requireNonNull(eventId, "eventId");
         Objects.requireNonNull(policies, "policies");
