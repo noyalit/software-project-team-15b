@@ -7,8 +7,6 @@ import com.software_project_team_15b.Ticketmaster.DTO.DiscountPolicyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.PurchasePolicyDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpHeaders;
@@ -27,7 +25,6 @@ import java.util.UUID;
 
 /**
  * Endpoints for the event's purchase- and discount-policy chains.
- *
  */
 @RestController
 @RequestMapping(path = "/api/events/{eventId}", produces = "application/json")
@@ -45,10 +42,7 @@ public class EventPolicyController {
     public ResponseEntity<ApiResponse<List<PurchasePolicyDTO>>> getPurchasePolicies(
             @PathVariable UUID eventId) {
         try {
-            List<PurchasePolicyDTO> body = eventService.getPurchasePolicies(eventId).stream()
-                    .map(PurchasePolicyDTO::fromDomain)
-                    .toList();
-            return ResponseEntity.ok(new ApiResponse<>(body, null));
+            return ResponseEntity.ok(new ApiResponse<>(eventService.getPurchasePolicies(eventId), null));
         } catch (InvalidEventStateException ex) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new ApiResponse<>(null, ex.getMessage()));
@@ -66,10 +60,7 @@ public class EventPolicyController {
     public ResponseEntity<ApiResponse<List<DiscountPolicyDTO>>> getDiscountPolicies(
             @PathVariable UUID eventId) {
         try {
-            List<DiscountPolicyDTO> body = eventService.getDiscountPolicies(eventId).stream()
-                    .map(DiscountPolicyDTO::fromDomain)
-                    .toList();
-            return ResponseEntity.ok(new ApiResponse<>(body, null));
+            return ResponseEntity.ok(new ApiResponse<>(eventService.getDiscountPolicies(eventId), null));
         } catch (InvalidEventStateException ex) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new ApiResponse<>(null, ex.getMessage()));
@@ -89,10 +80,7 @@ public class EventPolicyController {
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
             @RequestBody List<PurchasePolicyDTO> policies) {
         try {
-            List<IEventPurchasePolicy> domainPolicies = policies.stream()
-                    .map(PurchasePolicyDTO::toDomain)
-                    .toList();
-            eventService.replacePurchasePolicies(eventId, domainPolicies, token);
+            eventService.replacePurchasePolicies(eventId, policies, token);
             return ResponseEntity.ok(new ApiResponse<>(null, null));
         } catch (InvalidTokenException ex) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -119,10 +107,7 @@ public class EventPolicyController {
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
             @RequestBody List<DiscountPolicyDTO> policies) {
         try {
-            List<IEventDiscountPolicy> domainPolicies = policies.stream()
-                    .map(DiscountPolicyDTO::toDomain)
-                    .toList();
-            eventService.replaceDiscountPolicies(eventId, domainPolicies, token);
+            eventService.replaceDiscountPolicies(eventId, policies, token);
             return ResponseEntity.ok(new ApiResponse<>(null, null));
         } catch (InvalidTokenException ex) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
