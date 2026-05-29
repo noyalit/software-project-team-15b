@@ -44,6 +44,27 @@ export default function EventDetailsPage() {
   const [activeOrderId, setActiveOrderId] = useState<string | null>(() =>localStorage.getItem('activeOrderId'));
   const [checkoutStarted, setCheckoutStarted] = useState(false);
 
+  const myActiveOrdersQuery = useQuery({
+    queryKey: ['active-orders', 'my', token],
+    queryFn: async () => {
+      const res = await http.get<
+        ApiResponse<Array<{ orderId: string; eventId?: string }>>
+      >('/api/active-orders/my');
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
+    },
+    enabled: Boolean(token) && Boolean(eventId),
+  });
+
+  useEffect(() => {
+    if (activeOrderId) return;
+    const orders = myActiveOrdersQuery.data ?? [];
+    const matching = orders.find((o) => o.eventId === eventId);
+    if (!matching) return;
+    setActiveOrderId(matching.orderId);
+    localStorage.setItem('activeOrderId', matching.orderId);
+  }, [activeOrderId, eventId, myActiveOrdersQuery.data]);
+
   const eventQuery = useQuery({
     queryKey: ['event', eventId],
     queryFn: async () => {
@@ -121,19 +142,30 @@ export default function EventDetailsPage() {
 
         return res.data.data;
       } catch (e) {
-        const message =
-          e instanceof Error ? e.message : 'Failed to start order.';
+        const message = getApiErrorMessage(e);
 
-        if (
-          message.includes('409') ||
-          message.includes('concurrent_order')
-        ) {
+        if (message.toLowerCase().includes('active order')) {
+          try {
+            const res2 = await http.get<
+              ApiResponse<Array<{ orderId: string; eventId?: string }>>
+            >('/api/active-orders/my');
+            const orders = res2.data.data ?? [];
+            const matching = orders.find((o) => o.eventId === eventId);
+            if (matching?.orderId) {
+              setActiveOrderId(matching.orderId);
+              localStorage.setItem('activeOrderId', matching.orderId);
+              return matching.orderId;
+            }
+          } catch {
+            // fall through
+          }
+
           throw new Error(
-            'You already have an active order. Please complete it or wait for it to expire before starting a new one.'
+            'You already have an active order for this event. Please continue it from the Orders page.'
           );
         }
 
-        throw new Error(message);
+        throw new Error(message || 'Failed to start order.');
       }
     },
 
