@@ -528,7 +528,9 @@ public class PurchasingService {
                             "Area not found in event: " + activeOrder.getAreaId()
                     ));
 
-            Money base = area.basePrice() != null ? area.basePrice() : Money.zero("ILS");
+            Money base = area.basePrice() != null
+                    ? new Money(area.basePrice().amount(), area.basePrice().currency())
+                    : Money.zero("ILS");
             int qty = activeOrder.getOrderSeats() == null ? 0 : activeOrder.getOrderSeats().size();
             Money subtotal = base.multiply(qty);
             pricing = new PriceBreakdown(base, subtotal, Money.zero(base.currency()), subtotal);
