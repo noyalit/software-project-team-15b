@@ -85,8 +85,12 @@ class ConcurrentSalesReportGenerationTest {
 
         Member member = org.mockito.Mockito.mock(Member.class);
         Set<com.software_project_team_15b.Ticketmaster.Domain.Member.Role> roles = new HashSet<>();
-        roles.add(new Manager(UUID.randomUUID(), companyId, eventId1, Set.of(ManagerPermission.GENERATE_SALES_REPORTS)));
-        roles.add(new Manager(UUID.randomUUID(), companyId, eventId2, Set.of(ManagerPermission.GENERATE_SALES_REPORTS)));
+        Manager manager1 = new Manager(UUID.randomUUID(), companyId, eventId1, Set.of(ManagerPermission.GENERATE_SALES_REPORTS));
+        manager1.approveAppointment();
+        Manager manager2 = new Manager(UUID.randomUUID(), companyId, eventId2, Set.of(ManagerPermission.GENERATE_SALES_REPORTS));
+        manager2.approveAppointment();
+        roles.add(manager1);
+        roles.add(manager2);
         when(member.getAssignedRoles()).thenReturn(roles);
         when(memberRepository.findById(callerId)).thenReturn(Optional.of(member));
 
