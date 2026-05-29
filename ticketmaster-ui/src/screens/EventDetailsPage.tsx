@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { http } from '../api/http';
 import type { ApiResponse, EventDTO } from '../api/types';
@@ -28,12 +28,12 @@ type CheckoutCompletedDTO = {
 
 export default function EventDetailsPage() {
   const { eventId } = useParams();
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const { token, userType } = useAuthStore();
 
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>([]);
-  const [couponCode, setCouponCode] = useState('');
   const [guestBirthDate, setGuestBirthDate] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(() =>localStorage.getItem('activeOrderId'));
@@ -198,46 +198,9 @@ export default function EventDetailsPage() {
     onSuccess: () => {
       setCheckoutStarted(true);
       setSuccessMessage('Checkout started.');
-    },
-  });
-
-  const completeCheckoutMutation = useMutation({
-    mutationFn: async () => {
-      if (!activeOrderId) throw new Error('Please start an order first.');
-
-      if (userType === 'member') {
-        const res = await http.post<ApiResponse<CheckoutCompletedDTO>>(
-          `/api/active-orders/${activeOrderId}/checkout/member/complete`,
-          {
-            couponCode: couponCode.trim() || null,
-          }
-        );
-
-        if (res.data.error) throw new Error(res.data.error);
-        return res.data.data;
+      if (activeOrderId) {
+        navigate(`/checkout/${activeOrderId}`);
       }
-
-      if (!guestBirthDate) {
-        throw new Error('Please enter birth date for guest checkout.');
-      }
-
-      const res = await http.post<ApiResponse<CheckoutCompletedDTO>>(
-        `/api/active-orders/${activeOrderId}/checkout/guest/complete`,
-        {
-          birthDate: guestBirthDate,
-          couponCode: couponCode.trim() || null,
-        }
-      );
-
-      if (res.data.error) throw new Error(res.data.error);
-      return res.data.data;
-    },
-
-    onSuccess: async () => {
-      setSuccessMessage('Purchase completed successfully.');
-      setSelectedSeatIds([]);
-      await qc.invalidateQueries({ queryKey: ['event', eventId] });
-      await qc.invalidateQueries({ queryKey: ['active-order', activeOrderId] });
     },
   });
 
@@ -261,8 +224,7 @@ export default function EventDetailsPage() {
     createOrderMutation.error ||
     addSeatsMutation.error ||
     removeSeatsMutation.error ||
-    startCheckoutMutation.error ||
-    completeCheckoutMutation.error 
+    startCheckoutMutation.error 
 
   const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
 
@@ -572,16 +534,6 @@ export default function EventDetailsPage() {
             </label>
           )}
 
-          <label className="mt-4 block">
-            <div className="text-sm font-medium text-slate-700">Coupon code</div>
-            <input
-              value={couponCode}
-              onChange={(e) => setCouponCode(e.target.value)}
-              placeholder="Optional"
-              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-            />
-          </label>
-
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               onClick={() => {
@@ -593,14 +545,6 @@ export default function EventDetailsPage() {
               className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
             >
               {checkoutStarted ? 'Checkout started' : 'Start checkout'}
-            </button>
-
-            <button
-              onClick={() => completeCheckoutMutation.mutate()}
-              disabled={!checkoutStarted || completeCheckoutMutation.isPending}
-              className="rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
-            >
-              Complete purchase
             </button>
           </div>
         </div>

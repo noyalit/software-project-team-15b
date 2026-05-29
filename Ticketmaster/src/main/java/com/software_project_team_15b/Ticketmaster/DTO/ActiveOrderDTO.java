@@ -57,37 +57,39 @@ public record ActiveOrderDTO(
         EventDTO.AreaView area = EventDTO.areas().stream()
                 .filter(a -> a.areaId().equals(activeOrder.getAreaId()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "Area not found in event: " + activeOrder.getAreaId()
-                ));
+                .orElse(null);
 
-        List<SeatInOrderDTO> seats = activeOrder.getOrderSeats().stream()
+        List<UUID> seatIds = activeOrder.getOrderSeats() == null
+                ? List.of()
+                : activeOrder.getOrderSeats().stream().toList();
+
+        List<SeatInOrderDTO> seats = seatIds.stream()
                 .map(seatId -> {
-                    EventDTO.SeatView seatView = area.seats().stream()
-                            .filter(s -> s.seatId().equals(seatId))
-                            .findFirst()
-                            .orElseThrow(() -> new IllegalArgumentException(
-                                    "Seat not found in area: " + seatId
-                            ));
+                    EventDTO.SeatView seatView = area == null
+                            ? null
+                            : area.seats().stream()
+                                    .filter(s -> s.seatId().equals(seatId))
+                                    .findFirst()
+                                    .orElse(null);
 
                     return new SeatInOrderDTO(
                             seatId,
-                            seatView.row(),
-                            seatView.number(),
-                            seatView.status(),
+                            seatView == null ? null : seatView.row(),
+                            seatView == null ? null : seatView.number(),
+                            seatView == null ? null : seatView.status(),
                             MoneyDTO.from(pricing.basePrice())
                     );
                 })
                 .toList();
 
-        int quantity = activeOrder.getOrderSeats().size();
+        int quantity = seatIds.size();
 
         return new ActiveOrderDTO(
                 activeOrder.getOrderId(),
                 activeOrder.getUserId(),
                 activeOrder.getEventId(),
                 activeOrder.getAreaId(),
-                area.name(),
+                area == null ? "Unknown area" : area.name(),
                 EventDTO.name(),
                 EventDTO.artist(),
                 EventDTO.startsAt(),
