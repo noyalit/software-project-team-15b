@@ -81,11 +81,11 @@ class TimeWindowConditionWhiteTest {
     }
 
     @Test
-    void GivenNullContext_WhenTest_ThenFallbackToInstantNow() {
+    void GivenNullContext_WhenTest_ThenThrowsNullPointer() {
         Instant from = Instant.now().minus(1, ChronoUnit.DAYS);
         Instant to = Instant.now().plus(1, ChronoUnit.DAYS);
         TimeWindowCondition condition = new TimeWindowCondition(from, to);
 
-        assertTrue(condition.test(null));
+        assertThrows(NullPointerException.class, () -> condition.test(null));
     }
 }
