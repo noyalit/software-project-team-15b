@@ -464,7 +464,7 @@ public class EventDomainServiceImpl implements IEventDomainService {
         for (IEventPurchasePolicy policy : event.purchasePolicies()) {
             policy.validate(request, event);
         }
-        //companyService.validatePurchaseEligibility(event.companyId(), request);
+        companyDomainService.validatePurchaseEligibility(event.companyId(), request);
     }
 
     // ---- Helpers -------------------------------------------------------------
