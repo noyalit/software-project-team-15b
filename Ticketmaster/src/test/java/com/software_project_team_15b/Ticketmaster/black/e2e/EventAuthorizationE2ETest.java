@@ -257,17 +257,17 @@ class EventAuthorizationE2ETest {
     }
 
     @Test
-    @DisplayName("Founder can remove an area (CONFIGURE_HALL)")
+    @DisplayName("Founder can remove an area")
     void founder_can_remove_area() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
-        events.removeArea(eventId, areaId, founderId); // should not throw
+        events.removeArea(eventId, areaId, founderId);
     }
 
     @Test
     @DisplayName("Manager with CONFIGURE_HALLS_AND_SEATS can remove an area")
     void manager_config_hall_can_remove_area() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
         events.removeArea(eventId, areaId, mgrConfigHallId);
     }
@@ -275,59 +275,56 @@ class EventAuthorizationE2ETest {
     @Test
     @DisplayName("Manager with wrong permission cannot remove an area")
     void manager_wrong_permission_cannot_remove_area() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
         assertThatThrownBy(() -> events.removeArea(eventId, areaId, mgrWrongPermId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
-    // ── UPDATE_EVENT_MAP (updateArea) ─────────────────────────────────────────
+    // ── UPDATE_EVENT_MAP — updateArea ─────────────────────────────────────────
 
     @Test
-    @DisplayName("Founder can update an area (UPDATE_EVENT_MAP)")
+    @DisplayName("Founder can update an area")
     void founder_can_update_area() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
-        events.updateArea(eventId, areaId,
-                new UpdateAreaCommand("New Name", null, null), founderId);
+        events.updateArea(eventId, areaId, new UpdateAreaCommand("New Name", null, null), founderId);
     }
 
     @Test
-    @DisplayName("Owner can update an area (UPDATE_EVENT_MAP)")
+    @DisplayName("Owner can update an area")
     void owner_can_update_area() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
-        events.updateArea(eventId, areaId,
-                new UpdateAreaCommand("Owner Name", null, null), ownerId);
+        events.updateArea(eventId, areaId, new UpdateAreaCommand("Owner Name", null, null), ownerId);
     }
 
     @Test
     @DisplayName("Manager with UPDATE_EVENT_MAP can update an area")
     void manager_update_map_can_update_area() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
-        events.updateArea(eventId, areaId,
-                new UpdateAreaCommand("Mgr Name", null, null), mgrUpdateMapId);
+        events.updateArea(eventId, areaId, new UpdateAreaCommand("Mgr Name", null, null), mgrUpdateMapId);
     }
 
     @Test
     @DisplayName("Manager with wrong permission cannot update an area")
     void manager_wrong_permission_cannot_update_area() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
         assertThatThrownBy(() -> events.updateArea(eventId, areaId,
                 new UpdateAreaCommand("Forbidden", null, null), mgrWrongPermId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
     @DisplayName("Unauthorized member cannot update an area")
     void unauthorized_cannot_update_area() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
         assertThatThrownBy(() -> events.updateArea(eventId, areaId,
                 new UpdateAreaCommand("Forbidden", null, null), unauthorizedId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     // ── DEFINE_PURCHASE_POLICY ────────────────────────────────────────────────
