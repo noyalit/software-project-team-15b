@@ -87,6 +87,40 @@ export default function MyEventsPage() {
     enabled: Boolean(token) && userType === 'member',
   });
 
+  const appointmentApprovedQuery = useQuery({
+    queryKey: ['appointment-approved', token, meQuery.data?.activeRole],
+    queryFn: async () => {
+      const res = await http.get<ApiResponse<boolean>>('/api/users/roles/approved');
+
+      if (res.data.error) throw new Error(res.data.error);
+
+      return res.data.data ?? false;
+    },
+    enabled:
+      Boolean(token) &&
+      userType === 'member' &&
+      (meQuery.data?.activeRole === 'Owner' || meQuery.data?.activeRole === 'Manager'),
+  });
+
+  const activeRole = meQuery.data?.activeRole;
+  const isApprovedAppointment =
+    activeRole === 'Founder' || appointmentApprovedQuery.data === true;
+
+  const canManageEvents =
+  activeRole === 'Founder' ||
+  ((activeRole === 'Owner' || activeRole === 'Manager') && isApprovedAppointment);
+
+  if (!canManageEvents) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h1 className="text-2xl font-extrabold text-slate-900">My Events</h1>
+        <p className="mt-2 text-slate-600">
+          Your appointment must be approved before you can manage events.
+        </p>
+      </div>
+    );
+  }
+
   const deleteLotteryMutation = useMutation({
     mutationFn: async ({ companyId, eventId }: { companyId: string; eventId: string }) => {
       setSuccessMessage(null);

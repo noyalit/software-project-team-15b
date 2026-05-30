@@ -82,8 +82,25 @@ export default function HierarchyReportPage() {
     );
   }
 
+  const appointmentApprovedQuery = useQuery({
+    queryKey: ['appointment-approved', token, meQuery.data?.activeRole],
+    queryFn: async () => {
+        const res = await http.get<ApiResponse<boolean>>('/api/users/roles/approved');
+
+        if (res.data.error) throw new Error(res.data.error);
+
+        return res.data.data ?? false;
+    },
+    enabled:
+        Boolean(token) &&
+        userType === 'member' &&
+        meQuery.data?.activeRole === 'Owner',
+    });
+
   const activeRole = meQuery.data?.activeRole;
-  const canView = activeRole === 'Founder' || activeRole === 'Owner';
+  const canView =
+    activeRole === 'Founder' ||
+    (activeRole === 'Owner' && appointmentApprovedQuery.data === true);
 
   // Recursive tree render helper
   const renderTreeNode = (node: RoleTreeNodeDTO) => {

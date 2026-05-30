@@ -96,6 +96,39 @@ export default function CompanyPage() {
     enabled: Boolean(token) && userType === 'member',
   });
 
+  const appointmentApprovedQuery = useQuery({
+    queryKey: ['appointment-approved', token, meQuery.data?.activeRole],
+    queryFn: async () => {
+      const res = await http.get<ApiResponse<boolean>>('/api/users/roles/approved');
+
+      if (res.data.error) throw new Error(res.data.error);
+
+      return res.data.data ?? false;
+    },
+    enabled:
+      Boolean(token) &&
+      userType === 'member' &&
+      (meQuery.data?.activeRole === 'Owner' || meQuery.data?.activeRole === 'Manager'),
+  });
+
+  const activeRole = meQuery.data?.activeRole;
+  const canManageCompany =
+    activeRole === 'Founder' ||
+    (activeRole === 'Owner' && appointmentApprovedQuery.data === true);
+
+  if (!canManageCompany) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
+          Company
+        </h1>
+        <p className="mt-2 text-slate-600">
+          Your owner appointment must be approved before you can manage this company.
+        </p>
+      </div>
+    );
+  }
+
   const eventsQuery = useQuery({
     queryKey: ['company-events', companyId],
     queryFn: async () => {

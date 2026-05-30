@@ -53,6 +53,28 @@ export default function AppShell() {
 
   const activeRole = meQuery.data?.activeRole;
 
+  const appointmentApprovedQuery = useQuery({
+    queryKey: ['appointment-approved', token, activeRole],
+    queryFn: async () => {
+      const res = await http.get<ApiResponse<boolean>>('/api/users/roles/approved');
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? false;
+    },
+    enabled:
+      Boolean(token) &&
+      userType === 'member' &&
+      (activeRole === 'Owner' || activeRole === 'Manager'),
+});
+
+const isApprovedAppointment =
+  activeRole === 'Founder' || appointmentApprovedQuery.data === true;
+
+const canAccessOwnerPages =
+  activeRole === 'Founder' || (activeRole === 'Owner' && isApprovedAppointment);
+
+const canAccessManagerPages =
+  canAccessOwnerPages || (activeRole === 'Manager' && isApprovedAppointment);
+
   const badgeText = (() => {
     if (!token) return null;
     if (userType === 'member') {
@@ -75,21 +97,17 @@ export default function AppShell() {
           <nav className="flex items-center gap-1">
             {userType !== 'system-admin' && <NavLink to="/events" label="Discover Events" />}
             {userType === 'member' && <NavLink to="/companies/me" label="My Companies" />}
-            {userType === 'member' &&
-              (activeRole === 'Founder' || activeRole === 'Owner') && (
+            {userType === 'member' && canAccessManagerPages  && (
                 <NavLink to="/my-events" label="My Events" />
             )}
-            {userType === 'member' &&
-              (activeRole === 'Founder' || activeRole === 'Owner') && (
+            {userType === 'member' && canAccessOwnerPages && (
                 <NavLink to="/company-orders" label="Company Orders" />
             )}
-            {userType === 'member' &&
-              (activeRole === 'Founder' || activeRole === 'Owner') && (
+            {userType === 'member' && canAccessOwnerPages  && (
                 <NavLink to="/company-sales" label="Sales Report" />
             )}
 
-            {userType === 'member' &&
-              (activeRole === 'Founder' || activeRole === 'Owner') && (
+            {userType === 'member' && canAccessOwnerPages  && (
                 <NavLink to="/hierarchy-report" label="Hierarchy Report" />
             )}
             {userType === 'member' && <NavLink to="/orders" label="Orders" />}
