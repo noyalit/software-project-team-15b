@@ -1,13 +1,19 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Member;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
+import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationType;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyOwnerInCompanyException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AppointmentCycleDetectedException;
@@ -25,9 +31,56 @@ import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 public class UserDomainService {
 
     private final IMemberRepository memberRepository;
-    
-    public UserDomainService(IMemberRepository memberRepository) {
+    private final INotifier notifier;
+
+    /**
+     * Primary constructor used by the Spring container.
+     *
+     * @param memberRepository repository for member persistence
+     * @param notifier         port used to deliver notifications to users
+     */
+    @Autowired
+    public UserDomainService(IMemberRepository memberRepository, INotifier notifier) {
         this.memberRepository = memberRepository;
+        this.notifier = notifier;
+    }
+
+    /**
+     * Convenience constructor for contexts that do not exercise the notification
+     * system (e.g. unit tests that never call {@link #notifyUser(UUID, String)}).
+     *
+     * @param memberRepository repository for member persistence
+     */
+    public UserDomainService(IMemberRepository memberRepository) {
+        this(memberRepository, null);
+    }
+
+    /**
+     * Sends a free-text message to a single user by delegating to the notification system.
+     * <p>
+     * The target user must exist; the message is delivered as a {@link NotificationType#ADMIN_MESSAGE}
+     * notification through the configured {@link INotifier}.
+     *
+     * @param userId  the ID of the user to notify; must not be {@code null} and must identify an existing member
+     * @param message the textual content of the message; must not be {@code null} or blank
+     * @throws InvalidMemberInputException if {@code userId} is {@code null} or {@code message} is null/blank
+     * @throws MemberNotFoundException     if no member exists with the given {@code userId}
+     */
+    public void notifyUser(UUID userId, String message) {
+        if (message == null || message.isBlank()) {
+            throw new InvalidMemberInputException("Message cannot be null or empty");
+        }
+
+        // Ensure the recipient is a real member before dispatching the notification.
+        getMemberOrThrow(userId);
+
+        NotificationDTO notification = new NotificationDTO(
+                NotificationType.ADMIN_MESSAGE,
+                "Message from System Administration",
+                message,
+                Instant.now()
+        );
+        notifier.notifyUser(userId, notification);
     }
 
     @Transactional

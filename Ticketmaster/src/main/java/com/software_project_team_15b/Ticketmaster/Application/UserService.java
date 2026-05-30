@@ -580,6 +580,40 @@ public class UserService {
         }
     }
 
+    /**
+     * Sends a message from a system admin to a target user.
+     * <p>
+     * The caller's token must be valid and belong to a system admin. Once authorized,
+     * delivery is delegated to {@link UserDomainService#notifyUser(UUID, String)}, which
+     * forwards the message to the notification system.
+     *
+     * @param token        the authentication token of the sending system admin; must be a valid admin token
+     * @param targetUserId the ID of the user to receive the message; must not be {@code null}
+     * @param message      the textual content of the message; must not be {@code null} or blank
+     * @throws InvalidTokenException    if the token is null/blank, invalid, or does not belong to a system admin
+     * @throws IllegalArgumentException if {@code targetUserId} is {@code null} or {@code message} is null/blank
+     */
+    public void sendMessageToUser(String token, UUID targetUserId, String message) {
+        try {
+            if (token == null || token.isBlank() || !auth.isTokenValid(token) || !auth.isSystemAdmin(token)) {
+                throw new InvalidTokenException("Only a system admin can send messages to users");
+            }
+            if (targetUserId == null) {
+                throw new IllegalArgumentException("Target user ID cannot be null");
+            }
+            if (message == null || message.isBlank()) {
+                throw new IllegalArgumentException("Message cannot be null or empty");
+            }
+
+            UUID systemAdminId = auth.extractUserId(token);
+            userDomainService.notifyUser(targetUserId, message);
+            AUDIT.info("op=send-message-to-user systemAdminId={} targetUserId={}", systemAdminId, targetUserId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=send-message-to-user targetUserId={} result=rejected reason={}", targetUserId, e.getMessage());
+            throw e;
+        }
+    }
+
     private UUID getAuthenticatedMemberId(String token) {
         if (!auth.isTokenValid(token)) {
             throw new InvalidTokenException("Invalid or expired token");

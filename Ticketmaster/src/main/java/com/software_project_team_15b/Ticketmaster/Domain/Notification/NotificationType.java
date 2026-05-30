@@ -25,4 +25,6 @@ public enum NotificationType {
     COMPANY_SUSPENDED,
     /** An active order (held seats) is about to expire. */
     ORDER_EXPIRING_SOON,
+    /** A free-text message sent to the recipient by a system administrator. */
+    ADMIN_MESSAGE,
 }
