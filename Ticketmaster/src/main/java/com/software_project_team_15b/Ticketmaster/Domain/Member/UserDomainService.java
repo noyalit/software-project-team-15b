@@ -1,6 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Member;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -19,7 +20,9 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.MemberN
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.RoleNotAssignedException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UsernameAlreadyExistsException;
+import com.software_project_team_15b.Ticketmaster.DTO.CompanyRoleTreeDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.RoleTreeNodeDTO;
 
 @Service
 public class UserDomainService {
@@ -327,6 +330,59 @@ public class UserDomainService {
 
         member.getActiveRole().approveAppointment();
         return memberRepository.save(member);
+    }
+
+    @Transactional(readOnly = true)
+    public CompanyRoleTreeDTO getCompanyRoleTree(UUID requesterId, UUID companyId) {
+        if (requesterId == null) {
+            throw new InvalidMemberInputException("Requester ID cannot be null");
+        }
+
+        if (companyId == null) {
+            throw new InvalidMemberInputException("Company ID cannot be null");
+        }
+
+        if (!isActiveFounder(requesterId, companyId) && !isActiveOwner(requesterId, companyId)) {
+            throw new UnauthorizedCompanyActionException(
+                    "Only company owners or founders can view the role tree"
+            );
+        }
+
+        List<UUID> memberIds = getAppointedMembersTree(requesterId, companyId);
+        List<RoleTreeNodeDTO> roleNodes = new ArrayList<>();
+
+        for (UUID memberId : memberIds) {
+            Member member = getMemberOrThrow(memberId);
+
+            for (Role role : member.getAssignedRoles()) {
+                if (!role.belongsToCompany(companyId)) {
+                    continue;
+                }
+
+                UUID eventId = null;
+                Set<ManagerPermission> permissions = null;
+
+                if (role instanceof Manager manager) {
+                    eventId = manager.getEventId();
+                    permissions = manager.getPermissions();
+                }
+
+                roleNodes.add(new RoleTreeNodeDTO(
+                        member.getUserId(),
+                        role.getRoleName(),
+                        role.getAppointedBy(),
+                        role.getCompanyId(),
+                        eventId,
+                        permissions
+                ));
+            }
+        }
+
+        return new CompanyRoleTreeDTO(
+                companyId,
+                requesterId,
+                roleNodes
+        );
     }
 
     @Transactional
