@@ -44,6 +44,11 @@ export default function MyEventsPage() {
   const [seatsPerRow, setSeatsPerRow] = useState('');
   const [openEventDetailsId, setOpenEventDetailsId] = useState<string | null>(null);
 
+  const [lotteryEventId, setLotteryEventId] = useState<string | null>(null);
+  const [lotteryWinners, setLotteryWinners] = useState<string[] | null>(null);
+  const [lotteryWinnerCount, setLotteryWinnerCount] = useState('10');
+  const [lotteryExpiration, setLotteryExpiration] = useState('');
+
   const [editingAreaId, setEditingAreaId] = useState<string | null>(null);
   const [editAreaName, setEditAreaName] = useState('');
   const [editAreaPrice, setEditAreaPrice] = useState('');
@@ -61,6 +66,78 @@ export default function MyEventsPage() {
       return res.data.data;
     },
     enabled: Boolean(token) && userType === 'member',
+  });
+
+  const deleteLotteryMutation = useMutation({
+    mutationFn: async ({ companyId, eventId }: { companyId: string; eventId: string }) => {
+      setSuccessMessage(null);
+
+      if (!companyId) throw new Error('Company ID is missing.');
+      if (!eventId) throw new Error('Event ID is missing.');
+
+      const res = await http.delete<ApiResponse<null>>(
+        `/api/companies/${companyId}/events/${eventId}/lottery`
+      );
+      if (res.data.error) throw new Error(res.data.error);
+    },
+    onSuccess: async () => {
+      setSuccessMessage('Lottery deleted successfully.');
+      setLotteryWinners(null);
+      setLotteryEventId(null);
+    },
+  });
+
+  const drawLotteryMutation = useMutation({
+    mutationFn: async ({ companyId, eventId }: { companyId: string; eventId: string }) => {
+      setSuccessMessage(null);
+
+      if (!companyId) throw new Error('Company ID is missing.');
+      if (!eventId) throw new Error('Event ID is missing.');
+
+      const count = Number(lotteryWinnerCount);
+      if (!Number.isFinite(count) || count < 0) {
+        throw new Error('Winner count must be 0 or more.');
+      }
+
+      if (!lotteryExpiration) {
+        throw new Error('Expiration time is required.');
+      }
+
+      const expirationTime = new Date(lotteryExpiration).toISOString();
+
+      const res = await http.post<ApiResponse<string[]>>(
+        `/api/companies/${companyId}/events/${eventId}/lottery/draw`,
+        {
+          count,
+          expirationTime,
+        }
+      );
+
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
+    },
+    onSuccess: async (winners) => {
+      setLotteryWinners(winners);
+      setSuccessMessage(`Lottery drawn successfully. Winners: ${winners.length}.`);
+    },
+  });
+
+  const fetchWinnersMutation = useMutation({
+    mutationFn: async ({ companyId, eventId }: { companyId: string; eventId: string }) => {
+      setSuccessMessage(null);
+      if (!companyId) throw new Error('Company ID is missing.');
+      if (!eventId) throw new Error('Event ID is missing.');
+
+      const res = await http.get<ApiResponse<string[]>>(
+        `/api/companies/${companyId}/events/${eventId}/lottery/winners`
+      );
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
+    },
+    onSuccess: async (winners) => {
+      setLotteryWinners(winners);
+      setSuccessMessage(`Loaded winners. Total: ${winners.length}.`);
+    },
   });
 
   const createLotteryMutation = useMutation({
@@ -327,7 +404,10 @@ export default function MyEventsPage() {
     addAreaMutation.error ||
     updateAreaMutation.error ||
     removeAreaMutation.error ||
-    createLotteryMutation.error;
+    createLotteryMutation.error ||
+    deleteLotteryMutation.error ||
+    drawLotteryMutation.error ||
+    fetchWinnersMutation.error;
 
   const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
 
@@ -494,10 +574,110 @@ export default function MyEventsPage() {
                           >
                             {createLotteryMutation.isPending ? 'Creating lottery…' : 'Create lottery'}
                           </button>
+
+                          <button
+                            onClick={() => {
+                              const isOpen = lotteryEventId === event.eventId;
+                              setLotteryEventId(isOpen ? null : event.eventId);
+                              setLotteryWinners(null);
+                              setSuccessMessage(null);
+                            }}
+                            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                          >
+                            {lotteryEventId === event.eventId ? 'Hide lottery' : 'Manage lottery'}
+                          </button>
                         </>
                       )}
                     </div>
                   </div>
+
+                  {lotteryEventId === event.eventId && !isCancelled && (
+                    <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+                      <div className="font-semibold text-slate-900">Lottery management</div>
+                      <div className="mt-1 text-sm text-slate-600">
+                        You can configure the draw (how many winners) and the winners' access expiration time.
+                      </div>
+
+                      <div className="mt-4 grid gap-3 md:grid-cols-3">
+                        <label className="block">
+                          <div className="text-sm font-medium text-slate-700">Winners to draw</div>
+                          <input
+                            value={lotteryWinnerCount}
+                            onChange={(e) => setLotteryWinnerCount(e.target.value)}
+                            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                          />
+                        </label>
+
+                        <label className="block md:col-span-2">
+                          <div className="text-sm font-medium text-slate-700">Winner access expires at</div>
+                          <input
+                            type="datetime-local"
+                            value={lotteryExpiration}
+                            onChange={(e) => setLotteryExpiration(e.target.value)}
+                            className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                          />
+                        </label>
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <button
+                          onClick={() =>
+                            drawLotteryMutation.mutate({
+                              companyId: event.companyId,
+                              eventId: event.eventId,
+                            })
+                          }
+                          disabled={drawLotteryMutation.isPending}
+                          className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                        >
+                          {drawLotteryMutation.isPending ? 'Running draw…' : 'Run draw'}
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            fetchWinnersMutation.mutate({
+                              companyId: event.companyId,
+                              eventId: event.eventId,
+                            })
+                          }
+                          disabled={fetchWinnersMutation.isPending}
+                          className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          {fetchWinnersMutation.isPending ? 'Loading…' : 'View winners'}
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            deleteLotteryMutation.mutate({
+                              companyId: event.companyId,
+                              eventId: event.eventId,
+                            })
+                          }
+                          disabled={deleteLotteryMutation.isPending}
+                          className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 hover:bg-rose-100 disabled:opacity-60"
+                        >
+                          {deleteLotteryMutation.isPending ? 'Deleting…' : 'Delete lottery'}
+                        </button>
+                      </div>
+
+                      {lotteryWinners && (
+                        <div className="mt-4">
+                          <div className="text-sm font-semibold text-slate-900">Winners</div>
+                          {lotteryWinners.length === 0 ? (
+                            <div className="mt-1 text-sm text-slate-600">No winners yet.</div>
+                          ) : (
+                            <div className="mt-2 grid gap-1">
+                              {lotteryWinners.map((id) => (
+                                <div key={id} className="font-mono text-sm text-slate-800">
+                                  {id}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {editingEventId === event.eventId && !isCancelled && (
                     <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
