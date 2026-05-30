@@ -9,14 +9,16 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Add
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidManagerPermissionsException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
+import com.software_project_team_15b.Ticketmaster.DTO.DiscountPolicyDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.PurchasePolicyDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
-import com.software_project_team_15b.Ticketmaster.DTO.DiscountPolicyDTO;
-import com.software_project_team_15b.Ticketmaster.DTO.PurchasePolicyDTO;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -26,7 +28,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.commons.lang3.NotImplementedException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -34,25 +35,32 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 /**
- * E2E authorization tests for all event-management EventActions.
+ * E2E authorization tests for the event-management actions exposed by
+ * {@link EventManagementService}.
  *
- * Authorization model (InMemoryCompanyAuthorizationAdapter):
- *   Founder  → all actions permitted
- *   Owner    → all actions permitted
- *   Manager  → only actions covered by their ManagerPermission set;
- *              PUBLISH and CANCEL are always owner/founder-only
+ * Current authorization model (UserDomainService):
+ *   Founder  → all event actions permitted on its company's events
+ *   Owner    → all event actions permitted on its company's events
+ *   Manager  → only actions whose ManagerPermission they hold for the specific event;
+ *              a Manager role is bound to one eventId at appointment time
  *   Member   → no event management permitted
  *
- * Each test uses a freshly created company and role set so tests are independent.
+ * Special case: {@code createEvent} happens before any event exists, so it cannot
+ * be authorized via a per-event Manager role. It is therefore owner/founder-only
+ * (enforced by {@code UserDomainService.isActiveOwnerOrFounder}).
  *
- * EventAction → ManagerPermission mapping:
- *   MANAGE_EVENT         → MANAGE_EVENTS
- *   CONFIGURE_HALL       → CONFIGURE_HALLS_AND_SEATS
- *   UPDATE_EVENT_MAP     → UPDATE_EVENT_MAP
- *   DEFINE_PURCHASE_POLICY → DEFINE_PURCHASE_POLICY
- *   DEFINE_DISCOUNT_POLICY → DEFINE_DISCOUNT_POLICY
- *   PUBLISH              → owner/founder only (no manager mapping)
- *   CANCEL               → owner/founder only (no manager mapping)
+ * EventAction → ManagerPermission mapping enforced by EventManagementService:
+ *   updateEvent          → MANAGE_EVENTS
+ *   publish              → MANAGE_EVENTS
+ *   cancel               → MANAGE_EVENTS
+ *   addArea / removeArea → CONFIGURE_HALLS_AND_SEATS
+ *   updateArea           → UPDATE_EVENT_MAP
+ *   replacePurchasePolicies → DEFINE_PURCHASE_POLICY
+ *   replaceDiscountPolicies → DEFINE_DISCOUNT_POLICY
+ *
+ * Exception types:
+ *   - createEvent denial → {@link UnauthorizedCompanyActionException}
+ *   - all per-event manager denials → {@link InvalidManagerPermissionsException}
  */
 @SpringBootTest
 @DisplayName("E2E: Event action authorization — Founder / Owner / Manager / Unauthorized")
@@ -65,17 +73,24 @@ class EventAuthorizationE2ETest {
 
     private static final AtomicInteger CTR = new AtomicInteger(0);
 
-    // Actors set up fresh before each test
+    // Company + founder
     private UUID companyId;
     private String founderToken;
     private UUID founderId;
+
+    // Owner (company-scoped, set up once)
     private UUID ownerId;
-    private UUID mgrManageEventsId;
-    private UUID mgrConfigHallId;
-    private UUID mgrUpdateMapId;
-    private UUID mgrPurchasePolicyId;
-    private UUID mgrDiscountPolicyId;
-    private UUID mgrWrongPermId;   // has HANDLE_INQUIRIES only — wrong for all event actions
+    private String ownerToken;
+
+    // Manager candidates — registered and logged in, but not yet appointed.
+    // They are appointed lazily per-event via setupManagersForEvent(eventId).
+    private UUID mgrManageEventsId;     private String mgrManageEventsToken;
+    private UUID mgrConfigHallId;       private String mgrConfigHallToken;
+    private UUID mgrUpdateMapId;        private String mgrUpdateMapToken;
+    private UUID mgrPurchasePolicyId;   private String mgrPurchasePolicyToken;
+    private UUID mgrDiscountPolicyId;   private String mgrDiscountPolicyToken;
+    private UUID mgrWrongPermId;        private String mgrWrongPermToken;
+
     private UUID unauthorizedId;   // plain member, no role at all
 
     @BeforeEach
