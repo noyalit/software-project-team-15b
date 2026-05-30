@@ -102,7 +102,7 @@ export default function CompanyPage() {
       if (!companyId) return [];
 
       const res = await http.get<ApiResponse<EventDTO[]>>(
-        `/api/events/company/${companyId}`
+        `/api/companies/${companyId}/events`
       );
 
       if (res.data.error) {

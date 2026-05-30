@@ -457,10 +457,11 @@ export default function ProfilePage() {
                   )}
                 </div>
 
-                {renderRoleButton(
-                  currentRole === 'Owner',
-                  `Owner:${ownerCompanies[0]?.companyId}`
-                )}
+                {ownerCompanies.length > 0 &&
+                  renderRoleButton(
+                    currentRole === 'Owner',
+                    `Owner:${ownerCompanies[0].companyId}`
+                  )}
               </div>
 
               <div className="mt-3 space-y-2">
