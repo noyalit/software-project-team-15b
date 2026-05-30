@@ -672,6 +672,23 @@ public class PurchasingService {
     private ActiveOrderDTO buildActiveOrderView(ActiveOrder activeOrder) {
         EventDTO event = eventDomainService.getEvent(activeOrder.getEventId());
         PriceBreakdown pricing;
+        int qty = activeOrder.getOrderSeats() == null ? 0 : activeOrder.getOrderSeats().size();
+
+        if (qty == 0) {
+            EventDTO.AreaView area = event.areas().stream()
+                    .filter(a -> a.areaId().equals(activeOrder.getAreaId()))
+                    .findFirst()
+                    .orElse(null);
+
+            Money base = area != null && area.basePrice() != null
+                    ? new Money(area.basePrice().amount(), area.basePrice().currency())
+                    : Money.zero("ILS");
+            Money zero = Money.zero(base.currency());
+            pricing = new PriceBreakdown(base, zero, zero, zero);
+
+            return ActiveOrderDTO.from(activeOrder, event, pricing);
+        }
+
         try {
             pricing = getPriceBreakdown(activeOrder, null, null);
         } catch (RuntimeException e) {
@@ -685,7 +702,6 @@ public class PurchasingService {
             Money base = area != null && area.basePrice() != null
                     ? new Money(area.basePrice().amount(), area.basePrice().currency())
                     : Money.zero("ILS");
-            int qty = activeOrder.getOrderSeats() == null ? 0 : activeOrder.getOrderSeats().size();
             Money subtotal = base.multiply(qty);
             pricing = new PriceBreakdown(base, subtotal, Money.zero(base.currency()), subtotal);
         }

@@ -69,6 +69,18 @@ public class PurchasingDomainService {
             throw new IllegalArgumentException("User ID, event ID, and lottery eligibility result cannot be null");
         }
         if (!lotteryEligibilityDTO.canCreateActiveOrder()) {
+            if (lotteryEligibilityDTO.status() == com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus.LOTTERY_OPEN_NOT_ENTERED) {
+                throw new IllegalStateException("You must enter the lottery draw to be eligible to purchase tickets for this event");
+            }
+            if (lotteryEligibilityDTO.status() == com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus.LOTTERY_OPEN_ENTERED) {
+                throw new IllegalStateException("You are registered to the lottery draw. You can purchase only if you win after the draw");
+            }
+            if (lotteryEligibilityDTO.status() == com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus.NOT_SELECTED) {
+                throw new IllegalStateException("You were not selected in the lottery draw for this event");
+            }
+            if (lotteryEligibilityDTO.status() == com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus.ACCESS_EXPIRED) {
+                throw new IllegalStateException("Your lottery winner access has expired");
+            }
             throw new IllegalStateException("User is not eligible to create an active order for this event: " + lotteryEligibilityDTO.status());
         }
         if (!queueAccess) {

@@ -642,13 +642,13 @@ export default function EventDetailsPage() {
 
           {eligibilityStatus === 'LOTTERY_OPEN_NOT_ENTERED' && (
             <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              This event has a lottery draw. Register to the draw to be able to purchase after the draw.
+              This event has a lottery draw. Register to the draw. You can purchase only if you win after the draw.
             </div>
           )}
 
           {eligibilityStatus === 'LOTTERY_OPEN_ENTERED' && (
             <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-              You are registered to the lottery draw.
+              You are registered to the lottery draw. You can purchase only if you win after the draw.
             </div>
           )}
 
@@ -676,6 +676,10 @@ export default function EventDetailsPage() {
               disabled={
                 Boolean(activeOrderId) ||
                 event.status !== 'PUBLISHED' ||
+                (userType === 'member' &&
+                  eligibilityStatus !== null &&
+                  eligibilityStatus !== 'NO_LOTTERY_REQUIRED' &&
+                  eligibilityStatus !== 'WON_AND_ACCESS_VALID') ||
                 createOrderMutation.isPending
               }
               className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
