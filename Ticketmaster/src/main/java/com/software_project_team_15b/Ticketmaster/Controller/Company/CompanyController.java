@@ -1,15 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.Controller.Company;
 
-import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
-import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
-import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
-
-import io.swagger.v3.oas.annotations.Operation;
-import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.List;
+import java.util.UUID;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -23,8 +15,16 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-import java.util.UUID;
+import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
+import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
+import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @RequestMapping(path = "/api/companies", produces = "application/json")
@@ -47,6 +47,25 @@ public class CompanyController {
             CompanyDTO company = companyService.createCompany(token, request.name());
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(new ApiResponse<>(company, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+        @Operation(summary = "List companies related to the logged in member")
+    @GetMapping("/me")
+    public ResponseEntity<ApiResponse<List<CompanyDTO>>> getMyCompanies(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+    ) {
+        try {
+            List<CompanyDTO> result = companyService.getMyCompanies(token);
+            return ResponseEntity.ok(new ApiResponse<>(result, null));
         } catch (InvalidTokenException ex) {
             return unauthorized(ex);
         } catch (UnauthorizedCompanyActionException ex) {
@@ -82,25 +101,6 @@ public class CompanyController {
     ) {
         try {
             List<CompanyDTO> result = companyService.getAllCompanies(token);
-            return ResponseEntity.ok(new ApiResponse<>(result, null));
-        } catch (InvalidTokenException ex) {
-            return unauthorized(ex);
-        } catch (UnauthorizedCompanyActionException ex) {
-            return forbidden(ex);
-        } catch (IllegalArgumentException ex) {
-            return badRequest(ex);
-        } catch (Exception ex) {
-            return internalServerError(ex);
-        }
-    }
-
-    @Operation(summary = "List companies related to the logged in member")
-    @GetMapping("/me")
-    public ResponseEntity<ApiResponse<List<CompanyDTO>>> getMyCompanies(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
-    ) {
-        try {
-            List<CompanyDTO> result = companyService.getMyCompanies(token);
             return ResponseEntity.ok(new ApiResponse<>(result, null));
         } catch (InvalidTokenException ex) {
             return unauthorized(ex);

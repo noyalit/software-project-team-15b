@@ -105,5 +105,19 @@ export type SiteQueueSnapshotDTO = {
   admittedCount: number;
 };
 
+export type RoleTreeNodeDTO = {
+  memberId: string;
+  roleName: string;
+  appointedBy: string | null;
+  companyId: string | null;
+  eventId: string | null;
+  permissions: ManagerPermission[];
+};
+
+export type CompanyRoleTreeDTO = {
+  companyId: string;
+  rootMemberId: string;
+  roles: RoleTreeNodeDTO[];
+};
 
 
