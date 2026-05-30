@@ -78,9 +78,6 @@ public class EventManagementService implements IEventManagementService, EventSub
         try {
             Objects.requireNonNull(cmd, "cmd");
             Objects.requireNonNull(callerId, "callerId");
-            // We don't have an option to check if mgr can do an action without an event id
-            // so this will be only Founder/Owner action.
-            // userDomainService.isLegalEventManager(null, callerId, cmd.companyId(), ManagerPermission.MANAGE_EVENTS);
             userDomainService.isActiveOwnerOrFounder(cmd.companyId(), callerId);
             UUID id = eventDomainService.createEvent(cmd);
             AUDIT.info("op=createEvent event={} caller={} result=ok", id, callerId);
