@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.Application.events.TempTokenAcceptedFromQueueEvent;
+import com.software_project_team_15b.Ticketmaster.DTO.CompanyRoleTreeDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
@@ -493,6 +494,34 @@ public class UserService {
         } catch (RuntimeException e) {
             AUDIT.warn("op=approve-appointment approverId={} result=rejected reason={}",
                     auth.extractUserId(token), e.getMessage());
+            throw e;
+        }
+    }
+
+    public CompanyRoleTreeDTO getCompanyRoleTree(String token, UUID companyId) {
+        try {
+            UUID requesterId = getAuthenticatedMemberId(token);
+
+            CompanyRoleTreeDTO tree = userDomainService.getCompanyRoleTree(
+                    requesterId,
+                    companyId
+            );
+
+            AUDIT.info(
+                    "op=get-company-role-tree requesterId={} companyId={}",
+                    requesterId,
+                    companyId
+            );
+
+            return tree;
+
+        } catch (RuntimeException e) {
+            AUDIT.warn(
+                    "op=get-company-role-tree companyId={} result=rejected reason={}",
+                    companyId,
+                    e.getMessage()
+            );
+
             throw e;
         }
     }

@@ -19,6 +19,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Invalid
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
+import com.software_project_team_15b.Ticketmaster.DTO.CompanyRoleTreeDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 
@@ -438,6 +439,27 @@ public class UserController {
             return badRequest(ex);
         } catch (IllegalStateException ex) {
             return conflict(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Get company role tree with manager permissions")
+    @GetMapping("/companies/{companyId}/roles/tree")
+    public ResponseEntity<ApiResponse<CompanyRoleTreeDTO>> getCompanyRoleTree(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID companyId
+    ) {
+        try {
+            return ResponseEntity.ok(new ApiResponse<>(
+                    userService.getCompanyRoleTree(token, companyId),
+                    null
+            ));
+
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
         } catch (Exception ex) {
             return internalServerError(ex);
         }
