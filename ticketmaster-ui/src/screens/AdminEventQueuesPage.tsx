@@ -365,6 +365,10 @@ export default function AdminEventQueuesPage() {
                 <div className="mt-1 text-xl font-semibold text-slate-900">
                   {queueQuery.data.capacity}
                 </div>
+
+                <div className="mt-1 text-xs text-slate-500">
+                  Max users allowed to wait in line.
+                </div>
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -374,6 +378,10 @@ export default function AdminEventQueuesPage() {
 
                 <div className="mt-1 text-xl font-semibold text-slate-900">
                   {queueQuery.data.maxAccepted}
+                </div>
+
+                <div className="mt-1 text-xs text-slate-500">
+                  Max users allowed to buy at the same time.
                 </div>
               </div>
 
@@ -385,6 +393,10 @@ export default function AdminEventQueuesPage() {
                 <div className="mt-1 text-xl font-semibold text-slate-900">
                   {queueQuery.data.waitingCount}
                 </div>
+
+                <div className="mt-1 text-xs text-slate-500">
+                  Users currently in line (not admitted yet).
+                </div>
               </div>
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -394,6 +406,10 @@ export default function AdminEventQueuesPage() {
 
                 <div className="mt-1 text-xl font-semibold text-slate-900">
                   {queueQuery.data.admittedCount}
+                </div>
+
+                <div className="mt-1 text-xs text-slate-500">
+                  Users with active access right now.
                 </div>
               </div>
 
