@@ -24,13 +24,15 @@ import static org.mockito.Mockito.when;
 import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyDomainServiceImpl;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
-import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
+import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
 
 class CompanyServiceWhiteTest {
 
@@ -39,9 +41,9 @@ class CompanyServiceWhiteTest {
     private ICompanyRepository repo;
     private IAuth auth;
     private UserDomainService userDomainService;
-    private IEventDomainService eventManagementService;
+    private IEventDomainService eventDomainService;
+    private ICompanyDomainService domainService;
     private CompanyService service;
-    private INotifier notifier;
 
     @BeforeEach
     void setUp() {
@@ -63,12 +65,12 @@ class CompanyServiceWhiteTest {
 
         auth = mock(IAuth.class);
         userDomainService = mock(UserDomainService.class);
-        eventManagementService = mock(IEventDomainService.class);
         when(userDomainService.isActiveOwner(any(), any())).thenReturn(true);
-        when(userDomainService.isActiveFounder(any(), any())).thenReturn(true);
-        when(eventManagementService.searchInCompany(any(), any())).thenReturn(List.of());
-        notifier = mock(INotifier.class);
-        service = new CompanyService(repo, userDomainService, eventManagementService, auth, notifier);
+        eventDomainService = mock(IEventDomainService.class);
+        when(eventDomainService.searchInCompany(any(), any())).thenReturn(List.of());
+
+        domainService = new CompanyDomainServiceImpl(repo);
+        service = new CompanyService(domainService, userDomainService, eventDomainService, auth);
     }
 
     private Company saveToRepo(Company company) {
@@ -108,32 +110,26 @@ class CompanyServiceWhiteTest {
     // Constructor — dependency null checks
 
     @Test
-    void constructor_throws_when_repository_is_null() {
-        assertThatThrownBy(() -> new CompanyService(null, userDomainService, eventManagementService, auth, notifier))
+    void constructor_throws_when_domainService_is_null() {
+        assertThatThrownBy(() -> new CompanyService(null, userDomainService, eventDomainService, auth))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_userDomainService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(repo, null, eventManagementService, auth, notifier))
+        assertThatThrownBy(() -> new CompanyService(domainService, null, eventDomainService, auth))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
-    void constructor_throws_when_eventManagementService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(repo, userDomainService, null, auth, notifier))
+    void constructor_throws_when_eventDomainService_is_null() {
+        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, null, auth))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_auth_is_null() {
-        assertThatThrownBy(() -> new CompanyService(repo, userDomainService, eventManagementService, null, notifier))
-                .isInstanceOf(NullPointerException.class);
-    }
-
-    @Test
-    void constructor_throws_when_notifier_is_null() {
-        assertThatThrownBy(() -> new CompanyService(repo, userDomainService, eventManagementService, auth, null))
+        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, eventDomainService, null))
                 .isInstanceOf(NullPointerException.class);
     }
 
@@ -157,8 +153,8 @@ class CompanyServiceWhiteTest {
             pool.submit(() -> {
                 try {
                     start.await();
-                    Company company = service.createCompany(token, "Acme-" + idx);
-                    ids.add(company.getId());
+                    CompanyDTO dto = service.createCompany(token, "Acme-" + idx);
+                    ids.add(dto.companyId());
                 } catch (Exception e) {
                     failures.incrementAndGet();
                 }
@@ -180,7 +176,7 @@ class CompanyServiceWhiteTest {
     void concurrent_updatePurchasePolicy_results_in_one_of_the_attempted_values() throws Exception {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
-        Company company = service.createCompany(founderToken, "Acme");
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
 
         int N = 50;
         ExecutorService pool = Executors.newFixedThreadPool(16);
@@ -194,7 +190,7 @@ class CompanyServiceWhiteTest {
             pool.submit(() -> {
                 try {
                     start.await();
-                    service.updatePurchasePolicy(founderToken, company.getId(), policy);
+                    service.updatePurchasePolicy(founderToken, dto.companyId(), policy);
                 } catch (Exception e) {
                     failures.incrementAndGet();
                 }
@@ -205,30 +201,32 @@ class CompanyServiceWhiteTest {
         pool.shutdown();
         assertThat(pool.awaitTermination(30, SECONDS)).isTrue();
         assertThat(failures.get()).isZero();
-        Company finalState = repo.findById(company.getId()).orElseThrow();
+        Company finalState = repo.findById(dto.companyId()).orElseThrow();
         assertThat(finalState.getPurchasePolicies()).hasSize(1);
         assertThat(attempted).contains(finalState.getPurchasePolicies().get(0));
     }
 
     @Test
-    void concurrent_changeStatus_does_not_throw() throws Exception {
-        UUID founderId = UUID.randomUUID();
-        String founderToken = registerMember(founderId);
-        Company company = service.createCompany(founderToken, "Acme");
+    void concurrent_suspendCompany_does_not_throw() throws Exception {
         String adminToken = registerSystemAdmin(UUID.randomUUID());
 
         int N = 40;
+        CompanyDTO[] companies = new CompanyDTO[N];
+        for (int i = 0; i < N; i++) {
+            String founderToken = registerMember(UUID.randomUUID());
+            companies[i] = service.createCompany(founderToken, "Company-" + i);
+        }
+
         ExecutorService pool = Executors.newFixedThreadPool(16);
         CountDownLatch start = new CountDownLatch(1);
         AtomicInteger failures = new AtomicInteger();
-        CompanyStatus[] statuses = {CompanyStatus.ACTIVE, CompanyStatus.SUSPENDED, CompanyStatus.CLOSED};
 
         for (int i = 0; i < N; i++) {
-            final CompanyStatus target = statuses[i % statuses.length];
+            final UUID companyId = companies[i].companyId();
             pool.submit(() -> {
                 try {
                     start.await();
-                    service.changeStatus(adminToken, company.getId(), target);
+                    service.suspendCompany(adminToken, companyId);
                 } catch (Exception e) {
                     failures.incrementAndGet();
                 }
@@ -239,7 +237,5 @@ class CompanyServiceWhiteTest {
         pool.shutdown();
         assertThat(pool.awaitTermination(30, SECONDS)).isTrue();
         assertThat(failures.get()).isZero();
-        assertThat(repo.findById(company.getId()).orElseThrow().getStatus())
-                .isIn((Object[]) statuses);
     }
 }

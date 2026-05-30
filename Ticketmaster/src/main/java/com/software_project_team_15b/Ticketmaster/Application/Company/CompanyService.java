@@ -4,95 +4,64 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
-import java.time.LocalDateTime;
 
+import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
-import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
-
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
-import com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationType;
-
-import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 
 /**
- * Application-level service for managing {@link Company} aggregates.
- * Coordinates authentication, authorization, and persistence so callers
- * interact with companies through use-case methods rather than directly
- * with the domain model and repository.
- *
- * <p>Authorization rules enforced here:
- * <ul>
- *     <li>Creating a company requires an authenticated member; that member
- *         becomes the founder.</li>
- *     <li>Updating purchase or discount policies is restricted to the
- *         company's owners.</li>
- *     <li>Changing a company's status is restricted to the founder or a
- *         system administrator.</li>
- *     <li>Appointing or removing event managers for a specific event is
- *         restricted to the company's owners.</li>
- * </ul>
+ * Application-level facade for {@link Company} use cases.
+ * Validates tokens and resolves caller identity, then delegates all business
+ * logic to {@link ICompanyDomainService}.
  */
 @Service
 public class CompanyService {
 
     private static final Logger AUDIT = LoggerFactory.getLogger("audit.company");
 
-    private final ICompanyRepository companyRepository;
+    private final ICompanyDomainService companyDomainService;
     private final UserDomainService userDomainService;
-    private final IEventDomainService eventManagementService;
+    private final IEventDomainService eventDomainService;
     private final IAuth auth;
-    private final INotifier notifier;
 
-    /**
-     * @param companyRepository      repository used to load and persist companies; must not be null
-     * @param userDomainService      user domain service for role queries; must not be null
-     * @param eventManagementService event management gateway; must not be null
-     * @param auth                   authentication/authorization gateway; must not be null
-     * @throws NullPointerException if any argument is null
-     */
-    public CompanyService(ICompanyRepository companyRepository, UserDomainService userDomainService, IEventDomainService eventManagementService, IAuth auth, INotifier notifier) {
-        this.companyRepository = Objects.requireNonNull(companyRepository, "companyRepository cannot be null");
+    public CompanyService(ICompanyDomainService companyDomainService, UserDomainService userDomainService, IEventDomainService eventDomainService, IAuth auth) {
+        this.companyDomainService = Objects.requireNonNull(companyDomainService, "companyDomainService cannot be null");
         this.userDomainService = Objects.requireNonNull(userDomainService, "userDomainService cannot be null");
+        this.eventDomainService = Objects.requireNonNull(eventDomainService, "eventDomainService cannot be null");
         this.auth = Objects.requireNonNull(auth, "auth cannot be null");
-        this.eventManagementService = Objects.requireNonNull(eventManagementService, "eventManagementService cannot be null");
-        this.notifier = Objects.requireNonNull(notifier, "notifier cannot be null");
     }
 
     /**
-     * Creates a new company whose founder is the authenticated member.
+     * Creates a new production company whose founder is the authenticated caller.
      *
-     * @param token an active member token; must not be null or blank
-     * @param name  the company's display name; must not be null or blank
-     * @return the newly persisted company
-     * @throws IllegalArgumentException if {@code name} is null or blank
-     * @throws InvalidTokenException if the token is null, blank, or not valid
+     * @param token the caller's member session token
+     * @param name  the desired company name (must not be null or blank)
+     * @return a {@link CompanyDTO} representing the newly created company
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
+     *         if the token is invalid, expired, or belongs to a non-member
      * @throws UnauthorizedCompanyActionException if the caller is not a member
+     * @throws IllegalArgumentException           if {@code name} is null or blank
      */
-    @Transactional
-    public Company createCompany(String token, String name) {
+    public CompanyDTO createCompany(String token, String name) {
         try {
             requireNonBlank(name, "Company name");
             UUID founderId = requireAuthenticatedMember(token);
-            Company company = new Company(name, founderId);
-            company = companyRepository.save(company);
-            userDomainService.appointFounder(founderId, company.getId());
+            var company = companyDomainService.createCompany(name, founderId);
             AUDIT.info("op=createCompany founderId={} companyId={} name={} result=ok",
                     founderId, company.getId(), name);
-            return company;
+            return CompanyDTO.from(company);
         } catch (RuntimeException e) {
             AUDIT.warn("op=createCompany name={} result=rejected reason={}", name, e.getMessage());
             throw e;
@@ -100,54 +69,52 @@ public class CompanyService {
     }
 
     /**
-     * Returns all companies whose founder matches {@code founderId}.
+     * Returns all companies whose founder matches the given {@code founderId}.
      *
-     * <p>Note: {@code token} is accepted for API consistency but no
-     * authorization check is currently enforced on this query.
-     *
-     * @param token     caller's token (currently unused for authorization)
-     * @param founderId the id of the founder to search by; must not be null
-     * @return a non-null, possibly empty list of matching companies
+     * @param token     a valid session token (any user type)
+     * @param founderId the UUID of the founder to query
+     * @return a (possibly empty) list of matching {@link CompanyDTO}s
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
+     *         if the token is null, blank, or invalid
      * @throws IllegalArgumentException if {@code founderId} is null
-     * @throws IllegalStateException    if the repository returns null instead of an empty list
      */
-    @Transactional(readOnly = true)
-    public List<Company> findCompaniesByFounder(String token, UUID founderId) {
+    public List<CompanyDTO> findCompaniesByFounder(String token, UUID founderId) {
         requireValidToken(token);
         requireNonNull(founderId, "Founder ID");
-        List<Company> result = companyRepository.findByFounder(founderId);
-        if (result == null) {
-            throw new IllegalStateException("Repository returned null for findByFounder; expected an empty list");
-        }
-        return result;
+        return companyDomainService.findCompaniesByFounder(founderId).stream()
+                .map(CompanyDTO::from)
+                .toList();
     }
 
     /**
-     * Replaces the company's purchase policy. Only an owner of the company
-     * may perform this action, and the company must be in an active state.
+     * Replaces the purchase policy of the specified company.
+     * The caller must be an active founder or owner of the company, or an approved manager who holds
+     * the {@link com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission#DEFINE_PURCHASE_POLICY}
+     * permission for that company.
      *
-     * @param token     an active member token; must not be null or blank
-     * @param companyId the target company's id; must not be null or blank
-     * @param policy    the new purchase policy; must not be null
-     * @return the updated, persisted company
-     * @throws IllegalArgumentException if {@code companyId} is null/blank or {@code policy} is null
-     * @throws InvalidTokenException if the token is null, blank, or not valid
-     * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
-     * @throws CompanyNotFoundException if no company with {@code companyId} exists
-     * @throws IllegalStateException if the company is not active
+     * @param token     the caller's member session token
+     * @param companyId the UUID of the target company
+     * @param policy    the new purchase policy to apply (must not be null)
+     * @return a {@link CompanyDTO} reflecting the updated state
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
+     *         if the token is invalid or expired
+     * @throws UnauthorizedCompanyActionException if the caller lacks the required role or permission
+     * @throws IllegalArgumentException           if {@code companyId} or {@code policy} is null
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
+     *         if no company exists with the given {@code companyId}
      */
-    @Transactional
-    public Company updatePurchasePolicy(String token, UUID companyId, ICompanyPurchasePolicy policy) {
+    public CompanyDTO updatePurchasePolicy(String token, UUID companyId, ICompanyPurchasePolicy policy) {
         try {
             requireNonNull(companyId, "Company ID");
             requireNonNull(policy, "Purchase policy");
             UUID callerId = requireAuthenticatedMember(token);
-            Company company = getCompanyOrThrow(companyId);
-            requireOwner(company, callerId);
-            company.updatePurchasePolicy(policy);
-            Company saved = companyRepository.save(company);
+            boolean isOwner = userDomainService.isActiveOwner(callerId, companyId) || userDomainService.isActiveFounder(callerId, companyId);
+            if (!isOwner && !userDomainService.canChangePurchasePolicy(callerId, companyId)) {
+                throw new UnauthorizedCompanyActionException("User does not have permission to change purchase policy");
+            }
+            var saved = companyDomainService.updatePurchasePolicy(companyId, policy);
             AUDIT.info("op=updatePurchasePolicy callerId={} companyId={} result=ok", callerId, companyId);
-            return saved;
+            return CompanyDTO.from(saved);
         } catch (RuntimeException e) {
             AUDIT.warn("op=updatePurchasePolicy companyId={} result=rejected reason={}", companyId, e.getMessage());
             throw e;
@@ -155,31 +122,34 @@ public class CompanyService {
     }
 
     /**
-     * Replaces the company's discount policy. Only an owner of the company
-     * may perform this action, and the company must be in an active state.
+     * Replaces the discount policy of the specified company.
+     * The caller must be an active founder or owner of the company, or an approved manager who holds
+     * the {@link com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission#DEFINE_DISCOUNT_POLICY}
+     * permission for that company.
      *
-     * @param token     an active member token; must not be null or blank
-     * @param companyId the target company's id; must not be null or blank
-     * @param policy    the new discount policy; must not be null
-     * @return the updated, persisted company
-     * @throws IllegalArgumentException if {@code companyId} is null/blank or {@code policy} is null
-     * @throws InvalidTokenException if the token is null, blank, or not valid
-     * @throws UnauthorizedCompanyActionException if the caller is not an owner of the company
-     * @throws CompanyNotFoundException if no company with {@code companyId} exists
-     * @throws IllegalStateException if the company is not active
+     * @param token     the caller's member session token
+     * @param companyId the UUID of the target company
+     * @param policy    the new discount policy to apply (must not be null)
+     * @return a {@link CompanyDTO} reflecting the updated state
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
+     *         if the token is invalid or expired
+     * @throws UnauthorizedCompanyActionException if the caller lacks the required role or permission
+     * @throws IllegalArgumentException           if {@code companyId} or {@code policy} is null
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
+     *         if no company exists with the given {@code companyId}
      */
-    @Transactional
-    public Company updateDiscountPolicy(String token, UUID companyId, ICompanyDiscountPolicy policy) {
+    public CompanyDTO updateDiscountPolicy(String token, UUID companyId, ICompanyDiscountPolicy policy) {
         try {
             requireNonNull(companyId, "Company ID");
             requireNonNull(policy, "Discount policy");
             UUID callerId = requireAuthenticatedMember(token);
-            Company company = getCompanyOrThrow(companyId);
-            requireOwner(company, callerId);
-            company.updateDiscountPolicy(policy);
-            Company saved = companyRepository.save(company);
+            boolean isOwner = userDomainService.isActiveOwner(callerId, companyId) || userDomainService.isActiveFounder(callerId, companyId);
+            if (!isOwner && !userDomainService.canChangeDiscountPolicy(callerId, companyId)) {
+                throw new UnauthorizedCompanyActionException("User does not have permission to change discount policy");
+            }
+            var saved = companyDomainService.updateDiscountPolicy(companyId, policy);
             AUDIT.info("op=updateDiscountPolicy callerId={} companyId={} result=ok", callerId, companyId);
-            return saved;
+            return CompanyDTO.from(saved);
         } catch (RuntimeException e) {
             AUDIT.warn("op=updateDiscountPolicy companyId={} result=rejected reason={}", companyId, e.getMessage());
             throw e;
@@ -187,158 +157,123 @@ public class CompanyService {
     }
 
     /**
-     * Transitions the company to the given status. Only the founder of the
-     * company or a system administrator may perform this action.
+     * Suspends the company and cancels all its events. Only a system admin may perform this action.
      *
-     * @param token     an active member or system-admin token; must not be null or blank
-     * @param companyId the target company's id; must not be null or blank
-     * @param newStatus the status to transition to; must not be null
-     * @return the updated, persisted company
-     * @throws IllegalArgumentException if {@code companyId} is null/blank or {@code newStatus} is null
-     * @throws InvalidTokenException if the token is null, blank, or not valid
-     * @throws UnauthorizedCompanyActionException if the caller is neither the founder nor a system admin
-     * @throws CompanyNotFoundException if no company with {@code companyId} exists
+     * @param token     a valid system-admin token; must not be null or blank
+     * @param companyId the target company's id; must not be null
+     * @return the updated company with status {@link CompanyStatus#SUSPENDED}
+     * @throws InvalidTokenException             if the token is null, blank, or not valid
+     * @throws UnauthorizedCompanyActionException if the caller is not a system admin
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
+     *                                           if no company with {@code companyId} exists
      */
-    @Transactional
-    public Company changeStatus(String token, UUID companyId, CompanyStatus newStatus) {
+    public CompanyDTO suspendCompany(String token, UUID companyId) {
         try {
             requireNonNull(companyId, "Company ID");
-            requireNonNull(newStatus, "Company status");
             requireValidToken(token);
-            Company company = getCompanyOrThrow(companyId);
-            requireFounderOrSystemAdmin(token, company);
+            if (!auth.isSystemAdmin(token)) {
+                throw new UnauthorizedCompanyActionException("Only system admins can suspend companies");
+            }
+            Company saved = companyDomainService.changeStatus(companyId, CompanyStatus.SUSPENDED);
+            eventDomainService.searchInCompany(companyId, null)
+                    .forEach(event -> eventDomainService.cancel(event.eventId()));
             UUID callerId = auth.extractUserId(token);
-            company.changeStatus(newStatus);
-            if (newStatus == CompanyStatus.CLOSED) {
-                eventManagementService.searchInCompany(companyId, null)
-                        .forEach(event -> eventManagementService.cancel(event.eventId()));
-            }
-            Company saved = companyRepository.save(company);
-
-            if (newStatus == CompanyStatus.CLOSED) {
-                notifier.notifyCompanyManagers(companyId, new NotificationDTO(
-                        NotificationType.COMPANY_CLOSED,
-                        "Company Closed",
-                        "Company " + company.getName() + " has been closed. All events under this company have been cancelled.",
-                        LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC))
-                );
-            }
-
-            else if (newStatus == CompanyStatus.SUSPENDED) {
-                notifier.notifyCompanyManagers(companyId, new NotificationDTO(
-                        NotificationType.COMPANY_SUSPENDED,
-                        "Company Suspended",
-                        "Company " + company.getName() + " has been suspended.",
-                        LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC))
-                );
-            }
-
-            AUDIT.info("op=changeStatus callerId={} companyId={} newStatus={} result=ok", callerId, companyId, newStatus);
-            return saved;
+            AUDIT.info("op=suspendCompany callerId={} companyId={} result=ok", callerId, companyId);
+            return CompanyDTO.from(saved);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=changeStatus companyId={} newStatus={} result=rejected reason={}",
-                    companyId, newStatus, e.getMessage());
+            AUDIT.warn("op=suspendCompany companyId={} result=rejected reason={}", companyId, e.getMessage());
             throw e;
         }
     }
 
     /**
-     * Loads a company by id, failing if it does not exist.
+     * Closes the company and cancels all its events. Only the company's founder may perform this action.
      *
-     * @param companyId the company's id; must not be null
-     * @return the company with the given id
-     * @throws IllegalArgumentException if {@code companyId} is null
-     * @throws CompanyNotFoundException if no company with {@code companyId} exists
+     * @param token     a valid member token for the founder; must not be null or blank
+     * @param companyId the target company's id; must not be null
+     * @return the updated company with status {@link CompanyStatus#CLOSED}
+     * @throws InvalidTokenException             if the token is null, blank, or not valid
+     * @throws UnauthorizedCompanyActionException if the caller is not the founder
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
+     *                                           if no company with {@code companyId} exists
      */
-    @Transactional(readOnly = true)
-    public Company getCompany(UUID companyId) {
+    public CompanyDTO closeCompany(String token, UUID companyId) {
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireValidToken(token);
+            UUID callerId = auth.extractUserId(token);
+            if (!userDomainService.isActiveFounder(callerId, companyId)) {
+                throw new UnauthorizedCompanyActionException("Only company founder can close the company");
+            }
+            Company saved = companyDomainService.changeStatus(companyId, CompanyStatus.CLOSED);
+            eventDomainService.searchInCompany(companyId, null)
+                    .forEach(event -> eventDomainService.cancel(event.eventId()));
+            AUDIT.info("op=closeCompany callerId={} companyId={} result=ok", callerId, companyId);
+            return CompanyDTO.from(saved);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=closeCompany companyId={} result=rejected reason={}", companyId, e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * Reactivates a suspended or closed company.
+     * <ul>
+     *   <li>A {@link CompanyStatus#SUSPENDED} company may only be reactivated by a system admin.</li>
+     *   <li>A {@link CompanyStatus#CLOSED} company may only be reopened by its founder.</li>
+     *   <li>An {@link CompanyStatus#ACTIVE} company cannot be activated again.</li>
+     * </ul>
+     *
+     * @param token     a valid token; must not be null or blank
+     * @param companyId the target company's id; must not be null
+     * @return the updated company with status {@link CompanyStatus#ACTIVE}
+     * @throws InvalidTokenException             if the token is null, blank, or not valid
+     * @throws UnauthorizedCompanyActionException if the caller lacks permission for the current status
+     * @throws IllegalArgumentException          if the company is already active
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
+     *                                           if no company with {@code companyId} exists
+     */
+    public CompanyDTO activateCompany(String token, UUID companyId) {
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireValidToken(token);
+            UUID callerId = auth.isMember(token) ? auth.extractUserId(token) : null;
+            if (!userDomainService.isActiveFounder(callerId, companyId)) {
+                throw new UnauthorizedCompanyActionException("Only a founder can reactivate a closed company");
+            }
+            Company saved = companyDomainService.changeStatus(companyId, CompanyStatus.ACTIVE);
+            AUDIT.info("op=activateCompany callerId={} companyId={} result=ok", callerId, companyId);
+            return CompanyDTO.from(saved);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=activateCompany companyId={} result=rejected reason={}", companyId, e.getMessage());
+            throw e;
+        }
+    }
+
+    public CompanyDTO getCompany(String token, UUID companyId) {
+        requireNonNull(token, "Token");
         requireNonNull(companyId, "Company ID");
-        return getCompanyOrThrow(companyId);
-    }
-
-    /**
-     * Looks up a company by id without throwing when absent.
-     *
-     * @param companyId the company's id; may be null
-     * @return an {@link Optional} containing the company if found, or empty when the id is null
-     */
-    @Transactional(readOnly = true)
-    public Optional<Company> findCompany(UUID companyId) {
-        if (companyId == null) {
-            return Optional.empty();
-        }
-        return companyRepository.findById(companyId);
-    }
-
-    /**
-     * @param companyId the company's id; must not be null
-     * @return the company with the given id
-     * @throws CompanyNotFoundException if no matching company exists
-     */
-    private Company getCompanyOrThrow(UUID companyId) {
-        return companyRepository.findById(companyId)
-                .orElseThrow(() -> new CompanyNotFoundException(
-                        "Company not found with id: " + companyId));
-    }
-
-    /**
-     * @param company  the target company; must not be null
-     * @param callerId the id of the caller to authorize; must not be null
-     * @throws UnauthorizedCompanyActionException if {@code callerId} is not in the company's owner set,
-     *         or is neither an active owner nor an active founder in {@code UserService}
-     */
-    private void requireOwner(Company company, UUID callerId) {
-        // isActiveOwner excludes Founders; check isActiveFounder as well so that
-        // the company founder can exercise owner-level actions.
-        UUID companyId = company.getId();
-        if (!userDomainService.isActiveOwner(callerId, companyId) && !userDomainService.isActiveFounder(callerId, companyId)) {
-            throw new UnauthorizedCompanyActionException(
-                    "Only an owner of the company can perform this action");
-        }
-    }
-
-    /**
-     * Authorizes the caller as either the company's founder or a system admin.
-     *
-     * @param token   the caller's token; must not be null or blank
-     * @param company the target company; must not be null
-     * @throws InvalidTokenException if the token is null, blank, or not valid
-     * @throws UnauthorizedCompanyActionException if the caller is neither the founder nor a system admin
-     */
-    private void requireFounderOrSystemAdmin(String token, Company company) {
-        requireValidToken(token);
-        UUID companyId = company.getId();
-        if (auth.isSystemAdmin(token)) {
-            return;
-        }
-        if (!auth.isMember(token)) {
-            throw new UnauthorizedCompanyActionException(
-                    "Only the company's founder or a system admin can perform this action");
-        }
         UUID callerId = auth.extractUserId(token);
-        if (!company.getFounderId().equals(callerId)) {
-            throw new UnauthorizedCompanyActionException(
-                    "Only the company's founder or a system admin can perform this action");
-        }
-        if (!userDomainService.isActiveFounder(callerId, companyId)) {
-            throw new UnauthorizedCompanyActionException(
-                    "Only the company's founder or a system admin can perform this action");
-        }
+        boolean canViewClosed = auth.isSystemAdmin(token)
+                || userDomainService.isActiveFounder(callerId, companyId)
+                || userDomainService.isActiveOwner(callerId, companyId);
+        return CompanyDTO.from(companyDomainService.getCompany(companyId, canViewClosed));
     }
 
     /**
-     * Authorizes the caller as a member and extracts their user id.
+     * Looks up the company with the given ID without throwing if absent.
      *
-     * @param token the caller's token; must not be null or blank
-     * @return the authenticated member's user id
-     * @throws InvalidTokenException if the token is null, blank, not valid, or carries no user id
-     * @throws UnauthorizedCompanyActionException if the caller is not a member
+     * @param companyId the UUID of the company to look up (may be null)
+     * @return an {@link Optional} containing the {@link CompanyDTO}, or empty if not found
      */
+    public Optional<CompanyDTO> findCompany(UUID companyId) {
+        return companyDomainService.findCompany(companyId).map(CompanyDTO::from);
+    }
+
     private UUID requireAuthenticatedMember(String token) {
         requireValidToken(token);
         if (!auth.isMember(token)) {
-            throw new UnauthorizedCompanyActionException(
-                    "Only members can perform this action");
+            throw new UnauthorizedCompanyActionException("Only members can perform this action");
         }
         UUID userId = auth.extractUserId(token);
         if (userId == null) {
@@ -347,10 +282,6 @@ public class CompanyService {
         return userId;
     }
 
-    /**
-     * @param token the token to verify; must not be null or blank
-     * @throws InvalidTokenException if the token is null, blank, expired, or otherwise not valid
-     */
     private void requireValidToken(String token) {
         if (token == null || token.isBlank()) {
             throw new InvalidTokenException("Token cannot be null or blank");
@@ -360,22 +291,12 @@ public class CompanyService {
         }
     }
 
-    /**
-     * @param value     the value to check
-     * @param fieldName label used in the exception message
-     * @throws IllegalArgumentException if {@code value} is null
-     */
     private static void requireNonNull(Object value, String fieldName) {
         if (value == null) {
             throw new IllegalArgumentException(fieldName + " cannot be null");
         }
     }
 
-    /**
-     * @param value     the string to check
-     * @param fieldName label used in the exception message
-     * @throws IllegalArgumentException if {@code value} is null or blank
-     */
     private static void requireNonBlank(String value, String fieldName) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(fieldName + " cannot be null or blank");

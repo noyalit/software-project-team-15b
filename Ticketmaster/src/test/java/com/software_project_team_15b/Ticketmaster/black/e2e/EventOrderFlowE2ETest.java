@@ -18,7 +18,6 @@ import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Comman
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
@@ -94,12 +93,11 @@ class EventOrderFlowE2ETest {
         founderToken = userService.login(userService.enterAsGuest(), founderUser, "Password1");
         founderId = mFounder.getUserId();
 
-        Company company = companyService.createCompany(founderToken, "OrdTestCo_" + n);
-        companyId = company.getId();
+        companyId = companyService.createCompany(founderToken, "OrdTestCo_" + n).companyId();
         userService.changeRoleToFounder(founderToken, companyId);
 
         mgrWrongPermId = registerAndApproveManager("ord_mgr_wp_" + sfx, founderToken,
-                company.getId(), Set.of(ManagerPermission.HANDLE_INQUIRIES));
+                companyId, Set.of(ManagerPermission.HANDLE_INQUIRIES));
 
         String unauthUser = "ord_unauth_" + sfx;
         com.software_project_team_15b.Ticketmaster.DTO.MemberDTO mUnauth = userService.registerMember(userService.enterAsGuest(), unauthUser, "Password1", LocalDate.of(1990, 1, 1));
