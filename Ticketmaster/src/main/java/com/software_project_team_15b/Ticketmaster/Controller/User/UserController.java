@@ -460,7 +460,7 @@ public class UserController {
         }
     }
 
-    @Operation(summary = "Get company role tree with manager permissions")
+    @Operation(summary = "Get company role tree with manager permissions (Hierarchical Format)")
     @GetMapping("/companies/{companyId}/roles/tree")
     public ResponseEntity<ApiResponse<CompanyRoleTreeDTO>> getCompanyRoleTree(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
