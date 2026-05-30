@@ -49,6 +49,7 @@ public class OrderHistoryService implements EventSubscriber{
     private final IPaymentAPI paymentGateway;
     private final ITicketSupplyAPI ticketProvider;
     private final IEventRepository eventsRepository;
+    private final ICompanyRepository companyRepository;
     private final IAuth auth;
     private final UserDomainService userDomainService;
     private final IMemberRepository memberRepository;
@@ -71,9 +72,20 @@ public class OrderHistoryService implements EventSubscriber{
         this.eventsRepository = eventsRepository;
         this.auth = auth;
         this.userDomainService = userDomainService;
+        this.companyRepository = companyRepository;
         this.memberRepository = memberRepository;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         eventCancelManager.subscribe(this);
+    }
+
+    private boolean isFounderOrOwner(UUID callerId, UUID companyId) {
+        if (callerId == null || companyId == null) return false;
+        try {
+            return companyRepository.findByFounder(callerId).stream().anyMatch(c -> companyId.equals(c.getId()))
+                    || companyRepository.findByOwner(callerId).stream().anyMatch(c -> companyId.equals(c.getId()));
+        } catch (RuntimeException ignored) {
+            return false;
+        }
     }
 
     private static class LockEntry {
@@ -336,10 +348,17 @@ public class OrderHistoryService implements EventSubscriber{
                 return emptyReport;
             }
 
-            Set<UUID> managedEventIds = getEventIdsManagedBy(visibleManagers, companyId);
-            List<Event> filteredEvents = events.stream()
-                .filter(event -> managedEventIds.contains(event.eventId()))
-                    .toList();
+            boolean isOwnerOrFounder = isFounderOrOwner(callerId, companyId);
+
+            List<Event> filteredEvents;
+            if (isOwnerOrFounder) {
+                filteredEvents = events;
+            } else {
+                Set<UUID> managedEventIds = getEventIdsManagedBy(visibleManagers, companyId);
+                filteredEvents = events.stream()
+                        .filter(event -> managedEventIds.contains(event.eventId()))
+                        .toList();
+            }
 
             if (filteredEvents.isEmpty()) {
                 Map<String, Object> emptyReport = Map.of("ticketsSold", 0, "totalRevenue", Money.zero("USD"), "orders", List.of());
@@ -390,9 +409,7 @@ public class OrderHistoryService implements EventSubscriber{
                 return List.of();
             }
 
-            boolean isOwnerOrFounder =
-                    userDomainService.isActiveOwner(callerId, companyId)
-                            || userDomainService.isActiveFounder(callerId, companyId);
+            boolean isOwnerOrFounder = isFounderOrOwner(callerId, companyId);
 
             List<UUID> visibleEventIds;
             if (isOwnerOrFounder) {
@@ -577,7 +594,7 @@ public class OrderHistoryService implements EventSubscriber{
             .filter(manager -> manager.isAppointmentApproved())
             .anyMatch(manager -> manager.hasPermission(requiredPermission));
 
-        return (isPermittedManager || userDomainService.isActiveOwner(callerId, companyId) || userDomainService.isActiveFounder(callerId, companyId));
+        return (isPermittedManager || isFounderOrOwner(callerId, companyId));
         }
 
     
