@@ -675,6 +675,18 @@ export default function EventDetailsPage() {
                   );
                 }
 
+                const orderAreaType = eventQuery.data?.areas?.find((a) => a.areaId === order.areaId)?.type;
+                const isStanding = orderAreaType === 'STANDING';
+                const standingCount = seats.length > 0 ? seats.length : seatIds.length;
+
+                if (isStanding) {
+                  return (
+                    <div className="mt-2 text-sm text-slate-700">
+                      Standing (x{standingCount})
+                    </div>
+                  );
+                }
+
                 const labels = (seats.length > 0 ? seats.map((s) => ({
                   seatId: s.seatId,
                   label: `Row ${s.row ?? '—'} Seat ${s.number ?? '—'}`,

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { http } from '../api/http';
-import type { ApiResponse } from '../api/types';
+import type { ApiResponse, EventDTO } from '../api/types';
 import { getApiErrorMessage } from '../api/errors';
 import { useAuthStore } from '../ui/authStore';
 import { useState } from 'react';
@@ -51,6 +51,20 @@ export default function CheckoutPage() {
       return res.data.data;
     },
     enabled: Boolean(activeOrderId) && Boolean(token) && !checkoutCompleted,
+  });
+
+  const eventQuery = useQuery({
+    queryKey: ['event', activeOrderQuery.data?.eventId],
+    queryFn: async () => {
+      const eventId = activeOrderQuery.data?.eventId;
+      if (!eventId) throw new Error('Event ID is missing');
+      const res = await http.get<ApiResponse<EventDTO>>(`/api/events/${eventId}`);
+      if (res.data.error) throw new Error(res.data.error);
+      if (!res.data.data) throw new Error('Event not found');
+      return res.data.data;
+    },
+    enabled: Boolean(activeOrderQuery.data?.eventId),
+    staleTime: 60_000,
   });
 
   const completeCheckoutMutation = useMutation({
@@ -145,15 +159,30 @@ export default function CheckoutPage() {
 
             <div className="mt-4 text-sm text-slate-600">Selected seats</div>
             <div className="mt-1 grid gap-1">
-              {(activeOrderQuery.data.seats ?? []).length > 0 ? (
-                (activeOrderQuery.data.seats ?? []).map((s) => (
+              {(() => {
+                const seats = activeOrderQuery.data?.seats ?? [];
+                const seatIds = activeOrderQuery.data?.seatIds ?? [];
+                const areaType = eventQuery.data?.areas?.find((a) => a.areaId === activeOrderQuery.data?.areaId)?.type;
+                const isStanding = areaType === 'STANDING';
+                const standingCount = seats.length > 0 ? seats.length : seatIds.length;
+                if (isStanding) {
+                  return (
+                    <div className="text-sm text-slate-900">
+                      Standing (x{standingCount})
+                    </div>
+                  );
+                }
+
+                if (seats.length === 0 && seatIds.length === 0) {
+                  return <div className="text-sm text-slate-600">No seats found.</div>;
+                }
+
+                return seats.map((s) => (
                   <div key={s.seatId} className="text-sm text-slate-900">
                     Row {s.row ?? '—'} Seat {s.number ?? '—'}
                   </div>
-                ))
-              ) : (
-                <div className="text-sm text-slate-600">No seats found.</div>
-              )}
+                ));
+              })()}
             </div>
 
             <div className="mt-6 grid gap-2">
