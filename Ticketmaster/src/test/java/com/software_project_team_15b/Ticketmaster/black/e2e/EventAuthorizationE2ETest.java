@@ -103,25 +103,31 @@ class EventAuthorizationE2ETest {
 
         companyId = companyService.createCompany(founderToken, "AuthTestCo_" + n).companyId();
 
-        // Activate the founder's role so they can appoint others
+        // Assign + activate + approve the Founder role so they can appoint others.
+        userService.appointFounder(founderId, founderToken, companyId);
         userService.changeRoleToFounder(founderToken, companyId);
+        userService.approveAppointment(founderToken);
 
         // ── Owner ─────────────────────────────────────────────────────────────
-        ownerId = registerAndApproveOwner("auth_owner_" + sfx, founderToken, companyId);
+        Actor owner = registerAndApproveOwner("auth_owner_" + sfx);
+        ownerId = owner.id();
+        ownerToken = owner.token();
 
-        // ── Managers with specific permissions ────────────────────────────────
-        mgrManageEventsId   = registerAndApproveManager("auth_mgr_me_"  + sfx, founderToken, companyId,
-                Set.of(ManagerPermission.MANAGE_EVENTS));
-        mgrConfigHallId     = registerAndApproveManager("auth_mgr_ch_"  + sfx, founderToken, companyId,
-                Set.of(ManagerPermission.CONFIGURE_HALLS_AND_SEATS));
-        mgrUpdateMapId      = registerAndApproveManager("auth_mgr_um_"  + sfx, founderToken, companyId,
-                Set.of(ManagerPermission.UPDATE_EVENT_MAP));
-        mgrPurchasePolicyId = registerAndApproveManager("auth_mgr_pp_"  + sfx, founderToken, companyId,
-                Set.of(ManagerPermission.DEFINE_PURCHASE_POLICY));
-        mgrDiscountPolicyId = registerAndApproveManager("auth_mgr_dp_"  + sfx, founderToken, companyId,
-                Set.of(ManagerPermission.DEFINE_DISCOUNT_POLICY));
-        mgrWrongPermId      = registerAndApproveManager("auth_mgr_wp_"  + sfx, founderToken, companyId,
-                Set.of(ManagerPermission.HANDLE_INQUIRIES));
+        // ── Manager candidates ────────────────────────────────────────────────
+        // Managers are bound to a specific eventId at appointment time, so we only
+        // register + login them here; per-event appointment happens in setupManagersForEvent.
+        Actor mMe = registerAndLogin("auth_mgr_me_" + sfx);
+        mgrManageEventsId = mMe.id();   mgrManageEventsToken = mMe.token();
+        Actor mCh = registerAndLogin("auth_mgr_ch_" + sfx);
+        mgrConfigHallId = mCh.id();     mgrConfigHallToken = mCh.token();
+        Actor mUm = registerAndLogin("auth_mgr_um_" + sfx);
+        mgrUpdateMapId = mUm.id();      mgrUpdateMapToken = mUm.token();
+        Actor mPp = registerAndLogin("auth_mgr_pp_" + sfx);
+        mgrPurchasePolicyId = mPp.id(); mgrPurchasePolicyToken = mPp.token();
+        Actor mDp = registerAndLogin("auth_mgr_dp_" + sfx);
+        mgrDiscountPolicyId = mDp.id(); mgrDiscountPolicyToken = mDp.token();
+        Actor mWp = registerAndLogin("auth_mgr_wp_" + sfx);
+        mgrWrongPermId = mWp.id();      mgrWrongPermToken = mWp.token();
 
         // ── Unauthorized plain member ─────────────────────────────────────────
         String unauthUser = "auth_unauth_" + sfx;
