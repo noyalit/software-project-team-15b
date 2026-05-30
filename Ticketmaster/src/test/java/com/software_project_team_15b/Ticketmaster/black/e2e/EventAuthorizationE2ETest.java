@@ -330,50 +330,50 @@ class EventAuthorizationE2ETest {
     // ── DEFINE_PURCHASE_POLICY ────────────────────────────────────────────────
 
     @Test
-    @DisplayName("Founder can replace purchase policies (DEFINE_PURCHASE_POLICY)")
+    @DisplayName("Founder can replace purchase policies")
     void founder_can_replace_purchase_policies() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.replacePurchasePolicies(eventId, List.of(new PurchasePolicyDTO.MaxTicketsPerOrder(5)), founderId);
     }
 
     @Test
     @DisplayName("Owner can replace purchase policies")
     void owner_can_replace_purchase_policies() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.replacePurchasePolicies(eventId, List.of(new PurchasePolicyDTO.MaxTicketsPerOrder(5)), ownerId);
     }
 
     @Test
     @DisplayName("Manager with DEFINE_PURCHASE_POLICY can replace purchase policies")
     void manager_purchase_policy_can_replace_purchase_policies() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.replacePurchasePolicies(eventId, List.of(new PurchasePolicyDTO.MaxTicketsPerOrder(3)), mgrPurchasePolicyId);
     }
 
     @Test
     @DisplayName("Manager with wrong permission cannot replace purchase policies")
     void manager_wrong_permission_cannot_replace_purchase_policies() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.replacePurchasePolicies(eventId,
                 List.of(new PurchasePolicyDTO.MaxTicketsPerOrder(1)), mgrWrongPermId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
     @DisplayName("Unauthorized member cannot replace purchase policies")
     void unauthorized_cannot_replace_purchase_policies() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.replacePurchasePolicies(eventId,
                 List.of(new PurchasePolicyDTO.MaxTicketsPerOrder(1)), unauthorizedId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     // ── DEFINE_DISCOUNT_POLICY ────────────────────────────────────────────────
 
     @Test
-    @DisplayName("Founder can replace discount policies (DEFINE_DISCOUNT_POLICY)")
+    @DisplayName("Founder can replace discount policies")
     void founder_can_replace_discount_policies() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.replaceDiscountPolicies(eventId,
                 List.of(new DiscountPolicyDTO.Coupon("X", new BigDecimal("10"), null)), founderId);
     }
@@ -381,7 +381,7 @@ class EventAuthorizationE2ETest {
     @Test
     @DisplayName("Owner can replace discount policies")
     void owner_can_replace_discount_policies() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.replaceDiscountPolicies(eventId,
                 List.of(new DiscountPolicyDTO.Coupon("Y", new BigDecimal("5"), null)), ownerId);
     }
@@ -389,7 +389,7 @@ class EventAuthorizationE2ETest {
     @Test
     @DisplayName("Manager with DEFINE_DISCOUNT_POLICY can replace discount policies")
     void manager_discount_policy_can_replace_discount_policies() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.replaceDiscountPolicies(eventId,
                 List.of(new DiscountPolicyDTO.Coupon("Z", new BigDecimal("20"), null)), mgrDiscountPolicyId);
     }
@@ -397,72 +397,71 @@ class EventAuthorizationE2ETest {
     @Test
     @DisplayName("Manager with wrong permission cannot replace discount policies")
     void manager_wrong_permission_cannot_replace_discount_policies() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.replaceDiscountPolicies(eventId,
                 List.of(new DiscountPolicyDTO.Coupon("W", new BigDecimal("10"), null)), mgrWrongPermId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
     @DisplayName("Unauthorized member cannot replace discount policies")
     void unauthorized_cannot_replace_discount_policies() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.replaceDiscountPolicies(eventId,
                 List.of(new DiscountPolicyDTO.Coupon("W", new BigDecimal("10"), null)), unauthorizedId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
-    // ── PUBLISH (owner/founder only) ──────────────────────────────────────────
+    // ── publish (MANAGE_EVENTS) ───────────────────────────────────────────────
 
     @Test
-    @DisplayName("Founder can publish an event (PUBLISH is owner-only)")
+    @DisplayName("Founder can publish an event")
     void founder_can_publish_event() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.addArea(eventId, standingAreaCmd(), founderId);
-        events.publish(eventId, founderId); // should not throw
+        events.publish(eventId, founderId);
     }
 
     @Test
     @DisplayName("Owner can publish an event")
     void owner_can_publish_event() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.addArea(eventId, standingAreaCmd(), founderId);
         events.publish(eventId, ownerId);
     }
 
     @Test
-    @DisplayName("Manager with MANAGE_EVENTS permission CANNOT publish — owner-only action")
-    void manager_with_manage_events_cannot_publish() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+    @DisplayName("Manager with MANAGE_EVENTS can publish an event")
+    void manager_with_manage_events_can_publish() {
+        UUID eventId = createDraftEvent();
         events.addArea(eventId, standingAreaCmd(), founderId);
-        assertThatThrownBy(() -> events.publish(eventId, mgrManageEventsId))
-                .isInstanceOf(PolicyViolationException.class);
+        events.publish(eventId, mgrManageEventsId);
     }
 
     @Test
     @DisplayName("Manager with CONFIGURE_HALLS_AND_SEATS permission CANNOT publish")
     void manager_with_config_hall_cannot_publish() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.addArea(eventId, standingAreaCmd(), founderId);
         assertThatThrownBy(() -> events.publish(eventId, mgrConfigHallId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
     @DisplayName("Unauthorized member cannot publish an event")
     void unauthorized_cannot_publish() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.addArea(eventId, standingAreaCmd(), founderId);
         assertThatThrownBy(() -> events.publish(eventId, unauthorizedId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
-    // ── CANCEL (owner/founder only) ───────────────────────────────────────────
+    // ── cancel (MANAGE_EVENTS) ────────────────────────────────────────────────
 
     @Test
-    @DisplayName("Founder can cancel an event (CANCEL is owner-only)")
+    @DisplayName("Founder can cancel an event")
     void founder_can_cancel_event() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.addArea(eventId, standingAreaCmd(), founderId);
         events.publish(eventId, founderId);
         events.cancel(eventId, founderId);
@@ -471,76 +470,75 @@ class EventAuthorizationE2ETest {
     @Test
     @DisplayName("Owner can cancel an event")
     void owner_can_cancel_event() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.addArea(eventId, standingAreaCmd(), founderId);
         events.publish(eventId, founderId);
         events.cancel(eventId, ownerId);
     }
 
     @Test
-    @DisplayName("Manager with MANAGE_EVENTS permission CANNOT cancel — owner-only action")
-    void manager_with_manage_events_cannot_cancel() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+    @DisplayName("Manager with MANAGE_EVENTS can cancel an event")
+    void manager_with_manage_events_can_cancel() {
+        UUID eventId = createDraftEvent();
         events.addArea(eventId, standingAreaCmd(), founderId);
         events.publish(eventId, founderId);
-        assertThatThrownBy(() -> events.cancel(eventId, mgrManageEventsId))
-                .isInstanceOf(PolicyViolationException.class);
+        events.cancel(eventId, mgrManageEventsId);
     }
 
     @Test
     @DisplayName("Manager with CONFIGURE_HALLS_AND_SEATS permission CANNOT cancel")
     void manager_with_config_hall_cannot_cancel() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.addArea(eventId, standingAreaCmd(), founderId);
         events.publish(eventId, founderId);
         assertThatThrownBy(() -> events.cancel(eventId, mgrConfigHallId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
     @DisplayName("Unauthorized member cannot cancel an event")
     void unauthorized_cannot_cancel() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.addArea(eventId, standingAreaCmd(), founderId);
         events.publish(eventId, founderId);
         assertThatThrownBy(() -> events.cancel(eventId, unauthorizedId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     // ── Permission cross-checks: right action, wrong permission ───────────────
 
     @Test
-    @DisplayName("Manager with only MANAGE_EVENTS cannot configure hall")
+    @DisplayName("Manager with only MANAGE_EVENTS cannot configure hall (addArea)")
     void manager_manage_events_cannot_configure_hall() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.addArea(eventId, standingAreaCmd(), mgrManageEventsId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
     @DisplayName("Manager with only CONFIGURE_HALLS_AND_SEATS cannot update event fields")
     void manager_config_hall_cannot_manage_event() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.updateEvent(eventId,
                 new UpdateEventCommand("Changed", null, null, null, null), mgrConfigHallId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
     @DisplayName("Manager with only DEFINE_PURCHASE_POLICY cannot configure hall")
     void manager_purchase_policy_cannot_configure_hall() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.addArea(eventId, standingAreaCmd(), mgrPurchasePolicyId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
     @DisplayName("Manager with only DEFINE_DISCOUNT_POLICY cannot replace purchase policies")
     void manager_discount_policy_cannot_replace_purchase_policies() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.replacePurchasePolicies(eventId,
                 List.of(new PurchasePolicyDTO.MaxTicketsPerOrder(2)), mgrDiscountPolicyId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
