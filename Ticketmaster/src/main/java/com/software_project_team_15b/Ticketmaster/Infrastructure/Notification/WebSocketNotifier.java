@@ -2,6 +2,8 @@ package com.software_project_team_15b.Ticketmaster.Infrastructure.Notification;
 
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationEntity;
+import com.software_project_team_15b.Ticketmaster.Infrastructure.Notification.NotificationRepository;
 
 import java.util.UUID;
 
@@ -16,14 +18,30 @@ public class WebSocketNotifier implements INotifier {
     private static final Logger AUDIT = LoggerFactory.getLogger("audit.notification");
 
     private final SimpMessagingTemplate messagingTemplate;
+    private final NotificationRepository notificationRepository;
 
-    public WebSocketNotifier(SimpMessagingTemplate messagingTemplate) {
+    public WebSocketNotifier(SimpMessagingTemplate messagingTemplate,
+                             NotificationRepository notificationRepository) {
         this.messagingTemplate = messagingTemplate;
+        this.notificationRepository = notificationRepository;
     }
 
     @Override
     public void notifyUser(UUID userId, NotificationDTO notification) {
         AUDIT.debug("op=notifyUser target=userId={} type={} title={}", userId, notification.getType(), notification.getTitle());
+        try {
+            NotificationEntity entity = new NotificationEntity(
+                    userId,
+                    notification.getType(),
+                    notification.getTitle(),
+                    notification.getMessage(),
+                    notification.getCreatedAt()
+            );
+            notificationRepository.save(entity);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=persistNotification userId={} result=error reason={}", userId, e.getMessage(), e);
+        }
+
         messagingTemplate.convertAndSend("/topic/user/" + userId, notification);
     }
 
