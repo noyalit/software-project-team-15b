@@ -89,6 +89,34 @@ export default function ProfilePage() {
     enabled: Boolean(token) && userType === 'member' && Boolean(companiesQuery.data?.length),
   });
 
+  const managerEventsQuery = useQuery({
+    queryKey: ['profile', 'manager-events', token, meQuery.data?.assignedRoles],
+    queryFn: async () => {
+      const roles = meQuery.data?.assignedRoles ?? [];
+
+      const eventIds = roles
+        .filter((role) => role.roleName === 'Manager' && role.eventId)
+        .map((role) => role.eventId as string);
+
+      const uniqueEventIds = [...new Set(eventIds)];
+
+      const events = await Promise.all(
+        uniqueEventIds.map(async (eventId) => {
+          const res = await http.get<ApiResponse<EventDTO>>(`/api/events/${eventId}`);
+          if (res.data.error) throw new Error(res.data.error);
+          if (!res.data.data) throw new Error('Event not found');
+          return res.data.data;
+        })
+      );
+
+      return events;
+    },
+    enabled:
+      Boolean(token) &&
+      userType === 'member' &&
+      Boolean(meQuery.data?.assignedRoles?.some((role) => role.roleName === 'Manager')),
+  });
+
   useEffect(() => {
     if (meQuery.data) {
       setNewUsername(meQuery.data.username ?? '');
@@ -288,16 +316,7 @@ export default function ProfilePage() {
     ? companies
     : [];
 
-  const managedEvents =
-  companyEventsQuery.data
-    ?.flatMap((entry) =>
-      entry.events.map((event) => ({
-        ...event,
-        companyName: entry.company.name,
-      }))
-    )
-    .filter((event) => managerEventIds.includes(event.eventId)) ?? [];
-
+  const managedEvents = managerEventsQuery.data ?? [];
   const hasFounderRole = founderCompanies.length > 0 || roleNames.includes('Founder')|| currentRole === 'Founder';
   const hasOwnerRole = ownerCompanies.length > 0 || roleNames.includes('Owner') || currentRole === 'Owner';
   const hasManagerRole = roleNames.includes('Manager') || currentRole === 'Manager';
@@ -554,7 +573,7 @@ export default function ProfilePage() {
                       className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2"
                     >
                       <span className="text-sm font-medium text-slate-800">
-                        {event.name} — {event.companyName}
+                        {event.name}
                       </span>
                       <div className="flex items-center gap-2">
                         {approvedAppointmentTarget === event.eventId ? (
