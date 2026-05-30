@@ -285,7 +285,6 @@ class ActiveOrderMaintenanceServiceWhiteTest {
                         List.of()
                 );
 
-                when(activeOrder.getOrderId()).thenReturn(orderId);
                 when(activeOrder.getUserId()).thenReturn(userId);
                 when(activeOrder.getEventId()).thenReturn(eventId);
                 when(activeOrder.getExpiresAt()).thenReturn(expiresAt);
