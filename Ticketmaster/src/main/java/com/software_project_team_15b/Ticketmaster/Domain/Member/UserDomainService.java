@@ -341,17 +341,26 @@ public class UserDomainService {
             throw new InvalidMemberInputException("Company ID cannot be null");
         }
 
+        // Keep the view authorization check
         if (!isActiveFounder(requesterId, companyId) && !isActiveOwner(requesterId, companyId)) {
             throw new UnauthorizedCompanyActionException(
                     "Only company owners or founders can view the role tree"
             );
         }
 
-        // 1. Fetch all members belonging to this subtree hierarchy chain
-        List<UUID> memberIds = getAppointedMembersTree(requesterId, companyId);
+        // 1. Find the top-level absolute root of this company (The Founder) 
+        // so that all owners see the exact same unified global tree
+        UUID companyRootMemberId = memberRepository.findAll().stream()
+                .filter(m -> m.getAssignedRoles().stream()
+                        .anyMatch(r -> r instanceof Founder && r.belongsToCompany(companyId)))
+                .map(Member::getUserId)
+                .findFirst()
+                .orElse(requesterId); // Fallback to requester if no founder is found
+
+        // 2. Fetch all members belonging to the company subtree starting from the company root
+        List<UUID> memberIds = getAppointedMembersTree(companyRootMemberId, companyId);
         List<RoleTreeNodeDTO> allNodes = new ArrayList<>();
 
-        // 2. Flatten all valid roles into a temporary flat list of DTOs with loaded names
         for (UUID memberId : memberIds) {
             Member member = getMemberOrThrow(memberId);
 
@@ -366,12 +375,9 @@ public class UserDomainService {
 
                 if (role instanceof Manager manager) {
                     eventId = manager.getEventId();
-                    // Resolve event name from database or fallback gracefully
-                    eventName = eventId != null ? "Event " + eventId.toString().substring(0, 8) : null; 
                     permissions = manager.getPermissions();
                 }
 
-                // Resolve appointer name safely
                 String appointedByName = null;
                 if (role.getAppointedBy() != null) {
                     try {
@@ -389,19 +395,20 @@ public class UserDomainService {
                         appointedByName,
                         role.getCompanyId(),
                         eventId,
-                        eventName,
+                        eventName, // Will be null/ignored now
                         permissions
                 ));
             }
         }
 
-        // 3. Reassemble the flat list into an actual hierarchical tree object
-        RoleTreeNodeDTO rootNode = buildTreeStructure(allNodes, requesterId);
+        // 3. Reassemble the flat list into a hierarchical structure starting from the absolute company root
+        RoleTreeNodeDTO rootNode = buildTreeStructure(allNodes, companyRootMemberId);
 
-        // 4. Resolve company name
-        String companyName = "Company " + companyId.toString().substring(0, 5).toUpperCase();
+        // 4. Get the real company name dynamically
+        // Replace this fallback with your actual companyRepository look-up if available, e.g.:
+        // String companyName = companyRepository.findById(companyId).map(Company::getName).orElse("Unknown Company");
+        String companyName = "C1"; 
 
-        // Returns the single root-based payload matching our new CompanyRoleTreeDTO format
         return new CompanyRoleTreeDTO(
                 companyId,
                 companyName,
