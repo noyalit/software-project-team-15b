@@ -314,7 +314,12 @@ export default function EventDetailsPage() {
         <div key={row} className="flex items-center gap-2">
           <div className="w-8 text-sm font-semibold text-slate-700">Row {row}</div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex items-center gap-2">
+            <span className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+              Exit
+            </span>
+
+            <div className="flex flex-wrap gap-2">
             {seats
               .sort((a, b) => Number(a.number) - Number(b.number))
               .map((seat) => {
@@ -339,6 +344,12 @@ export default function EventDetailsPage() {
                   </button>
                 );
               })}
+
+            </div>
+
+            <span className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+              Exit
+            </span>
           </div>
         </div>
       ));
@@ -444,12 +455,30 @@ export default function EventDetailsPage() {
                 Stage / Screen
               </div>
 
+              <div className="mb-3 flex items-center justify-between text-xs font-semibold text-slate-600">
+                <span className="rounded border border-slate-200 bg-white px-2 py-1 uppercase tracking-wide">
+                  Exit
+                </span>
+                <span className="rounded border border-slate-200 bg-white px-2 py-1 uppercase tracking-wide">
+                  Exit
+                </span>
+              </div>
+
               <div className="space-y-3">
                 {selectedArea.seats.length === 0 ? (
                   <div className="text-sm text-slate-600">No seats found.</div>
                 ) : (
                   renderSeatsByRow(selectedArea)
                 )}
+              </div>
+
+              <div className="mt-3 flex items-center justify-between text-xs font-semibold text-slate-600">
+                <span className="rounded border border-slate-200 bg-white px-2 py-1 uppercase tracking-wide">
+                  Exit
+                </span>
+                <span className="rounded border border-slate-200 bg-white px-2 py-1 uppercase tracking-wide">
+                  Exit
+                </span>
               </div>
 
               <div className="mt-4 text-sm text-slate-600">
