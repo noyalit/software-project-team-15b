@@ -4,6 +4,7 @@ import { http } from '../api/http';
 import type { ApiResponse, CompanyDTO, MemberDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 
+// TypeScript interfaces matching your updated Java backend models
 interface RoleTreeNodeDTO {
   memberId: string;
   memberName: string;
@@ -12,7 +13,6 @@ interface RoleTreeNodeDTO {
   appointedByName?: string;
   companyId: string;
   eventId?: string;
-  eventName?: string;
   permissions?: string[];
   children: RoleTreeNodeDTO[];
 }
@@ -85,13 +85,12 @@ export default function HierarchyReportPage() {
   const activeRole = meQuery.data?.activeRole;
   const canView = activeRole === 'Founder' || activeRole === 'Owner';
 
-  // Recursive render component function to generate the tree view visually
+  // Recursive tree render helper
   const renderTreeNode = (node: RoleTreeNodeDTO) => {
     if (!node) return null;
 
     return (
       <div key={`${node.memberId}-${node.roleName}`} className="my-3 ml-2 relative">
-        {/* Tree structural connector block */}
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-xs max-w-xl transition-all hover:border-slate-300">
           <div className="flex items-center justify-between gap-4">
             <span className="font-bold text-slate-900 text-base">{node.memberName}</span>
@@ -104,12 +103,6 @@ export default function HierarchyReportPage() {
             {node.appointedByName && (
               <div>
                 <span className="text-slate-400 font-medium">Appointed by:</span> {node.appointedByName}
-              </div>
-            )}
-
-            {node.eventName && (
-              <div>
-                <span className="text-slate-400 font-medium">Event context:</span> {node.eventName}
               </div>
             )}
           </div>
@@ -136,7 +129,7 @@ export default function HierarchyReportPage() {
           )}
         </div>
 
-        {/* Children Render Area - Adds nesting padding and an elegant hierarchy line guide */}
+        {/* Child Rendering with decorative connector lines */}
         {node.children && node.children.length > 0 && (
           <div className="pl-6 mt-2 ml-4 border-l-2 border-dashed border-slate-200 space-y-2">
             {node.children.map((childNode) => renderTreeNode(childNode))}
@@ -166,7 +159,7 @@ export default function HierarchyReportPage() {
         </div>
       ) : (
         <>
-          {/* Company Selector */}
+          {/* Company Selector dropdown */}
           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <label className="block">
               <div className="text-sm font-medium text-slate-700">Company</div>
@@ -193,7 +186,7 @@ export default function HierarchyReportPage() {
             </div>
           )}
 
-          {/* Hierarchical Tree Render Block */}
+          {/* Graphical Tree Workspace Panel */}
           {treeQuery.data && (
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="text-lg font-semibold text-slate-900 border-b border-slate-100 pb-3">
