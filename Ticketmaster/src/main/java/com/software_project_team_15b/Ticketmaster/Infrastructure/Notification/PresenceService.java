@@ -2,7 +2,6 @@ package com.software_project_team_15b.Ticketmaster.Infrastructure.Notification;
 
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;

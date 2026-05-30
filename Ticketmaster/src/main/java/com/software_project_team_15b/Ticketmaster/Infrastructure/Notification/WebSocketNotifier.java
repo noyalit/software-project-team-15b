@@ -3,8 +3,6 @@ package com.software_project_team_15b.Ticketmaster.Infrastructure.Notification;
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationEntity;
-import com.software_project_team_15b.Ticketmaster.Infrastructure.Notification.NotificationRepository;
-import com.software_project_team_15b.Ticketmaster.Infrastructure.Notification.PresenceService;
 
 import java.util.UUID;
 

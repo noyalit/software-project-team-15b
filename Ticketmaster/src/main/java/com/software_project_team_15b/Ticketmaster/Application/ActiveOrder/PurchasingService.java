@@ -384,31 +384,7 @@ public class PurchasingService {
                     receipt.quantity()
             );
 
-            //for notification purposes
-            var eventView = eventDomainService.getEvent(activeOrder.getEventId());
-
-            //successful purchase
-            if (eventView != null) {
-                notifier.notifyUser(userId, new NotificationDTO(
-                        NotificationType.PURCHASE_SUCCESS,
-                        "Checkout Completed",
-                        "Your checkout for event " + eventView.name() + " has been completed successfully.",
-                        LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC))
-                    );
-            }
-
-            //event sold out
-            if (eventView != null) {
-                int remaining = eventView.areas().stream().mapToInt(a -> a.availableCapacity()).sum();
-                if (remaining == 0) {
-                    notifier.notifyEventManagers(activeOrder.getEventId(), new NotificationDTO(
-                            NotificationType.EVENT_SOLD_OUT,
-                            "Event Sold Out",
-                            "Event " + eventView.name() + " is now sold out.",
-                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC))
-                        );
-                }
-            }
+            sendNotificationsAfterSuccessfulCheckout(activeOrder, receipt, priceBreakdown);
 
             return new CheckoutCompletedDTO(
                     activeOrder.getOrderId(),
@@ -436,6 +412,35 @@ public class PurchasingService {
             );
             throw e;
         }
+    }
+
+    private void sendNotificationsAfterSuccessfulCheckout(ActiveOrder activeOrder, ConfirmationReceipt receipt,
+            PriceBreakdown priceBreakdown) {
+
+            //for notification purposes
+            var eventView = eventDomainService.getEvent(activeOrder.getEventId());
+
+            //successful purchase
+            if (eventView != null) {
+                notifier.notifyUser(activeOrder.getUserId(), new NotificationDTO(
+                        NotificationType.PURCHASE_SUCCESS,
+                        "Checkout Completed",
+                        "Your checkout for event " + eventView.name() + " has been completed successfully.",
+                        LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC))
+                    );
+
+                //event sold out
+                int remaining = eventView.areas().stream().mapToInt(a -> a.availableCapacity()).sum();
+                if (remaining == 0) {
+                    notifier.notifyEventManagers(activeOrder.getEventId(), new NotificationDTO(
+                            NotificationType.EVENT_SOLD_OUT,
+                            "Event Sold Out",
+                            "Event " + eventView.name() + " is now sold out.",
+                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC))
+                        );
+                }
+            }
+
     }
 
     @Transactional
