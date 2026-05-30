@@ -286,12 +286,21 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
             return new LotteryEligibilityDTO(LotteryEligibilityStatus.NO_LOTTERY_REQUIRED);
         }
 
+        if (!lottery.isDrawn()) {
+            return new LotteryEligibilityDTO(
+                    lottery.hasEntry(userId)
+                            ? LotteryEligibilityStatus.LOTTERY_OPEN_ENTERED
+                            : LotteryEligibilityStatus.LOTTERY_OPEN_NOT_ENTERED
+            );
+        }
+
         Set<UUID> eventWinners = lottery.getWinners();
         if (!eventWinners.contains(userId)) {
             return new LotteryEligibilityDTO(LotteryEligibilityStatus.NOT_SELECTED);
         }
 
-        if (LocalDateTime.now().isBefore(lottery.getExpirationTime())) {
+        LocalDateTime expiry = lottery.getExpirationTime();
+        if (expiry == null || LocalDateTime.now().isBefore(expiry)) {
             return new LotteryEligibilityDTO(LotteryEligibilityStatus.WON_AND_ACCESS_VALID);
         }
         return new LotteryEligibilityDTO(LotteryEligibilityStatus.ACCESS_EXPIRED);

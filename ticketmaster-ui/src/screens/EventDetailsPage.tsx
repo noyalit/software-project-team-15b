@@ -5,6 +5,7 @@ import { http } from '../api/http';
 import type { ApiResponse, EventDTO } from '../api/types';
 import { getApiErrorMessage } from '../api/errors';
 import { useAuthStore } from '../ui/authStore';
+import type { AxiosError } from 'axios';
 
 type ActiveOrderDTO = {
   orderId: string;
@@ -29,6 +30,17 @@ type CheckoutStartedDTO = {
 type CheckoutCompletedDTO = {
   orderId?: string;
   tickets?: unknown[];
+};
+
+type LotteryEligibilityDTO = {
+  status:
+    | 'NO_LOTTERY_REQUIRED'
+    | 'LOTTERY_OPEN_NOT_ENTERED'
+    | 'LOTTERY_OPEN_ENTERED'
+    | 'WON_AND_ACCESS_VALID'
+    | 'NOT_SELECTED'
+    | 'ACCESS_EXPIRED'
+    | string;
 };
 
 export default function EventDetailsPage() {
@@ -125,6 +137,39 @@ export default function EventDetailsPage() {
     enabled: Boolean(eventId),
   });
 
+  const lotteryEligibilityQuery = useQuery({
+    queryKey: ['lottery', 'eligibility', eventId, token],
+    queryFn: async () => {
+      const event = eventQuery.data;
+      if (!event) throw new Error('Event is missing.');
+
+      const res = await http.get<ApiResponse<LotteryEligibilityDTO>>(
+        `/api/companies/${event.companyId}/events/${event.eventId}/lottery/eligibility`
+      );
+      if (res.data.error) throw new Error(res.data.error);
+      if (!res.data.data) throw new Error('No eligibility returned');
+      return res.data.data;
+    },
+    enabled: Boolean(token) && Boolean(eventQuery.data?.companyId) && Boolean(eventId),
+    retry: false,
+  });
+
+  const enterLotteryMutation = useMutation({
+    mutationFn: async () => {
+      const event = eventQuery.data;
+      if (!event) throw new Error('Event is missing.');
+
+      const res = await http.post<ApiResponse<null>>(
+        `/api/companies/${event.companyId}/events/${event.eventId}/lottery/entries`
+      );
+      if (res.data.error) throw new Error(res.data.error);
+    },
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ['lottery', 'eligibility', eventId, token] });
+      setSuccessMessage('Registered to the lottery draw.');
+    },
+  });
+
   const activeOrderQuery = useQuery({
     queryKey: ['active-order', activeOrderId, token],
     queryFn: async () => {
@@ -193,7 +238,12 @@ export default function EventDetailsPage() {
       } catch (e) {
         const message = getApiErrorMessage(e);
 
-        if (message.toLowerCase().includes('active order')) {
+        const lower = message.toLowerCase();
+        const isAlreadyHasActiveOrder =
+          lower.includes('already has an active order') ||
+          lower.includes('active order request conflicts with existing data');
+
+        if (isAlreadyHasActiveOrder) {
           try {
             const res2 = await http.get<
               ApiResponse<Array<{ orderId: string; eventId?: string }>>
@@ -209,9 +259,7 @@ export default function EventDetailsPage() {
             // fall through
           }
 
-          throw new Error(
-            'You already have an active order for this event. Please continue it from the Orders page.'
-          );
+          throw new Error(message);
         }
 
         throw new Error(message || 'Failed to start order.');
@@ -332,6 +380,8 @@ export default function EventDetailsPage() {
   const isPastEvent = new Date(event.startsAt).getTime() < Date.now();
   const areas = event.areas ?? [];
   const selectedArea = areas.find((area) => area.areaId === selectedAreaId);
+
+  const eligibilityStatus = lotteryEligibilityQuery.data?.status ?? null;
 
   const actionError =
     requestAccessMutation.error ||
@@ -590,7 +640,34 @@ export default function EventDetailsPage() {
             </div>
           )}
 
+          {eligibilityStatus === 'LOTTERY_OPEN_NOT_ENTERED' && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              This event has a lottery draw. Register to the draw to be able to purchase after the draw.
+            </div>
+          )}
+
+          {eligibilityStatus === 'LOTTERY_OPEN_ENTERED' && (
+            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+              You are registered to the lottery draw.
+            </div>
+          )}
+
+          {eligibilityStatus === 'NOT_SELECTED' && (
+            <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              You were not selected in the lottery draw for this event.
+            </div>
+          )}
+
           <div className="mt-4 flex flex-wrap gap-2">
+            {userType === 'member' && eligibilityStatus === 'LOTTERY_OPEN_NOT_ENTERED' && (
+              <button
+                onClick={() => enterLotteryMutation.mutate()}
+                disabled={enterLotteryMutation.isPending}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+              >
+                {enterLotteryMutation.isPending ? 'Registering…' : 'Register to draw'}
+              </button>
+            )}
             <button
               onClick={async () => {
                 await requestAccessMutation.mutateAsync();

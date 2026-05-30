@@ -87,6 +87,7 @@ public class LotteryController {
     @PostMapping("/entries")
     public ResponseEntity<ApiResponse<Void>> addToEventLottery(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID companyId,
             @PathVariable UUID eventId
     ) {
         try {
