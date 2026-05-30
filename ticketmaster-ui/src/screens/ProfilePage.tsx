@@ -275,21 +275,32 @@ export default function ProfilePage() {
   const isCurrentAppointmentApproved = appointmentApprovedQuery.data === true || approveAppointmentMutation.isSuccess;
 
   const assignedRoles = me.assignedRoles ?? [];
+
+  const roleNames = assignedRoles.map((role) =>
+    typeof role === 'string' ? role : role.roleName
+  );
+
+  const managerEventIds = assignedRoles
+    .filter((role) => typeof role !== 'string' && role.roleName === 'Manager' && role.eventId)
+    .map((role) => role.eventId);
   const founderCompanies = companies.filter((company) => company.founderId === me.userId);
-  const ownerCompanies = assignedRoles.includes('Owner') || currentRole === 'Owner'
+  const ownerCompanies = roleNames.includes('Owner') || currentRole === 'Owner'
     ? companies
     : [];
 
-  const managedEvents = companyEventsQuery.data?.flatMap((entry) =>
-    entry.events.map((event) => ({
-      ...event,
-      companyName: entry.company.name,
-    }))
-  ) ?? [];
+  const managedEvents =
+  companyEventsQuery.data
+    ?.flatMap((entry) =>
+      entry.events.map((event) => ({
+        ...event,
+        companyName: entry.company.name,
+      }))
+    )
+    .filter((event) => managerEventIds.includes(event.eventId)) ?? [];
 
-  const hasFounderRole = founderCompanies.length > 0 || (me.assignedRoles ?? []).includes('Founder') || currentRole === 'Founder';
-  const hasOwnerRole = ownerCompanies.length > 0 || (me.assignedRoles ?? []).includes('Owner') || currentRole === 'Owner';
-  const hasManagerRole = (me.assignedRoles ?? []).includes('Manager') || currentRole === 'Manager';
+  const hasFounderRole = founderCompanies.length > 0 || roleNames.includes('Founder')|| currentRole === 'Founder';
+  const hasOwnerRole = ownerCompanies.length > 0 || roleNames.includes('Owner') || currentRole === 'Owner';
+  const hasManagerRole = roleNames.includes('Manager') || currentRole === 'Manager';
 
   const updateError =
     changeUsernameMutation.error ??

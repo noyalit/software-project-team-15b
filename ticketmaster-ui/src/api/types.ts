@@ -68,7 +68,14 @@ export type MemberDTO = {
   username: string;
   birthDate?: string;
   activeRole?: string;
-  assignedRoles?: string[];
+  assignedRoles?: AssignedRoleDTO[];
+};
+
+export type AssignedRoleDTO = {
+  roleName: string;
+  companyId?: string | null;
+  eventId?: string | null;
+  approved: boolean;
 };
 
 export type ManagerPermission =

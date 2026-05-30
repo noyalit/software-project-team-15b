@@ -14,7 +14,7 @@ public class MemberDTO {
 
     private String activeRole;
 
-    private List<String> assignedRoles;
+    private List<AssignedRoleDTO> assignedRoles;
 
     public MemberDTO() {
     }
@@ -24,7 +24,7 @@ public class MemberDTO {
             String username,
             LocalDate birthDate,
             String activeRole,
-            List<String> assignedRoles
+            List<AssignedRoleDTO> assignedRoles
     ) {
         this.userId = userId;
         this.username = username;
@@ -65,11 +65,11 @@ public class MemberDTO {
         this.activeRole = activeRole;
     }
 
-    public List<String> getAssignedRoles() {
+    public List<AssignedRoleDTO> getAssignedRoles() {
         return assignedRoles;
     }
 
-    public void setAssignedRoles(List<String> assignedRoles) {
+    public void setAssignedRoles(List<AssignedRoleDTO> assignedRoles) {
         this.assignedRoles = assignedRoles;
     }
 }

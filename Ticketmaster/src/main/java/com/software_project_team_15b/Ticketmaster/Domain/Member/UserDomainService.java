@@ -20,6 +20,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.MemberN
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.RoleNotAssignedException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UsernameAlreadyExistsException;
+import com.software_project_team_15b.Ticketmaster.DTO.AssignedRoleDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyRoleTreeDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.RoleTreeNodeDTO;
@@ -713,9 +714,14 @@ public class UserDomainService {
                 ? "RegularMember"
                 : member.getActiveRole().getRoleName();
 
-        List<String> assignedRoles = member.getAssignedRoles()
+        List<AssignedRoleDTO> assignedRoles = member.getAssignedRoles()
                 .stream()
-                .map(Role::getRoleName)
+                .map(role -> new AssignedRoleDTO(
+                        role.getRoleName(),
+                        role.getCompanyId(),
+                        role instanceof Manager manager ? manager.getEventId() : null,
+                        role.isAppointmentApproved()
+                ))
                 .toList();
 
         return new MemberDTO(
