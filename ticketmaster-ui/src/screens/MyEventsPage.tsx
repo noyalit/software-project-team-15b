@@ -15,6 +15,10 @@ type SeatSpec = {
   number: string;
 };
 
+type LotteryEligibilityDTO = {
+  status: string;
+};
+
 export default function MyEventsPage() {
   const qc = useQueryClient();
   const { token, userType } = useAuthStore();
@@ -80,10 +84,14 @@ export default function MyEventsPage() {
       );
       if (res.data.error) throw new Error(res.data.error);
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, variables) => {
       setSuccessMessage('Lottery deleted successfully.');
       setLotteryWinners(null);
       setLotteryEventId(null);
+
+      await qc.invalidateQueries({
+        queryKey: ['lottery', 'eligibility', 'company-events', selectedCompanyId, token],
+      });
     },
   });
 
@@ -152,8 +160,15 @@ export default function MyEventsPage() {
       );
       if (res.data.error) throw new Error(res.data.error);
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, variables) => {
       setSuccessMessage('Lottery created successfully.');
+
+      await qc.invalidateQueries({
+        queryKey: ['lottery', 'eligibility', 'company-events', selectedCompanyId, token],
+      });
+
+      setLotteryWinners(null);
+      setLotteryEventId(variables.eventId);
     },
   });
 
@@ -177,6 +192,30 @@ export default function MyEventsPage() {
       return res.data.data ?? [];
     },
     enabled: Boolean(selectedCompanyId),
+  });
+
+  const lotteryStatusByEventQuery = useQuery({
+    queryKey: ['lottery', 'eligibility', 'company-events', selectedCompanyId, token],
+    queryFn: async () => {
+      const events = eventsQuery.data ?? [];
+
+      const statuses = await Promise.all(
+        events.map(async (event) => {
+          try {
+            const res = await http.get<ApiResponse<LotteryEligibilityDTO>>(
+              `/api/companies/${event.companyId}/events/${event.eventId}/lottery/eligibility`
+            );
+            if (res.data.error) throw new Error(res.data.error);
+            return [event.eventId, res.data.data?.status ?? 'NO_LOTTERY_REQUIRED'] as const;
+          } catch {
+            return [event.eventId, 'NO_LOTTERY_REQUIRED'] as const;
+          }
+        })
+      );
+
+      return Object.fromEntries(statuses) as Record<string, string>;
+    },
+    enabled: Boolean(token) && Boolean(eventsQuery.data?.length),
   });
 
   const createEventMutation = useMutation({
@@ -569,7 +608,11 @@ export default function MyEventsPage() {
                                 eventId: event.eventId,
                               })
                             }
-                            disabled={createLotteryMutation.isPending}
+                            disabled={
+                              createLotteryMutation.isPending ||
+                              (lotteryStatusByEventQuery.data?.[event.eventId] ??
+                                'NO_LOTTERY_REQUIRED') !== 'NO_LOTTERY_REQUIRED'
+                            }
                             className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
                           >
                             {createLotteryMutation.isPending ? 'Creating lottery…' : 'Create lottery'}
@@ -577,12 +620,21 @@ export default function MyEventsPage() {
 
                           <button
                             onClick={() => {
+                              const status =
+                                lotteryStatusByEventQuery.data?.[event.eventId] ?? 'NO_LOTTERY_REQUIRED';
+                              const hasLottery = status !== 'NO_LOTTERY_REQUIRED';
+                              if (!hasLottery) return;
+
                               const isOpen = lotteryEventId === event.eventId;
                               setLotteryEventId(isOpen ? null : event.eventId);
                               setLotteryWinners(null);
                               setSuccessMessage(null);
                             }}
-                            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                            disabled={
+                              (lotteryStatusByEventQuery.data?.[event.eventId] ??
+                                'NO_LOTTERY_REQUIRED') === 'NO_LOTTERY_REQUIRED'
+                            }
+                            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
                           >
                             {lotteryEventId === event.eventId ? 'Hide lottery' : 'Manage lottery'}
                           </button>
@@ -591,7 +643,10 @@ export default function MyEventsPage() {
                     </div>
                   </div>
 
-                  {lotteryEventId === event.eventId && !isCancelled && (
+                  {lotteryEventId === event.eventId &&
+                    (lotteryStatusByEventQuery.data?.[event.eventId] ?? 'NO_LOTTERY_REQUIRED') !==
+                      'NO_LOTTERY_REQUIRED' &&
+                    !isCancelled && (
                     <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
                       <div className="font-semibold text-slate-900">Lottery management</div>
                       <div className="mt-1 text-sm text-slate-600">
