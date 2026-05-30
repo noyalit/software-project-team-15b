@@ -106,8 +106,6 @@ class EventAuthorizationE2ETest {
         companyId = company.getId();
         userService.changeRoleToFounder(founderToken, companyId);
 
-        // ── Owner ─────────────────────────────────────────────────────────────
-        ownerId = registerAndApproveOwner("auth_owner_" + sfx, founderToken, company.getId());
         // Owner (company-scoped)
         Actor owner = registerAndApproveOwner("auth_owner_" + sfx);
         ownerId = owner.id;
@@ -137,71 +135,66 @@ class EventAuthorizationE2ETest {
         unauthorizedId = mUnauth.getUserId();
     }
 
-    // ── MANAGE_EVENT (createEvent, updateEvent) ───────────────────────────────
+    // ── MANAGE_EVENT — createEvent (owner/founder only) ───────────────────────
 
     @Test
-    @DisplayName("Founder can create an event (MANAGE_EVENT)")
+    @DisplayName("Founder can create an event")
     void founder_can_create_event() {
         UUID id = events.createEvent(draftCmd(), founderId);
         assertThat(id).isNotNull();
     }
 
     @Test
-    @DisplayName("Owner can create an event (MANAGE_EVENT)")
+    @DisplayName("Owner can create an event")
     void owner_can_create_event() {
         UUID id = events.createEvent(draftCmd(), ownerId);
         assertThat(id).isNotNull();
     }
 
     @Test
-    @DisplayName("Manager with MANAGE_EVENTS can create an event")
-    void manager_with_manage_events_can_create_event() {
-        UUID id = events.createEvent(draftCmd(), mgrManageEventsId);
-        assertThat(id).isNotNull();
-    }
-
-    @Test
-    @DisplayName("Manager with wrong permission cannot create an event")
-    void manager_with_wrong_permission_cannot_create_event() {
-        assertThatThrownBy(() -> events.createEvent(draftCmd(), mgrWrongPermId))
-                .isInstanceOf(PolicyViolationException.class);
+    @DisplayName("Manager (with any permission) cannot create event — owner/founder-only")
+    void manager_cannot_create_event() {
+        assertThatThrownBy(() -> events.createEvent(draftCmd(), mgrManageEventsId))
+                .isInstanceOf(UnauthorizedCompanyActionException.class);
     }
 
     @Test
     @DisplayName("Unauthorized member cannot create an event")
     void unauthorized_cannot_create_event() {
         assertThatThrownBy(() -> events.createEvent(draftCmd(), unauthorizedId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(UnauthorizedCompanyActionException.class);
     }
 
+    // ── MANAGE_EVENTS — updateEvent ───────────────────────────────────────────
+
     @Test
-    @DisplayName("Founder can update an event (MANAGE_EVENT)")
+    @DisplayName("Founder can update an event")
     void founder_can_update_event() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.updateEvent(eventId, new UpdateEventCommand("New Name", null, null, null, null), founderId);
     }
 
     @Test
-    @DisplayName("Owner can update an event (MANAGE_EVENT)")
+    @DisplayName("Owner can update an event")
     void owner_can_update_event() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.updateEvent(eventId, new UpdateEventCommand("Owner Updated", null, null, null, null), ownerId);
     }
 
     @Test
     @DisplayName("Manager with MANAGE_EVENTS can update an event")
     void manager_with_manage_events_can_update_event() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         events.updateEvent(eventId, new UpdateEventCommand("Mgr Updated", null, null, null, null), mgrManageEventsId);
     }
 
     @Test
     @DisplayName("Manager with wrong permission cannot update an event")
     void manager_with_wrong_permission_cannot_update_event() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.updateEvent(eventId,
                 new UpdateEventCommand("Forbidden", null, null, null, null), mgrWrongPermId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
