@@ -188,10 +188,19 @@ export default function AdminMembersPage() {
               </div>
             </div>
 
+            {Boolean(resolvedMember.assignedRoles?.includes('Founder')) && (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                This member has a Founder role and cannot be suspended.
+              </div>
+            )}
+
             <div className="mt-4">
               <button
                 onClick={() => cancelMemberMutation.mutate()}
-                disabled={cancelMemberMutation.isPending}
+                disabled={
+                  cancelMemberMutation.isPending ||
+                  Boolean(resolvedMember.assignedRoles?.includes('Founder'))
+                }
                 className="w-full rounded-md bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
               >
                 {cancelMemberMutation.isPending ? 'Suspending…' : 'Suspend member'}

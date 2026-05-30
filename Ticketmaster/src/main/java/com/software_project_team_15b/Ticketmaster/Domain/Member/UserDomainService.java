@@ -335,10 +335,15 @@ public class UserDomainService {
             throw new InvalidMemberInputException("Member ID cannot be null");
         }
 
-        memberRepository.findById(memberIdToCancel)
+        Member member = memberRepository.findById(memberIdToCancel)
                 .orElseThrow(() -> new MemberNotFoundException(
                         "Member not found with id: " + memberIdToCancel
                 ));
+
+        boolean hasFounderRole = member.getAssignedRoles().stream().anyMatch(role -> role instanceof Founder);
+        if (hasFounderRole) {
+            throw new IllegalArgumentException("Cannot suspend a member who has a Founder role");
+        }
 
         return memberRepository.deleteById(memberIdToCancel);
     }
