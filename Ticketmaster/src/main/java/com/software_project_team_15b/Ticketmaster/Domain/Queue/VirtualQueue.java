@@ -115,7 +115,7 @@ public class VirtualQueue {
      * @throws IllegalArgumentException if item is null or already in the queue
      * @throws IllegalStateException if the queue is full
      */
-    public void push(String item) {
+    public synchronized void push(String item) {
         if (item == null) {
             throw new IllegalArgumentException("item cannot be null");
         }
@@ -136,7 +136,7 @@ public class VirtualQueue {
      *
      * @return the next token, or {@code null} if the queue is empty
      */
-    public String pop() {
+    public synchronized String pop() {
         return queue.isEmpty() ? null : queue.remove(0);
     }
 
@@ -145,28 +145,28 @@ public class VirtualQueue {
      *
      * @return the next token, or {@code null} if the queue is empty
      */
-    public String peek() {
+    public synchronized String peek() {
         return queue.isEmpty() ? null : queue.get(0);
     }
 
     /**
      * @return the number of entries currently in the queue
      */
-    public int size() {
+    public synchronized int size() {
         return queue.size();
     }
 
     /**
      * @return {@code true} if the queue contains no entries
      */
-    public boolean isEmpty() {
+    public synchronized boolean isEmpty() {
         return queue.isEmpty();
     }
 
     /**
      * @return {@code true} if the queue has reached its capacity
      */
-    public boolean isFull() {
+    public synchronized boolean isFull() {
         return queue.size() >= capacity;
     }
 
@@ -175,7 +175,7 @@ public class VirtualQueue {
      * @return {@code true} if the given token is currently in the queue
      * @throws IllegalArgumentException if item is null
      */
-    public boolean contains(String item) {
+    public synchronized boolean contains(String item) {
         if  (item == null) {
             throw new IllegalArgumentException("item cannot be null");
         }
@@ -189,7 +189,7 @@ public class VirtualQueue {
      * @return the 0-based index of the token in the queue
      * @throws IllegalArgumentException if {@code item} is null or not present in the queue
      */
-    public int getPosition(String item) {
+    public synchronized int getPosition(String item) {
         if (item == null) {
             throw new IllegalArgumentException("item cannot be null");
         }
@@ -207,7 +207,7 @@ public class VirtualQueue {
      * @return {@code true} if the token was present and removed
      * @throws IllegalArgumentException if {@code item} is null
      */
-    public boolean remove(String item) {
+    public synchronized boolean remove(String item) {
         if (item == null) throw new IllegalArgumentException("item cannot be null");
         return queue.remove(item);
     }
@@ -219,7 +219,7 @@ public class VirtualQueue {
      * @return {@code true} if the token had an active access entry that was removed
      * @throws IllegalArgumentException if {@code item} is null
      */
-    public boolean clearAccess(String item) {
+    public synchronized boolean clearAccess(String item) {
         if (item == null) throw new IllegalArgumentException("item cannot be null");
         return accessMap.remove(item) != null;
     }
@@ -228,7 +228,7 @@ public class VirtualQueue {
      * Removes all entries from both the waiting list and {@link #accessMap}, leaving
      * this queue completely empty.
      */
-    public void clear() {
+    public synchronized void clear() {
         queue.clear();
         accessMap.clear();
     }
@@ -240,7 +240,7 @@ public class VirtualQueue {
      * @param maxAccepted the new maximum number of simultaneously admitted users; must be non-negative
      * @throws IllegalArgumentException if either value is negative
      */
-    public void setSettings(int capacity, int maxAccepted) {
+    public synchronized void setSettings(int capacity, int maxAccepted) {
         if (capacity < 0) throw new IllegalArgumentException("capacity cannot be negative");
         if (maxAccepted < 0) throw new IllegalArgumentException("maxAccepted cannot be negative");
         this.capacity = capacity;
@@ -250,7 +250,7 @@ public class VirtualQueue {
     /**
      * Removes all entries from {@link #accessMap} whose expiry time is at or before now.
      */
-    public void clearAccessMap() {
+    public synchronized void clearAccessMap() {
         LocalDateTime now = LocalDateTime.now();
         accessMap.entrySet().removeIf(entry -> !entry.getValue().isAfter(now));
     }
@@ -262,7 +262,7 @@ public class VirtualQueue {
      *
      * @param accessExpiresAt the expiry {@link LocalDateTime} to assign to each newly admitted token
      */
-    public void advanceQueue(LocalDateTime accessExpiresAt) {
+    public synchronized void advanceQueue(LocalDateTime accessExpiresAt) {
         clearAccessMap();
         while (!queue.isEmpty() && accessMap.size() < maxAccepted) {
             String item = pop();
@@ -279,7 +279,7 @@ public class VirtualQueue {
      *
      * @return an unmodifiable map of admitted tokens to their expiry times
      */
-    public Map<String, LocalDateTime> getAccessMap() {
+    public synchronized Map<String, LocalDateTime> getAccessMap() {
         clearAccessMap();
         return Collections.unmodifiableMap(accessMap);
     }
@@ -293,7 +293,7 @@ public class VirtualQueue {
      * @return the expiry {@link LocalDateTime}, or {@code null} if not admitted
      * @throws IllegalArgumentException if {@code item} is null
      */
-    public LocalDateTime hasAccess(String item) {
+    public synchronized LocalDateTime hasAccess(String item) {
         if (item == null) {
             throw new IllegalArgumentException("item cannot be null");
         }
