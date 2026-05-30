@@ -4,6 +4,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Notification.INoti
 import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationEntity;
 import com.software_project_team_15b.Ticketmaster.Infrastructure.Notification.NotificationRepository;
+import com.software_project_team_15b.Ticketmaster.Infrastructure.Notification.PresenceService;
 
 import java.util.UUID;
 
@@ -19,16 +20,25 @@ public class WebSocketNotifier implements INotifier {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final NotificationRepository notificationRepository;
+    private final PresenceService presenceService;
 
     public WebSocketNotifier(SimpMessagingTemplate messagingTemplate,
-                             NotificationRepository notificationRepository) {
+                             NotificationRepository notificationRepository,
+                             PresenceService presenceService) {
         this.messagingTemplate = messagingTemplate;
         this.notificationRepository = notificationRepository;
+        this.presenceService = presenceService;
     }
 
     @Override
     public void notifyUser(UUID userId, NotificationDTO notification) {
         AUDIT.debug("op=notifyUser target=userId={} type={} title={}", userId, notification.getType(), notification.getTitle());
+        // If user is online, send without persisting to reduce DB writes.
+        if (presenceService.isOnline(userId)) {
+            messagingTemplate.convertAndSend("/topic/user/" + userId, notification);
+            return;
+        }
+
         try {
             NotificationEntity entity = new NotificationEntity(
                     userId,
