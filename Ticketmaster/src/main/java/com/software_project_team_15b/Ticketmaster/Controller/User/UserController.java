@@ -444,6 +444,22 @@ public class UserController {
         }
     }
 
+    @Operation(summary = "Check if current active appointment is approved")
+    @GetMapping("/roles/approved")
+    public ResponseEntity<ApiResponse<Boolean>> isAppointmentApproved(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+    ) {
+        try {
+            return ResponseEntity.ok(new ApiResponse<>(userService.isAppointmentApproved(token), null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     @Operation(summary = "Get company role tree with manager permissions")
     @GetMapping("/companies/{companyId}/roles/tree")
     public ResponseEntity<ApiResponse<CompanyRoleTreeDTO>> getCompanyRoleTree(

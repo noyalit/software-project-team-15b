@@ -43,6 +43,21 @@ export default function ProfilePage() {
     enabled: userType === 'member' && Boolean(token),
   });
 
+  const appointmentApprovedQuery = useQuery({
+    queryKey: ['appointment-approved', token, meQuery.data?.activeRole],
+    queryFn: async () => {
+      const res = await http.get<ApiResponse<boolean>>('/api/users/roles/approved');
+
+      if (res.data.error) throw new Error(res.data.error);
+
+      return res.data.data ?? false;
+    },
+    enabled:
+      Boolean(token) &&
+      userType === 'member' &&
+      (meQuery.data?.activeRole === 'Owner' || meQuery.data?.activeRole === 'Manager'),
+  });
+
   const companiesQuery = useQuery({
     queryKey: ['profile', 'companies', token],
     queryFn: async () => {
@@ -210,6 +225,7 @@ export default function ProfilePage() {
 
     onSuccess: async (targetName) => {
       setApprovedAppointmentTarget(targetName);
+      await qc.invalidateQueries({ queryKey: ['appointment-approved'] });
       await refreshProfile();
     },
   });
@@ -256,6 +272,7 @@ export default function ProfilePage() {
   const me = meQuery.data;
   const companies = companiesQuery.data ?? [];
   const currentRole = me.activeRole ?? 'RegularMember';
+  const isCurrentAppointmentApproved = appointmentApprovedQuery.data === true || approveAppointmentMutation.isSuccess;
 
   const assignedRoles = me.assignedRoles ?? [];
   const founderCompanies = companies.filter((company) => company.founderId === me.userId);
@@ -479,7 +496,7 @@ export default function ProfilePage() {
                           <span className="rounded-md bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-800">
                             Appointment approved
                           </span>
-                        ) : currentRole === 'Owner' ? (
+                        ) : currentRole === 'Owner' && !isCurrentAppointmentApproved ? (
                           <button
                             onClick={() => approveAppointmentMutation.mutate(company.companyId)}
                             disabled={approveAppointmentMutation.isPending}
@@ -533,7 +550,7 @@ export default function ProfilePage() {
                           <span className="rounded-md bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-800">
                             Appointment approved
                           </span>
-                        ) : currentRole === 'Manager' ? (
+                        ) : currentRole === 'Manager' && !isCurrentAppointmentApproved ? (
                           <button
                             onClick={() => approveAppointmentMutation.mutate(event.eventId)}
                             disabled={approveAppointmentMutation.isPending}

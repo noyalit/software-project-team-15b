@@ -498,6 +498,19 @@ public class UserService {
         }
     }
 
+    public boolean isAppointmentApproved(String token) {
+        try {
+            UUID userId = getAuthenticatedMemberId(token);
+            boolean approved = userDomainService.isAppointmentApproved(userId);
+            AUDIT.info("op=is-appointment-approved userId={} approved={}", userId, approved);
+            return approved;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=is-appointment-approved userId={} result=rejected reason={}",
+                    auth.extractUserId(token), e.getMessage());
+            throw e;
+        }
+    }
+
     public CompanyRoleTreeDTO getCompanyRoleTree(String token, UUID companyId) {
         try {
             UUID requesterId = getAuthenticatedMemberId(token);
