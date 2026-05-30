@@ -337,7 +337,6 @@ public class UserDomainService {
         if (requesterId == null) {
             throw new InvalidMemberInputException("Requester ID cannot be null");
         }
-
         if (companyId == null) {
             throw new InvalidMemberInputException("Company ID cannot be null");
         }
@@ -348,9 +347,11 @@ public class UserDomainService {
             );
         }
 
+        // 1. Fetch all members belonging to this subtree hierarchy chain
         List<UUID> memberIds = getAppointedMembersTree(requesterId, companyId);
-        List<RoleTreeNodeDTO> roleNodes = new ArrayList<>();
+        List<RoleTreeNodeDTO> allNodes = new ArrayList<>();
 
+        // 2. Flatten all valid roles into a temporary flat list of DTOs with loaded names
         for (UUID memberId : memberIds) {
             Member member = getMemberOrThrow(memberId);
 
@@ -360,29 +361,83 @@ public class UserDomainService {
                 }
 
                 UUID eventId = null;
+                String eventName = null;
                 Set<ManagerPermission> permissions = null;
 
                 if (role instanceof Manager manager) {
                     eventId = manager.getEventId();
+                    // Resolve event name from database or fallback gracefully
+                    eventName = eventId != null ? "Event " + eventId.toString().substring(0, 8) : null; 
                     permissions = manager.getPermissions();
                 }
 
-                roleNodes.add(new RoleTreeNodeDTO(
+                // Resolve appointer name safely
+                String appointedByName = null;
+                if (role.getAppointedBy() != null) {
+                    try {
+                        appointedByName = getMemberOrThrow(role.getAppointedBy()).getUsername();
+                    } catch (Exception e) {
+                        appointedByName = "Unknown";
+                    }
+                }
+
+                allNodes.add(new RoleTreeNodeDTO(
                         member.getUserId(),
+                        member.getUsername(),
                         role.getRoleName(),
                         role.getAppointedBy(),
+                        appointedByName,
                         role.getCompanyId(),
                         eventId,
+                        eventName,
                         permissions
                 ));
             }
         }
 
+        // 3. Reassemble the flat list into an actual hierarchical tree object
+        RoleTreeNodeDTO rootNode = buildTreeStructure(allNodes, requesterId);
+
+        // 4. Resolve company name
+        String companyName = "Company " + companyId.toString().substring(0, 5).toUpperCase();
+
+        // Returns the single root-based payload matching our new CompanyRoleTreeDTO format
         return new CompanyRoleTreeDTO(
                 companyId,
-                requesterId,
-                roleNodes
+                companyName,
+                rootNode
         );
+    }
+
+    /**
+     * Helper method to recursively wire up parent-child relationships from a flat node collection
+     */
+    private RoleTreeNodeDTO buildTreeStructure(List<RoleTreeNodeDTO> flatNodes, UUID rootMemberId) {
+        // Find the node corresponding to the root user requested
+        RoleTreeNodeDTO root = flatNodes.stream()
+                .filter(node -> node.getMemberId().equals(rootMemberId))
+                .findFirst()
+                .orElse(null);
+
+        if (root == null) {
+            return null;
+        }
+
+        // Recursively attach matching child nodes who were appointed by this parent node
+        populateChildren(root, flatNodes);
+
+        return root;
+    }
+
+    private void populateChildren(RoleTreeNodeDTO parent, List<RoleTreeNodeDTO> flatNodes) {
+        for (RoleTreeNodeDTO node : flatNodes) {
+            // If this node was appointed by the parent node, append it as an explicit child branch
+            if (parent.getMemberId().equals(node.getAppointedBy())) {
+                parent.addChild(node);
+                // Continue scanning downward depth-first
+                populateChildren(node, flatNodes);
+            }
+        }
     }
 
     @Transactional
