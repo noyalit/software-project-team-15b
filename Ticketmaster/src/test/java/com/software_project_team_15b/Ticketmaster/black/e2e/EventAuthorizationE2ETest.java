@@ -570,17 +570,27 @@ class EventAuthorizationE2ETest {
 //        return id;
     }
 
-    private UUID registerAndApproveManager(String username, String founderToken,
-                                           UUID companyId, Set<ManagerPermission> perms) {
-        throw new NotImplementedException();
-//        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO m = userService.registerMember(userService.enterAsGuest(), username, "Password1", LocalDate.of(1990, 1, 1));
-//        String mgrToken = userService.login(userService.enterAsGuest(), username, "Password1");
-//        UUID id = m.getUserId();
-//
-//        UUID eventId = UUID.randomUUID();
-//        companyService.addManager(founderToken, companyId, eventId, id, perms);
-//        userService.changeRoleToManager(mgrToken, eventId);
-//        userService.approveAppointment(mgrToken);
-//        return id;
+    private MemberDTO registerMember(String username, LocalDate birthDate) {
+        return userService.registerMember(userService.enterAsGuest(), username, "Password1", birthDate);
     }
+
+    private String login(String username) {
+        return userService.login(userService.enterAsGuest(), username, "Password1");
+    }
+
+    private Actor registerAndLogin(String username) {
+        MemberDTO m = registerMember(username, LocalDate.of(1990, 1, 1));
+        String token = login(username);
+        return new Actor(m.getUserId(), token);
+    }
+
+    private Actor registerAndApproveOwner(String username) {
+        Actor a = registerAndLogin(username);
+        userService.appointOwner(a.id, founderToken, companyId);
+        userService.changeRoleToOwner(a.token, companyId);
+        userService.approveAppointment(a.token);
+        return a;
+    }
+
+    private record Actor(UUID id, String token) {}
 }
