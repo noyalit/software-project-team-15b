@@ -73,10 +73,14 @@ class EventOrderFlowE2ETest {
         founderId = mFounder.getUserId();
 
         companyId = companyService.createCompany(founderToken, "OrdTestCo_" + n).companyId();
+        userService.appointFounder(founderId, founderToken, companyId);
         userService.changeRoleToFounder(founderToken, companyId);
+        userService.approveAppointment(founderToken);
 
-        mgrWrongPermId = registerAndApproveManager("ord_mgr_wp_" + sfx, founderToken,
-                companyId, Set.of(ManagerPermission.HANDLE_INQUIRIES));
+        // Manager candidate: per-event appointment happens lazily in each test that needs it.
+        Actor mWp = registerAndLogin("ord_mgr_wp_" + sfx);
+        mgrWrongPermId = mWp.id();
+        mgrWrongPermToken = mWp.token();
 
         MemberDTO mUnauth = registerMember("ord_unauth_" + sfx, LocalDate.of(1990, 1, 1));
         unauthorizedId = mUnauth.getUserId();
