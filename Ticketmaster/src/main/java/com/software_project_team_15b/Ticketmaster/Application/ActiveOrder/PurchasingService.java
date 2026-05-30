@@ -8,6 +8,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.HashSet;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,6 +82,112 @@ public class PurchasingService {
         this.paymentGateway = Objects.requireNonNull(paymentGateway);
         this.ticketProvider = Objects.requireNonNull(ticketProvider);
         this.auth = Objects.requireNonNull(auth);
+    }
+
+    @Transactional(noRollbackFor = TimeExpiredException.class)
+    public void addStandingQuantityToExistingOrder(String token, UUID orderId, int quantity) {
+        UUID userId = null;
+        try {
+            requireOrderId(orderId);
+            if (quantity < 1) {
+                throw new IllegalArgumentException("Quantity must be >= 1");
+            }
+            userId = requireValidUser(token);
+
+            ActiveOrder activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
+            ensureOrderIsModifiable(activeOrder);
+            requireAccessForPurchase(token, userId, activeOrder.getEventId());
+
+            Set<UUID> candidates = eventDomainService.areaSeats(activeOrder.getEventId(), activeOrder.getAreaId())
+                    .stream()
+                    .map(EventDTO.SeatView::seatId)
+                    .collect(java.util.stream.Collectors.toSet());
+
+            Map<Boolean, Set<UUID>> availability = eventDomainService.getSeatsAvailability(
+                    activeOrder.getEventId(),
+                    activeOrder.getAreaId(),
+                    candidates
+            );
+            Set<UUID> available = availability.getOrDefault(Boolean.TRUE, Set.of());
+            int needed = quantity;
+            Set<UUID> toAdd = new HashSet<>();
+            for (UUID seatId : available) {
+                if (activeOrder.getOrderSeats().contains(seatId)) {
+                    continue;
+                }
+                toAdd.add(seatId);
+                if (toAdd.size() == needed) {
+                    break;
+                }
+            }
+            if (toAdd.size() != needed) {
+                throw new OrderSeatsUnavailableException("Not enough standing tickets available");
+            }
+
+            purchasingDomainService.addSeatsToOrder(activeOrder, toAdd);
+
+            AUDIT.info(
+                    "op=addStandingQuantityToExistingOrder order={} user={} event={} area={} qty={} result=ok",
+                    orderId,
+                    userId,
+                    activeOrder.getEventId(),
+                    activeOrder.getAreaId(),
+                    quantity
+            );
+        } catch (RuntimeException e) {
+            AUDIT.warn(
+                    "op=addStandingQuantityToExistingOrder order={} user={} result=rejected reason={} ",
+                    orderId,
+                    userId,
+                    e.getMessage()
+            );
+            throw e;
+        }
+    }
+
+    @Transactional(noRollbackFor = TimeExpiredException.class)
+    public void removeStandingQuantityFromExistingOrder(String token, UUID orderId, int quantity) {
+        UUID userId = null;
+        try {
+            requireOrderId(orderId);
+            if (quantity < 1) {
+                throw new IllegalArgumentException("Quantity must be >= 1");
+            }
+            userId = requireValidUser(token);
+
+            ActiveOrder activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
+            ensureOrderIsModifiable(activeOrder);
+            requireAccessForPurchase(token, userId, activeOrder.getEventId());
+
+            if (activeOrder.getOrderSeats().size() < quantity) {
+                throw new IllegalArgumentException("Cannot remove more tickets than exist in the order");
+            }
+
+            Set<UUID> toRemove = new HashSet<>();
+            for (UUID seatId : activeOrder.getOrderSeats()) {
+                toRemove.add(seatId);
+                if (toRemove.size() == quantity) break;
+            }
+
+            purchasingDomainService.removeSeatsFromOrder(activeOrder, toRemove);
+
+            AUDIT.info(
+                    "op=removeStandingQuantityFromExistingOrder order={} user={} event={} area={} qty={} result=ok",
+                    orderId,
+                    userId,
+                    activeOrder.getEventId(),
+                    activeOrder.getAreaId(),
+                    quantity
+            );
+        } catch (RuntimeException e) {
+            AUDIT.warn(
+                    "op=removeStandingQuantityFromExistingOrder order={} user={} result=rejected reason={} ",
+                    orderId,
+                    userId,
+                    e.getMessage()
+            );
+            throw e;
+        }
     }
 
     @Transactional(readOnly = true)

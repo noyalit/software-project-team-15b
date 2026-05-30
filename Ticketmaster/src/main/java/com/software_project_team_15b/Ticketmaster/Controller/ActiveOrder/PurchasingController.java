@@ -69,6 +69,60 @@ public class PurchasingController {
         }
     }
 
+    @Operation(summary = "Add a quantity of standing tickets to an existing active order")
+    @PostMapping(path = "/{orderId}/standing/add", consumes = "application/json")
+    public ResponseEntity<ApiResponse<Void>> addStandingQuantityToExistingOrder(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID orderId,
+            @RequestBody QuantityRequest request
+    ) {
+        try {
+            purchasingService.addStandingQuantityToExistingOrder(token, orderId, request.quantity());
+            return ResponseEntity.ok(new ApiResponse<>(null, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (TimeExpiredException ex) {
+            return gone(ex);
+        } catch (OrderSeatsUnavailableException ex) {
+            return conflict(ex);
+        } catch (UnactiveOrderException ex) {
+            return conflict(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (IllegalStateException ex) {
+            return conflict(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Remove a quantity of standing tickets from an existing active order")
+    @PostMapping(path = "/{orderId}/standing/remove", consumes = "application/json")
+    public ResponseEntity<ApiResponse<Void>> removeStandingQuantityFromExistingOrder(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID orderId,
+            @RequestBody QuantityRequest request
+    ) {
+        try {
+            purchasingService.removeStandingQuantityFromExistingOrder(token, orderId, request.quantity());
+            return ResponseEntity.ok(new ApiResponse<>(null, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (TimeExpiredException ex) {
+            return gone(ex);
+        } catch (OrderSeatsUnavailableException ex) {
+            return conflict(ex);
+        } catch (UnactiveOrderException ex) {
+            return conflict(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (IllegalStateException ex) {
+            return conflict(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     @Operation(summary = "Get all active orders for the logged in user")
     @GetMapping("/my")
     public ResponseEntity<ApiResponse<List<ActiveOrderDTO>>> getMyActiveOrders(
@@ -346,6 +400,11 @@ public class PurchasingController {
 
     public record SeatsRequest(
             java.util.Set<UUID> seatIds
+    ) {
+    }
+
+    public record QuantityRequest(
+            int quantity
     ) {
     }
 

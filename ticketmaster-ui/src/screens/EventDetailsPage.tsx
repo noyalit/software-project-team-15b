@@ -39,6 +39,7 @@ export default function EventDetailsPage() {
 
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>([]);
+  const [standingQuantity, setStandingQuantity] = useState(1);
   const [guestBirthDate, setGuestBirthDate] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(() =>localStorage.getItem('activeOrderId'));
@@ -54,6 +55,54 @@ export default function EventDetailsPage() {
       return res.data.data ?? [];
     },
     enabled: Boolean(token) && Boolean(eventId),
+  });
+
+  const addStandingQuantityMutation = useMutation({
+    mutationFn: async () => {
+      if (!activeOrderId) throw new Error('Please start an order first.');
+      if (checkoutStarted) {
+        throw new Error("Checkout already started. You can't change tickets now.");
+      }
+      if (standingQuantity < 1) throw new Error('Please select at least 1 ticket.');
+
+      const res = await http.post<ApiResponse<null>>(
+        `/api/active-orders/${activeOrderId}/standing/add`,
+        {
+          quantity: standingQuantity,
+        }
+      );
+
+      if (res.data.error) throw new Error(res.data.error);
+    },
+    onSuccess: async () => {
+      setSuccessMessage('Tickets added to active order.');
+      await qc.invalidateQueries({ queryKey: ['event', eventId] });
+      await qc.invalidateQueries({ queryKey: ['active-order', activeOrderId, token] });
+    },
+  });
+
+  const removeStandingQuantityMutation = useMutation({
+    mutationFn: async () => {
+      if (!activeOrderId) throw new Error('Please start an order first.');
+      if (checkoutStarted) {
+        throw new Error("Checkout already started. You can't change tickets now.");
+      }
+      if (standingQuantity < 1) throw new Error('Please select at least 1 ticket.');
+
+      const res = await http.post<ApiResponse<null>>(
+        `/api/active-orders/${activeOrderId}/standing/remove`,
+        {
+          quantity: standingQuantity,
+        }
+      );
+
+      if (res.data.error) throw new Error(res.data.error);
+    },
+    onSuccess: async () => {
+      setSuccessMessage('Tickets removed from active order.');
+      await qc.invalidateQueries({ queryKey: ['event', eventId] });
+      await qc.invalidateQueries({ queryKey: ['active-order', activeOrderId, token] });
+    },
   });
 
   useEffect(() => {
@@ -289,6 +338,8 @@ export default function EventDetailsPage() {
     createOrderMutation.error ||
     addSeatsMutation.error ||
     removeSeatsMutation.error ||
+    addStandingQuantityMutation.error ||
+    removeStandingQuantityMutation.error ||
     startCheckoutMutation.error 
 
   const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
@@ -488,12 +539,22 @@ export default function EventDetailsPage() {
           )}
 
           {selectedArea.type === 'STANDING' && (
-            <div className="mt-4 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-700">
-              Standing area<br />
-              {selectedArea.availableCapacity} tickets available
-              <div className="mt-3 text-xs text-slate-500">
-                Standing purchase needs a backend quantity endpoint or exposed standing ticket IDs.
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-6">
+              <div className="text-sm font-semibold text-slate-900">Standing area</div>
+              <div className="mt-1 text-sm text-slate-700">
+                {selectedArea.availableCapacity} tickets available
               </div>
+
+              <label className="mt-4 block">
+                <div className="text-sm font-medium text-slate-700">Quantity</div>
+                <input
+                  type="number"
+                  min={1}
+                  value={standingQuantity}
+                  onChange={(e) => setStandingQuantity(Number(e.target.value || 1))}
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+              </label>
             </div>
           )}
 
@@ -506,8 +567,7 @@ export default function EventDetailsPage() {
               disabled={
                 Boolean(activeOrderId) ||
                 event.status !== 'PUBLISHED' ||
-                createOrderMutation.isPending ||
-                selectedArea.type !== 'SEATING'
+                createOrderMutation.isPending
               }
               className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
             >
@@ -519,29 +579,59 @@ export default function EventDetailsPage() {
                 Start an order before adding or removing seats.
               </div>
             )}
-            <button
-              onClick={() => {
-                if (addSeatsMutation.isPending) return;
-                setSuccessMessage(null);
-                addSeatsMutation.mutate();
-              }}
-              disabled={!activeOrderId || checkoutStarted || selectedSeatIds.length === 0 || addSeatsMutation.isPending}
-              className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-            >
-              {addSeatsMutation.isPending ? 'Adding...' : 'Add selected seats'}
-            </button>
+            {selectedArea.type === 'SEATING' ? (
+              <>
+                <button
+                  onClick={() => {
+                    if (addSeatsMutation.isPending) return;
+                    setSuccessMessage(null);
+                    addSeatsMutation.mutate();
+                  }}
+                  disabled={!activeOrderId || checkoutStarted || selectedSeatIds.length === 0 || addSeatsMutation.isPending}
+                  className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {addSeatsMutation.isPending ? 'Adding...' : 'Add selected seats'}
+                </button>
 
-            <button
-              onClick={() => {
-                if (removeSeatsMutation.isPending) return;
-                setSuccessMessage(null);
-                removeSeatsMutation.mutate();
-              }}
-              disabled={!activeOrderId || checkoutStarted || selectedSeatIds.length === 0 || removeSeatsMutation.isPending}
-              className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 hover:bg-rose-100 disabled:opacity-60"
-            >
-              {removeSeatsMutation.isPending ? 'Removing...' : 'Remove selected seats'}
-            </button>
+                <button
+                  onClick={() => {
+                    if (removeSeatsMutation.isPending) return;
+                    setSuccessMessage(null);
+                    removeSeatsMutation.mutate();
+                  }}
+                  disabled={!activeOrderId || checkoutStarted || selectedSeatIds.length === 0 || removeSeatsMutation.isPending}
+                  className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 hover:bg-rose-100 disabled:opacity-60"
+                >
+                  {removeSeatsMutation.isPending ? 'Removing...' : 'Remove selected seats'}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    if (addStandingQuantityMutation.isPending) return;
+                    setSuccessMessage(null);
+                    addStandingQuantityMutation.mutate();
+                  }}
+                  disabled={!activeOrderId || checkoutStarted || addStandingQuantityMutation.isPending}
+                  className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                >
+                  {addStandingQuantityMutation.isPending ? 'Adding...' : 'Add tickets'}
+                </button>
+
+                <button
+                  onClick={() => {
+                    if (removeStandingQuantityMutation.isPending) return;
+                    setSuccessMessage(null);
+                    removeStandingQuantityMutation.mutate();
+                  }}
+                  disabled={!activeOrderId || checkoutStarted || removeStandingQuantityMutation.isPending}
+                  className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 hover:bg-rose-100 disabled:opacity-60"
+                >
+                  {removeStandingQuantityMutation.isPending ? 'Removing...' : 'Remove tickets'}
+                </button>
+              </>
+            )}
           </div>
 
           {successMessage && (
