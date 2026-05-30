@@ -230,6 +230,8 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
         }
         if (queue.hasAccess(token) == null) {
             pushToEventQueue(eventId, token);
+            queue.advanceQueue(LocalDateTime.now().plusSeconds(ACCESS_TIME));
+            queueRepository.updateQueue(queue);
         }
         return getQueueAccessView(token, eventId);
     }
@@ -359,7 +361,7 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
             throw new QueueNotFoundException("Queue not found for eventId: " + eventId);
         }
         if (queue.isFull()) {
-            throw new QueueIsFullException("Event queue is full (eventId: " + eventId + ")");
+            throw new QueueIsFullException("Event queue is full. Please try again later.");
         }
         if (queue.contains(token)) {
             throw new AlreadyInQueueException("Token " + token + " is already in the queue for eventId: " + eventId);

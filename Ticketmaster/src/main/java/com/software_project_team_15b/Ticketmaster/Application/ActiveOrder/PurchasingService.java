@@ -846,6 +846,26 @@ public class PurchasingService {
 
         LotteryEligibilityDTO eligibility = lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId);
         boolean queueAccess = queueDomainService.hasAccess(token, eventId);
+        if (!queueAccess) {
+            try {
+                QueueAccessDTO view = queueDomainService.getQueueAccessView(token, eventId);
+                if (view.status() == com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.WAITING) {
+                    Integer position = view.position();
+                    throw new TimeExpiredException(
+                            "Queue is currently active for this event. You are in line" +
+                                    (position != null ? " (position: " + (position + 1) + ")" : "") +
+                                    ". Please wait until you are admitted."
+                    );
+                }
+                throw new TimeExpiredException(
+                        "Queue is currently active for this event. Please join the queue and wait until admitted."
+                );
+            } catch (RuntimeException ignored) {
+                throw new TimeExpiredException(
+                        "Queue is currently active for this event. Please join the queue and wait until admitted."
+                );
+            }
+        }
         purchasingDomainService.requirePurchaseAccess(
                 userId,
                 eventId,

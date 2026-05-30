@@ -290,7 +290,14 @@ export default function EventDetailsPage() {
 
         return res.data.data;
       } catch (e) {
+        const err = e as AxiosError<ApiResponse<unknown>>;
+        const status = err.response?.status;
         const message = getApiErrorMessage(e);
+
+        if (userType === 'member' && status === 410) {
+          navigate(`/queue/${eventId}`);
+          throw e;
+        }
 
         const lower = message.toLowerCase();
         const isAlreadyHasActiveOrder =
@@ -724,9 +731,13 @@ export default function EventDetailsPage() {
             )}
             <button
               onClick={async () => {
-                const access = await requestAccessMutation.mutateAsync();
-                if (access === null) return;
-                await createOrderMutation.mutateAsync(selectedArea.areaId);
+                try {
+                  const access = await requestAccessMutation.mutateAsync();
+                  if (access === null) return;
+                  await createOrderMutation.mutateAsync(selectedArea.areaId);
+                } catch {
+                  // errors are displayed via actionErrorMessage
+                }
               }}
               disabled={
                 Boolean(activeOrderId) ||
