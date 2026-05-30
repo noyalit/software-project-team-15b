@@ -26,7 +26,7 @@ export default function AdminEventQueuesPage() {
     queryKey: ['admin', 'events', token],
     queryFn: async () => {
       try {
-        const res = await http.get<EventsResponse>('/api/events');
+        const res = await http.post<EventsResponse>('/api/events/search', {});
 
         if (res.data.error) {
           throw new Error(res.data.error);

@@ -17,6 +17,7 @@ import AdminEventQueuesPage from '../screens/AdminEventQueuesPage';
 import MyEventsPage from '../screens/MyEventsPage';
 import OrdersPage from '../screens/OrdersPage';
 import CheckoutPage from '../screens/CheckoutPage';
+import WaitQueuePage from '../screens/WaitQueuePage';
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/events/:eventId" element={<EventDetailsPage />} />
         <Route path="/orders" element={<OrdersPage />} />
         <Route path="/checkout/:orderId" element={<CheckoutPage />} />
+        <Route path="/queue/:eventId" element={<WaitQueuePage />} />
 
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />

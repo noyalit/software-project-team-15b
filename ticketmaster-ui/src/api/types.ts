@@ -90,6 +90,15 @@ export type QueueSnapshotDTO = {
   admittedUsers: Record<string, string>;
 };
 
+export type QueueAccessStatus = 'NO_QUEUE' | 'WAITING' | 'ADMITTED';
+
+export type QueueAccessDTO = {
+  eventId: string;
+  status: QueueAccessStatus;
+  position: number | null;
+  accessExpiresAt: string | null;
+};
+
 export type SiteQueueSnapshotDTO = {
   maxVisitors: number;
   waitingCount: number;

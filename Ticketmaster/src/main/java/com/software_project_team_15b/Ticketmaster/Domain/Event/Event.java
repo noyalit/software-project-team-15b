@@ -53,8 +53,8 @@ public class Event {
     private long version;
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    @JoinColumn(name = "event_id")
-    @OrderColumn(name = "area_order")
+    @JoinColumn(name = "event_id", nullable = true)
+    @OrderColumn(name = "area_order", nullable = true)
     private List<EventArea> areas = new ArrayList<>();
 
     @Convert(converter = PolicyJsonConverter.PurchasePolicyListConverter.class)
