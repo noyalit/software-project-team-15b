@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Controller.OrderHistory;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -16,6 +17,8 @@ import org.springframework.web.bind.annotation.RestController;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.OrderHistory.OrderHistoryService;
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
+import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.OrderHistoryDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.TicketDTO;
 
@@ -171,7 +174,13 @@ public class OrderHistoryController {
             Map<String, Object> report =
                     orderHistoryService.generateSalesReport(token, companyId);
 
-            return ResponseEntity.ok(new ApiResponse<>(report, null));
+            Map<String, Object> apiReport = new LinkedHashMap<>(report);
+            Object totalRevenue = apiReport.get("totalRevenue");
+            if (totalRevenue instanceof Money m) {
+                apiReport.put("totalRevenue", MoneyDTO.from(m));
+            }
+
+            return ResponseEntity.ok(new ApiResponse<>(apiReport, null));
 
         } catch (UnauthorizedCompanyActionException ex) {
             return forbidden(ex);

@@ -11,14 +11,28 @@ type CompaniesResponse = ApiResponse<CompanyDTO[]>;
 type SalesReportResponse = ApiResponse<Record<string, unknown>>;
 
 function formatMoneyLike(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return String(value);
   if (!value || typeof value !== 'object') return '—';
-  const v = value as { amount?: unknown; currency?: unknown };
-  if (typeof v.amount === 'string' && typeof v.currency === 'string') {
-    return `${v.amount} ${v.currency}`;
-  }
-  if (typeof v.amount === 'number' && typeof v.currency === 'string') {
-    return `${v.amount} ${v.currency}`;
-  }
+
+  const v = value as {
+    amount?: unknown;
+    currency?: unknown;
+    amountValue?: unknown;
+    currencyCode?: unknown;
+  };
+
+  const amount =
+    v.amountValue ??
+    v.amount ??
+    (typeof v.amount === 'object' && v.amount !== null
+      ? (v.amount as { value?: unknown }).value
+      : undefined);
+  const currency = v.currencyCode ?? v.currency;
+
+  if (typeof currency !== 'string' || !currency) return '—';
+  if (typeof amount === 'string') return `${amount} ${currency}`;
+  if (typeof amount === 'number') return `${amount} ${currency}`;
   return '—';
 }
 
