@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import type { AxiosError } from 'axios';
 import { http } from '../api/http';
 import type { ApiResponse, EventDTO } from '../api/types';
 import { getApiErrorMessage } from '../api/errors';
@@ -30,7 +31,7 @@ export default function CheckoutPage() {
   const { orderId } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { token, userType } = useAuthStore();
+  const { token, userType, clearAuth } = useAuthStore();
 
   const [couponCode, setCouponCode] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -43,12 +44,32 @@ export default function CheckoutPage() {
     queryKey: ['active-order', activeOrderId, token],
     queryFn: async () => {
       if (!activeOrderId) throw new Error('No active order found');
-      const res = await http.get<ApiResponse<ActiveOrderDTO>>(
-        `/api/active-orders/${activeOrderId}`
-      );
-      if (res.data.error) throw new Error(res.data.error);
-      if (!res.data.data) throw new Error('Active order not found');
-      return res.data.data;
+      try {
+        const res = await http.get<ApiResponse<ActiveOrderDTO>>(
+          `/api/active-orders/${activeOrderId}`
+        );
+        if (res.data.error) throw new Error(res.data.error);
+        if (!res.data.data) throw new Error('Active order not found');
+        return res.data.data;
+      } catch (e) {
+        const err = e as AxiosError<ApiResponse<ActiveOrderDTO>>;
+        const status = err.response?.status;
+
+        if (status === 401) {
+          clearAuth();
+          throw new Error('Your session expired. Please log in again.');
+        }
+
+        if (status === 410) {
+          localStorage.removeItem('activeOrderId');
+          if (!orderId) {
+            navigate('/events', { replace: true });
+          }
+          throw new Error('This active order has expired. Please start a new order.');
+        }
+
+        throw e;
+      }
     },
     enabled: Boolean(activeOrderId) && Boolean(token) && !checkoutCompleted,
   });
