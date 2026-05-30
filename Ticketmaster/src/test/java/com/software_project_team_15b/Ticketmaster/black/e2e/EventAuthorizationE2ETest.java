@@ -200,26 +200,26 @@ class EventAuthorizationE2ETest {
     @Test
     @DisplayName("Unauthorized member cannot update an event")
     void unauthorized_cannot_update_event() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.updateEvent(eventId,
                 new UpdateEventCommand("Forbidden", null, null, null, null), unauthorizedId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
-    // ── CONFIGURE_HALL (addArea, removeArea) ─────────────────────────────────
+    // ── CONFIGURE_HALLS_AND_SEATS — addArea / removeArea ──────────────────────
 
     @Test
-    @DisplayName("Founder can add an area (CONFIGURE_HALL)")
+    @DisplayName("Founder can add an area")
     void founder_can_add_area() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
         assertThat(areaId).isNotNull();
     }
 
     @Test
-    @DisplayName("Owner can add an area (CONFIGURE_HALL)")
+    @DisplayName("Owner can add an area")
     void owner_can_add_area() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, standingAreaCmd(), ownerId);
         assertThat(areaId).isNotNull();
     }
@@ -227,7 +227,7 @@ class EventAuthorizationE2ETest {
     @Test
     @DisplayName("Manager with CONFIGURE_HALLS_AND_SEATS can add an area")
     void manager_config_hall_can_add_area() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, standingAreaCmd(), mgrConfigHallId);
         assertThat(areaId).isNotNull();
     }
@@ -235,26 +235,25 @@ class EventAuthorizationE2ETest {
     @Test
     @DisplayName("Manager with wrong permission cannot add an area")
     void manager_wrong_permission_cannot_add_area() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.addArea(eventId, standingAreaCmd(), mgrWrongPermId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
     @DisplayName("Unauthorized member cannot add an area")
     void unauthorized_cannot_add_area() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.addArea(eventId, standingAreaCmd(), unauthorizedId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
     @DisplayName("Manager with MANAGE_EVENTS permission cannot add an area (wrong permission type)")
     void manager_manage_events_cannot_add_area() {
-        UUID eventId = events.createEvent(draftCmd(), founderId);
-        // MANAGE_EVENTS permission covers MANAGE_EVENT action, not CONFIGURE_HALL
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.addArea(eventId, standingAreaCmd(), mgrManageEventsId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
