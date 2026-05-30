@@ -64,7 +64,6 @@ import org.springframework.boot.test.context.SpringBootTest;
  */
 @SpringBootTest
 @DisplayName("E2E: Event action authorization — Founder / Owner / Manager / Unauthorized")
-@org.junit.jupiter.api.Disabled("Authorization enforcement temporarily removed from EventManagementService; re-enable when auth is reintroduced via ICompanyAuthorizationPort")
 class EventAuthorizationE2ETest {
 
     @Autowired EventManagementService events;
@@ -98,37 +97,43 @@ class EventAuthorizationE2ETest {
         int n = CTR.incrementAndGet();
         String sfx = n + "_" + System.nanoTime();
 
-        String founderUser = "auth_founder_" + sfx;
-        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO mFounder = userService.registerMember(userService.enterAsGuest(), founderUser, "Password1", LocalDate.of(1985, 1, 1));
-        founderToken = userService.login(userService.enterAsGuest(), founderUser, "Password1");
+        // Founder + company
+        MemberDTO mFounder = registerMember("auth_founder_" + sfx, LocalDate.of(1985, 1, 1));
+        founderToken = login("auth_founder_" + sfx);
         founderId = mFounder.getUserId();
 
         Company company = companyService.createCompany(founderToken, "AuthTestCo_" + n);
         companyId = company.getId();
-
-        // Activate the founder's role so they can appoint others
         userService.changeRoleToFounder(founderToken, companyId);
 
         // ── Owner ─────────────────────────────────────────────────────────────
         ownerId = registerAndApproveOwner("auth_owner_" + sfx, founderToken, company.getId());
+        // Owner (company-scoped)
+        Actor owner = registerAndApproveOwner("auth_owner_" + sfx);
+        ownerId = owner.id;
+        ownerToken = owner.token;
 
-        // ── Managers with specific permissions ────────────────────────────────
-        mgrManageEventsId   = registerAndApproveManager("auth_mgr_me_"  + sfx, founderToken, company.getId(),
-                Set.of(ManagerPermission.MANAGE_EVENTS));
-        mgrConfigHallId     = registerAndApproveManager("auth_mgr_ch_"  + sfx, founderToken, company.getId(),
-                Set.of(ManagerPermission.CONFIGURE_HALLS_AND_SEATS));
-        mgrUpdateMapId      = registerAndApproveManager("auth_mgr_um_"  + sfx, founderToken, company.getId(),
-                Set.of(ManagerPermission.UPDATE_EVENT_MAP));
-        mgrPurchasePolicyId = registerAndApproveManager("auth_mgr_pp_"  + sfx, founderToken, company.getId(),
-                Set.of(ManagerPermission.DEFINE_PURCHASE_POLICY));
-        mgrDiscountPolicyId = registerAndApproveManager("auth_mgr_dp_"  + sfx, founderToken, company.getId(),
-                Set.of(ManagerPermission.DEFINE_DISCOUNT_POLICY));
-        mgrWrongPermId      = registerAndApproveManager("auth_mgr_wp_"  + sfx, founderToken, company.getId(),
-                Set.of(ManagerPermission.HANDLE_INQUIRIES));
+        // Manager candidates — registered only; appointment happens per-event
+        Actor mME = registerAndLogin("auth_mgr_me_" + sfx);
+        mgrManageEventsId = mME.id; mgrManageEventsToken = mME.token;
 
-        // ── Unauthorized plain member ─────────────────────────────────────────
-        String unauthUser = "auth_unauth_" + sfx;
-        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO mUnauth = userService.registerMember(userService.enterAsGuest(), unauthUser, "Password1", LocalDate.of(1990, 1, 1));
+        Actor mCH = registerAndLogin("auth_mgr_ch_" + sfx);
+        mgrConfigHallId = mCH.id; mgrConfigHallToken = mCH.token;
+
+        Actor mUM = registerAndLogin("auth_mgr_um_" + sfx);
+        mgrUpdateMapId = mUM.id; mgrUpdateMapToken = mUM.token;
+
+        Actor mPP = registerAndLogin("auth_mgr_pp_" + sfx);
+        mgrPurchasePolicyId = mPP.id; mgrPurchasePolicyToken = mPP.token;
+
+        Actor mDP = registerAndLogin("auth_mgr_dp_" + sfx);
+        mgrDiscountPolicyId = mDP.id; mgrDiscountPolicyToken = mDP.token;
+
+        Actor mWP = registerAndLogin("auth_mgr_wp_" + sfx);
+        mgrWrongPermId = mWP.id; mgrWrongPermToken = mWP.token;
+
+        // Unauthorized plain member
+        MemberDTO mUnauth = registerMember("auth_unauth_" + sfx, LocalDate.of(1990, 1, 1));
         unauthorizedId = mUnauth.getUserId();
     }
 
