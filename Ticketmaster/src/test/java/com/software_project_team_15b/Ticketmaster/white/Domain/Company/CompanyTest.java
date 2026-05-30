@@ -17,6 +17,20 @@ import org.junit.jupiter.api.Test;
 
 class CompanyTest {
 
+    // JPA requires a protected no-arg constructor; cover it via a subclass
+    private static class JpaCompany extends Company {}
+
+    @Test
+    void protectedConstructor_createsInstance() {
+        assertDoesNotThrow(() -> new JpaCompany());
+    }
+
+    @Test
+    void getId_returnsNullBeforePersistence() {
+        Company c = new Company("Acme", UUID.randomUUID());
+        assertNull(c.getId());
+    }
+
     // ==============================================================================================================
     // constructor — positive
 

@@ -4,12 +4,21 @@ import com.software_project_team_15b.Ticketmaster.Domain.Lottery.Lottery;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 public class LotteryTest {
+
+    // JPA requires a protected no-arg constructor; cover it via a subclass
+    private static class JpaLottery extends Lottery {}
+
+    @Test
+    void protectedConstructor_createsInstance() {
+        assertDoesNotThrow(() -> new JpaLottery());
+    }
 
     private static final UUID ALICE = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID BOB   = UUID.fromString("00000000-0000-0000-0000-000000000002");
@@ -399,5 +408,26 @@ public class LotteryTest {
         UUID drawn = lottery.popRandom();
         assertEquals(ALICE, drawn);
         assertTrue(lottery.getWinners().contains(ALICE));
+    }
+
+    // --- expirationTime ---
+
+    @Test
+    void getExpirationTime_returnsNullByDefault() {
+        assertNull(lottery.getExpirationTime());
+    }
+
+    @Test
+    void setExpirationTime_storesAndReturnsValue() {
+        LocalDateTime expiry = LocalDateTime.now().plusDays(1);
+        lottery.setExpirationTime(expiry);
+        assertEquals(expiry, lottery.getExpirationTime());
+    }
+
+    @Test
+    void setExpirationTime_allowsNull() {
+        lottery.setExpirationTime(LocalDateTime.now().plusDays(1));
+        lottery.setExpirationTime(null);
+        assertNull(lottery.getExpirationTime());
     }
 }

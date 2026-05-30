@@ -365,6 +365,123 @@ class LotteryServiceBlackTest {
     // Concurrency — facade is stateless, concurrent reads return consistent results
     // =========================================================================
 
+    // =========================================================================
+    // constructor null checks
+    // =========================================================================
+
+    @Test
+    void constructor_throws_when_lotteryDomainService_is_null() {
+        assertThatThrownBy(() -> new LotteryService(null, userDomainService, auth))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void constructor_throws_when_userDomainService_is_null() {
+        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, null, auth))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void constructor_throws_when_auth_is_null() {
+        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, userDomainService, null))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    // =========================================================================
+    // runEventLottery — remaining input guards (not yet tested at facade level)
+    // =========================================================================
+
+    @Test
+    void runEventLottery_negative_count_is_negative() {
+        assertThatThrownBy(() -> service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, -1, EXPIRY))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void runEventLottery_negative_expirationTime_is_null() {
+        assertThatThrownBy(() -> service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 1, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void runEventLottery_negative_expirationTime_is_in_the_past() {
+        assertThatThrownBy(() -> service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 1, LocalDateTime.now().minusSeconds(1)))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // =========================================================================
+    // getEventLotteryWinners — null guards
+    // =========================================================================
+
+    @Test
+    void getEventLotteryWinners_negative_null_token() {
+        assertThatThrownBy(() -> service.getEventLotteryWinners(null, COMPANY_ID, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getEventLotteryWinners_negative_null_companyId() {
+        assertThatThrownBy(() -> service.getEventLotteryWinners(TOKEN_A, null, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getEventLotteryWinners_negative_null_eventId() {
+        assertThatThrownBy(() -> service.getEventLotteryWinners(TOKEN_A, COMPANY_ID, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // =========================================================================
+    // addToEventLottery — null guards
+    // =========================================================================
+
+    @Test
+    void addToEventLottery_negative_null_eventId() {
+        assertThatThrownBy(() -> service.addToEventLottery(null, TOKEN_A))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void addToEventLottery_negative_null_token() {
+        assertThatThrownBy(() -> service.addToEventLottery(EVENT_ID, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // =========================================================================
+    // getLotteryEligibilityForEvent — null eventId
+    // =========================================================================
+
+    @Test
+    void getLotteryEligibilityForEvent_negative_null_eventId() {
+        assertThatThrownBy(() -> service.getLotteryEligibilityForEvent(TOKEN_A, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // =========================================================================
+    // requireEventPermissions — owner-only and founder-only paths
+    // =========================================================================
+
+    @Test
+    void createEventLottery_positive_when_owner_authorized() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(true);
+        assertThatCode(() -> service.createEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void createEventLottery_positive_when_founder_authorized() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(false);
+        when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(true);
+        assertThatCode(() -> service.createEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID))
+                .doesNotThrowAnyException();
+    }
+
     @Test
     void concurrentRunEventLottery_allThreadsReceiveDomainProvidedWinners() throws InterruptedException {
         Set<UUID> expected = Set.of(USER_A);
