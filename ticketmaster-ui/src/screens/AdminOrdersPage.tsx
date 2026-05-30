@@ -17,6 +17,8 @@ type Mode = 'all' | 'user' | 'event' | 'company';
 export default function AdminOrdersPage() {
   const { token, userType, clearAuth } = useAuthStore();
 
+  const [loadedOrders, setLoadedOrders] = useState<OrderHistoryDTO[]>([]);
+
   const [mode, setMode] = useState<Mode>('all');
   const [username, setUsername] = useState('');
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
@@ -148,21 +150,83 @@ export default function AdminOrdersPage() {
         );
       }
     },
-    enabled: userType === 'system-admin' && Boolean(token) && Boolean(endpoint) && mode !== 'user',
+    enabled: false,
   });
 
   const runQuery = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<OrderHistoryDTO[]> => {
       if (mode === 'user') {
         const member = await resolveMemberMutation.mutateAsync();
-        const res = await http.get<OrdersResponse>(`/api/order-history/admin/user/${member.userId}`);
-        if (res.data.error) {
-          throw new Error(res.data.error);
-        }
-        return { data: res.data.data ?? [] };
+        const res = await http.get<OrdersResponse>(
+          `/api/order-history/admin/user/${member.userId}`
+        );
+        if (res.data.error) throw new Error(res.data.error);
+        return res.data.data ?? [];
       }
-      return ordersQuery.refetch();
+
+      if (!endpoint) return [];
+      const res = await http.get<OrdersResponse>(endpoint);
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
     },
+    onSuccess: (data) => {
+      setLoadedOrders(data);
+    },
+  });
+
+  const eventsById = useMemo(() => {
+    const map = new Map<string, EventDTO>();
+    for (const ev of eventsQuery.data ?? []) {
+      map.set(ev.eventId, ev);
+    }
+    return map;
+  }, [eventsQuery.data]);
+
+  const companiesById = useMemo(() => {
+    const map = new Map<string, CompanyDTO>();
+    for (const c of companiesQuery.data ?? []) {
+      map.set(c.companyId, c);
+    }
+    return map;
+  }, [companiesQuery.data]);
+
+  const userIdsToResolve = useMemo(() => {
+    const uniq = new Set<string>();
+    for (const o of loadedOrders) {
+      if (o.userId) uniq.add(o.userId);
+    }
+    return Array.from(uniq).sort();
+  }, [loadedOrders]);
+
+  const usernamesQuery = useQuery({
+    queryKey: ['admin', 'orders', 'usernames', userIdsToResolve, token],
+    queryFn: async () => {
+      const result: Record<string, string> = {};
+      for (const userId of userIdsToResolve) {
+        try {
+          const res = await http.get<ApiResponse<MemberDTO>>(
+            '/api/users/members/resolve-by-id',
+            {
+              params: { userId },
+            }
+          );
+          if (res.data.error) continue;
+          if (res.data.data?.username) {
+            result[userId] = res.data.data.username;
+          }
+        } catch (e) {
+          const err = e as AxiosError<ApiResponse<MemberDTO>>;
+          const status = err.response?.status;
+          if (status === 401) {
+            clearAuth();
+            throw new Error('Your session expired. Please log in again.');
+          }
+        }
+      }
+      return result;
+    },
+    enabled: userType === 'system-admin' && Boolean(token) && userIdsToResolve.length > 0,
+    staleTime: 60_000,
   });
 
   if (userType !== 'system-admin') {
@@ -199,7 +263,7 @@ export default function AdminOrdersPage() {
     );
   }
 
-  const orders = ordersQuery.data ?? [];
+  const ordersToShow = loadedOrders;
 
   return (
     <div className="space-y-4">
@@ -284,10 +348,10 @@ export default function AdminOrdersPage() {
           <div className="md:col-span-3">
             <button
               onClick={() => runQuery.mutate()}
-              disabled={ordersQuery.isFetching || runQuery.isPending || (mode !== 'user' && !endpoint) || (mode === 'user' && !username.trim())}
+              disabled={runQuery.isPending || (mode !== 'user' && !endpoint) || (mode === 'user' && !username.trim())}
               className="w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
             >
-              {ordersQuery.isFetching ? 'Loading…' : 'Load orders'}
+              {runQuery.isPending ? 'Loading…' : 'Load orders'}
             </button>
           </div>
         </div>
@@ -302,39 +366,54 @@ export default function AdminOrdersPage() {
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between gap-3">
           <div className="text-lg font-semibold text-slate-900">Results</div>
-          <div className="text-sm text-slate-600">{orders.length} orders</div>
+          <div className="text-sm text-slate-600">{ordersToShow.length} orders</div>
         </div>
 
-        {!ordersQuery.isFetching && !ordersQuery.isError && !runQuery.isError && orders.length === 0 && (
+        {!runQuery.isPending && !ordersQuery.isError && !runQuery.isError && ordersToShow.length === 0 && (
           <div className="mt-4 text-slate-600">No orders found.</div>
         )}
 
-        {orders.length > 0 && (
+        {ordersToShow.length > 0 && (
           <div className="mt-4 overflow-hidden rounded-xl border border-slate-200">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50 text-slate-700">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Order ID</th>
-                  <th className="px-4 py-3 font-semibold">User ID</th>
-                  <th className="px-4 py-3 font-semibold">Event ID</th>
+                  <th className="px-4 py-3 font-semibold">Username</th>
+                  <th className="px-4 py-3 font-semibold">Event</th>
+                  <th className="px-4 py-3 font-semibold">Company</th>
                   <th className="px-4 py-3 font-semibold">Total</th>
                   <th className="px-4 py-3 font-semibold">Tickets</th>
                   <th className="px-4 py-3 font-semibold">Cancelled</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
-                {orders.map((o) => (
+                {ordersToShow.map((o) => {
+                  const ev = eventsById.get(o.eventId);
+                  const company = ev?.companyId
+                    ? companiesById.get(ev.companyId)
+                    : undefined;
+                  const usernameResolved = usernamesQuery.data?.[o.userId];
+                  return (
                   <tr key={o.orderId} className="bg-white">
                     <td className="px-4 py-3 font-mono text-xs text-slate-800">{o.orderId}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-800">{o.userId}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-slate-800">{o.eventId}</td>
+                    <td className="px-4 py-3 text-slate-800">
+                      {usernameResolved ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 text-slate-800">
+                      {ev ? `${ev.name} — ${ev.artist}` : o.eventId}
+                    </td>
+                    <td className="px-4 py-3 text-slate-800">
+                      {company ? company.name : ev?.companyId ?? '—'}
+                    </td>
                     <td className="px-4 py-3 text-slate-800">
                       {o.totalPrice ? `${o.totalPrice.amount} ${o.totalPrice.currency}` : '—'}
                     </td>
                     <td className="px-4 py-3 text-slate-800">{o.tickets?.length ?? 0}</td>
                     <td className="px-4 py-3 text-slate-800">{o.cancelled ? 'Yes' : 'No'}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
