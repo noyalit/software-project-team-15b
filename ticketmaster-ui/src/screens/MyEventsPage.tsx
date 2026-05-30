@@ -63,6 +63,23 @@ export default function MyEventsPage() {
     enabled: Boolean(token) && userType === 'member',
   });
 
+  const createLotteryMutation = useMutation({
+    mutationFn: async ({ companyId, eventId }: { companyId: string; eventId: string }) => {
+      setSuccessMessage(null);
+
+      if (!companyId) throw new Error('Company ID is missing.');
+      if (!eventId) throw new Error('Event ID is missing.');
+
+      const res = await http.post<ApiResponse<null>>(
+        `/api/companies/${companyId}/events/${eventId}/lottery`
+      );
+      if (res.data.error) throw new Error(res.data.error);
+    },
+    onSuccess: async () => {
+      setSuccessMessage('Lottery created successfully.');
+    },
+  });
+
   const companiesQuery = useQuery({
     queryKey: ['companies', 'me', token],
     queryFn: async () => {
@@ -287,12 +304,16 @@ export default function MyEventsPage() {
 
   if (meQuery.isPending) return <div className="text-slate-600">Loading…</div>;
 
-  if (meQuery.data?.activeRole !== 'Founder' && meQuery.data?.activeRole !== 'Owner') {
+  if (
+    meQuery.data?.activeRole !== 'Founder' &&
+    meQuery.data?.activeRole !== 'Owner' &&
+    meQuery.data?.activeRole !== 'Manager'
+  ) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-extrabold text-slate-900">My Events</h1>
         <p className="mt-2 text-slate-600">
-          Only active Owners or Founders can manage events.
+          Only active Owners, Founders, or Managers can manage events.
         </p>
       </div>
     );
@@ -305,7 +326,8 @@ export default function MyEventsPage() {
     cancelMutation.error ||
     addAreaMutation.error ||
     updateAreaMutation.error ||
-    removeAreaMutation.error;
+    removeAreaMutation.error ||
+    createLotteryMutation.error;
 
   const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
 
@@ -458,6 +480,19 @@ export default function MyEventsPage() {
                             className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 disabled:opacity-60"
                           >
                             Cancel event
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              createLotteryMutation.mutate({
+                                companyId: event.companyId,
+                                eventId: event.eventId,
+                              })
+                            }
+                            disabled={createLotteryMutation.isPending}
+                            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+                          >
+                            {createLotteryMutation.isPending ? 'Creating lottery…' : 'Create lottery'}
                           </button>
                         </>
                       )}
