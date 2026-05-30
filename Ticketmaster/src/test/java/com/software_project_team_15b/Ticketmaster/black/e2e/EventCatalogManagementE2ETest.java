@@ -81,17 +81,23 @@ class EventCatalogManagementE2ETest {
         founderId = mFounder.getUserId();
 
         companyId = companyService.createCompany(founderToken, "CatTestCo_" + n).companyId();
+        userService.appointFounder(founderId, founderToken, companyId);
         userService.changeRoleToFounder(founderToken, companyId);
+        userService.approveAppointment(founderToken);
 
-        ownerId = registerAndApproveOwner("cat_owner_" + sfx, founderToken, companyId);
-        mgrManageEventsId = registerAndApproveManager("cat_mgr_me_" + sfx, founderToken,
-                companyId, Set.of(ManagerPermission.MANAGE_EVENTS));
-        mgrConfigHallId = registerAndApproveManager("cat_mgr_ch_" + sfx, founderToken,
-                companyId, Set.of(ManagerPermission.CONFIGURE_HALLS_AND_SEATS));
-        mgrUpdateMapId = registerAndApproveManager("cat_mgr_um_" + sfx, founderToken,
-                companyId, Set.of(ManagerPermission.UPDATE_EVENT_MAP));
-        mgrWrongPermId = registerAndApproveManager("cat_mgr_wp_" + sfx, founderToken,
-                companyId, Set.of(ManagerPermission.HANDLE_INQUIRIES));
+        Actor owner = registerAndApproveOwner("cat_owner_" + sfx);
+        ownerId = owner.id();
+        ownerToken = owner.token();
+
+        // Manager candidates: per-event appointment happens in createDraftEvent().
+        Actor mMe = registerAndLogin("cat_mgr_me_" + sfx);
+        mgrManageEventsId = mMe.id(); mgrManageEventsToken = mMe.token();
+        Actor mCh = registerAndLogin("cat_mgr_ch_" + sfx);
+        mgrConfigHallId = mCh.id();   mgrConfigHallToken = mCh.token();
+        Actor mUm = registerAndLogin("cat_mgr_um_" + sfx);
+        mgrUpdateMapId = mUm.id();    mgrUpdateMapToken = mUm.token();
+        Actor mWp = registerAndLogin("cat_mgr_wp_" + sfx);
+        mgrWrongPermId = mWp.id();    mgrWrongPermToken = mWp.token();
 
         String unauthUser = "cat_unauth_" + sfx;
         com.software_project_team_15b.Ticketmaster.DTO.MemberDTO mUnauth = userService.registerMember(userService.enterAsGuest(), unauthUser, "Password1", LocalDate.of(1990, 1, 1));
