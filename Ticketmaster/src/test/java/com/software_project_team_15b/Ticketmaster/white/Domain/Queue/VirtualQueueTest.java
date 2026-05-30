@@ -12,6 +12,14 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class VirtualQueueTest {
 
+    // JPA requires a protected no-arg constructor; cover it via a subclass
+    private static class JpaQueue extends VirtualQueue {}
+
+    @Test
+    void protectedConstructor_createsInstance() {
+        assertDoesNotThrow(() -> new JpaQueue());
+    }
+
     private static final String ALICE = "token-alice";
     private static final String BOB   = "token-bob";
     private static final String CAROL = "token-carol";

@@ -142,20 +142,9 @@ public class Lottery {
      * @return a randomly selected option, or null if the lottery is empty
      */
     protected UUID getRandom() {
-         if (lotterySet.isEmpty()) {
-            return null;
-        }
-
+        if (lotterySet.isEmpty()) return null;
         int index = ThreadLocalRandom.current().nextInt(lotterySet.size());
-        int i = 0;
-
-        for (UUID value : lotterySet) {
-            if (i++ == index) {
-                return value;
-            }
-        }
-
-        return null;
+        return lotterySet.stream().skip(index).findFirst().orElse(null);
     }
 
     /**

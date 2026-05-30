@@ -1,23 +1,30 @@
 package com.software_project_team_15b.Ticketmaster.white.Application.Queue;
 
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
+import com.software_project_team_15b.Ticketmaster.Application.events.TempTokenAcceptedFromQueueEvent;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
@@ -228,5 +235,88 @@ class QueueServiceWhiteTest {
         inOrder.verify(auth).isTokenValid(ADMIN_TOKEN);
         inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);
         inOrder.verify(queueDomainService).getAllQueueSnapshots();
+    }
+
+    // =========================================================================
+    // constructor null checks
+    // =========================================================================
+
+    @Test
+    void constructor_throws_when_queueDomainService_is_null() {
+        assertThatThrownBy(() -> new com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService(null, auth, eventPublisher))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void constructor_throws_when_eventPublisher_is_null() {
+        assertThatThrownBy(() -> new com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService(queueDomainService, auth, null))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    // =========================================================================
+    // private acceptUsersFromSiteQueue — all branches via reflection
+    // =========================================================================
+
+    private void invokeAcceptUsersFromSiteQueue() throws Exception {
+        Method m = com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService.class
+                .getDeclaredMethod("acceptUsersFromSiteQueue");
+        m.setAccessible(true);
+        m.invoke(service);
+    }
+
+    @Test
+    void scheduledAccept_emptyAdmittedSet_noEvictionNoEvent() throws Exception {
+        when(queueDomainService.getAcceptedTokens()).thenReturn(Set.of()).thenReturn(Set.of());
+
+        assertThatCode(this::invokeAcceptUsersFromSiteQueue).doesNotThrowAnyException();
+
+        verify(queueDomainService, times(2)).getAcceptedTokens();
+        verify(queueDomainService).acceptUsersFromSiteQueue();
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void scheduledAccept_invalidToken_evictedBeforeAdmit() throws Exception {
+        when(queueDomainService.getAcceptedTokens())
+                .thenReturn(Set.of("expired-tok"))
+                .thenReturn(Set.of());
+        when(auth.isTokenValid("expired-tok")).thenReturn(false);
+
+        invokeAcceptUsersFromSiteQueue();
+
+        verify(queueDomainService, times(2)).getAcceptedTokens();
+        verify(auth).isTokenValid("expired-tok");
+        verify(queueDomainService).removeAcceptedToken("expired-tok");
+        verify(queueDomainService).acceptUsersFromSiteQueue();
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void scheduledAccept_validToken_notEvicted() throws Exception {
+        when(queueDomainService.getAcceptedTokens())
+                .thenReturn(Set.of("valid-tok"))
+                .thenReturn(Set.of("valid-tok"));
+        when(auth.isTokenValid("valid-tok")).thenReturn(true);
+
+        invokeAcceptUsersFromSiteQueue();
+
+        verify(queueDomainService, times(2)).getAcceptedTokens();
+        verify(auth).isTokenValid("valid-tok");
+        verify(queueDomainService, never()).removeAcceptedToken(any());
+        verify(queueDomainService).acceptUsersFromSiteQueue();
+        verify(eventPublisher, never()).publishEvent(any());
+    }
+
+    @Test
+    void scheduledAccept_newlyAdmittedToken_publishesEvent() throws Exception {
+        when(queueDomainService.getAcceptedTokens())
+                .thenReturn(Set.of())
+                .thenReturn(Set.of("new-tok"));
+
+        invokeAcceptUsersFromSiteQueue();
+
+        verify(queueDomainService, times(2)).getAcceptedTokens();
+        verify(queueDomainService).acceptUsersFromSiteQueue();
+        verify(eventPublisher).publishEvent(any(TempTokenAcceptedFromQueueEvent.class));
     }
 }

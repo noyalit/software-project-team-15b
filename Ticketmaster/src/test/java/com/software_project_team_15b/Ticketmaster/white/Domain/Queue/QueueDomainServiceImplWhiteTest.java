@@ -805,4 +805,29 @@ class QueueDomainServiceImplWhiteTest {
         }
         return tokens;
     }
+
+    // =========================================================================
+    // constructor
+    // =========================================================================
+
+    @Test
+    void constructor_throws_when_repo_is_null() {
+        assertThatThrownBy(() -> new QueueDomainServiceImpl(null))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    // =========================================================================
+    // acceptUsersFromSiteQueue — cap-exit branch
+    // =========================================================================
+
+    @Test
+    void acceptUsersFromSiteQueue_stops_at_cap_when_site_queue_has_more_than_max_visitors() {
+        // Add 101 tokens so the cap (100) is hit before the queue is drained
+        for (int i = 0; i <= 100; i++) {
+            service.addUserToSiteQueue("site-cap-" + i);
+        }
+        service.acceptUsersFromSiteQueue();
+        assertThat(service.getAcceptedTokens()).hasSize(100);
+        assertThat(service.canAccessWebsite()).isFalse();
+    }
 }

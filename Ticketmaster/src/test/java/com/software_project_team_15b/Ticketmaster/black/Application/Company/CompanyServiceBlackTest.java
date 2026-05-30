@@ -709,4 +709,48 @@ class CompanyServiceBlackTest {
     void findCompany_returns_empty_when_not_found() {
         assertThat(service.findCompany(UUID.randomUUID())).isEmpty();
     }
+
+    // ===========================================================================================
+    // requireAuthenticatedMember — extractUserId returns null
+
+    @Test
+    void createCompany_throws_when_extractUserId_returns_null() {
+        String token = "member-null-id-" + UUID.randomUUID();
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(null);
+        assertThatThrownBy(() -> service.createCompany(token, "Acme"))
+                .isInstanceOf(com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException.class)
+                .hasMessageContaining("valid user id");
+    }
+
+    // ===========================================================================================
+    // getCompany — canViewClosed short-circuit branches
+
+    @Test
+    void getCompany_system_admin_can_view_closed_company() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+        service.closeCompany(founderToken, dto.companyId());
+
+        String adminToken = registerSystemAdmin(UUID.randomUUID());
+        CompanyDTO result = service.getCompany(adminToken, dto.companyId());
+        assertThat(result.status()).isEqualTo(CompanyStatus.CLOSED);
+    }
+
+    @Test
+    void getCompany_active_founder_can_view_closed_company() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+        service.closeCompany(founderToken, dto.companyId());
+
+        // isSystemAdmin = false (member token), isActiveFounder = true → canViewClosed = true
+        when(userDomainService.isActiveOwner(founderId, dto.companyId())).thenReturn(false);
+        CompanyDTO result = service.getCompany(founderToken, dto.companyId());
+        assertThat(result.status()).isEqualTo(CompanyStatus.CLOSED);
+    }
 }

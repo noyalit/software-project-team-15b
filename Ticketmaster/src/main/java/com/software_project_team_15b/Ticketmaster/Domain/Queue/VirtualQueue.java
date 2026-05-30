@@ -265,11 +265,7 @@ public class VirtualQueue {
     public void advanceQueue(LocalDateTime accessExpiresAt) {
         clearAccessMap();
         while (!queue.isEmpty() && accessMap.size() < maxAccepted) {
-            String item = pop();
-            if (item == null) {
-                continue;
-            }
-            accessMap.put(item, accessExpiresAt);
+            accessMap.put(pop(), accessExpiresAt);
         }
     }
 
