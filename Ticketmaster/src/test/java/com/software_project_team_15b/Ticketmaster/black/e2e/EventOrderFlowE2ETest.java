@@ -524,42 +524,25 @@ class EventOrderFlowE2ETest {
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private UUID registerAndApproveManager(String username, String founderToken,
-                                            UUID companyId, Set<ManagerPermission> perms) {
-        throw new NotImplementedException();
-//        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO m = userService.registerMember(userService.enterAsGuest(), username, "Password1", LocalDate.of(1990, 1, 1));
-//        String token = userService.login(userService.enterAsGuest(), username, "Password1");
-//        UUID id = m.getUserId();
-//
-//        UUID eventId = UUID.randomUUID();
-//        companyService.addManager(founderToken, companyId, eventId, id, perms);
-//        userService.changeRoleToManager(token, eventId);
-//        userService.approveAppointment(token);
-//        return id;
+    private MemberDTO registerMember(String username, LocalDate birthDate) {
+        return userService.registerMember(userService.enterAsGuest(), username, "Password1", birthDate);
     }
 
-    /**
-     * Grants queue access to a user for a given event by directly populating
-     * the QueueService's internal eventAccess map via reflection.
-     * This bypasses the transactional queue system which causes
-     * UnexpectedRollbackException in E2E test contexts.
-     */
-    @SuppressWarnings("unchecked")
-    private void grantQueueAccess(String token, UUID eventId) {
-        try {
-            UUID userId = auth.extractUserId(token);
-            // Unwrap the Spring CGLIB proxy to get the actual target object
-            Object target = queueService;
-            if (org.springframework.aop.support.AopUtils.isAopProxy(target)) {
-                target = ((org.springframework.aop.framework.Advised) target).getTargetSource().getTarget();
-            }
-            Field field = QueueService.class.getDeclaredField("eventAccess");
-            field.setAccessible(true);
-            var eventAccess = (ConcurrentHashMap<UUID, ConcurrentHashMap<UUID, LocalDateTime>>) field.get(target);
-            eventAccess.computeIfAbsent(eventId, k -> new ConcurrentHashMap<>())
-                    .put(userId, LocalDateTime.now().plusMinutes(30));
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to grant queue access via reflection", e);
-        }
+    private String login(String username) {
+        return userService.login(userService.enterAsGuest(), username, "Password1");
     }
+
+    private Actor registerAndLogin(String username) {
+        MemberDTO m = registerMember(username, LocalDate.of(1990, 1, 1));
+        String token = login(username);
+        return new Actor(m.getUserId(), token);
+    }
+
+    private void appointManagerForEvent(UUID memberId, String memberToken, UUID eventId, Set<ManagerPermission> perms) {
+        userService.appointManager(memberId, founderToken, companyId, eventId, perms);
+        userService.changeRoleToManager(memberToken, eventId);
+        userService.approveAppointment(memberToken);
+    }
+
+    private record Actor(UUID id, String token) {}
 }
