@@ -19,6 +19,26 @@ type LotteryEligibilityDTO = {
   status: string;
 };
 
+type ResolvedMemberDTO = {
+  userId: string;
+  username?: string | null;
+};
+
+function toDatetimeLocalValue(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    d.getFullYear() +
+    '-' +
+    pad(d.getMonth() + 1) +
+    '-' +
+    pad(d.getDate()) +
+    'T' +
+    pad(d.getHours()) +
+    ':' +
+    pad(d.getMinutes())
+  );
+}
+
 export default function MyEventsPage() {
   const qc = useQueryClient();
   const { token, userType } = useAuthStore();
@@ -169,6 +189,11 @@ export default function MyEventsPage() {
 
       setLotteryWinners(null);
       setLotteryEventId(variables.eventId);
+
+      if (!lotteryExpiration) {
+        const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        setLotteryExpiration(toDatetimeLocalValue(expiry));
+      }
     },
   });
 
@@ -216,6 +241,33 @@ export default function MyEventsPage() {
       return Object.fromEntries(statuses) as Record<string, string>;
     },
     enabled: Boolean(token) && Boolean(eventsQuery.data?.length),
+  });
+
+  const winnerUsernamesQuery = useQuery({
+    queryKey: ['lottery', 'winners', 'usernames', token, (lotteryWinners ?? []).join(',')],
+    queryFn: async () => {
+      const winners = lotteryWinners ?? [];
+      if (winners.length === 0) return {} as Record<string, string>;
+
+      const resolved = await Promise.all(
+        winners.map(async (userId) => {
+          try {
+            const res = await http.get<ApiResponse<ResolvedMemberDTO>>(
+              '/api/users/members/resolve-by-id',
+              { params: { userId } }
+            );
+            if (res.data.error) throw new Error(res.data.error);
+            const username = res.data.data?.username ?? null;
+            return [userId, username || userId] as const;
+          } catch {
+            return [userId, userId] as const;
+          }
+        })
+      );
+
+      return Object.fromEntries(resolved) as Record<string, string>;
+    },
+    enabled: Boolean(token) && Boolean(lotteryWinners && lotteryWinners.length > 0),
   });
 
   const createEventMutation = useMutation({
@@ -629,6 +681,11 @@ export default function MyEventsPage() {
                               setLotteryEventId(isOpen ? null : event.eventId);
                               setLotteryWinners(null);
                               setSuccessMessage(null);
+
+                              if (!isOpen && !lotteryExpiration) {
+                                const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+                                setLotteryExpiration(toDatetimeLocalValue(expiry));
+                              }
                             }}
                             disabled={
                               (lotteryStatusByEventQuery.data?.[event.eventId] ??
@@ -724,7 +781,9 @@ export default function MyEventsPage() {
                             <div className="mt-2 grid gap-1">
                               {lotteryWinners.map((id) => (
                                 <div key={id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                                  <div className="font-mono text-sm text-slate-800">{id}</div>
+                                  <div className="text-sm text-slate-800">
+                                    {winnerUsernamesQuery.data?.[id] ?? id}
+                                  </div>
                                   <button
                                     onClick={() => {
                                       setSuccessMessage(`Send message UI not connected yet (winner: ${id}).`);

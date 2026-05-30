@@ -427,6 +427,12 @@ public class UserDomainService {
         return member.getActiveRole().isAppointmentApproved();
     }
 
+    @Transactional(readOnly = true)
+    public MemberDTO resolveMemberById(UUID userId) {
+        Member member = getMemberOrThrow(userId);
+        return toDTO(member);
+    }
+
    private Member getMemberOrThrow(UUID userId) {
         if (userId == null) {
             throw new InvalidMemberInputException("User ID cannot be null");

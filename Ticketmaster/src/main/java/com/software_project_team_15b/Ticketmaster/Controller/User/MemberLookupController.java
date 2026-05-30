@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.UUID;
+
 @RestController
 @RequestMapping(path = "/api/users", produces = "application/json")
 @Tag(name = "Users", description = "User lookup utilities")
@@ -43,6 +45,34 @@ public class MemberLookupController {
 
             Member member = userDomainService.getMemberByUsername(username);
             return ResponseEntity.ok(new ApiResponse<>(userDomainService.toDTO(member), null));
+
+        } catch (InvalidTokenException ex) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiResponse<>(null, ex.getMessage()));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ApiResponse<>(null, ex.getMessage()));
+        } catch (Exception ex) {
+            String msg = ex == null || ex.getMessage() == null || ex.getMessage().isBlank()
+                    ? "The request failed due to a server error. Please try again later."
+                    : ex.getMessage();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new ApiResponse<>(null, msg));
+        }
+    }
+
+    @Operation(summary = "Resolve a member by id (for displaying usernames)")
+    @GetMapping("/members/resolve-by-id")
+    public ResponseEntity<ApiResponse<MemberDTO>> resolveMemberById(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @RequestParam UUID userId
+    ) {
+        try {
+            if (!auth.isTokenValid(token) || !(auth.isMember(token) || auth.isSystemAdmin(token))) {
+                throw new InvalidTokenException("Only an authenticated member or system admin can resolve members");
+            }
+
+            return ResponseEntity.ok(new ApiResponse<>(userDomainService.resolveMemberById(userId), null));
 
         } catch (InvalidTokenException ex) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
