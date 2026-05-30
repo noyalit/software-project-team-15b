@@ -540,20 +540,52 @@ export default function EventDetailsPage() {
 
           {selectedArea.type === 'STANDING' && (
             <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-6">
-              <div className="text-sm font-semibold text-slate-900">Standing area</div>
-              <div className="mt-1 text-sm text-slate-700">
-                {selectedArea.availableCapacity} tickets available
+              <div className="mb-4 rounded bg-slate-200 px-3 py-2 text-center text-sm font-semibold text-slate-700">
+                Stage / Screen
+              </div>
+
+              <div className="mb-3 flex items-center justify-between text-xs font-semibold text-slate-600">
+                <span className="rounded border border-slate-200 bg-white px-2 py-1 uppercase tracking-wide">
+                  Exit
+                </span>
+                <span className="rounded border border-slate-200 bg-white px-2 py-1 uppercase tracking-wide">
+                  Exit
+                </span>
+              </div>
+
+              <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center">
+                <div className="text-sm font-semibold text-slate-900">Standing area</div>
+                <div className="mt-1 text-sm text-slate-700">
+                  {selectedArea.availableCapacity} tickets available
+                </div>
+              </div>
+
+              <div className="mt-3 flex items-center justify-between text-xs font-semibold text-slate-600">
+                <span className="rounded border border-slate-200 bg-white px-2 py-1 uppercase tracking-wide">
+                  Exit
+                </span>
+                <span className="rounded border border-slate-200 bg-white px-2 py-1 uppercase tracking-wide">
+                  Exit
+                </span>
               </div>
 
               <label className="mt-4 block">
                 <div className="text-sm font-medium text-slate-700">Quantity</div>
-                <input
-                  type="number"
-                  min={1}
-                  value={standingQuantity}
-                  onChange={(e) => setStandingQuantity(Number(e.target.value || 1))}
-                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                />
+                <div className="mt-1 flex items-center gap-2">
+                  <span className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                    Exit
+                  </span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={standingQuantity}
+                    onChange={(e) => setStandingQuantity(Number(e.target.value || 1))}
+                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                  />
+                  <span className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
+                    Exit
+                  </span>
+                </div>
               </label>
             </div>
           )}
