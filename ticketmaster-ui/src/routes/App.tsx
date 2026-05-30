@@ -19,6 +19,7 @@ import OrdersPage from '../screens/OrdersPage';
 import CheckoutPage from '../screens/CheckoutPage';
 import WaitQueuePage from '../screens/WaitQueuePage';
 import CompanyOrdersPage from '../screens/CompanyOrdersPage';
+import CompanySalesReportPage from '../screens/CompanySalesReportPage';
 
 export default function App() {
   return (
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/companies/:companyId" element={<CompanyPage />} />
         <Route path="/my-events" element={<MyEventsPage />} />
         <Route path="/company-orders" element={<CompanyOrdersPage />} />
+        <Route path="/company-sales" element={<CompanySalesReportPage />} />
         <Route path="/admin/queues" element={<AdminQueuesPage />} />
         <Route path="/admin/companies" element={<AdminCompaniesPage />} />
         <Route path="/admin/members" element={<AdminMembersPage />} />
