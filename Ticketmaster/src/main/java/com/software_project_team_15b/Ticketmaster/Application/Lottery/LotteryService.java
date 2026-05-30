@@ -155,6 +155,19 @@ public class LotteryService {
         }
     }
 
+    public Set<String> runEventLotteryUsernames(String token, UUID companyId, UUID eventId, int count, LocalDateTime expirationTime) {
+        Set<UUID> winners = runEventLottery(token, companyId, eventId, count, expirationTime);
+        return winners.stream()
+                .map(id -> {
+                    try {
+                        return userDomainService.resolveMemberById(id).getUsername();
+                    } catch (RuntimeException e) {
+                        return id.toString();
+                    }
+                })
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
     /**
      * Returns the set of all winners drawn for the given event.
      *
@@ -182,6 +195,19 @@ public class LotteryService {
             AUDIT.warn("op=getEventLotteryWinners eventId={} result=error error={}", eventId, e.getMessage());
             throw e;
         }
+    }
+
+    public Set<String> getEventLotteryWinnerUsernames(String token, UUID companyId, UUID eventId) {
+        Set<UUID> winners = getEventLotteryWinners(token, companyId, eventId);
+        return winners.stream()
+                .map(id -> {
+                    try {
+                        return userDomainService.resolveMemberById(id).getUsername();
+                    } catch (RuntimeException e) {
+                        return id.toString();
+                    }
+                })
+                .collect(java.util.stream.Collectors.toSet());
     }
 
     /**

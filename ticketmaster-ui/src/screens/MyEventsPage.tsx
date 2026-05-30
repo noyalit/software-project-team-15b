@@ -19,11 +19,6 @@ type LotteryEligibilityDTO = {
   status: string;
 };
 
-type ResolvedMemberDTO = {
-  userId: string;
-  username?: string | null;
-};
-
 function toDatetimeLocalValue(d: Date) {
   const pad = (n: number) => String(n).padStart(2, '0');
   return (
@@ -190,10 +185,9 @@ export default function MyEventsPage() {
       setLotteryWinners(null);
       setLotteryEventId(variables.eventId);
 
-      if (!lotteryExpiration) {
-        const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
-        setLotteryExpiration(toDatetimeLocalValue(expiry));
-      }
+      setLotteryWinnerCount('10');
+      const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      setLotteryExpiration(toDatetimeLocalValue(expiry));
     },
   });
 
@@ -241,33 +235,6 @@ export default function MyEventsPage() {
       return Object.fromEntries(statuses) as Record<string, string>;
     },
     enabled: Boolean(token) && Boolean(eventsQuery.data?.length),
-  });
-
-  const winnerUsernamesQuery = useQuery({
-    queryKey: ['lottery', 'winners', 'usernames', token, (lotteryWinners ?? []).join(',')],
-    queryFn: async () => {
-      const winners = lotteryWinners ?? [];
-      if (winners.length === 0) return {} as Record<string, string>;
-
-      const resolved = await Promise.all(
-        winners.map(async (userId) => {
-          try {
-            const res = await http.get<ApiResponse<ResolvedMemberDTO>>(
-              '/api/users/members/resolve-by-id',
-              { params: { userId } }
-            );
-            if (res.data.error) throw new Error(res.data.error);
-            const username = res.data.data?.username ?? null;
-            return [userId, username || userId] as const;
-          } catch {
-            return [userId, userId] as const;
-          }
-        })
-      );
-
-      return Object.fromEntries(resolved) as Record<string, string>;
-    },
-    enabled: Boolean(token) && Boolean(lotteryWinners && lotteryWinners.length > 0),
   });
 
   const createEventMutation = useMutation({
@@ -682,7 +649,8 @@ export default function MyEventsPage() {
                               setLotteryWinners(null);
                               setSuccessMessage(null);
 
-                              if (!isOpen && !lotteryExpiration) {
+                              if (!isOpen) {
+                                setLotteryWinnerCount('10');
                                 const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
                                 setLotteryExpiration(toDatetimeLocalValue(expiry));
                               }
@@ -782,7 +750,7 @@ export default function MyEventsPage() {
                               {lotteryWinners.map((id) => (
                                 <div key={id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
                                   <div className="text-sm text-slate-800">
-                                    {winnerUsernamesQuery.data?.[id] ?? id}
+                                    {id}
                                   </div>
                                   <button
                                     onClick={() => {
