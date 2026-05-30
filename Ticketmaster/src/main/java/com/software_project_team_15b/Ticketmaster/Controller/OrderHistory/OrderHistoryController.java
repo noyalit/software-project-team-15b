@@ -143,6 +143,24 @@ public class OrderHistoryController {
         }
     }
 
+    @Operation(summary = "Get order history for all events of a company (owner/founder/manager)")
+    @GetMapping("/company/{companyId}/orders")
+    public ResponseEntity<ApiResponse<List<OrderHistoryDTO>>> getCompanyOrders(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID companyId
+    ) {
+        try {
+            List<OrderHistoryDTO> orders = orderHistoryService.getOrderHistoryForCompany(token, companyId);
+            return ResponseEntity.ok(new ApiResponse<>(orders, null));
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     @Operation(summary = "Generate sales report for a company")
     @GetMapping("/company/{companyId}/sales-report")
     public ResponseEntity<ApiResponse<Map<String, Object>>> generateSalesReport(

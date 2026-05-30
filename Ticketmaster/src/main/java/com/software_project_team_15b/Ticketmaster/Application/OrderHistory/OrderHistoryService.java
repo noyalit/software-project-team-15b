@@ -365,6 +365,71 @@ public class OrderHistoryService implements EventSubscriber{
     }
 
     @Transactional(readOnly = true)
+    public List<OrderHistoryDTO> getOrderHistoryForCompany(String token, UUID companyId) {
+        UUID callerId = null;
+        try {
+            if (token == null) {
+                throw new IllegalArgumentException("token cannot be null");
+            }
+            if (companyId == null) {
+                throw new IllegalArgumentException("companyId cannot be null");
+            }
+
+            validateUser(token);
+            callerId = auth.extractUserId(token);
+
+            if (!hasPermission(callerId, companyId, ManagerPermission.VIEW_PURCHASE_AND_ORDER_HISTORY)) {
+                throw new UnauthorizedCompanyActionException(
+                        "Caller does not have permission to view order history for this company"
+                );
+            }
+
+            List<Event> events = eventsRepository.searchByCompany(companyId, SearchCriteria.empty());
+            if (events.isEmpty()) {
+                AUDIT.info("op=getOrderHistoryForCompany callerId={} companyId={} result=no_events", callerId, companyId);
+                return List.of();
+            }
+
+            boolean isOwnerOrFounder =
+                    userDomainService.isActiveOwner(callerId, companyId)
+                            || userDomainService.isActiveFounder(callerId, companyId);
+
+            List<UUID> visibleEventIds;
+            if (isOwnerOrFounder) {
+                visibleEventIds = events.stream().map(Event::eventId).toList();
+            } else {
+                List<UUID> appointedMembers = userDomainService.getAppointedMembersTree(callerId, companyId);
+                List<UUID> visibleManagers = appointedMembers.contains(callerId)
+                        ? appointedMembers
+                        : new ArrayList<>(appointedMembers);
+                if (!visibleManagers.contains(callerId)) {
+                    visibleManagers.add(callerId);
+                }
+                Set<UUID> managedEventIds = getEventIdsManagedBy(visibleManagers, companyId);
+                visibleEventIds = events.stream()
+                        .map(Event::eventId)
+                        .filter(managedEventIds::contains)
+                        .toList();
+            }
+
+            if (visibleEventIds.isEmpty()) {
+                AUDIT.info("op=getOrderHistoryForCompany callerId={} companyId={} result=no_visible_events", callerId, companyId);
+                return List.of();
+            }
+
+            List<OrderHistoryDTO> result = orderHistoryRepository.findByEventIdIn(visibleEventIds).stream()
+                    .map(this::toOrderHistoryDTO)
+                    .collect(Collectors.toList());
+
+            AUDIT.info("op=getOrderHistoryForCompany callerId={} companyId={} orders={}", callerId, companyId, result.size());
+            return Collections.unmodifiableList(result);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=getOrderHistoryForCompany callerId={} companyId={} result=error reason={}", callerId, companyId, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    @Transactional(readOnly = true)
     public Map<UUID, List<OrderHistoryDTO>> getGlobalPurchaseHistoryByBuyers(String token) {
         return aggregateGlobalPurchaseHistory(token, OrderHistory::getUserId, "getGlobalPurchaseHistoryByBuyers");
     }
