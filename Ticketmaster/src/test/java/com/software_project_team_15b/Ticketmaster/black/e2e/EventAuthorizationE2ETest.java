@@ -556,15 +556,26 @@ class EventAuthorizationE2ETest {
                 AddAreaCommand.AreaType.STANDING, 100, null);
     }
 
-    private UUID registerAndApproveOwner(String username, String founderToken, UUID companyId) {
-        throw new NotImplementedException();
-//        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO m = userService.registerMember(userService.enterAsGuest(), username, "Password1", LocalDate.of(1990, 1, 1));
-//        String ownerToken = userService.login(userService.enterAsGuest(), username, "Password1");
-//        UUID id = m.getUserId();
-//        companyService.addOwner(founderToken, companyId, id);
-//        userService.changeRoleToOwner(ownerToken, companyId);
-//        userService.approveAppointment(ownerToken);
-//        return id;
+    /** Creates an event by the founder and wires all manager candidates as managers for it. */
+    private UUID createDraftEvent() {
+        UUID eventId = events.createEvent(draftCmd(), founderId);
+        setupManagersForEvent(eventId);
+        return eventId;
+    }
+
+    private void setupManagersForEvent(UUID eventId) {
+        appointManagerForEvent(mgrManageEventsId,   mgrManageEventsToken,   eventId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        appointManagerForEvent(mgrConfigHallId,     mgrConfigHallToken,     eventId, Set.of(ManagerPermission.CONFIGURE_HALLS_AND_SEATS));
+        appointManagerForEvent(mgrUpdateMapId,      mgrUpdateMapToken,      eventId, Set.of(ManagerPermission.UPDATE_EVENT_MAP));
+        appointManagerForEvent(mgrPurchasePolicyId, mgrPurchasePolicyToken, eventId, Set.of(ManagerPermission.DEFINE_PURCHASE_POLICY));
+        appointManagerForEvent(mgrDiscountPolicyId, mgrDiscountPolicyToken, eventId, Set.of(ManagerPermission.DEFINE_DISCOUNT_POLICY));
+        appointManagerForEvent(mgrWrongPermId,      mgrWrongPermToken,      eventId, Set.of(ManagerPermission.HANDLE_INQUIRIES));
+    }
+
+    private void appointManagerForEvent(UUID memberId, String memberToken, UUID eventId, Set<ManagerPermission> perms) {
+        userService.appointManager(memberId, founderToken, companyId, eventId, perms);
+        userService.changeRoleToManager(memberToken, eventId);
+        userService.approveAppointment(memberToken);
     }
 
     private MemberDTO registerMember(String username, LocalDate birthDate) {
