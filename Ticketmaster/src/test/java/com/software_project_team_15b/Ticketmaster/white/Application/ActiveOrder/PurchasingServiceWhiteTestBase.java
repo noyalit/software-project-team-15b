@@ -119,8 +119,14 @@ abstract class PurchasingServiceWhiteTestBase {
     protected LotteryEligibilityDTO mockPurchaseAccessAllowed() {
         LotteryEligibilityDTO eligibility = mockLotteryEligibilityDTO();
 
+        lenient().when(queueDomainService.requestAccess(token, eventId)).thenReturn(
+                new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null)
+        );
         when(queueDomainService.hasAccess(token, eventId))
                 .thenReturn(true);
+
+        lenient().when(purchasingDomainService.existsActiveOrderForEvent(eventId)).thenReturn(false);
+        lenient().when(purchasingDomainService.countActiveOrdersForEvent(eventId)).thenReturn(0L);
 
         return eligibility;
     }
@@ -128,8 +134,14 @@ abstract class PurchasingServiceWhiteTestBase {
     protected LotteryEligibilityDTO mockPurchaseAccessDeniedByQueue() {
         LotteryEligibilityDTO eligibility = mockLotteryEligibilityDTO();
 
+        lenient().when(queueDomainService.requestAccess(token, eventId)).thenReturn(
+                new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null)
+        );
         when(queueDomainService.hasAccess(token, eventId))
                 .thenReturn(false);
+
+        lenient().when(purchasingDomainService.existsActiveOrderForEvent(eventId)).thenReturn(false);
+        lenient().when(purchasingDomainService.countActiveOrdersForEvent(eventId)).thenReturn(0L);
 
         return eligibility;
     }

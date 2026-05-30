@@ -41,6 +41,22 @@ public class PurchasingDomainService {
         return orderId;
     }
 
+    public boolean existsActiveOrderForEvent(UUID eventId) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID cannot be null");
+        }
+
+        return activeOrderRepository.existsByEventIdAndStatus(eventId, ActiveOrderStatus.ACTIVE);
+    }
+
+    public long countActiveOrdersForEvent(UUID eventId) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID cannot be null");
+        }
+
+        return activeOrderRepository.countByEventIdAndStatus(eventId, ActiveOrderStatus.ACTIVE);
+    }
+
     public void requireEventCanBeBooked(UUID eventId, EventAvailability eventAvailability) {
         if (eventId == null) {
             throw new IllegalArgumentException("Event ID cannot be null");

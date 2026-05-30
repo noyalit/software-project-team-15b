@@ -104,6 +104,30 @@ public class JpaSystemActiveOrderRepositoryAdapter implements IActiveOrderReposi
     }
 
     @Override
+    public boolean existsByEventIdAndStatus(UUID eventId, ActiveOrderStatus status) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+        if (status == null) {
+            throw new IllegalArgumentException("status cannot be null");
+        }
+
+        return jpaActiveOrderSpringDataRepository.existsByEventIdAndStatus(eventId, status);
+    }
+
+    @Override
+    public long countByEventIdAndStatus(UUID eventId, ActiveOrderStatus status) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+        if (status == null) {
+            throw new IllegalArgumentException("status cannot be null");
+        }
+
+        return jpaActiveOrderSpringDataRepository.countByEventIdAndStatus(eventId, status);
+    }
+
+    @Override
     public void delete(ActiveOrder order) {
         if (order == null)
             throw new IllegalArgumentException("order cannot be null");

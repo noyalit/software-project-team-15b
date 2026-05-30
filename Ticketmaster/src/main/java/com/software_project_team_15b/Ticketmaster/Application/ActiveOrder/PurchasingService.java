@@ -234,6 +234,27 @@ public class PurchasingService {
         try {
             requireCreateActiveOrderArguments(eventId, areaId);
             userId = requireValidUser(token);
+
+            QueueAccessDTO access = queueDomainService.requestAccess(token, eventId);
+            if (access != null && access.status() == com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.WAITING) {
+                Integer position = access.position();
+                throw new TimeExpiredException(
+                        "User does not have access. Queue is currently active for this event" +
+                                (position != null ? " (position: " + (position + 1) + ")" : "") +
+                                ". Please wait until you are admitted."
+                );
+            }
+
+            if (access != null
+                    && access.status() != com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.NO_QUEUE
+                    && queueDomainService.getQueueSnapshot(eventId).maxAccepted() > 0
+                    && purchasingDomainService.countActiveOrdersForEvent(eventId)
+                        >= queueDomainService.getQueueSnapshot(eventId).maxAccepted()) {
+                throw new TimeExpiredException(
+                        "User does not have access. Queue is currently active for this event. Please wait until you are admitted."
+                );
+            }
+
             purchasingDomainService.requireEventCanBeBooked(
                     eventId,
                     eventDomainService.getEventAvailability(eventId)

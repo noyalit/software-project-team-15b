@@ -179,6 +179,37 @@ public class InMemoryActiveOrderRepository implements IActiveOrderRepository {
     }
 
     @Override
+    public boolean existsByEventIdAndStatus(UUID eventId, ActiveOrderStatus status) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+        if (status == null) {
+            throw new IllegalArgumentException("status cannot be null");
+        }
+
+        synchronized (lock) {
+            return storage.values().stream()
+                    .anyMatch(order -> eventId.equals(order.getEventId()) && order.getStatus() == status);
+        }
+    }
+
+    @Override
+    public long countByEventIdAndStatus(UUID eventId, ActiveOrderStatus status) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+        if (status == null) {
+            throw new IllegalArgumentException("status cannot be null");
+        }
+
+        synchronized (lock) {
+            return storage.values().stream()
+                    .filter(order -> eventId.equals(order.getEventId()) && order.getStatus() == status)
+                    .count();
+        }
+    }
+
+    @Override
     public Optional<ActiveOrder> findByIdForUpdate(UUID orderId) {
         if (orderId == null) {
             throw new IllegalArgumentException("orderId cannot be null");

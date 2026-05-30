@@ -24,6 +24,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import org.springframework.dao.DataIntegrityViolationException;
 
+import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -91,6 +93,22 @@ class CreateActiveOrderBlackTest {
         mockAreaAvailable();
         mockPurchaseAccess(true);
 
+        lenient().when(queueDomainService.requestAccess(token, eventId)).thenReturn(
+                new QueueAccessDTO(eventId, QueueAccessStatus.ADMITTED, null, LocalDateTime.now().plusSeconds(120))
+        );
+        lenient().when(queueDomainService.getQueueSnapshot(eventId)).thenReturn(
+                new com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO(
+                        eventId,
+                        1,
+                        1,
+                        0,
+                        0,
+                        Map.of()
+                )
+        );
+        lenient().when(purchasingDomainService.existsActiveOrderForEvent(eventId)).thenReturn(false);
+        lenient().when(purchasingDomainService.countActiveOrdersForEvent(eventId)).thenReturn(0L);
+
         when(purchasingDomainService.createActiveOrder(userId, eventId, areaId))
                 .thenReturn(orderId);
 
@@ -112,6 +130,13 @@ class CreateActiveOrderBlackTest {
     void createActiveOrderShouldFailWhenEventIsNotAvailable() {
         mockValidUser();
 
+        lenient().when(queueDomainService.requestAccess(token, eventId)).thenReturn(
+                new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null)
+        );
+        lenient().when(queueDomainService.getQueueSnapshot(eventId)).thenThrow(new RuntimeException("no queue"));
+        lenient().when(purchasingDomainService.existsActiveOrderForEvent(eventId)).thenReturn(false);
+        lenient().when(purchasingDomainService.countActiveOrdersForEvent(eventId)).thenReturn(0L);
+
         when(eventDomainService.getEventAvailability(eventId))
                 .thenReturn(null);
 
@@ -130,6 +155,12 @@ class CreateActiveOrderBlackTest {
     void createActiveOrderShouldFailWhenAreaIsNotAvailable() {
         mockValidUser();
         mockEventAvailable();
+
+        lenient().when(queueDomainService.requestAccess(token, eventId)).thenReturn(
+                new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null)
+        );
+        lenient().when(purchasingDomainService.existsActiveOrderForEvent(eventId)).thenReturn(false);
+        lenient().when(purchasingDomainService.countActiveOrdersForEvent(eventId)).thenReturn(0L);
 
         when(eventDomainService.getAreaAvailability(eventId, areaId))
                 .thenReturn(false);
@@ -150,6 +181,12 @@ class CreateActiveOrderBlackTest {
         mockValidUser();
         mockEventAvailable();
         mockAreaAvailable();
+
+        lenient().when(queueDomainService.requestAccess(token, eventId)).thenReturn(
+                new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null)
+        );
+        lenient().when(purchasingDomainService.existsActiveOrderForEvent(eventId)).thenReturn(false);
+        lenient().when(purchasingDomainService.countActiveOrdersForEvent(eventId)).thenReturn(0L);
 
         LotteryEligibilityDTO eligibility = mockPurchaseAccess(false);
 

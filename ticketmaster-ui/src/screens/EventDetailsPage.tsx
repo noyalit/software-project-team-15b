@@ -294,12 +294,19 @@ export default function EventDetailsPage() {
         const status = err.response?.status;
         const message = getApiErrorMessage(e);
 
-        if (userType === 'member' && status === 410) {
+        const lower = String(message ?? '').toLowerCase();
+        const shouldQueue =
+          status === 410 ||
+          lower.includes('does not have access') ||
+          lower.includes('no access') ||
+          lower.includes('queue') ||
+          lower.includes('capacity');
+
+        if (userType === 'member' && shouldQueue) {
           navigate(`/queue/${eventId}`);
           throw e;
         }
 
-        const lower = message.toLowerCase();
         const isAlreadyHasActiveOrder =
           lower.includes('already has an active order') ||
           lower.includes('active order request conflicts with existing data');
