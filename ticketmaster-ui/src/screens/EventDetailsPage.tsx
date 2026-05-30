@@ -47,7 +47,7 @@ export default function EventDetailsPage() {
   const { eventId } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { token, userType } = useAuthStore();
+  const { token, userType, clearAuth } = useAuthStore();
 
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>([]);
@@ -217,6 +217,23 @@ export default function EventDetailsPage() {
           `/api/active-orders/access/${eventId}`
         );
 
+        if (res.status === 401) {
+          clearAuth();
+          navigate('/login');
+          return null;
+        }
+
+        if (
+          userType === 'member' &&
+          (res.status === 410 ||
+            String(res.data.error ?? '')
+              .toLowerCase()
+              .includes('does not have access'))
+        ) {
+          navigate(`/queue/${eventId}`);
+          return null;
+        }
+
         if (res.data.error) throw new Error(res.data.error);
         return res.data.data;
       } catch (e) {
@@ -224,6 +241,12 @@ export default function EventDetailsPage() {
         const status = err.response?.status;
         const message = getApiErrorMessage(e);
         const lower = message.toLowerCase();
+
+        if (status === 401) {
+          clearAuth();
+          navigate('/login');
+          return null;
+        }
 
         const shouldQueue =
           status === 410 ||
@@ -691,11 +714,13 @@ export default function EventDetailsPage() {
             )}
             <button
               onClick={async () => {
-                await requestAccessMutation.mutateAsync();
+                const access = await requestAccessMutation.mutateAsync();
+                if (access === null) return;
                 await createOrderMutation.mutateAsync(selectedArea.areaId);
               }}
               disabled={
                 Boolean(activeOrderId) ||
+                !token ||
                 event.status !== 'PUBLISHED' ||
                 (userType === 'member' &&
                   eligibilityStatus !== null &&
