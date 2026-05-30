@@ -17,10 +17,30 @@ export default function WaitQueuePage() {
   const joinMutation = useMutation({
     mutationFn: async () => {
       if (!eventId) throw new Error('Event ID is missing.');
-      const res = await http.post<AccessResponse>(`/api/active-orders/access/${eventId}`);
-      if (res.data.error) throw new Error(res.data.error);
-      if (!res.data.data) throw new Error('Failed to request access.');
-      return res.data.data;
+      try {
+        const res = await http.post<AccessResponse>(
+          `/api/active-orders/access/${eventId}`
+        );
+        if (res.data.error) throw new Error(res.data.error);
+        if (!res.data.data) throw new Error('Failed to request access.');
+        return res.data.data;
+      } catch (e) {
+        const err = e as AxiosError<AccessResponse>;
+        const status = err.response?.status;
+
+        if (status === 401) {
+          clearAuth();
+          throw new Error('Your session expired. Please log in again.');
+        }
+
+        throw new Error(
+          getApiErrorMessage<QueueAccessDTO>(e, {
+            fallback: 'Failed to join the queue.',
+            serverFallback:
+              'Queue is currently unavailable due to a server issue.',
+          })
+        );
+      }
     },
   });
 
