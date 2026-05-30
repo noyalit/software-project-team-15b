@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import type { AxiosError } from 'axios';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useEffect } from 'react';
 import { http } from '../api/http';
 import { getApiErrorMessage } from '../api/errors';
 import type { ApiResponse, QueueAccessDTO } from '../api/types';
@@ -10,6 +11,7 @@ type AccessResponse = ApiResponse<QueueAccessDTO>;
 
 export default function WaitQueuePage() {
   const { eventId } = useParams();
+  const navigate = useNavigate();
   const { token, userType, clearAuth } = useAuthStore();
 
   const joinMutation = useMutation({
@@ -88,6 +90,14 @@ export default function WaitQueuePage() {
   }
 
   const access = accessQuery.data;
+
+  useEffect(() => {
+    if (!eventId) return;
+    if (!access) return;
+    if (access.status === 'ADMITTED' || access.status === 'NO_QUEUE') {
+      navigate(`/events/${eventId}`, { replace: true });
+    }
+  }, [access, eventId, navigate]);
 
   return (
     <div className="space-y-4">

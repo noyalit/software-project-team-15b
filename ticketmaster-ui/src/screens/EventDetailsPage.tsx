@@ -212,12 +212,33 @@ export default function EventDetailsPage() {
     mutationFn: async () => {
       if (!eventId) throw new Error('Event ID is missing.');
 
-      const res = await http.post<ApiResponse<unknown>>(
-        `/api/active-orders/access/${eventId}`
-      );
+      try {
+        const res = await http.post<ApiResponse<unknown>>(
+          `/api/active-orders/access/${eventId}`
+        );
 
-      if (res.data.error) throw new Error(res.data.error);
-      return res.data.data;
+        if (res.data.error) throw new Error(res.data.error);
+        return res.data.data;
+      } catch (e) {
+        const err = e as AxiosError<ApiResponse<unknown>>;
+        const status = err.response?.status;
+        const message = getApiErrorMessage(e);
+        const lower = message.toLowerCase();
+
+        const shouldQueue =
+          status === 410 ||
+          lower.includes('does not have access') ||
+          lower.includes('no access') ||
+          lower.includes('queue') ||
+          lower.includes('capacity');
+
+        if (userType === 'member' && shouldQueue) {
+          navigate(`/queue/${eventId}`);
+          return null;
+        }
+
+        throw e;
+      }
     },
   });
 
