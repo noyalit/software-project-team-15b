@@ -14,13 +14,6 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Unautho
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.RemoveOrAddSeatsFromActiveOrderCommand;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
-import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
-import com.software_project_team_15b.Ticketmaster.DTO.CheckoutStartedDTO;
-import com.software_project_team_15b.Ticketmaster.DTO.DiscountPolicyDTO;
-import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
-import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
-import com.software_project_team_15b.Ticketmaster.DTO.PurchasePolicyDTO;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
@@ -78,12 +71,11 @@ class EventOrderFlowE2ETest {
         founderToken = login("ord_founder_" + sfx);
         founderId = mFounder.getUserId();
 
-        Company company = companyService.createCompany(founderToken, "OrdTestCo_" + n);
-        companyId = company.getId();
+        companyId = companyService.createCompany(founderToken, "OrdTestCo_" + n).companyId();
         userService.changeRoleToFounder(founderToken, companyId);
 
-        Actor mWP = registerAndLogin("ord_mgr_wp_" + sfx);
-        mgrWrongPermId = mWP.id; mgrWrongPermToken = mWP.token;
+        mgrWrongPermId = registerAndApproveManager("ord_mgr_wp_" + sfx, founderToken,
+                companyId, Set.of(ManagerPermission.HANDLE_INQUIRIES));
 
         MemberDTO mUnauth = registerMember("ord_unauth_" + sfx, LocalDate.of(1990, 1, 1));
         unauthorizedId = mUnauth.getUserId();
