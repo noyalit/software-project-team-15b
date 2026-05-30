@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 class EventAvailabilityTest {
 
     @Test
-    void published_event_with_available_seating_is_available() {
+    void GivenPublishedEventWithAvailableSeatingArea_WhenBookingStatus_ThenReturnsAvailable() {
         SeatingEventArea area = EventTestFixtures.seatingArea(3, "50.00");
         Event event = EventTestFixtures.published(area);
 
@@ -19,7 +19,7 @@ class EventAvailabilityTest {
     }
 
     @Test
-    void published_event_with_available_standing_is_available() {
+    void GivenPublishedEventWithAvailableStandingArea_WhenBookingStatus_ThenReturnsAvailable() {
         StandingEventArea area = EventTestFixtures.standingArea(100, "10.00");
         Event event = EventTestFixtures.published(new StandingEventArea[]{area}, new SeatingEventArea[0]);
 
@@ -27,7 +27,7 @@ class EventAvailabilityTest {
     }
 
     @Test
-    void draft_event_is_inactive() {
+    void GivenDraftEvent_WhenBookingStatus_ThenReturnsInactive() {
         Event event = EventTestFixtures.draft();
         event.addArea(EventTestFixtures.seatingArea(1, "10.00"));
 
@@ -35,7 +35,7 @@ class EventAvailabilityTest {
     }
 
     @Test
-    void cancelled_event_is_inactive() {
+    void GivenCancelledEvent_WhenBookingStatus_ThenReturnsInactive() {
         SeatingEventArea area = EventTestFixtures.seatingArea(2, "30.00");
         Event event = EventTestFixtures.published(area);
         event.cancel();
@@ -44,7 +44,7 @@ class EventAvailabilityTest {
     }
 
     @Test
-    void sold_out_status_event_returns_sold_out() {
+    void GivenAllSeatsHeldAndConfirmed_WhenBookingStatus_ThenReturnsSoldOut() {
         SeatingEventArea area = EventTestFixtures.seatingArea(1, "10.00");
         Event event = EventTestFixtures.published(area);
         UUID seatId = area.seats().keySet().iterator().next();
@@ -57,7 +57,7 @@ class EventAvailabilityTest {
     }
 
     @Test
-    void published_event_with_all_seats_held_but_not_confirmed_is_sold_out() {
+    void GivenAllSeatsHeldNotConfirmed_WhenBookingStatus_ThenReturnsSoldOutButStatusPublished() {
         SeatingEventArea area = EventTestFixtures.seatingArea(2, "10.00");
         Event event = EventTestFixtures.published(area);
         List<UUID> all = area.seats().keySet().stream().toList();
@@ -68,7 +68,7 @@ class EventAvailabilityTest {
     }
 
     @Test
-    void past_event_is_inactive() {
+    void GivenPastDatedEvent_WhenBookingStatus_ThenReturnsInactive() {
         Event event = new Event(
                 UUID.randomUUID(), UUID.randomUUID(), "Past Show", "Artist",
                 Category.CONCERT, Instant.now().minusSeconds(3600), "Venue",
@@ -82,14 +82,13 @@ class EventAvailabilityTest {
     }
 
     @Test
-    void mixed_areas_with_some_capacity_remaining_is_available() {
+    void GivenFullSeatingButStandingStillHasCapacity_WhenBookingStatus_ThenReturnsAvailable() {
         SeatingEventArea seating = EventTestFixtures.seatingArea(2, "50.00");
         StandingEventArea standing = EventTestFixtures.standingArea(10, "20.00");
         Event event = EventTestFixtures.published(new StandingEventArea[]{standing}, new SeatingEventArea[]{seating});
         List<UUID> seatIds = seating.seats().keySet().stream().toList();
         event.holdSeats(seating.areaId(), seatIds, UUID.randomUUID());
 
-        // seating is fully held but standing still has capacity
         assertThat(event.bookingStatus()).isEqualTo(EventAvailability.AVAILABLE);
     }
 }

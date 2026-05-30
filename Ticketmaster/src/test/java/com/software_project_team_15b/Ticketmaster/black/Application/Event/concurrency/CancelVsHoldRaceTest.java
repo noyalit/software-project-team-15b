@@ -8,6 +8,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainServi
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -30,11 +31,14 @@ class CancelVsHoldRaceTest {
     @Autowired
     IEventRepository events;
 
+    @Autowired
+    IMemberRepository memberRepository;
+
     @Test
-    void cancel_eventually_wins_and_no_holds_survive_cancellation() throws Exception {
+    void GivenManyConcurrentHoldsAndCancel_WhenCancelWins_ThenEventIsCancelled() throws Exception {
         ConcurrencyTestSupport.SeatingSetup setup =
-                ConcurrencyTestSupport.publishedSeatingEvent(service, 20);
-        UUID caller = UUID.randomUUID();
+                ConcurrencyTestSupport.publishedSeatingEvent(service, memberRepository, 20);
+        UUID caller = setup.callerId();
 
         int N = 20;
         CountDownLatch start = new CountDownLatch(1);

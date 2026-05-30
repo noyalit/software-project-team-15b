@@ -2,10 +2,7 @@ package com.software_project_team_15b.Ticketmaster.Domain.Member;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -682,6 +679,21 @@ public class UserDomainService {
         return memberRepository.findByUsername(username)
                 .orElseThrow(() ->
                         new InvalidCredentialsException("Invalid username or password"));
+    }
+
+    /*
+        Private helper to check if the caller is an active owner or founder of the company.
+        Used as a fallback for manager permissions
+        since owners/founders can do everything regardless of their manager permissions.
+    */
+    public void isActiveOwnerOrFounder(UUID companyId, UUID callerId) {
+        Objects.requireNonNull(companyId, "eventId");
+        Objects.requireNonNull(callerId, "callerId");
+        if (!isActiveFounder(callerId, companyId) &&
+                !isActiveOwner(callerId, companyId)) {
+            throw new UnauthorizedCompanyActionException(
+                    "Only active owners/founders can perform this action");
+        }
     }
 
     public MemberDTO toDTO(Member member) {

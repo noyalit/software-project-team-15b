@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -24,11 +25,14 @@ class StandingQuantityRaceTest {
     @org.springframework.beans.factory.annotation.Autowired
     IEventDomainService eventDomainService;
 
+    @Autowired
+    IMemberRepository memberRepository;
+
     @Test
-    void total_standing_holds_cannot_exceed_capacity() throws Exception {
+    void GivenStandingAreaWithCapacityN_WhenManyConcurrentHoldsExceedN_ThenExactlyNSucceedAndTheRestFail() throws Exception {
         int capacity = 10;
         ConcurrencyTestSupport.StandingSetup setup =
-                ConcurrencyTestSupport.publishedStandingEvent(service, capacity);
+                ConcurrencyTestSupport.publishedStandingEvent(service, memberRepository, capacity);
 
         int N = 40;
         CountDownLatch start = new CountDownLatch(1);

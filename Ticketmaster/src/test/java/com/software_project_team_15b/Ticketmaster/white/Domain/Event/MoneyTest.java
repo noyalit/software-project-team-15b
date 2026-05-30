@@ -1,131 +1,133 @@
-package com.software_project_team_15b.Ticketmaster.Domain.Event;
+package com.software_project_team_15b.Ticketmaster.white.Domain.Event;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
+
+import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import org.junit.jupiter.api.Test;
 
 class MoneyTest {
 
     @Test
-    void of_creates_with_correct_amount_and_currency() {
+    void GivenAmountAndCurrency_WhenOf_ThenCreatesMoneyWithThoseValues() {
         Money m = Money.of("25.00", "USD");
         assertThat(m.amount()).isEqualByComparingTo(new BigDecimal("25.00"));
         assertThat(m.currency()).isEqualTo("USD");
     }
 
     @Test
-    void zero_creates_zero_amount() {
+    void GivenCurrency_WhenZero_ThenCreatesMoneyWithZeroAmount() {
         Money m = Money.zero("EUR");
         assertThat(m.amount()).isEqualByComparingTo(BigDecimal.ZERO);
         assertThat(m.currency()).isEqualTo("EUR");
     }
 
     @Test
-    void multiply_scales_amount() {
+    void GivenMoney_WhenMultiplyByInteger_ThenAmountIsScaled() {
         Money m = Money.of("10.00", "USD").multiply(3);
         assertThat(m.amount()).isEqualByComparingTo(new BigDecimal("30.00"));
         assertThat(m.currency()).isEqualTo("USD");
     }
 
     @Test
-    void multiply_by_zero_gives_zero() {
+    void GivenMoney_WhenMultiplyByZero_ThenResultIsZero() {
         Money m = Money.of("50.00", "USD").multiply(0);
         assertThat(m.amount()).isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     @Test
-    void add_sums_amounts() {
+    void GivenTwoMoneysSameCurrency_WhenAdd_ThenAmountsAreSummed() {
         Money result = Money.of("10.00", "USD").add(Money.of("5.50", "USD"));
         assertThat(result.amount()).isEqualByComparingTo(new BigDecimal("15.50"));
     }
 
     @Test
-    void add_currency_mismatch_throws() {
+    void GivenTwoMoneysDifferentCurrencies_WhenAdd_ThenThrowsIllegalArgument() {
         assertThatThrownBy(() -> Money.of("10.00", "USD").add(Money.of("5.00", "EUR")))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void subtract_differences_amounts() {
+    void GivenTwoMoneysSameCurrency_WhenSubtract_ThenAmountsAreSubtracted() {
         Money result = Money.of("20.00", "USD").subtract(Money.of("7.50", "USD"));
         assertThat(result.amount()).isEqualByComparingTo(new BigDecimal("12.50"));
     }
 
     @Test
-    void subtract_currency_mismatch_throws() {
+    void GivenTwoMoneysDifferentCurrencies_WhenSubtract_ThenThrowsIllegalArgument() {
         assertThatThrownBy(() -> Money.of("20.00", "USD").subtract(Money.of("5.00", "EUR")))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void percent_calculates_correct_fraction() {
+    void GivenMoney_WhenPercentWithWholeNumber_ThenReturnsCorrectFraction() {
         Money result = Money.of("100.00", "USD").percent(new BigDecimal("10"));
         assertThat(result.amount()).isEqualByComparingTo(new BigDecimal("10.00"));
     }
 
     @Test
-    void percent_fractional_percentage() {
+    void GivenMoney_WhenPercentWithFraction_ThenReturnsCorrectFraction() {
         Money result = Money.of("200.00", "USD").percent(new BigDecimal("7.5"));
         assertThat(result.amount()).isEqualByComparingTo(new BigDecimal("15.00"));
     }
 
     @Test
-    void isNegative_true_for_negative_amount() {
+    void GivenNegativeAmount_WhenIsNegative_ThenReturnsTrue() {
         Money m = Money.of("-1.00", "USD");
         assertThat(m.isNegative()).isTrue();
     }
 
     @Test
-    void isNegative_false_for_positive_amount() {
+    void GivenPositiveAmount_WhenIsNegative_ThenReturnsFalse() {
         assertThat(Money.of("1.00", "USD").isNegative()).isFalse();
     }
 
     @Test
-    void isNegative_false_for_zero() {
+    void GivenZeroAmount_WhenIsNegative_ThenReturnsFalse() {
         assertThat(Money.zero("USD").isNegative()).isFalse();
     }
 
     @Test
-    void equals_same_value_and_currency() {
+    void GivenSameAmountAndCurrency_WhenEquals_ThenReturnsTrue() {
         Money a = Money.of("50.00", "USD");
         Money b = Money.of("50.00", "USD");
         assertThat(a).isEqualTo(b);
     }
 
     @Test
-    void equals_same_value_trailing_zeros_ignored() {
+    void GivenSameAmountWithDifferentTrailingZeros_WhenEquals_ThenReturnsTrue() {
         Money a = Money.of("50.0", "USD");
         Money b = Money.of("50.00", "USD");
         assertThat(a).isEqualTo(b);
     }
 
     @Test
-    void equals_different_amount_not_equal() {
+    void GivenDifferentAmounts_WhenEquals_ThenReturnsFalse() {
         assertThat(Money.of("50.00", "USD")).isNotEqualTo(Money.of("51.00", "USD"));
     }
 
     @Test
-    void equals_different_currency_not_equal() {
+    void GivenDifferentCurrencies_WhenEquals_ThenReturnsFalse() {
         assertThat(Money.of("50.00", "USD")).isNotEqualTo(Money.of("50.00", "EUR"));
     }
 
     @Test
-    void hashCode_consistent_with_equals() {
+    void GivenEqualMoneys_WhenHashCode_ThenHashCodesAreEqual() {
         Money a = Money.of("100.00", "USD");
         Money b = Money.of("100.00", "USD");
         assertThat(a.hashCode()).isEqualTo(b.hashCode());
     }
 
     @Test
-    void amount_rounded_to_two_decimal_places() {
+    void GivenAmountWithMoreThanTwoDecimals_WhenOf_ThenAmountIsRoundedToTwoDecimalPlaces() {
         Money m = Money.of("10.005", "USD");
         assertThat(m.amount().scale()).isEqualTo(2);
     }
 
     @Test
-    void toString_includes_amount_and_currency() {
+    void GivenMoney_WhenToString_ThenIncludesAmountAndCurrency() {
         String s = Money.of("25.50", "USD").toString();
         assertThat(s).contains("25.50").contains("USD");
     }
