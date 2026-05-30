@@ -668,8 +668,16 @@ export default function MyEventsPage() {
                           ) : (
                             <div className="mt-2 grid gap-1">
                               {lotteryWinners.map((id) => (
-                                <div key={id} className="font-mono text-sm text-slate-800">
-                                  {id}
+                                <div key={id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                                  <div className="font-mono text-sm text-slate-800">{id}</div>
+                                  <button
+                                    onClick={() => {
+                                      setSuccessMessage(`Send message UI not connected yet (winner: ${id}).`);
+                                    }}
+                                    className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-50"
+                                  >
+                                    Send message
+                                  </button>
                                 </div>
                               ))}
                             </div>
