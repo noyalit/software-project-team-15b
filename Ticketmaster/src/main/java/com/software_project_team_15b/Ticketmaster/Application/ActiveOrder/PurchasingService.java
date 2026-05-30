@@ -385,26 +385,29 @@ public class PurchasingService {
             );
 
             //for notification purposes
+            var eventView = eventDomainService.getEvent(activeOrder.getEventId());
 
             //successful purchase
-            notifier.notifyUser(userId, new NotificationDTO(
-                    NotificationType.PURCHASE_SUCCESS,
-                    "Checkout Completed",
-                    "Your checkout for event " + eventDomainService.getEvent(activeOrder.getEventId()).name() + " has been completed successfully.",
-                    LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC))
-                );
+            if (eventView != null) {
+                notifier.notifyUser(userId, new NotificationDTO(
+                        NotificationType.PURCHASE_SUCCESS,
+                        "Checkout Completed",
+                        "Your checkout for event " + eventView.name() + " has been completed successfully.",
+                        LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC))
+                    );
+            }
 
             //event sold out
-            var event = eventDomainService.getEvent(activeOrder.getEventId());
-            int remaining = event.areas().stream().mapToInt(a -> a.availableCapacity()).sum();
-            if (remaining == 0) {
+            if (eventView != null) {
+                int remaining = eventView.areas().stream().mapToInt(a -> a.availableCapacity()).sum();
+                if (remaining == 0) {
                     notifier.notifyEventManagers(activeOrder.getEventId(), new NotificationDTO(
-                    NotificationType.EVENT_SOLD_OUT,
-                    "Event Sold Out",
-                    "Event " + event.name() + " is now sold out.",
-                    LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC))
-                );
-               
+                            NotificationType.EVENT_SOLD_OUT,
+                            "Event Sold Out",
+                            "Event " + eventView.name() + " is now sold out.",
+                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC))
+                        );
+                }
             }
 
             return new CheckoutCompletedDTO(

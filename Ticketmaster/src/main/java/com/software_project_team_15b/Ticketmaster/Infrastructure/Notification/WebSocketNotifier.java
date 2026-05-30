@@ -5,8 +5,10 @@ import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 
 import java.util.UUID;
 
+import org.springframework.stereotype.Component;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
+@Component
 public class WebSocketNotifier implements INotifier {
 
     private final SimpMessagingTemplate messagingTemplate;

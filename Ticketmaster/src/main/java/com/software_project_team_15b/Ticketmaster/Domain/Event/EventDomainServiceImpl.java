@@ -10,6 +10,7 @@ import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PessimisticLockException;
@@ -50,13 +51,16 @@ public class EventDomainServiceImpl implements IEventDomainService {
     private final IEventRepository events;
     private final EventLockRegistry locks;
     private final TransactionTemplate txTemplate;
+    private final IOrderHistoryRepository orderHistoryRepository;
 
     public EventDomainServiceImpl(IEventRepository events,
                                   EventLockRegistry locks,
-                                  PlatformTransactionManager txManager) {
+                                  PlatformTransactionManager txManager,
+                                  IOrderHistoryRepository orderHistoryRepository) {
         this.events = Objects.requireNonNull(events);
         this.locks = Objects.requireNonNull(locks);
         this.txTemplate = new TransactionTemplate(Objects.requireNonNull(txManager));
+        this.orderHistoryRepository = Objects.requireNonNull(orderHistoryRepository);
     }
 
     // ---- Catalog & lifecycle -------------------------------------------------
@@ -236,6 +240,16 @@ public class EventDomainServiceImpl implements IEventDomainService {
     @Transactional(readOnly = true)
     public EventDTO getEvent(UUID eventId) {
         return EventDTO.from(requireEvent(eventId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UUID> collectAttendeeUserIds(UUID eventId) {
+        Objects.requireNonNull(eventId, "eventId");
+        return orderHistoryRepository.findByEventIdAndIsCancelledFalse(eventId).stream()
+                .map(com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory::getUserId)
+                .distinct()
+                .toList();
     }
 
     @Override

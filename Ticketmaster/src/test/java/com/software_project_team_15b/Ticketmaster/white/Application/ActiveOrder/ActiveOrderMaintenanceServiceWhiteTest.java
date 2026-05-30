@@ -1,10 +1,13 @@
 package com.software_project_team_15b.Ticketmaster.white.Application.ActiveOrder;
 
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.ActiveOrderMaintenanceService;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrderRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -32,6 +35,9 @@ class ActiveOrderMaintenanceServiceWhiteTest {
     @Mock
     private IEventDomainService eventDomainService;
 
+        @Mock
+        private INotifier notifier;
+
     private ActiveOrderMaintenanceService service;
 
     private UUID userId;
@@ -44,7 +50,8 @@ class ActiveOrderMaintenanceServiceWhiteTest {
     void setUp() {
         service = new ActiveOrderMaintenanceService(
                 activeOrderRepository,
-                eventDomainService
+                eventDomainService,
+                notifier
         );
 
         userId = UUID.randomUUID();
@@ -57,14 +64,21 @@ class ActiveOrderMaintenanceServiceWhiteTest {
     @Test
     void constructorShouldThrowWhenRepositoryIsNull() {
         assertThrows(IllegalArgumentException.class, () ->
-                new ActiveOrderMaintenanceService(null, eventDomainService)
+                new ActiveOrderMaintenanceService(null, eventDomainService, notifier)
         );
     }
 
     @Test
     void constructorShouldThrowWhenEventDomainServiceIsNull() {
         assertThrows(IllegalArgumentException.class, () ->
-                new ActiveOrderMaintenanceService(activeOrderRepository, null)
+                new ActiveOrderMaintenanceService(activeOrderRepository, null, notifier)
+        );
+    }
+
+    @Test
+    void constructorShouldThrowWhenNotifierIsNull() {
+        assertThrows(IllegalArgumentException.class, () ->
+                new ActiveOrderMaintenanceService(activeOrderRepository, eventDomainService, null)
         );
     }
 
@@ -254,4 +268,54 @@ class ActiveOrderMaintenanceServiceWhiteTest {
         assertTrue(exception.getMessage().contains("Cannot invoke"));
         verifyNoInteractions(eventDomainService, activeOrderRepository);
     }
+
+        @Test
+        void notifyCheckoutExpiringSoonShouldNotifyOrdersInsideWarningWindow() {
+                ActiveOrder activeOrder = mock(ActiveOrder.class);
+                LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(1);
+                EventDTO event = new EventDTO(
+                        eventId,
+                        UUID.randomUUID(),
+                        "Concert Night",
+                        "Artist",
+                        null,
+                        null,
+                        "Hall",
+                        null,
+                        List.of()
+                );
+
+                when(activeOrder.getOrderId()).thenReturn(orderId);
+                when(activeOrder.getUserId()).thenReturn(userId);
+                when(activeOrder.getEventId()).thenReturn(eventId);
+                when(activeOrder.getExpiresAt()).thenReturn(expiresAt);
+                when(activeOrder.getStatus()).thenReturn(ActiveOrderStatus.ACTIVE);
+                when(activeOrder.isCheckoutWarningSent()).thenReturn(false);
+                when(activeOrderRepository.findByStatusNotForUpdate(ActiveOrderStatus.ACTIVE))
+                                .thenReturn(List.of(activeOrder));
+                when(eventDomainService.getEvent(eventId)).thenReturn(event);
+
+                service.notifyCheckoutExpiringSoon();
+
+                verify(notifier).notifyUser(eq(userId), any(NotificationDTO.class));
+                verify(activeOrder).markCheckoutWarningSent();
+                verify(activeOrderRepository).save(activeOrder);
+        }
+
+        @Test
+        void notifyCheckoutExpiringSoonShouldSkipOrdersOutsideWarningWindow() {
+                ActiveOrder activeOrder = mock(ActiveOrder.class);
+
+                when(activeOrder.getExpiresAt()).thenReturn(LocalDateTime.now().plusMinutes(10));
+                when(activeOrder.getStatus()).thenReturn(ActiveOrderStatus.ACTIVE);
+                when(activeOrder.isCheckoutWarningSent()).thenReturn(false);
+                when(activeOrderRepository.findByStatusNotForUpdate(ActiveOrderStatus.ACTIVE))
+                                .thenReturn(List.of(activeOrder));
+
+                service.notifyCheckoutExpiringSoon();
+
+                verifyNoInteractions(notifier);
+                verify(activeOrder, never()).markCheckoutWarningSent();
+                verify(activeOrderRepository, never()).save(any());
+        }
 }

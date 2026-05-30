@@ -80,6 +80,9 @@ public class ActiveOrder {
     @Column(name = "expires_at", nullable = true)
     private LocalDateTime expiresAt;
 
+    @Column(name = "checkout_warning_sent", nullable = false)
+    private boolean checkoutWarningSent;
+
     @Version
     private Long version;
 
@@ -108,6 +111,7 @@ public class ActiveOrder {
         this.activeUniquenessKey = true;
         this.createdAt = LocalDateTime.now();
         this.expiresAt = null;
+        this.checkoutWarningSent = false;
     }
     // Constructor for testing purposes
     public ActiveOrder(UUID orderId,
@@ -138,6 +142,7 @@ public class ActiveOrder {
         this.status = ActiveOrderStatus.ACTIVE;
         this.activeUniquenessKey = true;
         this.orderSeats = new HashSet<>();
+        this.checkoutWarningSent = false;
     }
 
     public UUID getOrderId() {
@@ -175,6 +180,10 @@ public class ActiveOrder {
 
     public LocalDateTime getExpiresAt() {
         return expiresAt;
+    }
+
+    public boolean isCheckoutWarningSent() {
+        return checkoutWarningSent;
     }
 
     public Long getVersion() {
@@ -225,6 +234,7 @@ public class ActiveOrder {
         }
 
         this.expiresAt = checkoutExpiresAt;
+        this.checkoutWarningSent = false;
     }
 
     public void complete() {
@@ -266,6 +276,17 @@ public class ActiveOrder {
         }
 
         changeStatusFromActive(ActiveOrderStatus.EXPIRED);
+    }
+
+    public void markCheckoutWarningSent() {
+        if (status != ActiveOrderStatus.ACTIVE) {
+            throw new UnactiveOrderException("Order " + orderId + " is not active and cannot be marked");
+        }
+        if (expiresAt == null) {
+            throw new IllegalStateException("Order " + orderId + " is not in checkout");
+        }
+
+        this.checkoutWarningSent = true;
     }
 
     public void ensureOrderIsActive() {

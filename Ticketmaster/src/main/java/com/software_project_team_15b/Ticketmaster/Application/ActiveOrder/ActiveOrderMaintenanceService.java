@@ -4,6 +4,9 @@ import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrderRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
+import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationType;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,6 +15,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -22,19 +26,57 @@ public class ActiveOrderMaintenanceService {
     private static final Logger AUDIT =
             LoggerFactory.getLogger("audit.active-order-maintenance");
 
+        private static final long EXPIRY_WARNING_MINUTES = 2;
+
     private final IActiveOrderRepository activeOrderRepository;
     private final IEventDomainService eventDomainService;
+        private final INotifier notifier;
 
     public ActiveOrderMaintenanceService(
             IActiveOrderRepository activeOrderRepository,
-            IEventDomainService eventDomainService
+            IEventDomainService eventDomainService,
+            INotifier notifier
     ) {
-        if (activeOrderRepository == null || eventDomainService == null) {
+        if (activeOrderRepository == null || eventDomainService == null || notifier == null) {
             throw new IllegalArgumentException("Dependencies cannot be null");
         }
 
         this.activeOrderRepository = activeOrderRepository;
         this.eventDomainService = eventDomainService;
+        this.notifier = notifier;
+    }
+
+    @Transactional
+    @Scheduled(fixedDelayString = "${active-orders.expiry-warning-scan-ms:60000}")
+    public void notifyCheckoutExpiringSoon() {
+        try {
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime warningBefore = now.plusMinutes(EXPIRY_WARNING_MINUTES);
+
+            List<ActiveOrder> orders = activeOrderRepository.findByStatusNotForUpdate(ActiveOrderStatus.ACTIVE);
+            if (orders.isEmpty()) {
+                return;
+            }
+
+            int notifiedCount = 0;
+            for (ActiveOrder activeOrder : orders) {
+                if (!shouldNotifyCheckoutExpiringSoon(activeOrder, now, warningBefore)) {
+                    continue;
+                }
+
+                sendCheckoutExpiringSoonNotification(activeOrder);
+                activeOrder.markCheckoutWarningSent();
+                activeOrderRepository.save(activeOrder);
+                notifiedCount++;
+            }
+
+            if (notifiedCount > 0) {
+                AUDIT.info("op=notifyCheckoutExpiringSoon count={} warningBefore={} result=ok", notifiedCount, warningBefore);
+            }
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=notifyCheckoutExpiringSoon result=error reason={}", e.getMessage(), e);
+            throw e;
+        }
     }
 
     @Transactional
@@ -86,6 +128,38 @@ public class ActiveOrderMaintenanceService {
             AUDIT.warn("op=releaseAndDeleteExpiredActiveOrders result=error reason={}", e.getMessage(), e);
 
             throw e; // Rethrow to trigger transaction rollback and ensure no orders are deleted without releasing seats
+        }
+    }
+
+    private boolean shouldNotifyCheckoutExpiringSoon(ActiveOrder activeOrder, LocalDateTime now, LocalDateTime warningBefore) {
+        if (activeOrder == null) {
+            return false;
+        }
+        LocalDateTime expiresAt = activeOrder.getExpiresAt();
+        return expiresAt != null
+                && activeOrder.getStatus() == ActiveOrderStatus.ACTIVE
+                && !activeOrder.isCheckoutWarningSent()
+                && expiresAt.isAfter(now)
+                && !expiresAt.isAfter(warningBefore);
+    }
+
+    private void sendCheckoutExpiringSoonNotification(ActiveOrder activeOrder) {
+        try {
+            if (activeOrder == null) {
+                return;
+            }
+            var event = eventDomainService.getEvent(activeOrder.getEventId());
+            NotificationDTO notification = new NotificationDTO(
+                    NotificationType.ORDER_EXPIRING_SOON,
+                    "Checkout Expiring Soon",
+                    "Your checkout for '" + event.name() + "' is almost up. Please complete your purchase before your reservation expires.",
+                    Instant.now()
+            );
+            notifier.notifyUser(activeOrder.getUserId(), notification);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=notifyCheckoutExpiringSoon order={} user={} result=error reason={}",
+                    activeOrder.getOrderId(), activeOrder.getUserId(), e.getMessage(), e);
+            throw e;
         }
     }
 

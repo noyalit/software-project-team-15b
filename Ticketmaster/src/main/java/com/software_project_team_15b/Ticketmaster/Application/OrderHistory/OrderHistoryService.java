@@ -24,6 +24,8 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaym
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
+
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Manager;
@@ -34,9 +36,12 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
+
 import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.OrderHistoryDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.TicketDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
+
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -54,6 +59,7 @@ public class OrderHistoryService implements EventSubscriber{
     private final IMemberRepository memberRepository;
     private static final ConcurrentHashMap<UUID, LockEntry> ORDER_LOCKS = new ConcurrentHashMap<>();
     private final TransactionTemplate transactionTemplate;
+    private final INotifier notifier;
 
     public OrderHistoryService(IOrderHistoryRepository orderHistoryRepository,
                                IPaymentAPI paymentGateway,
@@ -64,7 +70,8 @@ public class OrderHistoryService implements EventSubscriber{
                                UserDomainService userDomainService,
                                ICompanyRepository companyRepository,
                                IMemberRepository memberRepository,
-                               PlatformTransactionManager transactionManager) {
+                               PlatformTransactionManager transactionManager,
+                               INotifier notifier) {
         this.orderHistoryRepository = orderHistoryRepository;
         this.paymentGateway = paymentGateway;
         this.ticketProvider = ticketProvider;
@@ -74,6 +81,7 @@ public class OrderHistoryService implements EventSubscriber{
         this.companyRepository = companyRepository;
         this.memberRepository = memberRepository;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
+        this.notifier = notifier;
         eventCancelManager.subscribe(this);
     }
 
