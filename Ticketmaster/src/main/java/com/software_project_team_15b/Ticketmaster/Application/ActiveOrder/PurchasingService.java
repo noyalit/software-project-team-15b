@@ -24,6 +24,7 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITick
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
+import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutCompletedDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutStartedDTO;
@@ -794,6 +795,20 @@ public class PurchasingService {
     private HoldReceipt holdSeatsForActiveOrder(ActiveOrder activeOrder) {
         if (activeOrder == null || activeOrder.getOrderSeats().isEmpty()) {
             throw new IllegalArgumentException("Active order cannot be null and must have seats");
+        }
+
+        EventDTO event = eventDomainService.getEvent(activeOrder.getEventId());
+        EventDTO.AreaView area = event.areas().stream()
+                .filter(a -> a.areaId().equals(activeOrder.getAreaId()))
+                .findFirst()
+                .orElse(null);
+
+        if (area != null && "STANDING".equalsIgnoreCase(String.valueOf(area.type()))) {
+            int qty = activeOrder.getOrderSeats().size();
+            return eventDomainService.hold(
+                    activeOrder.getEventId(),
+                    new HoldCommand(activeOrder.getAreaId(), List.of(), qty, activeOrder.getOrderId())
+            );
         }
 
         return eventDomainService.holdSeats(
