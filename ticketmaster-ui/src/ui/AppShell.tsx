@@ -99,6 +99,7 @@ export default function AppShell() {
                 <button
                   onClick={() => {
                     localStorage.removeItem('activeOrderId');
+                    sessionStorage.removeItem('activeOrderId');
                     logout();
                     window.location.href = '/';
                   }}

@@ -36,7 +36,8 @@ export default function CheckoutPage() {
   const [couponCode, setCouponCode] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const activeOrderId = orderId ?? localStorage.getItem('activeOrderId') ?? null;
+  const activeOrderId =
+    orderId ?? sessionStorage.getItem('activeOrderId') ?? localStorage.getItem('activeOrderId') ?? null;
 
   const checkoutCompleted = Boolean(successMessage);
 
@@ -61,6 +62,7 @@ export default function CheckoutPage() {
         }
 
         if (status === 410) {
+          sessionStorage.removeItem('activeOrderId');
           localStorage.removeItem('activeOrderId');
           if (!orderId) {
             navigate('/events', { replace: true });
@@ -118,6 +120,7 @@ export default function CheckoutPage() {
     },
     onSuccess: async () => {
       setSuccessMessage('Purchase completed successfully.');
+      sessionStorage.removeItem('activeOrderId');
       localStorage.removeItem('activeOrderId');
       await qc.invalidateQueries({ queryKey: ['event'] });
       await qc.invalidateQueries({ queryKey: ['active-order'] });

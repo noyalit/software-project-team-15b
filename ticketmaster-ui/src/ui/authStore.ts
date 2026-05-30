@@ -35,6 +35,7 @@ function save(token: string | null, userType: UserType, username: string | null)
 
 function clearOrderContext() {
   localStorage.removeItem('activeOrderId');
+  sessionStorage.removeItem('activeOrderId');
   localStorage.removeItem('guestBirthDate');
 }
 

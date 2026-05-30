@@ -54,7 +54,17 @@ export default function EventDetailsPage() {
   const [standingQuantity, setStandingQuantity] = useState(1);
   const [guestBirthDate, setGuestBirthDate] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [activeOrderId, setActiveOrderId] = useState<string | null>(() =>localStorage.getItem('activeOrderId'));
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(() => {
+    const fromSession = sessionStorage.getItem('activeOrderId');
+    if (fromSession) return fromSession;
+    const fromLocal = localStorage.getItem('activeOrderId');
+    if (fromLocal) {
+      sessionStorage.setItem('activeOrderId', fromLocal);
+      localStorage.removeItem('activeOrderId');
+      return fromLocal;
+    }
+    return null;
+  });
   const [checkoutStarted, setCheckoutStarted] = useState(false);
 
   const myActiveOrdersQuery = useQuery({
@@ -123,7 +133,7 @@ export default function EventDetailsPage() {
     const matching = orders.find((o) => o.eventId === eventId);
     if (!matching) return;
     setActiveOrderId(matching.orderId);
-    localStorage.setItem('activeOrderId', matching.orderId);
+    sessionStorage.setItem('activeOrderId', matching.orderId);
   }, [activeOrderId, eventId, myActiveOrdersQuery.data]);
 
   const eventQuery = useQuery({
@@ -191,7 +201,7 @@ export default function EventDetailsPage() {
           msg.toLowerCase().includes('checkout has expired') ||
           msg.toLowerCase().includes('is not active')
         ) {
-          localStorage.removeItem('activeOrderId');
+          sessionStorage.removeItem('activeOrderId');
           setActiveOrderId(null);
           setCheckoutStarted(false);
           setSelectedSeatIds([]);
@@ -296,7 +306,7 @@ export default function EventDetailsPage() {
             const matching = orders.find((o) => o.eventId === eventId);
             if (matching?.orderId) {
               setActiveOrderId(matching.orderId);
-              localStorage.setItem('activeOrderId', matching.orderId);
+              sessionStorage.setItem('activeOrderId', matching.orderId);
               return matching.orderId;
             }
           } catch {
@@ -312,7 +322,7 @@ export default function EventDetailsPage() {
 
     onSuccess: async (orderId) => {
       setActiveOrderId(orderId);
-      localStorage.setItem('activeOrderId', orderId);
+      sessionStorage.setItem('activeOrderId', orderId);
       setSuccessMessage('Active order started.');
       await qc.invalidateQueries({ queryKey: ['active-order', orderId] });
     },
