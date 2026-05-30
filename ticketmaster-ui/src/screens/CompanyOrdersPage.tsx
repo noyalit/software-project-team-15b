@@ -4,12 +4,13 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getApiErrorMessage } from '../api/errors';
 import { http } from '../api/http';
-import type { ApiResponse, CompanyDTO, EventDTO, OrderHistoryDTO } from '../api/types';
+import type { ApiResponse, CompanyDTO, EventDTO, MemberDTO, OrderHistoryDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 
 type OrdersResponse = ApiResponse<OrderHistoryDTO[]>;
 type CompaniesResponse = ApiResponse<CompanyDTO[]>;
 type EventsResponse = ApiResponse<EventDTO[]>;
+type ResolveMemberResponse = ApiResponse<MemberDTO>;
 
 export default function CompanyOrdersPage() {
   const { token, userType, clearAuth } = useAuthStore();
@@ -80,6 +81,45 @@ export default function CompanyOrdersPage() {
     }
     return map;
   }, [eventsQuery.data]);
+
+  const userIdsToResolve = useMemo(() => {
+    const uniq = new Set<string>();
+    for (const o of loadedOrders) {
+      if (o.userId) uniq.add(o.userId);
+    }
+    return Array.from(uniq).sort();
+  }, [loadedOrders]);
+
+  const usernamesQuery = useQuery({
+    queryKey: ['company-orders', 'usernames', userIdsToResolve, token],
+    queryFn: async () => {
+      const result: Record<string, string> = {};
+      for (const userId of userIdsToResolve) {
+        try {
+          const res = await http.get<ResolveMemberResponse>(
+            '/api/users/members/resolve-by-id',
+            {
+              params: { userId },
+            }
+          );
+          if (res.data.error) continue;
+          if (res.data.data?.username) {
+            result[userId] = res.data.data.username;
+          }
+        } catch (e) {
+          const err = e as AxiosError<ResolveMemberResponse>;
+          const status = err.response?.status;
+          if (status === 401) {
+            clearAuth();
+            throw new Error('Your session expired. Please log in again.');
+          }
+        }
+      }
+      return result;
+    },
+    enabled: userType === 'member' && Boolean(token) && userIdsToResolve.length > 0,
+    staleTime: 60_000,
+  });
 
   const runQuery = useMutation({
     mutationFn: async (): Promise<OrderHistoryDTO[]> => {
@@ -235,7 +275,7 @@ export default function CompanyOrdersPage() {
                 <tr>
                   <th className="px-4 py-3 font-semibold">Order ID</th>
                   <th className="px-4 py-3 font-semibold">Event</th>
-                  <th className="px-4 py-3 font-semibold">User ID</th>
+                  <th className="px-4 py-3 font-semibold">Username</th>
                   <th className="px-4 py-3 font-semibold">Total</th>
                   <th className="px-4 py-3 font-semibold">Tickets</th>
                   <th className="px-4 py-3 font-semibold">Cancelled</th>
@@ -244,6 +284,7 @@ export default function CompanyOrdersPage() {
               <tbody className="divide-y divide-slate-200">
                 {loadedOrders.map((o) => {
                   const ev = eventsById.get(o.eventId);
+                  const usernameResolved = usernamesQuery.data?.[o.userId];
                   return (
                     <tr key={o.orderId} className="bg-white">
                       <td className="px-4 py-3 font-mono text-xs text-slate-800">
@@ -252,8 +293,8 @@ export default function CompanyOrdersPage() {
                       <td className="px-4 py-3 text-slate-800">
                         {ev ? `${ev.name} — ${ev.artist}` : o.eventId}
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-slate-800">
-                        {o.userId}
+                      <td className="px-4 py-3 text-slate-800">
+                        {usernameResolved ?? '—'}
                       </td>
                       <td className="px-4 py-3 text-slate-800">
                         {o.totalPrice
