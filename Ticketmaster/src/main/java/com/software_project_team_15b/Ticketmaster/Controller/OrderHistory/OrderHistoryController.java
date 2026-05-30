@@ -51,6 +51,77 @@ public class OrderHistoryController {
         }
     }
 
+    @Operation(summary = "Get all orders in the system (admin only)")
+    @GetMapping("/admin/all")
+    public ResponseEntity<ApiResponse<List<OrderHistoryDTO>>> getAllOrders(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+    ) {
+        try {
+            List<OrderHistoryDTO> orders = orderHistoryService.getGlobalOrderHistoryAll(token);
+            return ResponseEntity.ok(new ApiResponse<>(orders, null));
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Get all orders for a specific user (admin only)")
+    @GetMapping("/admin/user/{userId}")
+    public ResponseEntity<ApiResponse<List<OrderHistoryDTO>>> getOrdersForUser(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID userId
+    ) {
+        try {
+            List<OrderHistoryDTO> orders = orderHistoryService.getGlobalOrderHistoryByUser(token, userId);
+            return ResponseEntity.ok(new ApiResponse<>(orders, null));
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Get all orders for a specific event (admin only)")
+    @GetMapping("/admin/event/{eventId}")
+    public ResponseEntity<ApiResponse<List<OrderHistoryDTO>>> getOrdersForEvent(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID eventId
+    ) {
+        try {
+            List<OrderHistoryDTO> orders = orderHistoryService.getGlobalOrderHistoryByEvent(token, eventId);
+            return ResponseEntity.ok(new ApiResponse<>(orders, null));
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Get all orders for events owned by a specific company (admin only)")
+    @GetMapping("/admin/company/{companyId}")
+    public ResponseEntity<ApiResponse<List<OrderHistoryDTO>>> getOrdersForCompany(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID companyId
+    ) {
+        try {
+            List<OrderHistoryDTO> orders = orderHistoryService.getGlobalOrderHistoryByCompany(token, companyId);
+            return ResponseEntity.ok(new ApiResponse<>(orders, null));
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     @Operation(summary = "Get sold tickets grouped by event for a company")
     @GetMapping("/company/{companyId}/sold-tickets")
     public ResponseEntity<ApiResponse<Map<UUID, List<TicketDTO>>>> getSoldTicketsForCompany(

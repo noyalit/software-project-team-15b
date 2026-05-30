@@ -147,6 +147,123 @@ public class OrderHistoryService implements EventSubscriber{
     }
 
     @Transactional(readOnly = true)
+    public List<OrderHistoryDTO> getGlobalOrderHistoryAll(String token) {
+        UUID callerId = null;
+        try {
+            if (token == null) {
+                throw new IllegalArgumentException("token cannot be null");
+            }
+
+            validateUser(token);
+            callerId = auth.extractUserId(token);
+            if (!auth.isSystemAdmin(token)) {
+                throw new UnauthorizedCompanyActionException("Only system admin can view global order history");
+            }
+
+            List<OrderHistoryDTO> result = orderHistoryRepository.findAll().stream()
+                    .map(this::toOrderHistoryDTO)
+                    .collect(Collectors.toList());
+            AUDIT.info("op=getGlobalOrderHistoryAll callerId={} orders={}", callerId, result.size());
+            return Collections.unmodifiableList(result);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=getGlobalOrderHistoryAll callerId={} result=error reason={}", callerId, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderHistoryDTO> getGlobalOrderHistoryByUser(String token, UUID userId) {
+        UUID callerId = null;
+        try {
+            if (token == null) {
+                throw new IllegalArgumentException("token cannot be null");
+            }
+            if (userId == null) {
+                throw new IllegalArgumentException("userId cannot be null");
+            }
+
+            validateUser(token);
+            callerId = auth.extractUserId(token);
+            if (!auth.isSystemAdmin(token)) {
+                throw new UnauthorizedCompanyActionException("Only system admin can view global order history");
+            }
+
+            List<OrderHistoryDTO> result = orderHistoryRepository.findByUserId(userId).stream()
+                    .map(this::toOrderHistoryDTO)
+                    .collect(Collectors.toList());
+            AUDIT.info("op=getGlobalOrderHistoryByUser callerId={} userId={} orders={}", callerId, userId, result.size());
+            return Collections.unmodifiableList(result);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=getGlobalOrderHistoryByUser callerId={} userId={} result=error reason={}", callerId, userId, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderHistoryDTO> getGlobalOrderHistoryByEvent(String token, UUID eventId) {
+        UUID callerId = null;
+        try {
+            if (token == null) {
+                throw new IllegalArgumentException("token cannot be null");
+            }
+            if (eventId == null) {
+                throw new IllegalArgumentException("eventId cannot be null");
+            }
+
+            validateUser(token);
+            callerId = auth.extractUserId(token);
+            if (!auth.isSystemAdmin(token)) {
+                throw new UnauthorizedCompanyActionException("Only system admin can view global order history");
+            }
+
+            List<OrderHistoryDTO> result = orderHistoryRepository.findByEventId(eventId).stream()
+                    .map(this::toOrderHistoryDTO)
+                    .collect(Collectors.toList());
+            AUDIT.info("op=getGlobalOrderHistoryByEvent callerId={} eventId={} orders={}", callerId, eventId, result.size());
+            return Collections.unmodifiableList(result);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=getGlobalOrderHistoryByEvent callerId={} eventId={} result=error reason={}", callerId, eventId, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderHistoryDTO> getGlobalOrderHistoryByCompany(String token, UUID companyId) {
+        UUID callerId = null;
+        try {
+            if (token == null) {
+                throw new IllegalArgumentException("token cannot be null");
+            }
+            if (companyId == null) {
+                throw new IllegalArgumentException("companyId cannot be null");
+            }
+
+            validateUser(token);
+            callerId = auth.extractUserId(token);
+            if (!auth.isSystemAdmin(token)) {
+                throw new UnauthorizedCompanyActionException("Only system admin can view global order history");
+            }
+
+            SearchCriteria criteria = SearchCriteria.empty();
+            List<Event> events = eventsRepository.searchByCompany(companyId, criteria);
+            if (events.isEmpty()) {
+                AUDIT.info("op=getGlobalOrderHistoryByCompany callerId={} companyId={} result=no_events", callerId, companyId);
+                return List.of();
+            }
+
+            List<UUID> eventIds = events.stream().map(Event::eventId).toList();
+            List<OrderHistoryDTO> result = orderHistoryRepository.findByEventIdIn(eventIds).stream()
+                    .map(this::toOrderHistoryDTO)
+                    .collect(Collectors.toList());
+            AUDIT.info("op=getGlobalOrderHistoryByCompany callerId={} companyId={} orders={}", callerId, companyId, result.size());
+            return Collections.unmodifiableList(result);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=getGlobalOrderHistoryByCompany callerId={} companyId={} result=error reason={}", callerId, companyId, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    @Transactional(readOnly = true)
     public Map<UUID, List<TicketDTO>> getSoldTicketsForCompany(String token, UUID companyId) {
         try {
             if (token == null) {
