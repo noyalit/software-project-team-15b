@@ -7,13 +7,14 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Hol
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.DiscountCombineStrategy;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 
 import jakarta.persistence.OptimisticLockException;
 import jakarta.persistence.PessimisticLockException;
-import org.apache.commons.lang3.NotImplementedException;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.PessimisticLockingFailureException;
@@ -48,13 +49,16 @@ import java.util.concurrent.locks.ReentrantLock;
 public class EventDomainServiceImpl implements IEventDomainService {
 
     private final IEventRepository events;
+    private final ICompanyDomainService companyDomainService;
     private final EventLockRegistry locks;
     private final TransactionTemplate txTemplate;
 
     public EventDomainServiceImpl(IEventRepository events,
+                                  @Lazy ICompanyDomainService companyDomainService,
                                   EventLockRegistry locks,
                                   PlatformTransactionManager txManager) {
         this.events = Objects.requireNonNull(events);
+        this.companyDomainService = Objects.requireNonNull(companyDomainService);
         this.locks = Objects.requireNonNull(locks);
         this.txTemplate = new TransactionTemplate(Objects.requireNonNull(txManager));
     }
@@ -315,20 +319,20 @@ public class EventDomainServiceImpl implements IEventDomainService {
             LocalDate birthDate,
             String couponCode
     ) {
-        throw new NotImplementedException();
-//        Event event = requireEvent(eventId);
-//        EventArea area = requireArea(event, areaId);
-//        Money subtotal = area.basePrice().multiply(quantity);
-//        PurchaseRequest request = new PurchaseRequest(
-//                eventId, areaId, buyerId, birthDate,
-//                quantity, List.of(), couponCode
-//        );
-//        Money eventTotal = event.cheapestPriceFor(areaId, quantity, request);
-//        // TODO: We need @OrMalky cheapestPriceFor() func for evaluating the price with the polices to return final price
-//        Money companyTotal = companyService.cheapestPriceFor(event.companyId(), subtotal, request);
-//        Money total = eventTotal.amount().compareTo(companyTotal.amount()) <= 0 ? eventTotal : companyTotal;
-//        Money discount = subtotal.subtract(total);
-//        return new PriceBreakdown(area.basePrice(), subtotal, discount, total);
+        Event event = requireEvent(eventId);
+        EventArea area = requireArea(event, areaId);
+        Money subtotal = area.basePrice().multiply(quantity);
+        PurchaseRequest request = new PurchaseRequest(
+                eventId, areaId, buyerId, birthDate,
+                quantity, List.of(), couponCode
+        );
+        Money eventDiscount = event.discountAmountFor(areaId, quantity, request);
+        Money companyDiscount = companyDomainService.discountAmountFor(event.companyId(), subtotal, request);
+        DiscountCombineStrategy strategy =
+                companyDomainService.discountCombineStrategyFor(event.companyId());
+        Money totalDiscount = strategy.combine(eventDiscount, companyDiscount, subtotal);
+        Money total = subtotal.subtract(totalDiscount);
+        return new PriceBreakdown(area.basePrice(), subtotal, totalDiscount, total);
     }
 
     // ---- Holds / confirmations ----------------------------------------------
@@ -438,21 +442,38 @@ public class EventDomainServiceImpl implements IEventDomainService {
         }
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<IEventPurchasePolicy> getPurchasePolicies(UUID eventId) {
+        return requireEvent(eventId).purchasePolicies();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<IEventDiscountPolicy> getDiscountPolicies(UUID eventId) {
+        return requireEvent(eventId).discountPolicies();
+    }
+
     // ---- Validation ----------------------------------------------------------
 
     @Override
     @Transactional(readOnly = true)
     public void validatePurchaseEligibility(UUID eventId, PurchaseRequest request) {
-        throw new NotImplementedException();
-//        Objects.requireNonNull(request, "request");
-//        Event event = requireEvent(eventId);
-//        for (IEventPurchasePolicy policy : event.purchasePolicies()) {
-//            policy.validate(request, event);
-//        }
-//        companyService.validatePurchaseEligibility(event.companyId(), request);
+        Objects.requireNonNull(request, "request");
+        Event event = requireEvent(eventId);
+        for (IEventPurchasePolicy policy : event.purchasePolicies()) {
+            policy.validate(request, event);
+        }
+        companyDomainService.validatePurchaseEligibility(event.companyId(), request);
     }
 
     // ---- Helpers -------------------------------------------------------------
+
+
+    @Override
+    public UUID getCompanyIdForEventId(UUID eventId) {
+        return requireEvent(eventId).companyId();
+    }
 
     private Event requireEvent(UUID eventId) {
         return events.findById(eventId)

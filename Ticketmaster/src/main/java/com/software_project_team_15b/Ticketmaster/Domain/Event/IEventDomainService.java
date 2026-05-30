@@ -37,6 +37,10 @@ public interface IEventDomainService {
 
     void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies);
 
+    List<IEventPurchasePolicy> getPurchasePolicies(UUID eventId);
+
+    List<IEventDiscountPolicy> getDiscountPolicies(UUID eventId);
+
     // ---- Reads ---------------------------------------------------------------
 
     EventDTO getEvent(UUID eventId);
@@ -79,4 +83,6 @@ public interface IEventDomainService {
     // ---- Validation (combined event + company) -------------------------------
 
     void validatePurchaseEligibility(UUID eventId, PurchaseRequest request);
+
+    UUID getCompanyIdForEventId(UUID eventId);
 }

@@ -50,6 +50,28 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
 
     @Override
     @Transactional(readOnly = true)
+    public Money discountAmountFor(UUID companyId, Money subtotal, PurchaseRequest request) {
+        if (companyId == null) {
+            throw new IllegalArgumentException("companyId cannot be null");
+        }
+        if (subtotal == null) {
+            throw new IllegalArgumentException("subtotal cannot be null");
+        }
+        if (request == null) {
+            throw new IllegalArgumentException("request cannot be null");
+        }
+        Money cheapest = cheapestPriceFor(companyId, subtotal, request);
+        return subtotal.subtract(cheapest);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DiscountCombineStrategy discountCombineStrategyFor(UUID companyId) {
+        return DiscountCombineStrategy.SUM;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public void validatePurchaseEligibility(UUID companyId, PurchaseRequest request) {
         if (companyId == null) {
             throw new IllegalArgumentException("companyId cannot be null");
