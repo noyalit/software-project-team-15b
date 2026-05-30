@@ -33,6 +33,11 @@ function save(token: string | null, userType: UserType, username: string | null)
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ token, userType, username }));
 }
 
+function clearOrderContext() {
+  localStorage.removeItem('activeOrderId');
+  localStorage.removeItem('guestBirthDate');
+}
+
 export const useAuthStore = create<AuthState>((set, get) => {
   const initial = load();
 
@@ -41,6 +46,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
     userType: initial.userType,
     username: initial.username,
     setAuth: (token, userType, username = null) => {
+      clearOrderContext();
       save(token, userType, username);
       set({ token, userType, username });
     },
@@ -50,6 +56,7 @@ export const useAuthStore = create<AuthState>((set, get) => {
       set({ username });
     },
     clearAuth: () => {
+      clearOrderContext();
       save(null, null, null);
       set({ token: null, userType: null, username: null });
     },

@@ -229,9 +229,10 @@ public class PurchasingService {
 
     @Transactional
     public UUID createActiveOrder(String token, UUID eventId, UUID areaId) {
+        UUID userId = null;
         try {
             requireCreateActiveOrderArguments(eventId, areaId);
-            UUID userId = requireValidUser(token);
+            userId = requireValidUser(token);
             purchasingDomainService.requireEventCanBeBooked(
                     eventId,
                     eventDomainService.getEventAvailability(eventId)
@@ -250,7 +251,34 @@ public class PurchasingService {
             return orderId;
 
         } catch (DataIntegrityViolationException e) {
-            AUDIT.warn("op=createActiveOrder event={} result=rejected reason=concurrent_order", eventId);
+            AUDIT.warn(
+                    "op=createActiveOrder event={} user={} result=rejected reason=concurrent_order",
+                    eventId,
+                    userId
+            );
+
+            if (userId != null && eventId != null) {
+                try {
+                    List<ActiveOrder> activeOrders = purchasingDomainService.findByUserIdAndStatus(
+                            userId,
+                            ActiveOrderStatus.ACTIVE
+                    );
+                    for (ActiveOrder activeOrder : activeOrders) {
+                        if (eventId.equals(activeOrder.getEventId())) {
+                            AUDIT.info(
+                                    "op=createActiveOrder event={} user={} result=recovered_existing order={}",
+                                    eventId,
+                                    userId,
+                                    activeOrder.getOrderId()
+                            );
+                            return activeOrder.getOrderId();
+                        }
+                    }
+                } catch (RuntimeException ignored) {
+                    // fall through
+                }
+            }
+
             throw new IllegalStateException("User already has an active order for this event", e);
         } catch (RuntimeException e) {
             AUDIT.warn("op=createActiveOrder event={} result=rejected reason={}",

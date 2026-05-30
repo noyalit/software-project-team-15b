@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { http } from '../api/http';
 import type { ApiResponse } from '../api/types';
 import { getApiErrorMessage } from '../api/errors';
+import { useAuthStore } from '../ui/authStore';
 
 type ActiveOrderDTO = {
   orderId: string;
@@ -23,17 +24,19 @@ type OrderHistoryDTO = {
 };
 
 export default function OrdersPage() {
+  const { token } = useAuthStore();
   const myActiveOrdersQuery = useQuery({
-    queryKey: ['active-orders', 'my'],
+    queryKey: ['active-orders', 'my', token],
     queryFn: async () => {
       const res = await http.get<ApiResponse<ActiveOrderDTO[]>>('/api/active-orders/my');
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? [];
     },
+    enabled: Boolean(token),
   });
 
   const orderHistoryQuery = useQuery({
-    queryKey: ['order-history', 'my-orders'],
+    queryKey: ['order-history', 'my-orders', token],
     queryFn: async () => {
       const res = await http.get<ApiResponse<OrderHistoryDTO[]>>(
         '/api/order-history/my-orders'
@@ -41,6 +44,7 @@ export default function OrdersPage() {
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? [];
     },
+    enabled: Boolean(token),
   });
 
   const formatMoney = (m?: MoneyDTO | null) => {
