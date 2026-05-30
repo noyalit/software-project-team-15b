@@ -44,11 +44,11 @@ import org.springframework.stereotype.Service;
  * lives in the domain service so every caller of that interface gets the same
  * guarantees — including {@code PurchasingService} and scheduled maintenance jobs.
  *
- * <p>Each mutating method authorizes the caller against {@link UserDomainService}:
- * owner/founder bypass for every operation; managers must hold the
+ * <p>Each mutating method authorizes the caller through {@link UserDomainService}'s
+ * {@code isLegalEventManager} / {@code isLegalCompanyManager} gates. Both gates
+ * accept active owner/founder as a fallback; managers must hold the
  * {@link com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission}
- * documented on the method. {@code createEvent}, {@code publish}, and {@code cancel}
- * are owner/founder-only.
+ * documented on the method.
  */
 @Service
 public class EventManagementService implements IEventManagementService, EventSubscriber {
@@ -75,10 +75,10 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     public UUID createEvent(CreateEventCommand cmd, UUID callerId) {
-        Objects.requireNonNull(cmd, "cmd");
-        Objects.requireNonNull(callerId, "callerId");
         try {
-            requireOwnerOrFounder(callerId, cmd.companyId(), "createEvent");
+            Objects.requireNonNull(cmd, "cmd");
+            Objects.requireNonNull(callerId, "callerId");
+            userDomainService.isLegalCompanyManager(callerId, cmd.companyId(), ManagerPermission.MANAGE_EVENTS);
             UUID id = eventDomainService.createEvent(cmd);
             AUDIT.info("op=createEvent event={} caller={} result=ok", id, callerId);
             return id;
@@ -89,10 +89,10 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     public UUID addArea(UUID eventId, AddAreaCommand cmd, UUID callerId) {
-        Objects.requireNonNull(eventId, "eventId");
-        Objects.requireNonNull(cmd, "cmd");
-        Objects.requireNonNull(callerId, "callerId");
         try {
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(cmd, "cmd");
+            Objects.requireNonNull(callerId, "callerId");
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.CONFIGURE_HALLS_AND_SEATS);
             UUID areaId = eventDomainService.addArea(eventId, cmd);
@@ -105,9 +105,9 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     public void publish(UUID eventId, UUID callerId) {
-        Objects.requireNonNull(eventId, "eventId");
-        Objects.requireNonNull(callerId, "callerId");
         try {
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(callerId, "callerId");
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.MANAGE_EVENTS);
             eventDomainService.publish(eventId);
@@ -119,9 +119,9 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     public void cancel(UUID eventId, UUID callerId) {
-        Objects.requireNonNull(eventId, "eventId");
-        Objects.requireNonNull(callerId, "callerId");
         try {
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(callerId, "callerId");
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.MANAGE_EVENTS);
             eventDomainService.cancel(eventId);
@@ -158,8 +158,8 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     public void validatePurchaseEligibility(UUID eventId, PurchaseRequest request) {
-        Objects.requireNonNull(request, "request");
         try {
+            Objects.requireNonNull(request, "request");
             eventDomainService.validatePurchaseEligibility(eventId, request);
             AUDIT.info("op=validatePurchaseEligibility event={} buyer={} result=ok",
                     eventId, request.buyerId());
@@ -188,14 +188,6 @@ public class EventManagementService implements IEventManagementService, EventSub
     @Override
     public List<EventDTO.SeatView> areaSeats(UUID eventId, UUID areaId) {
         return eventDomainService.areaSeats(eventId, areaId);
-    }
-
-    private void requireOwnerOrFounder(UUID callerId, UUID companyId, String op) {
-        if (!userDomainService.isActiveOwner(callerId, companyId)
-                && !userDomainService.isActiveFounder(callerId, companyId)) {
-            throw new UnauthorizedCompanyActionException(
-                    "Only owners or the founder may perform " + op);
-        }
     }
 
     /**
@@ -275,10 +267,10 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     public void updateEvent(UUID eventId, UpdateEventCommand cmd, UUID callerId) {
-        Objects.requireNonNull(eventId, "eventId");
-        Objects.requireNonNull(cmd, "cmd");
-        Objects.requireNonNull(callerId, "callerId");
         try {
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(cmd, "cmd");
+            Objects.requireNonNull(callerId, "callerId");
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.MANAGE_EVENTS);
             eventDomainService.updateEvent(eventId, cmd);
@@ -292,11 +284,11 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     public void updateArea(UUID eventId, UUID areaId, UpdateAreaCommand cmd, UUID callerId) {
-        Objects.requireNonNull(eventId, "eventId");
-        Objects.requireNonNull(areaId, "areaId");
-        Objects.requireNonNull(cmd, "cmd");
-        Objects.requireNonNull(callerId, "callerId");
         try {
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(areaId, "areaId");
+            Objects.requireNonNull(cmd, "cmd");
+            Objects.requireNonNull(callerId, "callerId");
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.UPDATE_EVENT_MAP);
             eventDomainService.updateArea(eventId, areaId, cmd);
@@ -310,10 +302,10 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     public void removeArea(UUID eventId, UUID areaId, UUID callerId) {
-        Objects.requireNonNull(eventId, "eventId");
-        Objects.requireNonNull(areaId, "areaId");
-        Objects.requireNonNull(callerId, "callerId");
         try {
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(areaId, "areaId");
+            Objects.requireNonNull(callerId, "callerId");
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.CONFIGURE_HALLS_AND_SEATS);
             eventDomainService.removeArea(eventId, areaId);
@@ -327,10 +319,10 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     public void replacePurchasePolicies(UUID eventId, List<PurchasePolicyDTO> policies, UUID callerId) {
-        Objects.requireNonNull(eventId, "eventId");
-        Objects.requireNonNull(policies, "policies");
-        Objects.requireNonNull(callerId, "callerId");
         try {
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(policies, "policies");
+            Objects.requireNonNull(callerId, "callerId");
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.DEFINE_PURCHASE_POLICY);
             List<IEventPurchasePolicy> domainPolicies = policies.stream()
@@ -348,10 +340,10 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     public void replaceDiscountPolicies(UUID eventId, List<DiscountPolicyDTO> policies, UUID callerId) {
-        Objects.requireNonNull(eventId, "eventId");
-        Objects.requireNonNull(policies, "policies");
-        Objects.requireNonNull(callerId, "callerId");
         try {
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(policies, "policies");
+            Objects.requireNonNull(callerId, "callerId");
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.DEFINE_DISCOUNT_POLICY);
             List<IEventDiscountPolicy> domainPolicies = policies.stream()
@@ -389,8 +381,8 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     public void notifyEventIsCancelled(UUID event) {
-        Objects.requireNonNull(event, "event");
         try {
+            Objects.requireNonNull(event, "event");
             eventDomainService.cancel(event);
             AUDIT.info("op=notifyEventIsCancelled event={} result=ok", event);
         } catch (RuntimeException e) {
