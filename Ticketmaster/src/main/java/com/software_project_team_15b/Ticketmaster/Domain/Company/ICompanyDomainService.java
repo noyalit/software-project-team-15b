@@ -62,6 +62,13 @@ public interface ICompanyDomainService {
     List<Company> findCompaniesByOwner(UUID ownerId);
 
     /**
+     * Returns all companies in the system.
+     *
+     * @return a non-null, possibly empty list of all companies
+     */
+    List<Company> findAll();
+
+    /**
      * Replaces the company's purchase policy. Only an owner or founder of the company
      * may perform this action.
      *

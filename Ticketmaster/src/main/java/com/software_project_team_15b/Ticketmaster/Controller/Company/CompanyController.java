@@ -75,6 +75,25 @@ public class CompanyController {
         }
     }
 
+    @Operation(summary = "List all companies (system admin only)")
+    @GetMapping
+    public ResponseEntity<ApiResponse<List<CompanyDTO>>> getAllCompanies(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+    ) {
+        try {
+            List<CompanyDTO> result = companyService.getAllCompanies(token);
+            return ResponseEntity.ok(new ApiResponse<>(result, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     @Operation(summary = "List companies related to the logged in member")
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<List<CompanyDTO>>> getMyCompanies(

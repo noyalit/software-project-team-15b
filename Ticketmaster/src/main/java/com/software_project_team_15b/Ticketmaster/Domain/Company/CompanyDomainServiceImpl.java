@@ -93,6 +93,16 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<Company> findAll() {
+        List<Company> result = companyRepository.findAll();
+        if (result == null) {
+            throw new IllegalStateException("Repository returned null for findAll; expected an empty list");
+        }
+        return result;
+    }
+
+    @Override
     @Transactional
     public Company updatePurchasePolicy(UUID companyId, UUID callerId, ICompanyPurchasePolicy policy) {
         Company company = getCompanyOrThrow(companyId);

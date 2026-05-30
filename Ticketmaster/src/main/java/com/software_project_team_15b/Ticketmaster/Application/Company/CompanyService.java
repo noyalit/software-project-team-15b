@@ -89,6 +89,16 @@ public class CompanyService {
         return List.copyOf(unique.values());
     }
 
+    public List<CompanyDTO> getAllCompanies(String token) {
+        requireValidToken(token);
+        if (!auth.isSystemAdmin(token)) {
+            throw new UnauthorizedCompanyActionException("Only system admins can view all companies");
+        }
+        return companyDomainService.findAll().stream()
+                .map(CompanyDTO::from)
+                .toList();
+    }
+
     public CompanyDTO updatePurchasePolicy(String token, UUID companyId, ICompanyPurchasePolicy policy) {
         try {
             requireNonNull(companyId, "Company ID");
