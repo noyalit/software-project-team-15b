@@ -575,6 +575,21 @@ public class UserDomainService {
                         new InvalidCredentialsException("Invalid username or password"));
     }
 
+    /*
+        Private helper to check if the caller is an active owner or founder of the company.
+        Used as a fallback for manager permissions
+        since owners/founders can do everything regardless of their manager permissions.
+    */
+    public void isActiveOwnerOrFounder(UUID companyId, UUID callerId) {
+        Objects.requireNonNull(companyId, "eventId");
+        Objects.requireNonNull(callerId, "callerId");
+        if (!isActiveFounder(callerId, companyId) &&
+                !isActiveOwner(callerId, companyId)) {
+            throw new UnauthorizedCompanyActionException(
+                    "Only active owners/founders can perform this action");
+        }
+    }
+
     public MemberDTO toDTO(Member member) {
         if (member == null) {
             throw new InvalidMemberInputException("Member cannot be null");
