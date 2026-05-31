@@ -120,18 +120,21 @@ export default function CheckoutPage() {
         }
 
         if (status === 409) {
-          sessionStorage.removeItem('activeOrderId');
-          localStorage.removeItem('activeOrderId');
-          if (!orderId) {
-            navigate('/events', { replace: true });
-          }
-          throw new Error('This active order is no longer valid. Please start a new order.');
+          throw new Error('Order is being updated. Please wait a moment…');
         }
 
         throw e;
       }
     },
     enabled: Boolean(activeOrderId) && Boolean(token) && !checkoutCompleted,
+    retry: (failureCount, error) => {
+      const err = error as AxiosError<ApiResponse<unknown>>;
+      if (err.response?.status === 409) {
+        return failureCount < 5;
+      }
+      return false;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * (attemptIndex + 1), 3000),
   });
 
   const eventQuery = useQuery({
@@ -462,7 +465,13 @@ export default function CheckoutPage() {
                 setSuccessMessage(null);
                 completeCheckoutMutation.mutate();
               }}
-              disabled={completeCheckoutMutation.isPending || activeOrderQuery.isError}
+              disabled={
+                completeCheckoutMutation.isPending ||
+                (activeOrderQuery.isError &&
+                  !getApiErrorMessage(activeOrderQuery.error)
+                    .toLowerCase()
+                    .includes('order is being updated'))
+              }
               className="mt-4 inline-flex rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
             >
               Complete purchase
