@@ -127,6 +127,8 @@ export default function AdminMembersPage() {
     );
   }
 
+  const isFounder = Boolean(resolvedMember?.assignedRoles?.some((r) => r.roleName === 'Founder'));
+
   return (
     <div className="space-y-4">
       <div>
@@ -188,7 +190,7 @@ export default function AdminMembersPage() {
               </div>
             </div>
 
-            {Boolean(resolvedMember.assignedRoles?.includes('Founder')) && (
+            {isFounder && (
               <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 This member has a Founder role and cannot be suspended.
               </div>
@@ -199,7 +201,7 @@ export default function AdminMembersPage() {
                 onClick={() => cancelMemberMutation.mutate()}
                 disabled={
                   cancelMemberMutation.isPending ||
-                  Boolean(resolvedMember.assignedRoles?.includes('Founder'))
+                  isFounder
                 }
                 className="w-full rounded-md bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
               >

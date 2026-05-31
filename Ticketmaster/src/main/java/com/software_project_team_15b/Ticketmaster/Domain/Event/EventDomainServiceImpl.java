@@ -309,7 +309,7 @@ public class EventDomainServiceImpl implements IEventDomainService {
         for (UUID seatId : seatIds) {
             Objects.requireNonNull(seatId, "seatIds element");
             Seat seat = seats.get(seatId);
-            if (seat != null && (seat.status() == SeatStatus.AVAILABLE || seat.status() == SeatStatus.HELD)) {
+            if (seat != null && seat.status() == SeatStatus.AVAILABLE) {
                 available.add(seatId);
             } else {
                 unavailable.add(seatId);

@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.RemoveOrAddSeatsFromActiveOrderCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
@@ -284,31 +285,9 @@ public class PurchasingService {
                     userId
             );
 
-            if (userId != null && eventId != null) {
-                try {
-                    List<ActiveOrder> activeOrders = purchasingDomainService.findByUserIdAndStatus(
-                            userId,
-                            ActiveOrderStatus.ACTIVE
-                    );
-                    for (ActiveOrder activeOrder : activeOrders) {
-                        if (eventId.equals(activeOrder.getEventId())) {
-                            AUDIT.info(
-                                    "op=createActiveOrder event={} user={} result=recovered_existing order={}",
-                                    eventId,
-                                    userId,
-                                    activeOrder.getOrderId()
-                            );
-                            return activeOrder.getOrderId();
-                        }
-                    }
-                } catch (RuntimeException ignored) {
-                    // fall through
-                }
-            }
-
             throw new IllegalStateException("User already has an active order for this event", e);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=createActiveOrder event={} result=rejected reason={}",
+            AUDIT.warn("op=createActiveOrder event={} result=rejected reason={} ",
                     eventId,
                     e.getMessage());
             throw e;
