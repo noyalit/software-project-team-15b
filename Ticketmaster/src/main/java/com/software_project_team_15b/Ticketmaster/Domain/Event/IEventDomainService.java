@@ -37,9 +37,16 @@ public interface IEventDomainService {
 
     void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies);
 
+    List<IEventPurchasePolicy> getPurchasePolicies(UUID eventId);
+
+    List<IEventDiscountPolicy> getDiscountPolicies(UUID eventId);
+
     // ---- Reads ---------------------------------------------------------------
 
     EventDTO getEvent(UUID eventId);
+
+    // Collect distinct user IDs of non-cancelled orders for an event
+    java.util.List<java.util.UUID> collectAttendeeUserIds(UUID eventId);
 
     List<EventDTO> search(SearchCriteria criteria);
 
@@ -79,4 +86,6 @@ public interface IEventDomainService {
     // ---- Validation (combined event + company) -------------------------------
 
     void validatePurchaseEligibility(UUID eventId, PurchaseRequest request);
+
+    UUID getCompanyIdForEventId(UUID eventId);
 }

@@ -5,6 +5,8 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.Invali
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.PolicyJsonConverter;
+import com.software_project_team_15b.Ticketmaster.Domain.policy.IDiscountPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.policy.PolicyContext;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
@@ -321,6 +323,31 @@ public class Event {
             }
             if (candidate.amount().compareTo(best.amount()) < 0) {
                 best = candidate;
+            }
+        }
+        return best;
+    }
+
+    /**
+     * Aggregate discount amount produced by this event's discount policies for the given
+     * area / quantity / request. When multiple top-level policies are configured the
+     * largest discount wins (matching {@link #cheapestPriceFor}); typically callers
+     * configure a single root composite ({@code SumDiscountPolicy} or
+     * {@code MaxDiscountPolicy}) so the per-tree combination is explicit.
+     */
+    public Money discountAmountFor(UUID areaId, int quantity, PurchaseRequest request) {
+        Money subtotal = priceFor(areaId, quantity);
+        Money best = Money.zero(subtotal.currency());
+        PolicyContext ctx = PolicyContext.of(request, this);
+        for (IEventDiscountPolicy policy : discountPolicies) {
+            Money d = IDiscountPolicy.clamp(
+                    policy.discount(subtotal, ctx), subtotal);
+            if (!d.currency().equals(subtotal.currency())) {
+                throw new InvalidEventStateException("discount policy returned mismatched currency: "
+                        + d.currency() + " vs " + subtotal.currency());
+            }
+            if (d.amount().compareTo(best.amount()) > 0) {
+                best = d;
             }
         }
         return best;

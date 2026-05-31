@@ -3,6 +3,7 @@ package com.software_project_team_15b.Ticketmaster.Application;
 import java.time.LocalDate;
 import java.util.Set;
 import java.util.UUID;
+import java.time.LocalDateTime;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,12 +15,16 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Invalid
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.Application.events.TempTokenAcceptedFromQueueEvent;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyRoleTreeDTO;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
+
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationType;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 
 /**
@@ -36,6 +41,7 @@ public class UserService {
     private final IQueueDomainService queueDomainService;
     private final ISystemAdminRepository systemAdminRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final INotifier notifier;
 
     public UserService(
             UserDomainService userDomainService,
@@ -43,7 +49,8 @@ public class UserService {
             IPasswordEncoder passwordEncoder, 
             IQueueDomainService queueDomainService,
             ISystemAdminRepository systemAdminRepository,
-            ApplicationEventPublisher eventPublisher
+            ApplicationEventPublisher eventPublisher,
+            INotifier notifier
             ) {
         this.userDomainService = userDomainService;
         this.auth = auth;
@@ -51,6 +58,7 @@ public class UserService {
         this.queueDomainService = queueDomainService;
         this.systemAdminRepository = systemAdminRepository;
         this.eventPublisher = eventPublisher;
+        this.notifier = notifier;
     }
 
     /**
@@ -316,6 +324,15 @@ public class UserService {
             UUID userId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.changeRoleToManager(userId,eventId);
             AUDIT.info("op=switch-role userId={} role=Manager eventId={}",userId,eventId);
+
+            notifier.notifyUser(userId, 
+                    new NotificationDTO(
+                            NotificationType.PERMISSION_CHANGED,
+                            "Switched to Manager Role for Event " + eventId,
+                            "You have been switched to the manager role for event " + eventId + ". Your permissions have been updated.",
+                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+                    )
+            );
             return userDomainService.toDTO(saved);
         } catch (RuntimeException e) {
             AUDIT.warn("op=switch-role userId={} role=Manager eventId={} result=rejected reason={}",
@@ -330,6 +347,14 @@ public class UserService {
             UUID userId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.changeRoleToOwner(userId,companyId);
             AUDIT.info("op=switch-role userId={} role=Owner companyId={}",userId,companyId);
+            notifier.notifyUser(userId, 
+                    new NotificationDTO(
+                            NotificationType.PERMISSION_CHANGED,
+                            "Switched to Owner Role for Company " + companyId,
+                            "You have been switched to the owner role for company " + companyId + ". Your permissions have been updated.",
+                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+                    )
+            );
             return userDomainService.toDTO(saved);
         } catch (RuntimeException e) {
             AUDIT.warn("op=switch-role userId={} role=Owner companyId={} result=rejected reason={}",
@@ -343,6 +368,14 @@ public class UserService {
             UUID userId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.changeRoleToFounder(userId,companyId);
             AUDIT.info("op=switch-role userId={} role=Founder companyId={}",userId,companyId);
+            notifier.notifyUser(userId, 
+                    new NotificationDTO(
+                            NotificationType.PERMISSION_CHANGED,
+                            "Switched to Founder Role for Company " + companyId,
+                            "You have been switched to the founder role for company " + companyId + ". Your permissions have been updated.",
+                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+                    )
+            );
             return userDomainService.toDTO(saved);
         } catch (RuntimeException e) {
             AUDIT.warn("op=switch-role userId={} role=Founder companyId={} result=rejected reason={}",
@@ -356,6 +389,14 @@ public class UserService {
             UUID userId = getAuthenticatedMemberId(token);
             Member saved = userDomainService.changeRoleToRegularMember(userId);
              AUDIT.info("op=switch-role userId={} role=RegularMember",userId);
+            notifier.notifyUser(userId, 
+                    new NotificationDTO(
+                            NotificationType.PERMISSION_CHANGED,
+                            "Switched to Regular Member Role",
+                            "You have been switched to the regular member role. Your permissions have been updated.",
+                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+                    )
+            );
             return userDomainService.toDTO(saved);
         } catch (RuntimeException e) {
             AUDIT.warn("op=switch-role userId={} role=RegularMember result=rejected reason={}",
@@ -415,6 +456,14 @@ public class UserService {
             Member saved = userDomainService.removeOwnerAppointment(removerOwnerId, memberToRemoveId, companyId);
             AUDIT.info("op=remove-owner-appointment removerOwnerId={} memberId={} companyId={}",
                     removerOwnerId, memberToRemoveId, companyId);
+            notifier. notifyUser(memberToRemoveId, 
+                    new NotificationDTO(
+                            NotificationType.PERMISSION_CHANGED,
+                            "Removed from Owner Role",
+                            "You have been removed from the owner role for company " + companyId + ". Your permissions have been updated.",
+                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+                    )
+            );
             return userDomainService.toDTO(saved);
         } catch (RuntimeException e) {
             AUDIT.warn("op=remove-owner-appointment memberId={} companyId={} result=rejected reason={}",
@@ -430,6 +479,14 @@ public class UserService {
 
             AUDIT.info("op=remove-manager-appointment removerOwnerId={} memberId={} companyId={} eventId={}",
                     removerOwnerId, memberToRemoveId, companyId, eventId);
+            notifier. notifyUser(memberToRemoveId, 
+                    new NotificationDTO(
+                            NotificationType.PERMISSION_CHANGED,
+                            "Removed from Manager Role for Event " + eventId,
+                            "You have been removed from the manager role for event " + eventId + ". Your permissions have been updated.",
+                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+                    )
+            );
             return userDomainService.toDTO(saved);
         } catch (RuntimeException e) {
             AUDIT.warn("op=remove-manager-appointment memberId={} companyId={} eventId={} result=rejected reason={}",
@@ -444,6 +501,14 @@ public class UserService {
             Member saved = userDomainService.ownerResign(ownerId, companyId);
 
             AUDIT.info("op=owner-resign ownerId={} companyId={}", ownerId, companyId);
+            notifier.notifyUser(ownerId, 
+                    new NotificationDTO(
+                            NotificationType.PERMISSION_CHANGED,
+                            "Owner Role Resigned",
+                            "You have resigned from the owner role for company " + companyId + ". Your permissions have been updated.",
+                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+                    )
+            );
             return userDomainService.toDTO(saved);
 
         } catch (RuntimeException e) {
@@ -461,6 +526,15 @@ public class UserService {
 
             AUDIT.info("op=change-manager-permissions ownerId={} managerId={} eventId={} newPermissions={}",
                     ownerId, managerId, eventId, newPermissions);
+
+            notifier.notifyUser(managerId, 
+                    new NotificationDTO(
+                            NotificationType.PERMISSION_CHANGED,
+                            "Changed Permissions for Event " + eventId,
+                            "Your permissions for event " + eventId + " have been changed to: " + newPermissions,
+                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+                    )
+            );
             return userDomainService.toDTO(saved);
         } catch (RuntimeException e) {
             AUDIT.warn("op=change-manager-permissions managerId={} eventId={} result=rejected reason={}",
@@ -552,6 +626,47 @@ public class UserService {
         } catch (RuntimeException e) {
             AUDIT.warn("op=cancel-member-account-by-admin memberIdToCancel={} result=rejected reason={}",
                     memberIdToCancel, e.getMessage());
+            throw e;
+        }
+    }
+
+     /**
+      * Sends an admin message to a target user.
+      * <p>
+      * The caller's token must be valid and belong to a system admin. The user must exist,
+      * and the notification is dispatched from the application layer.
+      *
+      * @param token        the authentication token of the sending system admin; must be a valid admin token
+      * @param targetUserId the ID of the user to receive the message; must not be {@code null}
+      * @param message      the textual content of the message; must not be {@code null} or blank
+      * @throws InvalidTokenException    if the token is null/blank, invalid, or does not belong to a system admin
+      * @throws IllegalArgumentException if {@code targetUserId} is {@code null} or {@code message} is null/blank
+      */
+    public void sendMessageToUser(String token, UUID targetUserId, String message) {
+        try {
+            if (token == null || token.isBlank() || !auth.isTokenValid(token) || !auth.isSystemAdmin(token)) {
+                throw new InvalidTokenException("Only a system admin can send messages to users");
+            }
+            if (targetUserId == null) {
+                throw new IllegalArgumentException("Target user ID cannot be null");
+            }
+            if (message == null || message.isBlank()) {
+                throw new IllegalArgumentException("Message cannot be null or empty");
+            }
+
+            UUID systemAdminId = auth.extractUserId(token);
+            // Verify the target user exists before sending the notification.
+            userDomainService.watchPersonalDetails(targetUserId);
+
+            notifier.notifyUser(targetUserId, new NotificationDTO(
+                NotificationType.ADMIN_MESSAGE,
+                "Message from System Administration",
+                message,
+                LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+            ));
+            AUDIT.info("op=send-message-to-user systemAdminId={} targetUserId={}", systemAdminId, targetUserId);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=send-message-to-user targetUserId={} result=rejected reason={}", targetUserId, e.getMessage());
             throw e;
         }
     }

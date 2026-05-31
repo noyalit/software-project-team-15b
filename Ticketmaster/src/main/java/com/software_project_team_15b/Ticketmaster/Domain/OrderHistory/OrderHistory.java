@@ -49,6 +49,10 @@ public class OrderHistory {
     @Column(name = "is_cancelled", nullable = false, updatable = true)
     private boolean isCancelled = false;
 
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     protected OrderHistory() {
     }
 
@@ -153,6 +157,10 @@ public class OrderHistory {
 
     public boolean isCancelled() {
         return isCancelled;
+    }
+
+    public Long getVersion() {
+        return version;
     }
 
     public void cancel() {

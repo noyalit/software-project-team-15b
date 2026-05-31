@@ -5,19 +5,21 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
-import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidManagerPermissionsException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventAvailability;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 
 import java.time.Instant;
@@ -27,9 +29,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.commons.lang3.NotImplementedException;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,20 +38,19 @@ import org.springframework.boot.test.context.SpringBootTest;
 /**
  * E2E tests for II.4.1 (Manage Event Catalog and Inventory) and II.4.2 (Define Venue Config).
  *
- * Every test runs against a real company with real role-based authorization:
- *   Good paths  — Founder, Owner, or a Manager with the required permission succeeds.
- *   Bad paths   — wrong-permission Manager or plain Member is rejected (PolicyViolationException),
- *                 and business-rule violations throw InvalidEventStateException.
+ * Authorization model exercised here (matches current EventManagementService):
+ *   createEvent          → owner/founder only (cannot bind a Manager before an eventId exists)
+ *   updateEvent          → MANAGE_EVENTS
+ *   addArea / removeArea → CONFIGURE_HALLS_AND_SEATS
+ *   updateArea           → UPDATE_EVENT_MAP
+ *   publish / cancel     → MANAGE_EVENTS
  *
- * Authorization model for the actions exercised here:
- *   MANAGE_EVENT         → MANAGE_EVENTS manager permission (create, update event)
- *   CONFIGURE_HALL       → CONFIGURE_HALLS_AND_SEATS manager permission (add, remove area)
- *   UPDATE_EVENT_MAP     → UPDATE_EVENT_MAP manager permission (update area)
- *   PUBLISH, CANCEL      → owner/founder only — no manager can perform these
+ * Denials:
+ *   createEvent denial → UnauthorizedCompanyActionException
+ *   per-event manager denials → InvalidManagerPermissionsException
  */
 @SpringBootTest
 @DisplayName("E2E: Event catalog management (UC II.4.1 / II.4.2)")
-@Disabled("Reason: Flaky or under development")
 class EventCatalogManagementE2ETest {
 
     @Autowired EventManagementService events;
@@ -62,36 +61,41 @@ class EventCatalogManagementE2ETest {
     private static final AtomicInteger CTR = new AtomicInteger(0);
 
     private UUID companyId;
+    private String founderToken;
     private UUID founderId;
     private UUID ownerId;
-    private UUID mgrManageEventsId;  // MANAGE_EVENTS — may create/update events
-    private UUID mgrConfigHallId;    // CONFIGURE_HALLS_AND_SEATS — may add/remove areas
-    private UUID mgrUpdateMapId;     // UPDATE_EVENT_MAP — may update areas
-    private UUID mgrWrongPermId;     // HANDLE_INQUIRIES only — wrong for all event actions
-    private UUID unauthorizedId;     // plain member, no company role
+    private UUID mgrManageEventsId;  private String mgrManageEventsToken;
+    private UUID mgrConfigHallId;    private String mgrConfigHallToken;
+    private UUID mgrUpdateMapId;     private String mgrUpdateMapToken;
+    private UUID mgrWrongPermId;     private String mgrWrongPermToken;
+    private UUID unauthorizedId;
 
     @BeforeEach
     void setupActors() {
         int n = CTR.incrementAndGet();
         String sfx = n + "_" + System.nanoTime();
 
-        String founderUser = "cat_founder_" + sfx;
-        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO mFounder = userService.registerMember(userService.enterAsGuest(), founderUser, "Password1", LocalDate.of(1985, 1, 1));
-        String founderToken = userService.login(userService.enterAsGuest(), founderUser, "Password1");
+        MemberDTO mFounder = registerMember("cat_founder_" + sfx, LocalDate.of(1985, 1, 1));
+        founderToken = login("cat_founder_" + sfx);
         founderId = mFounder.getUserId();
 
         companyId = companyService.createCompany(founderToken, "CatTestCo_" + n).companyId();
+        userService.appointFounder(founderId, founderToken, companyId);
         userService.changeRoleToFounder(founderToken, companyId);
+        userService.approveAppointment(founderToken);
 
-        ownerId = registerAndApproveOwner("cat_owner_" + sfx, founderToken, companyId);
-        mgrManageEventsId = registerAndApproveManager("cat_mgr_me_" + sfx, founderToken,
-                companyId, Set.of(ManagerPermission.MANAGE_EVENTS));
-        mgrConfigHallId = registerAndApproveManager("cat_mgr_ch_" + sfx, founderToken,
-                companyId, Set.of(ManagerPermission.CONFIGURE_HALLS_AND_SEATS));
-        mgrUpdateMapId = registerAndApproveManager("cat_mgr_um_" + sfx, founderToken,
-                companyId, Set.of(ManagerPermission.UPDATE_EVENT_MAP));
-        mgrWrongPermId = registerAndApproveManager("cat_mgr_wp_" + sfx, founderToken,
-                companyId, Set.of(ManagerPermission.HANDLE_INQUIRIES));
+        Actor owner = registerAndApproveOwner("cat_owner_" + sfx);
+        ownerId = owner.id();
+
+        // Manager candidates: per-event appointment happens in createDraftEvent().
+        Actor mMe = registerAndLogin("cat_mgr_me_" + sfx);
+        mgrManageEventsId = mMe.id(); mgrManageEventsToken = mMe.token();
+        Actor mCh = registerAndLogin("cat_mgr_ch_" + sfx);
+        mgrConfigHallId = mCh.id();   mgrConfigHallToken = mCh.token();
+        Actor mUm = registerAndLogin("cat_mgr_um_" + sfx);
+        mgrUpdateMapId = mUm.id();    mgrUpdateMapToken = mUm.token();
+        Actor mWp = registerAndLogin("cat_mgr_wp_" + sfx);
+        mgrWrongPermId = mWp.id();    mgrWrongPermToken = mWp.token();
 
         String unauthUser = "cat_unauth_" + sfx;
         com.software_project_team_15b.Ticketmaster.DTO.MemberDTO mUnauth = userService.registerMember(userService.enterAsGuest(), unauthUser, "Password1", LocalDate.of(1990, 1, 1));
@@ -106,20 +110,13 @@ class EventCatalogManagementE2ETest {
         UUID eventId = events.createEvent(draftCmd("Draft Gig"), founderId);
 
         assertThat(eventId).isNotNull();
-        assertThat(events.getEventAvailability(eventId)).isNotEqualTo(EventAvailability.AVAILABLE);
+        assertThat(events.getEventAvailability(eventId).status()).isNotEqualTo(EventAvailability.AVAILABLE);
     }
 
     @Test
-    @DisplayName("Owner can create an event (MANAGE_EVENT)")
+    @DisplayName("Owner can create an event")
     void owner_can_create_event() {
         UUID eventId = events.createEvent(draftCmd("Owner Gig"), ownerId);
-        assertThat(eventId).isNotNull();
-    }
-
-    @Test
-    @DisplayName("Manager with MANAGE_EVENTS can create an event")
-    void manager_manage_events_can_create_event() {
-        UUID eventId = events.createEvent(draftCmd("Mgr Gig"), mgrManageEventsId);
         assertThat(eventId).isNotNull();
     }
 
@@ -139,30 +136,22 @@ class EventCatalogManagementE2ETest {
         assertThat(view.companyId()).isEqualTo(companyId);
     }
 
-    // ── II.4.1: Create event — bad paths (auth) ────────────────────────────────
+    // ── II.4.1: Create event — bad paths (auth) ───────────────────────────────
 
     @Test
-    @DisplayName("Unauthorized member cannot create event — MANAGE_EVENT denied")
-    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
+    @DisplayName("Unauthorized member cannot create event — owner/founder-only")
     void unauthorized_cannot_create_event() {
         assertThatThrownBy(() -> events.createEvent(draftCmd("Forbidden"), unauthorizedId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(UnauthorizedCompanyActionException.class);
     }
 
     @Test
-    @DisplayName("Manager with wrong permission cannot create event")
-    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
-    void manager_wrong_permission_cannot_create_event() {
+    @DisplayName("Plain manager candidate (no role yet) cannot create event")
+    void unappointed_manager_cannot_create_event() {
+        // mgrWrongPermId has no role until appointed for some event;
+        // createEvent is owner/founder-only regardless of manager permissions.
         assertThatThrownBy(() -> events.createEvent(draftCmd("Forbidden"), mgrWrongPermId))
-                .isInstanceOf(PolicyViolationException.class);
-    }
-
-    @Test
-    @DisplayName("Manager with CONFIGURE_HALLS_AND_SEATS cannot create event (wrong action)")
-    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
-    void manager_config_hall_cannot_create_event() {
-        assertThatThrownBy(() -> events.createEvent(draftCmd("Forbidden"), mgrConfigHallId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(UnauthorizedCompanyActionException.class);
     }
 
     // ── II.4.1: Add area — good paths ─────────────────────────────────────────
@@ -188,7 +177,7 @@ class EventCatalogManagementE2ETest {
     @Test
     @DisplayName("Manager with CONFIGURE_HALLS_AND_SEATS can add standing area")
     void manager_config_hall_adds_standing_area() {
-        UUID eventId = events.createEvent(draftCmd("Standing Show"), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, new AddAreaCommand(
                 "Pit", Money.of("30.00", "USD"),
                 AddAreaCommand.AreaType.STANDING, 200, null), mgrConfigHallId);
@@ -203,20 +192,18 @@ class EventCatalogManagementE2ETest {
 
     @Test
     @DisplayName("Unauthorized member cannot add area — CONFIGURE_HALL denied")
-    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void unauthorized_cannot_add_area() {
-        UUID eventId = events.createEvent(draftCmd("Area Test"), founderId);
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.addArea(eventId, standingAreaCmd(), unauthorizedId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
     @DisplayName("Manager with MANAGE_EVENTS cannot add area — wrong permission for CONFIGURE_HALL")
-    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void manager_manage_events_cannot_add_area() {
-        UUID eventId = events.createEvent(draftCmd("Area Test"), founderId);
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.addArea(eventId, standingAreaCmd(), mgrManageEventsId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
@@ -277,23 +264,21 @@ class EventCatalogManagementE2ETest {
     }
 
     @Test
-    @DisplayName("Manager cannot publish — PUBLISH is owner/founder-only")
-    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
-    void manager_cannot_publish_event() {
-        UUID eventId = events.createEvent(draftCmd("Mgr Pub Attempt"), founderId);
+    @DisplayName("Manager with wrong permission cannot publish — MANAGE_EVENTS required")
+    void manager_wrong_permission_cannot_publish_event() {
+        UUID eventId = createDraftEvent();
         events.addArea(eventId, standingAreaCmd(), founderId);
-        assertThatThrownBy(() -> events.publish(eventId, mgrManageEventsId))
-                .isInstanceOf(PolicyViolationException.class);
+        assertThatThrownBy(() -> events.publish(eventId, mgrConfigHallId))
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
     @DisplayName("Unauthorized member cannot publish an event")
-    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void unauthorized_cannot_publish_event() {
-        UUID eventId = events.createEvent(draftCmd("Unauth Pub"), founderId);
+        UUID eventId = createDraftEvent();
         events.addArea(eventId, standingAreaCmd(), founderId);
         assertThatThrownBy(() -> events.publish(eventId, unauthorizedId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
@@ -323,13 +308,13 @@ class EventCatalogManagementE2ETest {
         EventDTO view = events.getEvent(eventId);
         assertThat(view.name()).isEqualTo("New Name");
         assertThat(view.location()).isEqualTo("New Venue");
-        assertThat(view.artist()).isEqualTo("Old Artist"); // untouched field preserved
+        assertThat(view.artist()).isEqualTo("Old Artist");
     }
 
     @Test
     @DisplayName("Manager with MANAGE_EVENTS can update event fields")
     void manager_manage_events_can_update_event() {
-        UUID eventId = events.createEvent(draftCmd("Mgr Update Show"), founderId);
+        UUID eventId = createDraftEvent();
         events.updateEvent(eventId,
                 new UpdateEventCommand("Updated By Mgr", null, null, null, null), mgrManageEventsId);
 
@@ -369,23 +354,21 @@ class EventCatalogManagementE2ETest {
     }
 
     @Test
-    @DisplayName("Unauthorized member cannot update event — MANAGE_EVENT denied")
-    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
+    @DisplayName("Unauthorized member cannot update event — MANAGE_EVENTS denied")
     void unauthorized_cannot_update_event() {
-        UUID eventId = events.createEvent(draftCmd("Update Test"), founderId);
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.updateEvent(eventId,
                 new UpdateEventCommand("Hacked", null, null, null, null), unauthorizedId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
     @DisplayName("Manager with CONFIGURE_HALLS_AND_SEATS cannot update event fields")
-    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void manager_wrong_permission_cannot_update_event() {
-        UUID eventId = events.createEvent(draftCmd("Update Test"), founderId);
+        UUID eventId = createDraftEvent();
         assertThatThrownBy(() -> events.updateEvent(eventId,
                 new UpdateEventCommand("Hacked", null, null, null, null), mgrConfigHallId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     // ── II.4.2: Update area — good paths ─────────────────────────────────────
@@ -410,7 +393,7 @@ class EventCatalogManagementE2ETest {
     @Test
     @DisplayName("Manager with UPDATE_EVENT_MAP can update area")
     void manager_update_map_can_update_area() {
-        UUID eventId = events.createEvent(draftCmd("Map Update Show"), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
 
         events.updateArea(eventId, areaId,
@@ -455,24 +438,22 @@ class EventCatalogManagementE2ETest {
 
     @Test
     @DisplayName("Unauthorized member cannot update area — UPDATE_EVENT_MAP denied")
-    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void unauthorized_cannot_update_area() {
-        UUID eventId = events.createEvent(draftCmd("Area Auth Test"), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
         assertThatThrownBy(() -> events.updateArea(eventId, areaId,
                 new UpdateAreaCommand("Hacked", null, null), unauthorizedId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
     @DisplayName("Manager with MANAGE_EVENTS cannot update area — wrong permission for UPDATE_EVENT_MAP")
-    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void manager_wrong_permission_cannot_update_area() {
-        UUID eventId = events.createEvent(draftCmd("Area Auth Test"), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
         assertThatThrownBy(() -> events.updateArea(eventId, areaId,
                 new UpdateAreaCommand("Hacked", null, null), mgrManageEventsId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     // ── II.4.1: Remove area — good paths ─────────────────────────────────────
@@ -497,9 +478,9 @@ class EventCatalogManagementE2ETest {
     @Test
     @DisplayName("Manager with CONFIGURE_HALLS_AND_SEATS can remove an area")
     void manager_config_hall_can_remove_area() {
-        UUID eventId = events.createEvent(draftCmd("Remove Test"), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
-        events.removeArea(eventId, areaId, mgrConfigHallId); // should not throw
+        events.removeArea(eventId, areaId, mgrConfigHallId);
     }
 
     // ── II.4.1: Remove area — bad paths ───────────────────────────────────────
@@ -519,12 +500,11 @@ class EventCatalogManagementE2ETest {
 
     @Test
     @DisplayName("Unauthorized member cannot remove area — CONFIGURE_HALL denied")
-    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void unauthorized_cannot_remove_area() {
-        UUID eventId = events.createEvent(draftCmd("Remove Auth Test"), founderId);
+        UUID eventId = createDraftEvent();
         UUID areaId = events.addArea(eventId, standingAreaCmd(), founderId);
         assertThatThrownBy(() -> events.removeArea(eventId, areaId, unauthorizedId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     // ── II.4.1: Cancel event — good paths ─────────────────────────────────────
@@ -566,25 +546,23 @@ class EventCatalogManagementE2ETest {
     // ── II.4.1: Cancel event — bad paths ──────────────────────────────────────
 
     @Test
-    @DisplayName("Manager cannot cancel — CANCEL is owner/founder-only")
-    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
-    void manager_cannot_cancel_event() {
-        UUID eventId = events.createEvent(draftCmd("Mgr Cancel Attempt"), founderId);
+    @DisplayName("Manager with wrong permission cannot cancel — MANAGE_EVENTS required")
+    void manager_wrong_permission_cannot_cancel_event() {
+        UUID eventId = createDraftEvent();
         events.addArea(eventId, standingAreaCmd(), founderId);
         events.publish(eventId, founderId);
-        assertThatThrownBy(() -> events.cancel(eventId, mgrManageEventsId))
-                .isInstanceOf(PolicyViolationException.class);
+        assertThatThrownBy(() -> events.cancel(eventId, mgrConfigHallId))
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     @Test
     @DisplayName("Unauthorized member cannot cancel an event")
-    @org.junit.jupiter.api.Disabled("Authorization removed; re-enable when re-introduced")
     void unauthorized_cannot_cancel_event() {
-        UUID eventId = events.createEvent(draftCmd("Unauth Cancel"), founderId);
+        UUID eventId = createDraftEvent();
         events.addArea(eventId, standingAreaCmd(), founderId);
         events.publish(eventId, founderId);
         assertThatThrownBy(() -> events.cancel(eventId, unauthorizedId))
-                .isInstanceOf(PolicyViolationException.class);
+                .isInstanceOf(InvalidManagerPermissionsException.class);
     }
 
     // ── II.4.2: Venue configuration ───────────────────────────────────────────
@@ -654,29 +632,43 @@ class EventCatalogManagementE2ETest {
                 AddAreaCommand.AreaType.STANDING, 10, null);
     }
 
-    private UUID registerAndApproveOwner(String username, String founderToken, UUID companyId) {
-        throw new NotImplementedException();
-//        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO m = userService.registerMember(userService.enterAsGuest(), username, "Password1", LocalDate.of(1990, 1, 1));
-//        String token = userService.login(userService.enterAsGuest(), username, "Password1");
-//        UUID id = m.getUserId();
-//        companyService.addOwner(founderToken, companyId, id);
-//        userService.changeRoleToOwner(token, companyId);
-//        userService.approveAppointment(token);
-//        return id;
+    /** Creates a draft event by the founder and appoints all manager candidates for it. */
+    private UUID createDraftEvent() {
+        UUID eventId = events.createEvent(draftCmd("Setup Show " + UUID.randomUUID()), founderId);
+        appointManagerForEvent(mgrManageEventsId, mgrManageEventsToken, eventId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        appointManagerForEvent(mgrConfigHallId,   mgrConfigHallToken,   eventId, Set.of(ManagerPermission.CONFIGURE_HALLS_AND_SEATS));
+        appointManagerForEvent(mgrUpdateMapId,    mgrUpdateMapToken,    eventId, Set.of(ManagerPermission.UPDATE_EVENT_MAP));
+        appointManagerForEvent(mgrWrongPermId,    mgrWrongPermToken,    eventId, Set.of(ManagerPermission.HANDLE_INQUIRIES));
+        return eventId;
     }
 
-    private UUID registerAndApproveManager(String username, String founderToken,
-                                            UUID companyId, Set<ManagerPermission> perms) {
-        throw new NotImplementedException();
-//        com.software_project_team_15b.Ticketmaster.DTO.MemberDTO m = userService.registerMember(userService.enterAsGuest(), username, "Password1", LocalDate.of(1990, 1, 1));
-//        String token = userService.login(userService.enterAsGuest(), username, "Password1");
-//        UUID id = m.getUserId();
-//
-//        UUID eventId = UUID.randomUUID();
-//        companyService.addManager(founderToken, companyId, eventId, id, perms);
-//        userService.changeRoleToManager(token, eventId);
-//        userService.approveAppointment(token);
-//        return id;
-//    }
+    private void appointManagerForEvent(UUID memberId, String memberToken, UUID eventId, Set<ManagerPermission> perms) {
+        userService.appointManager(memberId, founderToken, companyId, eventId, perms);
+        userService.changeRoleToManager(memberToken, eventId);
+        userService.approveAppointment(memberToken);
     }
+
+    private MemberDTO registerMember(String username, LocalDate birthDate) {
+        return userService.registerMember(userService.enterAsGuest(), username, "Password1", birthDate);
+    }
+
+    private String login(String username) {
+        return userService.login(userService.enterAsGuest(), username, "Password1");
+    }
+
+    private Actor registerAndLogin(String username) {
+        MemberDTO m = registerMember(username, LocalDate.of(1990, 1, 1));
+        String token = login(username);
+        return new Actor(m.getUserId(), token);
+    }
+
+    private Actor registerAndApproveOwner(String username) {
+        Actor a = registerAndLogin(username);
+        userService.appointOwner(a.id, founderToken, companyId);
+        userService.changeRoleToOwner(a.token, companyId);
+        userService.approveAppointment(a.token);
+        return a;
+    }
+
+    private record Actor(UUID id, String token) {}
 }

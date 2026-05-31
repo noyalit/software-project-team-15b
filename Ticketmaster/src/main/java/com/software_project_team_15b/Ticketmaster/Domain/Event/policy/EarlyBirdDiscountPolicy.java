@@ -2,13 +2,20 @@ package com.software_project_team_15b.Ticketmaster.Domain.Event.policy;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
+import com.software_project_team_15b.Ticketmaster.Domain.policy.IDiscountPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.policy.PolicyContext;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Objects;
 
-public class EarlyBirdDiscountPolicy implements IEventDiscountPolicy {
+/**
+ * Percentage discount for purchases made before {@code until}. Kept as a stand-alone class
+ * (rather than re-expressed via {@code ConditionalDiscountPolicy(percent, TimeWindowCondition)})
+ * so previously serialized rows continue to deserialize without migration.
+ */
+public class EarlyBirdDiscountPolicy implements IEventDiscountPolicy, ICompanyDiscountPolicy {
 
     @JsonProperty("percentage")
     private final BigDecimal percentage;
@@ -20,9 +27,7 @@ public class EarlyBirdDiscountPolicy implements IEventDiscountPolicy {
     public EarlyBirdDiscountPolicy(
             @JsonProperty("percentage") BigDecimal percentage,
             @JsonProperty("until") Instant until) {
-        if (percentage.signum() < 0 || percentage.compareTo(BigDecimal.valueOf(100)) > 0) {
-            throw new IllegalArgumentException("percentage must be in [0, 100]");
-        }
+        IDiscountPolicy.requireValidPercent(percentage);
         this.percentage = percentage;
         this.until = Objects.requireNonNull(until, "until");
     }
@@ -31,10 +36,11 @@ public class EarlyBirdDiscountPolicy implements IEventDiscountPolicy {
     public Instant until() { return until; }
 
     @Override
-    public Money apply(Money subtotal, PurchaseRequest request) {
-        if (Instant.now().isBefore(until)) {
-            return subtotal.subtract(subtotal.percent(percentage));
+    public Money discount(Money subtotal, PolicyContext ctx) {
+        Instant now = ctx != null && ctx.now() != null ? ctx.now() : Instant.now();
+        if (now.isBefore(until)) {
+            return subtotal.percent(percentage);
         }
-        return subtotal;
+        return Money.zero(subtotal.currency());
     }
 }

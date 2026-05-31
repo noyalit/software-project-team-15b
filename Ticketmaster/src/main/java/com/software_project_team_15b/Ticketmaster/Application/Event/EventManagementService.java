@@ -3,6 +3,8 @@ package com.software_project_team_15b.Ticketmaster.Application.Event;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.DTO.DiscountPolicyDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.PurchasePolicyDTO;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
@@ -10,10 +12,13 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Upd
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
+import com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationType;
 import com.software_project_team_15b.Ticketmaster.DTO.EventAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.SeatsAvailabilityDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
@@ -25,6 +30,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+
+import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -38,9 +46,11 @@ import org.springframework.stereotype.Service;
  * lives in the domain service so every caller of that interface gets the same
  * guarantees — including {@code PurchasingService} and scheduled maintenance jobs.
  *
- * <p>Authorization has been temporarily removed; each mutating method carries a TODO
- * noting the {@link com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission}
- * a manager would need (owners and the founder always bypass).
+ * <p>Each mutating method authorizes the caller through {@link UserDomainService}'s
+ * {@code isLegalEventManager} / {@code isLegalCompanyManager} gates. Both gates
+ * accept active owner/founder as a fallback; managers must hold the
+ * {@link com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission}
+ * documented on the method.
  */
 @Service
 public class EventManagementService implements IEventManagementService, EventSubscriber {
@@ -48,15 +58,20 @@ public class EventManagementService implements IEventManagementService, EventSub
     private static final Logger AUDIT = LoggerFactory.getLogger("audit.event-management");
 
     private final IEventDomainService eventDomainService;
+    private final UserDomainService userDomainService;
     private final EventCancelManager cancelManager;
     private final IAuth auth;
+    private final INotifier notifier;
 
-    public EventManagementService(IEventDomainService eventDomainService,
+    public EventManagementService(IEventDomainService eventDomainService, UserDomainService userDomainService,
                                   EventCancelManager cancelManager,
-                                  IAuth auth) {
+                                  IAuth auth,
+                                  INotifier notifier) {
         this.eventDomainService = eventDomainService;
+        this.userDomainService = userDomainService;
         this.cancelManager = cancelManager;
         this.auth = auth;
+        this.notifier = notifier;
         try {
             this.cancelManager.subscribe(this);
         } catch (Exception e) {
@@ -65,9 +80,10 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     public UUID createEvent(CreateEventCommand cmd, UUID callerId) {
-        // TODO: authorize caller — require ManagerPermission.MANAGE_EVENTS on cmd.companyId()
-        //       (owner/founder bypass; manager needs the listed permission)
         try {
+            Objects.requireNonNull(cmd, "cmd");
+            Objects.requireNonNull(callerId, "callerId");
+            userDomainService.isActiveOwnerOrFounder(cmd.companyId(), callerId);
             UUID id = eventDomainService.createEvent(cmd);
             AUDIT.info("op=createEvent event={} caller={} result=ok", id, callerId);
             return id;
@@ -78,9 +94,12 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     public UUID addArea(UUID eventId, AddAreaCommand cmd, UUID callerId) {
-        // TODO: authorize caller — require ManagerPermission.CONFIGURE_HALLS_AND_SEATS on event's company
-        //       (owner/founder bypass; manager needs the listed permission)
         try {
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(cmd, "cmd");
+            Objects.requireNonNull(callerId, "callerId");
+            UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
+            userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.CONFIGURE_HALLS_AND_SEATS);
             UUID areaId = eventDomainService.addArea(eventId, cmd);
             AUDIT.info("op=addArea event={} area={} caller={} result=ok", eventId, areaId, callerId);
             return areaId;
@@ -91,8 +110,11 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     public void publish(UUID eventId, UUID callerId) {
-        // TODO: authorize caller — owner/founder only (PUBLISH is owner-only; managers cannot)
         try {
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(callerId, "callerId");
+            UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
+            userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.MANAGE_EVENTS);
             eventDomainService.publish(eventId);
             AUDIT.info("op=publish event={} caller={} result=ok", eventId, callerId);
         } catch (RuntimeException e) {
@@ -102,8 +124,11 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     public void cancel(UUID eventId, UUID callerId) {
-        // TODO: authorize caller — owner/founder only (CANCEL is owner-only; managers cannot)
         try {
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(callerId, "callerId");
+            UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
+            userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.MANAGE_EVENTS);
             eventDomainService.cancel(eventId);
             AUDIT.info("op=cancel event={} caller={} result=ok", eventId, callerId);
         } catch (RuntimeException e) {
@@ -138,8 +163,8 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     public void validatePurchaseEligibility(UUID eventId, PurchaseRequest request) {
-        Objects.requireNonNull(request, "request");
         try {
+            Objects.requireNonNull(request, "request");
             eventDomainService.validatePurchaseEligibility(eventId, request);
             AUDIT.info("op=validatePurchaseEligibility event={} buyer={} result=ok",
                     eventId, request.buyerId());
@@ -171,10 +196,7 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     /**
-     * Resolves a member token to its caller id.
-     * <p>
-     * Authentication only — per-action authorization will be re-introduced via a
-     * dedicated port and is currently absent (see method-level TODOs).
+     * Resolves a member token to its caller id (authentication only).
      */
     private UUID resolveMemberCallerId(String token) {
         if (token == null || token.isBlank()) {
@@ -235,12 +257,12 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     @Override
-    public void replacePurchasePolicies(UUID eventId, List<IEventPurchasePolicy> policies, String token) {
+    public void replacePurchasePolicies(UUID eventId, List<PurchasePolicyDTO> policies, String token) {
         replacePurchasePolicies(eventId, policies, resolveMemberCallerId(token));
     }
 
     @Override
-    public void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies, String token) {
+    public void replaceDiscountPolicies(UUID eventId, List<DiscountPolicyDTO> policies, String token) {
         replaceDiscountPolicies(eventId, policies, resolveMemberCallerId(token));
     }
 
@@ -250,11 +272,25 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     public void updateEvent(UUID eventId, UpdateEventCommand cmd, UUID callerId) {
-        // TODO: authorize caller — require ManagerPermission.MANAGE_EVENTS on event's company
-        //       (owner/founder bypass; manager needs the listed permission)
-        Objects.requireNonNull(cmd, "cmd");
         try {
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(cmd, "cmd");
+            Objects.requireNonNull(callerId, "callerId");
+            UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
+            userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.MANAGE_EVENTS);
+            EventDTO beforeUpdate = eventDomainService.getEvent(eventId);
             eventDomainService.updateEvent(eventId, cmd);
+            EventDTO afterUpdate = eventDomainService.getEvent(eventId);
+
+            if (cmd.startsAt() != null && !Objects.equals(beforeUpdate.startsAt(), afterUpdate.startsAt())) {
+                notifier.notifyEventAttendees(eventId, new NotificationDTO(
+                        com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationType.EVENT_TIME_CHANGED,
+                        "Event Time Changed",
+                        "Event " + afterUpdate.name() + " has been rescheduled from "
+                                + beforeUpdate.startsAt() + " to " + afterUpdate.startsAt() + ".",
+                        java.time.LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)));
+            }
+
             AUDIT.info("op=updateEvent event={} caller={} result=ok", eventId, callerId);
         } catch (RuntimeException e) {
             AUDIT.warn("op=updateEvent event={} caller={} result=rejected reason={}",
@@ -265,11 +301,13 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     public void updateArea(UUID eventId, UUID areaId, UpdateAreaCommand cmd, UUID callerId) {
-        // TODO: authorize caller — require ManagerPermission.UPDATE_EVENT_MAP on event's company
-        //       (owner/founder bypass; manager needs the listed permission)
-        Objects.requireNonNull(cmd, "cmd");
-        Objects.requireNonNull(areaId, "areaId");
         try {
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(areaId, "areaId");
+            Objects.requireNonNull(cmd, "cmd");
+            Objects.requireNonNull(callerId, "callerId");
+            UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
+            userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.UPDATE_EVENT_MAP);
             eventDomainService.updateArea(eventId, areaId, cmd);
             AUDIT.info("op=updateArea event={} area={} caller={} result=ok", eventId, areaId, callerId);
         } catch (RuntimeException e) {
@@ -281,10 +319,12 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     public void removeArea(UUID eventId, UUID areaId, UUID callerId) {
-        // TODO: authorize caller — require ManagerPermission.CONFIGURE_HALLS_AND_SEATS on event's company
-        //       (owner/founder bypass; manager needs the listed permission)
-        Objects.requireNonNull(areaId, "areaId");
         try {
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(areaId, "areaId");
+            Objects.requireNonNull(callerId, "callerId");
+            UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
+            userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.CONFIGURE_HALLS_AND_SEATS);
             eventDomainService.removeArea(eventId, areaId);
             AUDIT.info("op=removeArea event={} area={} caller={} result=ok", eventId, areaId, callerId);
         } catch (RuntimeException e) {
@@ -295,12 +335,17 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     @Override
-    public void replacePurchasePolicies(UUID eventId, List<IEventPurchasePolicy> policies, UUID callerId) {
-        // TODO: authorize caller — require ManagerPermission.DEFINE_PURCHASE_POLICY on event's company
-        //       (owner/founder bypass; manager needs the listed permission)
-        Objects.requireNonNull(policies, "policies");
+    public void replacePurchasePolicies(UUID eventId, List<PurchasePolicyDTO> policies, UUID callerId) {
         try {
-            eventDomainService.replacePurchasePolicies(eventId, policies);
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(policies, "policies");
+            Objects.requireNonNull(callerId, "callerId");
+            UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
+            userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.DEFINE_PURCHASE_POLICY);
+            List<IEventPurchasePolicy> domainPolicies = policies.stream()
+                    .map(PurchasePolicyDTO::toDomain)
+                    .toList();
+            eventDomainService.replacePurchasePolicies(eventId, domainPolicies);
             AUDIT.info("op=replacePurchasePolicies event={} caller={} count={} result=ok",
                     eventId, callerId, policies.size());
         } catch (RuntimeException e) {
@@ -311,12 +356,17 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     @Override
-    public void replaceDiscountPolicies(UUID eventId, List<IEventDiscountPolicy> policies, UUID callerId) {
-        // TODO: authorize caller — require ManagerPermission.DEFINE_DISCOUNT_POLICY on event's company
-        //       (owner/founder bypass; manager needs the listed permission)
-        Objects.requireNonNull(policies, "policies");
+    public void replaceDiscountPolicies(UUID eventId, List<DiscountPolicyDTO> policies, UUID callerId) {
         try {
-            eventDomainService.replaceDiscountPolicies(eventId, policies);
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(policies, "policies");
+            Objects.requireNonNull(callerId, "callerId");
+            UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
+            userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.DEFINE_DISCOUNT_POLICY);
+            List<IEventDiscountPolicy> domainPolicies = policies.stream()
+                    .map(DiscountPolicyDTO::toDomain)
+                    .toList();
+            eventDomainService.replaceDiscountPolicies(eventId, domainPolicies);
             AUDIT.info("op=replaceDiscountPolicies event={} caller={} count={} result=ok",
                     eventId, callerId, policies.size());
         } catch (RuntimeException e) {
@@ -326,15 +376,54 @@ public class EventManagementService implements IEventManagementService, EventSub
         }
     }
 
+    public UUID getCompanyIdForEventId(UUID eventId) {
+        return eventDomainService.getCompanyIdForEventId(eventId);
+    }
+
+    @Override
+    public List<PurchasePolicyDTO> getPurchasePolicies(UUID eventId) {
+        Objects.requireNonNull(eventId, "eventId");
+        return eventDomainService.getPurchasePolicies(eventId).stream()
+                .map(PurchasePolicyDTO::fromDomain)
+                .toList();
+    }
+
+    @Override
+    public List<DiscountPolicyDTO> getDiscountPolicies(UUID eventId) {
+        Objects.requireNonNull(eventId, "eventId");
+        return eventDomainService.getDiscountPolicies(eventId).stream()
+                .map(DiscountPolicyDTO::fromDomain)
+                .toList();
+    }
+
     @Override
     public void notifyEventIsCancelled(UUID event) {
         Objects.requireNonNull(event, "event");
+        EventDTO snapshot = eventDomainService.getEvent(event);
+        var attendeeIds = eventDomainService.collectAttendeeUserIds(event);
+
         try {
+            Objects.requireNonNull(event, "event");
             eventDomainService.cancel(event);
+
+            NotificationDTO dtoBase = new NotificationDTO(
+                    NotificationType.EVENT_CANCELLED,
+                    "Event Cancelled",
+                    snapshot == null ? "We regret to inform you that the event you purchased tickets for has been cancelled. You will receive a refund if you have already paid." :
+                            ("We regret to inform you that '" + snapshot.name() + "' has been cancelled. You will receive a refund if you have already paid."),
+                    java.time.LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+            );
+
+            for (UUID userId : attendeeIds) {
+                notifier.notifyUser(userId, dtoBase);
+            }
+
             AUDIT.info("op=notifyEventIsCancelled event={} result=ok", event);
         } catch (RuntimeException e) {
             AUDIT.warn("op=notifyEventIsCancelled event={} result=rejected reason={}", event, e.getMessage());
             throw e;
         }
     }
+
+    
 }

@@ -12,8 +12,11 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Hol
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
+import com.software_project_team_15b.Ticketmaster.DTO.DiscountPolicyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.PurchasePolicyDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
@@ -21,9 +24,10 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.Invali
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.AgeRestrictionPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.MaxTicketsPerOrderPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.EarlyBirdDiscountPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
+import com.software_project_team_15b.Ticketmaster.black.Application.Event.EventTestAuthSupport.FounderActor;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -42,10 +46,13 @@ class EventCatalogMutabilityIT {
     @org.springframework.beans.factory.annotation.Autowired
     IEventDomainService eventDomainService;
 
+    @Autowired
+    IMemberRepository memberRepository;
+
     // ── updateEvent ──────────────────────────────────────────────────────────
 
     @Test
-    void updateEvent_patches_descriptive_fields() {
+    void GivenDraftEvent_WhenUpdateEventWithAllFields_ThenAllFieldsArePatched() {
         Setup s = createDraftSeatingEvent(2, "10.00");
         Instant newStart = Instant.now().plusSeconds(7200);
 
@@ -62,7 +69,7 @@ class EventCatalogMutabilityIT {
     }
 
     @Test
-    void updateEvent_with_only_some_fields_leaves_others_unchanged() {
+    void GivenDraftEvent_WhenUpdateEventWithPartialFields_ThenOnlyProvidedFieldsChange() {
         Setup s = createDraftSeatingEvent(1, "10.00");
         EventDTO before = service.getEvent(s.eventId());
 
@@ -76,7 +83,7 @@ class EventCatalogMutabilityIT {
     }
 
     @Test
-    void updateEvent_works_after_publish() {
+    void GivenPublishedEvent_WhenUpdateEvent_ThenChangesArePersisted() {
         Setup s = createPublishedSeatingEvent(1, "10.00");
         service.updateEvent(s.eventId(),
                 new UpdateEventCommand("Live Update", null, null, null, null), s.callerId());
@@ -85,7 +92,7 @@ class EventCatalogMutabilityIT {
     }
 
     @Test
-    void updateEvent_on_cancelled_event_throws() {
+    void GivenCancelledEvent_WhenUpdateEvent_ThenThrowsInvalidEventState() {
         Setup s = createPublishedSeatingEvent(1, "10.00");
         service.cancel(s.eventId(), s.callerId());
 
@@ -96,7 +103,7 @@ class EventCatalogMutabilityIT {
     }
 
     @Test
-    void updateEvent_unknown_event_throws() {
+    void GivenUnknownEventId_WhenUpdateEvent_ThenThrowsInvalidEventState() {
         assertThatThrownBy(() -> service.updateEvent(UUID.randomUUID(),
                 new UpdateEventCommand("X", null, null, null, null), UUID.randomUUID()))
                 .isInstanceOf(InvalidEventStateException.class)
@@ -106,7 +113,7 @@ class EventCatalogMutabilityIT {
     // ── updateArea ───────────────────────────────────────────────────────────
 
     @Test
-    void updateArea_renames_seating_area() {
+    void GivenSeatingArea_WhenUpdateAreaName_ThenAreaIsRenamed() {
         Setup s = createPublishedSeatingEvent(2, "10.00");
 
         service.updateArea(s.eventId(), s.areaId(),
@@ -116,7 +123,7 @@ class EventCatalogMutabilityIT {
     }
 
     @Test
-    void updateArea_reprice_is_reflected_in_getPrice() {
+    void GivenAreaWithBasePrice_WhenUpdateAreaPrice_ThenGetPriceReflectsNewPrice() {
         Setup s = createPublishedSeatingEvent(3, "10.00");
 
         service.updateArea(s.eventId(), s.areaId(),
@@ -124,12 +131,12 @@ class EventCatalogMutabilityIT {
 
         PriceBreakdownDTO q = service.getPrice(s.eventId(),
                 new PriceQuery(s.areaId(), 2, UUID.randomUUID(), null, null));
-        assertThat(q.basePrice()).isEqualTo(Money.of("25.00", "USD"));
-        assertThat(q.total()).isEqualTo(Money.of("50.00", "USD"));
+        assertThat(q.basePrice()).isEqualTo(MoneyDTO.from(Money.of("25.00", "USD")));
+        assertThat(q.total()).isEqualTo(MoneyDTO.from(Money.of("50.00", "USD")));
     }
 
     @Test
-    void updateArea_resizes_standing_capacity_up() {
+    void GivenStandingArea_WhenUpdateAreaIncreasesCapacity_ThenAvailableCapacityGrows() {
         Setup s = createPublishedStandingEvent(5, "10.00");
 
         service.updateArea(s.eventId(), s.areaId(),
@@ -139,7 +146,7 @@ class EventCatalogMutabilityIT {
     }
 
     @Test
-    void updateArea_resizes_standing_capacity_down_preserves_held_quantity() {
+    void GivenStandingAreaWithHeldSeats_WhenShrinkCapacityAboveHeld_ThenHeldQuantityIsPreserved() {
         Setup s = createPublishedStandingEvent(10, "10.00");
         UUID token = UUID.randomUUID();
         eventDomainService.hold(s.eventId(), new HoldCommand(s.areaId(), null, 3, token));
@@ -152,7 +159,7 @@ class EventCatalogMutabilityIT {
     }
 
     @Test
-    void updateArea_shrink_below_held_floor_throws() {
+    void GivenStandingAreaWithHeldSeats_WhenShrinkCapacityBelowHeld_ThenThrowsInvalidEventState() {
         Setup s = createPublishedStandingEvent(10, "10.00");
         eventDomainService.hold(s.eventId(), new HoldCommand(s.areaId(), null, 5, UUID.randomUUID()));
 
@@ -162,7 +169,7 @@ class EventCatalogMutabilityIT {
     }
 
     @Test
-    void updateArea_standing_capacity_on_seating_area_throws() {
+    void GivenSeatingArea_WhenUpdateAreaWithStandingCapacity_ThenThrowsInvalidEventState() {
         Setup s = createPublishedSeatingEvent(2, "10.00");
 
         assertThatThrownBy(() -> service.updateArea(s.eventId(), s.areaId(),
@@ -172,7 +179,7 @@ class EventCatalogMutabilityIT {
     }
 
     @Test
-    void updateArea_unknown_area_throws() {
+    void GivenUnknownAreaId_WhenUpdateArea_ThenThrowsInvalidEventState() {
         Setup s = createPublishedSeatingEvent(1, "10.00");
 
         assertThatThrownBy(() -> service.updateArea(s.eventId(), UUID.randomUUID(),
@@ -184,7 +191,7 @@ class EventCatalogMutabilityIT {
     // ── removeArea ───────────────────────────────────────────────────────────
 
     @Test
-    void removeArea_drops_a_draft_area() {
+    void GivenDraftEventWithArea_WhenRemoveArea_ThenAreaIsRemoved() {
         Setup s = createDraftSeatingEvent(1, "10.00");
 
         service.removeArea(s.eventId(), s.areaId(), s.callerId());
@@ -193,7 +200,7 @@ class EventCatalogMutabilityIT {
     }
 
     @Test
-    void removeArea_after_publish_throws() {
+    void GivenPublishedEvent_WhenRemoveArea_ThenThrowsAndAreaRemains() {
         Setup s = createPublishedSeatingEvent(1, "10.00");
 
         assertThatThrownBy(() -> service.removeArea(s.eventId(), s.areaId(), s.callerId()))
@@ -205,10 +212,10 @@ class EventCatalogMutabilityIT {
     // ── replacePurchasePolicies ──────────────────────────────────────────────
 
     @Test
-    void replacePurchasePolicies_changes_validation_outcome() {
+    void GivenEvent_WhenReplacePurchasePoliciesWithMaxTickets_ThenOversizedRequestFails() {
         Setup s = createDraftSeatingEvent(1, "10.00");
         service.replacePurchasePolicies(s.eventId(),
-                List.of(new MaxTicketsPerOrderPolicy(2)), s.callerId());
+                List.of(new PurchasePolicyDTO.MaxTicketsPerOrder(2)), s.callerId());
 
         PurchaseRequest req = new PurchaseRequest(s.eventId(), s.areaId(), UUID.randomUUID(),
                 LocalDate.now().minusYears(30), 5, List.of(), null);
@@ -218,15 +225,14 @@ class EventCatalogMutabilityIT {
     }
 
     @Test
-    void replacePurchasePolicies_loosening_lets_request_pass() {
-        UUID company = UUID.randomUUID();
-        UUID caller = UUID.randomUUID();
+    void GivenEventWithStrictPolicies_WhenReplaceWithEmpty_ThenPreviouslyRejectedRequestPasses() {
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
         UUID strict = service.createEvent(new CreateEventCommand(
-                company, "Strict", "A", Category.OTHER,
+                actor.companyId(), "Strict", "A", Category.OTHER,
                 Instant.now().plusSeconds(86400), "V",
-                List.of(new MaxTicketsPerOrderPolicy(1), new AgeRestrictionPolicy(18)), null), caller);
+                List.of(new MaxTicketsPerOrderPolicy(1), new AgeRestrictionPolicy(18)), null), actor.memberId());
 
-        service.replacePurchasePolicies(strict, List.of(), caller);
+        service.replacePurchasePolicies(strict, List.of(), actor.memberId());
 
         PurchaseRequest req = new PurchaseRequest(strict, UUID.randomUUID(), UUID.randomUUID(),
                 LocalDate.now().minusYears(30), 99, List.of(), null);
@@ -236,18 +242,18 @@ class EventCatalogMutabilityIT {
     }
 
     @Test
-    void replacePurchasePolicies_null_throws() {
+    void GivenNullPolicyList_WhenReplacePurchasePolicies_ThenThrowsNullPointerException() {
         Setup s = createDraftSeatingEvent(1, "10.00");
         assertThatThrownBy(() -> service.replacePurchasePolicies(s.eventId(), null, s.callerId()))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
-    void replacePurchasePolicies_on_cancelled_event_throws() {
+    void GivenCancelledEvent_WhenReplacePurchasePolicies_ThenThrowsInvalidEventState() {
         Setup s = createPublishedSeatingEvent(1, "10.00");
         service.cancel(s.eventId(), s.callerId());
 
-        List<IEventPurchasePolicy> p = List.of();
+        List<PurchasePolicyDTO> p = List.of();
         assertThatThrownBy(() -> service.replacePurchasePolicies(s.eventId(), p, s.callerId()))
                 .isInstanceOf(InvalidEventStateException.class)
                 .hasMessageContaining("cancelled");
@@ -256,41 +262,41 @@ class EventCatalogMutabilityIT {
     // ── replaceDiscountPolicies ──────────────────────────────────────────────
 
     @Test
-    void replaceDiscountPolicies_changes_total_in_getPrice() {
+    void GivenEvent_WhenReplaceDiscountPoliciesWith50PercentOff_ThenGetPriceTotalIsHalved() {
         Setup s = createPublishedSeatingEvent(3, "100.00");
         PriceBreakdownDTO before = service.getPrice(s.eventId(),
                 new PriceQuery(s.areaId(), 2, UUID.randomUUID(), null, null));
-        assertThat(before.total()).isEqualTo(Money.of("200.00", "USD"));
+        assertThat(before.total()).isEqualTo(MoneyDTO.from(Money.of("200.00", "USD")));
 
-        IEventDiscountPolicy half = new EarlyBirdDiscountPolicy(
+        DiscountPolicyDTO half = new DiscountPolicyDTO.EarlyBird(
                 java.math.BigDecimal.valueOf(50),
                 Instant.now().plusSeconds(86400));
         service.replaceDiscountPolicies(s.eventId(), List.of(half), s.callerId());
 
         PriceBreakdownDTO after = service.getPrice(s.eventId(),
                 new PriceQuery(s.areaId(), 2, UUID.randomUUID(), null, null));
-        assertThat(after.total()).isEqualTo(Money.of("100.00", "USD"));
-        assertThat(after.discount()).isEqualTo(Money.of("100.00", "USD"));
+        assertThat(after.total()).isEqualTo(MoneyDTO.from(Money.of("100.00", "USD")));
+        assertThat(after.discount()).isEqualTo(MoneyDTO.from(Money.of("100.00", "USD")));
     }
 
     @Test
-    void replaceDiscountPolicies_empty_clears_discounts() {
+    void GivenEventWithEarlyBird_WhenReplaceDiscountPoliciesWithEmpty_ThenDiscountIsZero() {
         Setup s = createPublishedSeatingEventWithEarlyBird(2, "50.00", 50);
         PriceBreakdownDTO discounted = service.getPrice(s.eventId(),
                 new PriceQuery(s.areaId(), 2, UUID.randomUUID(), null, null));
-        assertThat(discounted.discount()).isEqualTo(Money.of("50.00", "USD"));
+        assertThat(discounted.discount()).isEqualTo(MoneyDTO.from(Money.of("50.00", "USD")));
 
         service.replaceDiscountPolicies(s.eventId(), List.of(), s.callerId());
 
         PriceBreakdownDTO plain = service.getPrice(s.eventId(),
                 new PriceQuery(s.areaId(), 2, UUID.randomUUID(), null, null));
-        assertThat(plain.discount()).isEqualTo(Money.of("0.00", "USD"));
+        assertThat(plain.discount()).isEqualTo(MoneyDTO.from(Money.of("0.00", "USD")));
     }
 
     @Test
-    void replaceDiscountPolicies_null_element_throws() {
+    void GivenPolicyListContainingNull_WhenReplaceDiscountPolicies_ThenThrowsNullPointerException() {
         Setup s = createDraftSeatingEvent(1, "10.00");
-        List<IEventDiscountPolicy> bad = new ArrayList<>();
+        List<DiscountPolicyDTO> bad = new ArrayList<>();
         bad.add(null);
         assertThatThrownBy(() -> service.replaceDiscountPolicies(s.eventId(), bad, s.callerId()))
                 .isInstanceOf(NullPointerException.class);
@@ -301,16 +307,15 @@ class EventCatalogMutabilityIT {
     private record Setup(UUID eventId, UUID areaId, UUID callerId) {}
 
     private Setup createDraftSeatingEvent(int seatCount, String price) {
-        UUID caller = UUID.randomUUID();
-        UUID companyId = UUID.randomUUID();
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
-                companyId, "Test Event", "Artist", Category.CONCERT,
-                Instant.now().plusSeconds(86400), "Venue", null, null), caller);
+                actor.companyId(), "Test Event", "Artist", Category.CONCERT,
+                Instant.now().plusSeconds(86400), "Venue", null, null), actor.memberId());
         List<AddAreaCommand.SeatSpec> specs = new ArrayList<>();
         for (int i = 1; i <= seatCount; i++) specs.add(new AddAreaCommand.SeatSpec("A", String.valueOf(i)));
         UUID areaId = service.addArea(eventId, new AddAreaCommand(
-                "Main", Money.of(price, "USD"), AddAreaCommand.AreaType.SEATING, null, specs), caller);
-        return new Setup(eventId, areaId, caller);
+                "Main", Money.of(price, "USD"), AddAreaCommand.AreaType.SEATING, null, specs), actor.memberId());
+        return new Setup(eventId, areaId, actor.memberId());
     }
 
     private Setup createPublishedSeatingEvent(int seatCount, String price) {
@@ -320,32 +325,30 @@ class EventCatalogMutabilityIT {
     }
 
     private Setup createPublishedStandingEvent(int capacity, String price) {
-        UUID caller = UUID.randomUUID();
-        UUID companyId = UUID.randomUUID();
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
-                companyId, "Test Event", "Artist", Category.CONCERT,
-                Instant.now().plusSeconds(86400), "Venue", null, null), caller);
+                actor.companyId(), "Test Event", "Artist", Category.CONCERT,
+                Instant.now().plusSeconds(86400), "Venue", null, null), actor.memberId());
         UUID areaId = service.addArea(eventId, new AddAreaCommand(
-                "Floor", Money.of(price, "USD"), AddAreaCommand.AreaType.STANDING, capacity, null), caller);
-        service.publish(eventId, caller);
-        return new Setup(eventId, areaId, caller);
+                "Floor", Money.of(price, "USD"), AddAreaCommand.AreaType.STANDING, capacity, null), actor.memberId());
+        service.publish(eventId, actor.memberId());
+        return new Setup(eventId, areaId, actor.memberId());
     }
 
     private Setup createPublishedSeatingEventWithEarlyBird(int seatCount, String price, int percentOff) {
-        UUID caller = UUID.randomUUID();
-        UUID companyId = UUID.randomUUID();
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
         IEventDiscountPolicy earlyBird = new EarlyBirdDiscountPolicy(
                 java.math.BigDecimal.valueOf(percentOff),
                 Instant.now().plusSeconds(86400));
         UUID eventId = service.createEvent(new CreateEventCommand(
-                companyId, "EB", "A", Category.CONCERT,
-                Instant.now().plusSeconds(86400), "V", null, List.of(earlyBird)), caller);
+                actor.companyId(), "EB", "A", Category.CONCERT,
+                Instant.now().plusSeconds(86400), "V", null, List.of(earlyBird)), actor.memberId());
         List<AddAreaCommand.SeatSpec> specs = new ArrayList<>();
         for (int i = 1; i <= seatCount; i++) specs.add(new AddAreaCommand.SeatSpec("A", String.valueOf(i)));
         UUID areaId = service.addArea(eventId, new AddAreaCommand(
-                "Main", Money.of(price, "USD"), AddAreaCommand.AreaType.SEATING, null, specs), caller);
-        service.publish(eventId, caller);
-        return new Setup(eventId, areaId, caller);
+                "Main", Money.of(price, "USD"), AddAreaCommand.AreaType.SEATING, null, specs), actor.memberId());
+        service.publish(eventId, actor.memberId());
+        return new Setup(eventId, areaId, actor.memberId());
     }
 
     private static EventDTO.AreaView areaOf(EventDTO view, UUID areaId) {

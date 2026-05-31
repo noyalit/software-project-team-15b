@@ -25,10 +25,10 @@ import com.software_project_team_15b.Ticketmaster.Application.Company.CompanySer
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyDomainServiceImpl;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
@@ -40,6 +40,7 @@ class CompanyServiceWhiteTest {
     private ICompanyRepository repo;
     private IAuth auth;
     private UserDomainService userDomainService;
+    private IEventDomainService eventDomainService;
     private ICompanyDomainService domainService;
     private CompanyService service;
 
@@ -64,9 +65,11 @@ class CompanyServiceWhiteTest {
         auth = mock(IAuth.class);
         userDomainService = mock(UserDomainService.class);
         when(userDomainService.isActiveOwner(any(), any())).thenReturn(true);
+        eventDomainService = mock(IEventDomainService.class);
+        when(eventDomainService.searchInCompany(any(), any())).thenReturn(List.of());
 
         domainService = new CompanyDomainServiceImpl(repo);
-        service = new CompanyService(domainService, userDomainService, auth);
+        service = new CompanyService(domainService, userDomainService, eventDomainService, auth);
     }
 
     private Company saveToRepo(Company company) {
@@ -107,19 +110,25 @@ class CompanyServiceWhiteTest {
 
     @Test
     void constructor_throws_when_domainService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(null, userDomainService, auth))
+        assertThatThrownBy(() -> new CompanyService(null, userDomainService, eventDomainService, auth))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_userDomainService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(domainService, null, auth))
+        assertThatThrownBy(() -> new CompanyService(domainService, null, eventDomainService, auth))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void constructor_throws_when_eventDomainService_is_null() {
+        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, null, auth))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_auth_is_null() {
-        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, null))
+        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, eventDomainService, null))
                 .isInstanceOf(NullPointerException.class);
     }
 
@@ -197,24 +206,26 @@ class CompanyServiceWhiteTest {
     }
 
     @Test
-    void concurrent_changeStatus_does_not_throw() throws Exception {
-        UUID founderId = UUID.randomUUID();
-        String founderToken = registerMember(founderId);
-        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+    void concurrent_suspendCompany_does_not_throw() throws Exception {
         String adminToken = registerSystemAdmin(UUID.randomUUID());
 
         int N = 40;
+        CompanyDTO[] companies = new CompanyDTO[N];
+        for (int i = 0; i < N; i++) {
+            String founderToken = registerMember(UUID.randomUUID());
+            companies[i] = service.createCompany(founderToken, "Company-" + i);
+        }
+
         ExecutorService pool = Executors.newFixedThreadPool(16);
         CountDownLatch start = new CountDownLatch(1);
         AtomicInteger failures = new AtomicInteger();
-        CompanyStatus[] statuses = {CompanyStatus.ACTIVE, CompanyStatus.SUSPENDED, CompanyStatus.CLOSED};
 
         for (int i = 0; i < N; i++) {
-            final CompanyStatus target = statuses[i % statuses.length];
+            final UUID companyId = companies[i].companyId();
             pool.submit(() -> {
                 try {
                     start.await();
-                    service.changeStatus(adminToken, dto.companyId(), target);
+                    service.suspendCompany(adminToken, companyId);
                 } catch (Exception e) {
                     failures.incrementAndGet();
                 }

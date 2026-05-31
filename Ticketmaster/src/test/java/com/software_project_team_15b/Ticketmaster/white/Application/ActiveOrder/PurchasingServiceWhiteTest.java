@@ -21,6 +21,7 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaym
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
@@ -42,6 +43,7 @@ public class PurchasingServiceWhiteTest {
     IPaymentAPI paymentGateway;
     ITicketSupplyAPI ticketProvider;
     IAuth auth;
+    INotifier notifier;
 
     @BeforeEach
     public void setUp() {
@@ -53,6 +55,7 @@ public class PurchasingServiceWhiteTest {
         paymentGateway = mock(IPaymentAPI.class);
         ticketProvider = mock(ITicketSupplyAPI.class);
         auth = mock(IAuth.class);
+        notifier = mock(INotifier.class);
 
         service = new PurchasingService(
                 purchasingDomainService,
@@ -62,7 +65,8 @@ public class PurchasingServiceWhiteTest {
                 lotteryDomainService,
                 paymentGateway,
                 ticketProvider,
-                auth
+                auth,
+                notifier
         );
     }
 

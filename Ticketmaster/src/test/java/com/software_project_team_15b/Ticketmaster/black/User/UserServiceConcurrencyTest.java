@@ -23,6 +23,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.IPasswordEncoder;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Founder;
@@ -77,13 +78,15 @@ class UserServiceConcurrencyTest {
         IQueueDomainService queueDomainService = Mockito.mock(IQueueDomainService.class);
         Mockito.when(queueDomainService.canAccessWebsite()).thenReturn(true);
         ApplicationEventPublisher eventPublisher = ignored -> {};
+        INotifier notifier = Mockito.mock(INotifier.class);
         service = new UserService(
                 userDomainService,
                 auth,
                 new NoopPasswordEncoder(),
                 queueDomainService,
                 new NoopSystemAdminRepository(),
-                eventPublisher
+                eventPublisher,
+                notifier
         );
     }
 

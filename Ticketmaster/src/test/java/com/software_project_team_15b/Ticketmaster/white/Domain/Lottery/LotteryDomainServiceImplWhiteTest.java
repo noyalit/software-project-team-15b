@@ -464,4 +464,28 @@ class LotteryDomainServiceImplWhiteTest {
         }
         return ids;
     }
+
+    // =========================================================================
+    // constructor
+    // =========================================================================
+
+    @Test
+    void constructor_throws_when_repo_is_null() {
+        assertThatThrownBy(() -> new LotteryDomainServiceImpl(null))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    // =========================================================================
+    // popRandomFromEventLottery(count) — lottery not found
+    // =========================================================================
+
+    @Test
+    void popRandomFromEventLottery_withCount_lotteryNotFound_throwsLotteryNotFoundException() {
+        ExposedLotteryService exposed = createExposed();
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
+
+        assertThatThrownBy(() -> exposed.popRandomFromEventLottery(EVENT_ID, 2))
+                .isInstanceOf(LotteryNotFoundException.class);
+        verify(lotteryRepository, never()).updateLottery(any());
+    }
 }

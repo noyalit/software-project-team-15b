@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,7 +30,14 @@ import com.software_project_team_15b.Ticketmaster.DTO.RoleTreeNodeDTO;
 public class UserDomainService {
 
     private final IMemberRepository memberRepository;
-    
+
+    /**
+     * Primary constructor used by the Spring container.
+     *
+     * @param memberRepository repository for member persistence
+     * @param notifier         port used to deliver notifications to users
+     */
+    @Autowired
     public UserDomainService(IMemberRepository memberRepository) {
         this.memberRepository = memberRepository;
     }
@@ -299,6 +307,62 @@ public class UserDomainService {
                 ));
 
         return managerRole.getPermissions();
+    }
+
+    /**
+     * Returns {@code true} if the given user holds an approved Manager role in the specified
+     * company that carries the {@link ManagerPermission#DEFINE_PURCHASE_POLICY} permission.
+     *
+     * @param userId    the ID of the member to check
+     * @param companyId the company whose purchase-policy permission is being queried
+     * @return {@code true} when the member has an approved manager role with the required
+     *         permission; {@code false} otherwise
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException
+     *         if {@code userId} is {@code null}
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.MemberNotFoundException
+     *         if no member exists with the given {@code userId}
+     */
+    @Transactional(readOnly = true)
+    public boolean canChangePurchasePolicy(UUID userId, UUID companyId) {
+        Member manager = getMemberOrThrow(userId);
+        Manager managerRole = manager.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof Manager)
+                .map(role -> (Manager) role)
+                .filter(role -> role.isAppointmentApproved())
+                .filter(role -> role.belongsToCompany(companyId))
+                .filter(role -> role.hasPermission(ManagerPermission.DEFINE_PURCHASE_POLICY))
+                .findFirst()
+                .orElse(null);
+        return managerRole != null;
+    }
+
+    /**
+     * Returns {@code true} if the given user holds an approved Manager role in the specified
+     * company that carries the {@link ManagerPermission#DEFINE_DISCOUNT_POLICY} permission.
+     *
+     * @param userId    the ID of the member to check
+     * @param companyId the company whose discount-policy permission is being queried
+     * @return {@code true} when the member has an approved manager role with the required
+     *         permission; {@code false} otherwise
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException
+     *         if {@code userId} is {@code null}
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.MemberNotFoundException
+     *         if no member exists with the given {@code userId}
+     */
+    @Transactional(readOnly = true)
+    public boolean canChangeDiscountPolicy(UUID userId, UUID companyId) {
+        Member manager = getMemberOrThrow(userId);
+        Manager managerRole = manager.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof Manager)
+                .map(role -> (Manager) role)
+                .filter(Role::isAppointmentApproved)
+                .filter(role -> role.belongsToCompany(companyId))
+                .filter(role -> role.hasPermission(ManagerPermission.DEFINE_DISCOUNT_POLICY))
+                .findFirst()
+                .orElse(null);
+        return managerRole != null;
     }
 
     private boolean hasManagerPermission(
@@ -703,6 +767,21 @@ public class UserDomainService {
         return memberRepository.findByUsername(username)
                 .orElseThrow(() ->
                         new InvalidCredentialsException("Invalid username or password"));
+    }
+
+    /*
+        Private helper to check if the caller is an active owner or founder of the company.
+        Used as a fallback for manager permissions
+        since owners/founders can do everything regardless of their manager permissions.
+    */
+    public void isActiveOwnerOrFounder(UUID companyId, UUID callerId) {
+        Objects.requireNonNull(companyId, "eventId");
+        Objects.requireNonNull(callerId, "callerId");
+        if (!isActiveFounder(callerId, companyId) &&
+                !isActiveOwner(callerId, companyId)) {
+            throw new UnauthorizedCompanyActionException(
+                    "Only active owners/founders can perform this action");
+        }
     }
 
     public MemberDTO toDTO(Member member) {

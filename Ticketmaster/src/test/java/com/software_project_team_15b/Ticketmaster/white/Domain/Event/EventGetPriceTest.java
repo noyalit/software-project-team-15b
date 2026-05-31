@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 class EventGetPriceTest {
 
     @Test
-    void priceFor_seating_area_multiplies_base_price_by_quantity() {
+    void GivenSeatingArea_WhenPriceForQuantity_ThenReturnsBasePriceTimesQuantity() {
         SeatingEventArea area = EventTestFixtures.seatingArea(5, "25.00");
         Event event = EventTestFixtures.published(area);
 
@@ -21,7 +21,7 @@ class EventGetPriceTest {
     }
 
     @Test
-    void priceFor_quantity_one_returns_base_price() {
+    void GivenQuantityOne_WhenPriceFor_ThenReturnsBasePrice() {
         SeatingEventArea area = EventTestFixtures.seatingArea(1, "50.00");
         Event event = EventTestFixtures.published(area);
 
@@ -31,7 +31,7 @@ class EventGetPriceTest {
     }
 
     @Test
-    void priceFor_standing_area_returns_correct_price() {
+    void GivenStandingArea_WhenPriceForQuantity_ThenReturnsBasePriceTimesQuantity() {
         StandingEventArea area = EventTestFixtures.standingArea(100, "15.00");
         Event event = EventTestFixtures.published(new StandingEventArea[]{area}, new SeatingEventArea[0]);
 
@@ -41,7 +41,7 @@ class EventGetPriceTest {
     }
 
     @Test
-    void priceFor_unknown_area_throws() {
+    void GivenUnknownAreaId_WhenPriceFor_ThenThrowsInvalidEventState() {
         Event event = EventTestFixtures.published(EventTestFixtures.seatingArea(1, "10.00"));
 
         assertThatThrownBy(() -> event.priceFor(UUID.randomUUID(), 1))
@@ -50,7 +50,7 @@ class EventGetPriceTest {
     }
 
     @Test
-    void default_discount_policy_returns_subtotal_unchanged() {
+    void GivenNoDiscountPolicies_WhenCheapestPriceFor_ThenReturnsSubtotalUnchanged() {
         SeatingEventArea area = EventTestFixtures.seatingArea(5, "20.00");
         Event event = EventTestFixtures.published(area);
         Money subtotal = event.priceFor(area.areaId(), 4);
@@ -61,7 +61,7 @@ class EventGetPriceTest {
     }
 
     @Test
-    void priceFor_large_quantity_scales_correctly() {
+    void GivenLargeQuantity_WhenPriceFor_ThenScalesCorrectly() {
         StandingEventArea area = EventTestFixtures.standingArea(1000, "9.99");
         Event event = EventTestFixtures.published(new StandingEventArea[]{area}, new SeatingEventArea[0]);
 

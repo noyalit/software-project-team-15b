@@ -31,6 +31,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
 
@@ -43,6 +44,7 @@ class CompanyServiceBlackTest {
     @Mock private ICompanyRepository repo;
     @Mock private IAuth auth;
     @Mock private UserDomainService userDomainService;
+    @Mock private IEventDomainService eventDomainService;
 
     private CompanyService service;
 
@@ -64,9 +66,10 @@ class CompanyServiceBlackTest {
         });
 
         when(userDomainService.isActiveOwner(any(), any())).thenReturn(true);
+        when(eventDomainService.searchInCompany(any(), any())).thenReturn(List.of());
 
         CompanyDomainServiceImpl domainService = new CompanyDomainServiceImpl(repo);
-        service = new CompanyService(domainService, userDomainService, auth);
+        service = new CompanyService(domainService, userDomainService, eventDomainService, auth);
     }
 
     private Company saveToRepo(Company company) {
@@ -240,7 +243,7 @@ class CompanyServiceBlackTest {
     // updatePurchasePolicy — negative
 
     @Test
-    void updatePurchasePolicy_throws_when_caller_is_not_owner() {
+    void updatePurchasePolicy_throws_when_caller_has_neither_owner_nor_manager_permission() {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         CompanyDTO dto = service.createCompany(founderToken, "Acme");
@@ -248,11 +251,48 @@ class CompanyServiceBlackTest {
         String strangerToken = registerMember(strangerId);
         when(userDomainService.isActiveOwner(strangerId, dto.companyId())).thenReturn(false);
         when(userDomainService.isActiveFounder(strangerId, dto.companyId())).thenReturn(false);
+        when(userDomainService.canChangePurchasePolicy(strangerId, dto.companyId())).thenReturn(false);
         ICompanyPurchasePolicy policy = (request, c) -> {};
 
         assertThatThrownBy(() -> service.updatePurchasePolicy(strangerToken, dto.companyId(), policy))
                 .isInstanceOf(UnauthorizedCompanyActionException.class)
-                .hasMessageContaining("owner");
+                .hasMessageContaining("permission");
+    }
+
+    @Test
+    void updatePurchasePolicy_succeeds_when_caller_is_founder() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+
+        UUID actualFounderId = UUID.randomUUID();
+        String actualFounderToken = registerMember(actualFounderId);
+        when(userDomainService.isActiveOwner(actualFounderId, dto.companyId())).thenReturn(false);
+        when(userDomainService.isActiveFounder(actualFounderId, dto.companyId())).thenReturn(true);
+        ICompanyPurchasePolicy policy = (request, c) -> {};
+
+        CompanyDTO result = service.updatePurchasePolicy(actualFounderToken, dto.companyId(), policy);
+
+        assertThat(result).isNotNull();
+        assertThat(repo.findById(dto.companyId()).orElseThrow().getPurchasePolicies()).containsExactly(policy);
+    }
+
+    @Test
+    void updatePurchasePolicy_succeeds_when_caller_is_manager_with_permission() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+
+        UUID managerId = UUID.randomUUID();
+        String managerToken = registerMember(managerId);
+        when(userDomainService.isActiveOwner(managerId, dto.companyId())).thenReturn(false);
+        when(userDomainService.canChangePurchasePolicy(managerId, dto.companyId())).thenReturn(true);
+        ICompanyPurchasePolicy policy = (request, c) -> {};
+
+        CompanyDTO result = service.updatePurchasePolicy(managerToken, dto.companyId(), policy);
+
+        assertThat(result).isNotNull();
+        assertThat(repo.findById(dto.companyId()).orElseThrow().getPurchasePolicies()).containsExactly(policy);
     }
 
     @Test
@@ -326,7 +366,7 @@ class CompanyServiceBlackTest {
     // updateDiscountPolicy — negative
 
     @Test
-    void updateDiscountPolicy_throws_when_caller_is_not_owner() {
+    void updateDiscountPolicy_throws_when_caller_has_neither_owner_nor_manager_permission() {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         CompanyDTO dto = service.createCompany(founderToken, "Acme");
@@ -334,10 +374,56 @@ class CompanyServiceBlackTest {
         String strangerToken = registerMember(strangerId);
         when(userDomainService.isActiveOwner(strangerId, dto.companyId())).thenReturn(false);
         when(userDomainService.isActiveFounder(strangerId, dto.companyId())).thenReturn(false);
+        when(userDomainService.canChangeDiscountPolicy(strangerId, dto.companyId())).thenReturn(false);
         ICompanyDiscountPolicy policy = (subtotal, request) -> subtotal;
 
         assertThatThrownBy(() -> service.updateDiscountPolicy(strangerToken, dto.companyId(), policy))
-                .isInstanceOf(UnauthorizedCompanyActionException.class);
+                .isInstanceOf(UnauthorizedCompanyActionException.class)
+                .hasMessageContaining("permission");
+    }
+
+    @Test
+    void updateDiscountPolicy_succeeds_when_caller_is_founder() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+
+        UUID actualFounderId = UUID.randomUUID();
+        String actualFounderToken = registerMember(actualFounderId);
+        when(userDomainService.isActiveOwner(actualFounderId, dto.companyId())).thenReturn(false);
+        when(userDomainService.isActiveFounder(actualFounderId, dto.companyId())).thenReturn(true);
+        ICompanyDiscountPolicy policy = (subtotal, request) -> subtotal;
+
+        CompanyDTO result = service.updateDiscountPolicy(actualFounderToken, dto.companyId(), policy);
+
+        assertThat(result).isNotNull();
+        assertThat(repo.findById(dto.companyId()).orElseThrow().getDiscountPolicies()).containsExactly(policy);
+    }
+
+    @Test
+    void updateDiscountPolicy_succeeds_when_caller_is_manager_with_permission() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+
+        UUID managerId = UUID.randomUUID();
+        String managerToken = registerMember(managerId);
+        when(userDomainService.isActiveOwner(managerId, dto.companyId())).thenReturn(false);
+        when(userDomainService.canChangeDiscountPolicy(managerId, dto.companyId())).thenReturn(true);
+        ICompanyDiscountPolicy policy = (subtotal, request) -> subtotal;
+
+        CompanyDTO result = service.updateDiscountPolicy(managerToken, dto.companyId(), policy);
+
+        assertThat(result).isNotNull();
+        assertThat(repo.findById(dto.companyId()).orElseThrow().getDiscountPolicies()).containsExactly(policy);
+    }
+
+    @Test
+    void updateDiscountPolicy_throws_when_companyId_is_null() {
+        String token = registerMember(UUID.randomUUID());
+        assertThatThrownBy(() -> service.updateDiscountPolicy(token, null, (subtotal, req) -> subtotal))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Company ID");
     }
 
     @Test
@@ -358,42 +444,207 @@ class CompanyServiceBlackTest {
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
-    // ===========================================================================================
-    // changeStatus — negative
+    @Test
+    void updateDiscountPolicy_throws_when_company_is_not_active() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        Company company = repo.findById(dto.companyId()).orElseThrow();
+        company.changeStatus(CompanyStatus.SUSPENDED);
+        saveToRepo(company);
+        ICompanyDiscountPolicy policy = (subtotal, req) -> subtotal;
+
+        assertThatThrownBy(() -> service.updateDiscountPolicy(founderToken, dto.companyId(), policy))
+                .isInstanceOf(IllegalStateException.class);
+    }
 
     @Test
-    void changeStatus_throws_when_status_is_null() {
+    void updateDiscountPolicy_throws_when_token_invalid() {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         CompanyDTO dto = service.createCompany(founderToken, "Acme");
 
-        assertThatThrownBy(() -> service.changeStatus(founderToken, dto.companyId(), null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("Company status");
+        assertThatThrownBy(() -> service.updateDiscountPolicy("bad", dto.companyId(), (subtotal, req) -> subtotal))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    // ===========================================================================================
+    // suspendCompany
+
+    @Test
+    void suspendCompany_by_admin_sets_status_to_suspended() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        String adminToken = registerSystemAdmin(UUID.randomUUID());
+
+        CompanyDTO result = service.suspendCompany(adminToken, dto.companyId());
+
+        assertThat(result.status()).isEqualTo(CompanyStatus.SUSPENDED);
     }
 
     @Test
-    void changeStatus_throws_when_companyId_is_null() {
-        String founderToken = registerMember(UUID.randomUUID());
-        assertThatThrownBy(() -> service.changeStatus(founderToken, null, CompanyStatus.CLOSED))
+    void suspendCompany_throws_when_companyId_is_null() {
+        String adminToken = registerSystemAdmin(UUID.randomUUID());
+        assertThatThrownBy(() -> service.suspendCompany(adminToken, null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Company ID");
     }
 
     @Test
-    void changeStatus_throws_when_token_invalid() {
+    void suspendCompany_throws_when_token_invalid() {
         UUID founderId = UUID.randomUUID();
         String founderToken = registerMember(founderId);
         CompanyDTO dto = service.createCompany(founderToken, "Acme");
-
-        assertThatThrownBy(() -> service.changeStatus("bad", dto.companyId(), CompanyStatus.CLOSED))
+        assertThatThrownBy(() -> service.suspendCompany("bad", dto.companyId()))
                 .isInstanceOf(InvalidTokenException.class);
     }
 
     @Test
-    void changeStatus_throws_InvalidTokenException_before_CompanyNotFoundException_when_token_invalid() {
-        assertThatThrownBy(() -> service.changeStatus("bad", UUID.randomUUID(), CompanyStatus.CLOSED))
+    void suspendCompany_throws_InvalidTokenException_before_CompanyNotFoundException_when_token_invalid() {
+        assertThatThrownBy(() -> service.suspendCompany("bad", UUID.randomUUID()))
                 .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void suspendCompany_throws_when_caller_is_not_system_admin() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        assertThatThrownBy(() -> service.suspendCompany(founderToken, dto.companyId()))
+                .isInstanceOf(UnauthorizedCompanyActionException.class)
+                .hasMessageContaining("system admin");
+    }
+
+    // ===========================================================================================
+    // closeCompany
+
+    @Test
+    void closeCompany_by_founder_sets_status_to_closed() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+
+        CompanyDTO result = service.closeCompany(founderToken, dto.companyId());
+
+        assertThat(result.status()).isEqualTo(CompanyStatus.CLOSED);
+    }
+
+    @Test
+    void closeCompany_throws_when_companyId_is_null() {
+        String founderToken = registerMember(UUID.randomUUID());
+        assertThatThrownBy(() -> service.closeCompany(founderToken, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Company ID");
+    }
+
+    @Test
+    void closeCompany_throws_when_token_invalid() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        assertThatThrownBy(() -> service.closeCompany("bad", dto.companyId()))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void closeCompany_throws_when_caller_is_not_founder() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        UUID strangerId = UUID.randomUUID();
+        String strangerToken = registerMember(strangerId);
+        when(userDomainService.isActiveFounder(strangerId, dto.companyId())).thenReturn(false);
+        assertThatThrownBy(() -> service.closeCompany(strangerToken, dto.companyId()))
+                .isInstanceOf(UnauthorizedCompanyActionException.class)
+                .hasMessageContaining("founder");
+    }
+
+    // ===========================================================================================
+    // activateCompany
+
+    @Test
+    void activateCompany_admin_can_not_reactivate_suspended_company() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        String adminToken = registerSystemAdmin(UUID.randomUUID());
+        service.suspendCompany(adminToken, dto.companyId());
+
+        assertThatThrownBy(() -> service.activateCompany(adminToken, dto.companyId()))
+                .isInstanceOf(UnauthorizedCompanyActionException.class)
+                .hasMessageContaining("founder");
+    }
+
+    @Test
+    void activateCompany_founder_can_reactivate_closed_company() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+        service.closeCompany(founderToken, dto.companyId());
+
+        CompanyDTO result = service.activateCompany(founderToken, dto.companyId());
+
+        assertThat(result.status()).isEqualTo(CompanyStatus.ACTIVE);
+    }
+
+    @Test
+    void activateCompany_throws_when_company_is_already_active() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+
+        assertThatThrownBy(() -> service.activateCompany(founderToken, dto.companyId()))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("reactivated");
+    }
+
+    @Test
+    void activateCompany_throws_when_companyId_is_null() {
+        String adminToken = registerSystemAdmin(UUID.randomUUID());
+        assertThatThrownBy(() -> service.activateCompany(adminToken, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Company ID");
+    }
+
+    @Test
+    void activateCompany_throws_when_token_invalid() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        assertThatThrownBy(() -> service.activateCompany("bad", dto.companyId()))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void activateCompany_throws_when_tries_to_reactivate_suspended_company() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+        String adminToken = registerSystemAdmin(UUID.randomUUID());
+        service.suspendCompany(adminToken, dto.companyId());
+        assertThatThrownBy(() -> service.activateCompany(founderToken, dto.companyId()))
+                .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Company must be closed to be reactivated");
+    }
+
+    @Test
+    void activateCompany_throws_when_non_founder_tries_to_reactivate_closed_company() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+        service.closeCompany(founderToken, dto.companyId());
+        UUID strangerId = UUID.randomUUID();
+        String strangerToken = registerMember(strangerId);
+        when(userDomainService.isActiveFounder(strangerId, dto.companyId())).thenReturn(false);
+        assertThatThrownBy(() -> service.activateCompany(strangerToken, dto.companyId()))
+                .isInstanceOf(UnauthorizedCompanyActionException.class)
+                .hasMessageContaining("founder");
     }
 
     // ===========================================================================================
@@ -405,7 +656,23 @@ class CompanyServiceBlackTest {
         String founderToken = registerMember(founderId);
         CompanyDTO dto = service.createCompany(founderToken, "Acme");
 
-        assertThat(service.getCompany(dto.companyId()).companyId()).isEqualTo(dto.companyId());
+        assertThat(service.getCompany(founderToken, dto.companyId()).companyId()).isEqualTo(dto.companyId());
+    }
+
+    @Test
+    void getCompany_hides_closed_company_from_non_privileged_caller() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+        service.closeCompany(founderToken, dto.companyId());
+        UUID strangerId = UUID.randomUUID();
+        String strangerToken = registerMember(strangerId);
+        when(userDomainService.isActiveFounder(strangerId, dto.companyId())).thenReturn(false);
+        when(userDomainService.isActiveOwner(strangerId, dto.companyId())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getCompany(strangerToken, dto.companyId()))
+                .isInstanceOf(com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException.class);
     }
 
     @Test
@@ -426,18 +693,64 @@ class CompanyServiceBlackTest {
 
     @Test
     void getCompany_throws_when_not_found() {
-        assertThatThrownBy(() -> service.getCompany(UUID.randomUUID()))
+        String token = registerMember(UUID.randomUUID());
+        assertThatThrownBy(() -> service.getCompany(token, UUID.randomUUID()))
                 .isInstanceOf(CompanyNotFoundException.class);
     }
 
     @Test
     void getCompany_throws_when_id_is_null() {
-        assertThatThrownBy(() -> service.getCompany(null))
+        String token = registerMember(UUID.randomUUID());
+        assertThatThrownBy(() -> service.getCompany(token, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
     void findCompany_returns_empty_when_not_found() {
         assertThat(service.findCompany(UUID.randomUUID())).isEmpty();
+    }
+
+    // ===========================================================================================
+    // requireAuthenticatedMember — extractUserId returns null
+
+    @Test
+    void createCompany_throws_when_extractUserId_returns_null() {
+        String token = "member-null-id-" + UUID.randomUUID();
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(null);
+        assertThatThrownBy(() -> service.createCompany(token, "Acme"))
+                .isInstanceOf(com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException.class)
+                .hasMessageContaining("valid user id");
+    }
+
+    // ===========================================================================================
+    // getCompany — canViewClosed short-circuit branches
+
+    @Test
+    void getCompany_system_admin_can_view_closed_company() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+        service.closeCompany(founderToken, dto.companyId());
+
+        String adminToken = registerSystemAdmin(UUID.randomUUID());
+        CompanyDTO result = service.getCompany(adminToken, dto.companyId());
+        assertThat(result.status()).isEqualTo(CompanyStatus.CLOSED);
+    }
+
+    @Test
+    void getCompany_active_founder_can_view_closed_company() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+        service.closeCompany(founderToken, dto.companyId());
+
+        // isSystemAdmin = false (member token), isActiveFounder = true → canViewClosed = true
+        when(userDomainService.isActiveOwner(founderId, dto.companyId())).thenReturn(false);
+        CompanyDTO result = service.getCompany(founderToken, dto.companyId());
+        assertThat(result.status()).isEqualTo(CompanyStatus.CLOSED);
     }
 }

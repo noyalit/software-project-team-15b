@@ -11,6 +11,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Hol
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
+import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.SeatsAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
@@ -20,6 +21,8 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.StandingEventArea;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
+import com.software_project_team_15b.Ticketmaster.black.Application.Event.EventTestAuthSupport.FounderActor;
 import java.time.Instant;
 import java.util.List;
 import java.util.Set;
@@ -40,10 +43,13 @@ class EventServiceFeaturesIT {
     @Autowired
     IEventRepository events;
 
+    @Autowired
+    IMemberRepository memberRepository;
+
     // ── Task 1: releaseSeats ─────────────────────────────────────────────────
 
     @Test
-    void releaseSeats_frees_only_specified_seats() {
+    void GivenThreeHeldSeats_WhenReleaseOne_ThenOnlyThatSeatIsAvailable() {
         SeatingSetup setup = createSeatingEvent(3, "50.00");
         UUID token = UUID.randomUUID();
         HoldReceipt hold = eventDomainService.hold(setup.eventId(),
@@ -61,7 +67,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void releaseSeats_returns_false_when_token_does_not_match_held_seat() {
+    void GivenHeldSeats_WhenReleaseWithWrongToken_ThenReturnsFalseAndSeatsStayHeld() {
         SeatingSetup setup = createSeatingEvent(2, "10.00");
         UUID realToken = UUID.randomUUID();
         eventDomainService.hold(setup.eventId(),
@@ -76,7 +82,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void releaseSeats_works_for_standing_area_seats() {
+    void GivenHeldStandingSeats_WhenReleaseSubset_ThenReleasedSeatsAreAvailable() {
         StandingSetup setup = createStandingEvent(4, "10.00");
         UUID token = UUID.randomUUID();
         eventDomainService.hold(setup.eventId(),
@@ -98,7 +104,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void releaseSeats_released_seat_can_be_reheld() {
+    void GivenSeatReleased_WhenHoldByDifferentToken_ThenHoldSucceeds() {
         SeatingSetup setup = createSeatingEvent(2, "25.00");
         UUID tokenA = UUID.randomUUID();
         eventDomainService.hold(setup.eventId(),
@@ -113,7 +119,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void releaseSeats_empty_list_is_a_no_op() {
+    void GivenHeldSeats_WhenReleaseEmptyList_ThenNoSeatsChange() {
         SeatingSetup setup = createSeatingEvent(2, "25.00");
         UUID token = UUID.randomUUID();
         eventDomainService.hold(setup.eventId(),
@@ -128,39 +134,39 @@ class EventServiceFeaturesIT {
     // ── Task 2: getPrice ────────────────────────────────────────────────────
 
     @Test
-    void getPrice_returns_correct_subtotal_without_discount() {
+    void GivenAreaWithBasePrice_WhenGetPriceForQuantity_ThenSubtotalEqualsBaseTimesQuantity() {
         SeatingSetup setup = createSeatingEvent(5, "30.00");
         PriceQuery query = new PriceQuery(setup.areaId(), 3, UUID.randomUUID(), null, null);
 
         PriceBreakdownDTO breakdown = service.getPrice(setup.eventId(), query);
 
-        assertThat(breakdown.basePrice()).isEqualTo(Money.of("30.00", "USD"));
-        assertThat(breakdown.subtotal()).isEqualTo(Money.of("90.00", "USD"));
-        assertThat(breakdown.discount()).isEqualTo(Money.of("0.00", "USD"));
-        assertThat(breakdown.total()).isEqualTo(Money.of("90.00", "USD"));
+        assertThat(breakdown.basePrice()).isEqualTo(MoneyDTO.from(Money.of("30.00", "USD")));
+        assertThat(breakdown.subtotal()).isEqualTo(MoneyDTO.from(Money.of("90.00", "USD")));
+        assertThat(breakdown.discount()).isEqualTo(MoneyDTO.from(Money.of("0.00", "USD")));
+        assertThat(breakdown.total()).isEqualTo(MoneyDTO.from(Money.of("90.00", "USD")));
     }
 
     @Test
-    void getPrice_quantity_one_returns_base_price_as_total() {
+    void GivenQuantityOne_WhenGetPrice_ThenTotalEqualsBasePrice() {
         SeatingSetup setup = createSeatingEvent(1, "45.00");
         PriceQuery query = new PriceQuery(setup.areaId(), 1, UUID.randomUUID(), null, null);
 
         PriceBreakdownDTO breakdown = service.getPrice(setup.eventId(), query);
 
-        assertThat(breakdown.total()).isEqualTo(Money.of("45.00", "USD"));
+        assertThat(breakdown.total()).isEqualTo(MoneyDTO.from(Money.of("45.00", "USD")));
     }
 
     // ── Task 3: getEventAvailability ─────────────────────────────────────────
 
     @Test
-    void getEventAvailability_published_event_with_seats_is_available() {
+    void GivenPublishedEventWithSeats_WhenGetEventAvailability_ThenStatusIsAvailable() {
         SeatingSetup setup = createSeatingEvent(3, "20.00");
 
         assertThat(service.getEventAvailability(setup.eventId()).status()).isEqualTo(EventAvailability.AVAILABLE);
     }
 
     @Test
-    void getEventAvailability_fully_held_event_is_sold_out() {
+    void GivenAllSeatsHeld_WhenGetEventAvailability_ThenStatusIsSoldOut() {
         SeatingSetup setup = createSeatingEvent(2, "20.00");
         UUID token = UUID.randomUUID();
         eventDomainService.hold(setup.eventId(),
@@ -170,7 +176,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void getEventAvailability_cancelled_event_is_inactive() {
+    void GivenCancelledEvent_WhenGetEventAvailability_ThenStatusIsInactive() {
         SeatingSetup setup = createSeatingEvent(1, "10.00");
         service.cancel(setup.eventId(), setup.callerId());
 
@@ -178,7 +184,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void getEventAvailability_partial_release_restores_availability() {
+    void GivenSoldOutEvent_WhenReleaseOneSeat_ThenAvailabilityReturnsToAvailable() {
         SeatingSetup setup = createSeatingEvent(2, "20.00");
         UUID token = UUID.randomUUID();
         eventDomainService.hold(setup.eventId(),
@@ -193,14 +199,14 @@ class EventServiceFeaturesIT {
     // ── Task 4: getAreaAvailability ──────────────────────────────────────────
 
     @Test
-    void getAreaAvailability_returns_true_when_area_has_available_seats() {
+    void GivenAreaWithFreeSeats_WhenGetAreaAvailability_ThenReturnsTrue() {
         SeatingSetup setup = createSeatingEvent(3, "20.00");
 
         assertThat(service.getAreaAvailability(setup.eventId(), setup.areaId())).isTrue();
     }
 
     @Test
-    void getAreaAvailability_returns_false_when_all_seats_held() {
+    void GivenAreaWithAllSeatsHeld_WhenGetAreaAvailability_ThenReturnsFalse() {
         SeatingSetup setup = createSeatingEvent(2, "20.00");
         UUID token = UUID.randomUUID();
         eventDomainService.hold(setup.eventId(),
@@ -210,7 +216,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void getAreaAvailability_returns_true_after_partial_release() {
+    void GivenFullyHeldArea_WhenReleaseOneSeat_ThenGetAreaAvailabilityReturnsTrue() {
         SeatingSetup setup = createSeatingEvent(2, "20.00");
         UUID token = UUID.randomUUID();
         eventDomainService.hold(setup.eventId(),
@@ -223,7 +229,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void getAreaAvailability_throws_when_area_not_found() {
+    void GivenUnknownAreaId_WhenGetAreaAvailability_ThenThrowsInvalidEventState() {
         SeatingSetup setup = createSeatingEvent(1, "10.00");
         UUID unknownArea = UUID.randomUUID();
 
@@ -233,7 +239,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void getAreaAvailability_throws_when_event_not_found() {
+    void GivenUnknownEventId_WhenGetAreaAvailability_ThenThrowsInvalidEventState() {
         UUID unknownEvent = UUID.randomUUID();
         UUID unknownArea = UUID.randomUUID();
 
@@ -245,7 +251,7 @@ class EventServiceFeaturesIT {
     // ── Task 5: getSeatsAvailability ─────────────────────────────────────────
 
     @Test
-    void getSeatsAvailability_all_available_returns_all_in_true_bucket() {
+    void GivenAllSeatsAvailable_WhenGetSeatsAvailability_ThenAllInAvailableBucket() {
         SeatingSetup setup = createSeatingEvent(3, "20.00");
         Set<UUID> seatIds = new java.util.HashSet<>(setup.seatIds());
 
@@ -257,7 +263,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void getSeatsAvailability_all_held_returns_all_in_false_bucket() {
+    void GivenAllSeatsHeld_WhenGetSeatsAvailability_ThenAllInUnavailableBucket() {
         SeatingSetup setup = createSeatingEvent(2, "20.00");
         UUID token = UUID.randomUUID();
         eventDomainService.hold(setup.eventId(),
@@ -272,7 +278,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void getSeatsAvailability_partitions_mixed_held_and_available_seats() {
+    void GivenMixedHeldAndAvailableSeats_WhenGetSeatsAvailability_ThenSeatsAreCorrectlyPartitioned() {
         SeatingSetup setup = createSeatingEvent(3, "20.00");
         UUID heldSeat = setup.seatIds().get(0);
         UUID freeSeat1 = setup.seatIds().get(1);
@@ -288,7 +294,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void getSeatsAvailability_unknown_seat_id_lands_in_false_bucket() {
+    void GivenUnknownSeatId_WhenGetSeatsAvailability_ThenUnknownSeatIsInUnavailableBucket() {
         SeatingSetup setup = createSeatingEvent(1, "20.00");
         UUID realSeat = setup.seatIds().get(0);
         UUID ghost = UUID.randomUUID();
@@ -301,7 +307,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void getSeatsAvailability_empty_input_returns_two_empty_buckets() {
+    void GivenEmptySeatIdSet_WhenGetSeatsAvailability_ThenBothBucketsAreEmpty() {
         SeatingSetup setup = createSeatingEvent(2, "20.00");
 
         SeatsAvailabilityDTO result = service.getSeatsAvailability(
@@ -312,7 +318,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void getSeatsAvailability_throws_when_area_not_found() {
+    void GivenUnknownAreaId_WhenGetSeatsAvailability_ThenThrowsInvalidEventState() {
         SeatingSetup setup = createSeatingEvent(1, "10.00");
         UUID unknownArea = UUID.randomUUID();
 
@@ -325,7 +331,7 @@ class EventServiceFeaturesIT {
     // ── Task 6: areaSeats ────────────────────────────────────────────────────
 
     @Test
-    void areaSeats_returns_all_seats_of_a_seating_area_with_status() {
+    void GivenSeatingAreaWithOneHeldSeat_WhenAreaSeats_ThenReturnsAllSeatsWithCorrectStatuses() {
         SeatingSetup setup = createSeatingEvent(3, "20.00");
         UUID heldSeat = setup.seatIds().get(0);
         eventDomainService.hold(setup.eventId(),
@@ -345,7 +351,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void areaSeats_returns_synthetic_seats_for_a_standing_area() {
+    void GivenStandingArea_WhenAreaSeats_ThenReturnsSyntheticAvailableSeats() {
         StandingSetup setup = createStandingEvent(4, "10.00");
 
         List<EventDTO.SeatView> seats = service.areaSeats(setup.eventId(), setup.areaId());
@@ -356,7 +362,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void areaSeats_throws_when_area_not_found() {
+    void GivenUnknownAreaId_WhenAreaSeats_ThenThrowsInvalidEventState() {
         SeatingSetup setup = createSeatingEvent(1, "10.00");
         assertThatThrownBy(() -> service.areaSeats(setup.eventId(), UUID.randomUUID()))
                 .isInstanceOf(InvalidEventStateException.class)
@@ -364,7 +370,7 @@ class EventServiceFeaturesIT {
     }
 
     @Test
-    void areaSeats_throws_when_event_not_found() {
+    void GivenUnknownEventId_WhenAreaSeats_ThenThrowsInvalidEventState() {
         assertThatThrownBy(() -> service.areaSeats(UUID.randomUUID(), UUID.randomUUID()))
                 .isInstanceOf(InvalidEventStateException.class)
                 .hasMessageContaining("event not found");
@@ -376,15 +382,14 @@ class EventServiceFeaturesIT {
     private record StandingSetup(UUID eventId, UUID areaId, UUID callerId) {}
 
     private StandingSetup createStandingEvent(int capacity, String price) {
-        UUID caller = UUID.randomUUID();
-        UUID companyId = UUID.randomUUID();
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
-                companyId, "Test Event", "Artist", Category.CONCERT,
-                Instant.now().plusSeconds(86400), "Venue", null, null), caller);
+                actor.companyId(), "Test Event", "Artist", Category.CONCERT,
+                Instant.now().plusSeconds(86400), "Venue", null, null), actor.memberId());
         UUID areaId = service.addArea(eventId, new AddAreaCommand(
-                "Floor", Money.of(price, "USD"), AddAreaCommand.AreaType.STANDING, capacity, null), caller);
-        service.publish(eventId, caller);
-        return new StandingSetup(eventId, areaId, caller);
+                "Floor", Money.of(price, "USD"), AddAreaCommand.AreaType.STANDING, capacity, null), actor.memberId());
+        service.publish(eventId, actor.memberId());
+        return new StandingSetup(eventId, areaId, actor.memberId());
     }
 
     private List<UUID> standingHeldSeatIdsFor(UUID eventId, UUID areaId, UUID token) {
@@ -400,18 +405,17 @@ class EventServiceFeaturesIT {
     }
 
     private SeatingSetup createSeatingEvent(int seatCount, String price) {
-        UUID caller = UUID.randomUUID();
-        UUID companyId = UUID.randomUUID();
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
-                companyId, "Test Event", "Artist", Category.CONCERT,
-                Instant.now().plusSeconds(86400), "Venue", null, null), caller);
+                actor.companyId(), "Test Event", "Artist", Category.CONCERT,
+                Instant.now().plusSeconds(86400), "Venue", null, null), actor.memberId());
         List<AddAreaCommand.SeatSpec> specs = new java.util.ArrayList<>();
         for (int i = 1; i <= seatCount; i++) {
             specs.add(new AddAreaCommand.SeatSpec("A", String.valueOf(i)));
         }
         UUID areaId = service.addArea(eventId, new AddAreaCommand(
-                "Main", Money.of(price, "USD"), AddAreaCommand.AreaType.SEATING, null, specs), caller);
-        service.publish(eventId, caller);
+                "Main", Money.of(price, "USD"), AddAreaCommand.AreaType.SEATING, null, specs), actor.memberId());
+        service.publish(eventId, actor.memberId());
 
         List<UUID> seatIds = service.getEvent(eventId).areas().stream()
                 .filter(a -> a.areaId().equals(areaId))
@@ -420,7 +424,7 @@ class EventServiceFeaturesIT {
                 .seats().stream()
                 .map(EventDTO.SeatView::seatId)
                 .toList();
-        return new SeatingSetup(eventId, areaId, seatIds, caller);
+        return new SeatingSetup(eventId, areaId, seatIds, actor.memberId());
     }
 
     private long seatCount(EventDTO view, UUID areaId, String status) {

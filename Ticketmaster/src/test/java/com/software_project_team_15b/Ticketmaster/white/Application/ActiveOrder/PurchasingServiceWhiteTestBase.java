@@ -5,6 +5,7 @@ import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Purcha
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
@@ -60,6 +61,9 @@ abstract class PurchasingServiceWhiteTestBase {
     @Mock
     protected IAuth auth;
 
+    @Mock
+    protected INotifier notifier;
+
     protected PurchasingService service;
 
     protected String token;
@@ -80,7 +84,8 @@ abstract class PurchasingServiceWhiteTestBase {
                 lotteryDomainService,
                 paymentGateway,
                 ticketProvider,
-                auth
+                auth,
+                notifier
         );
 
         token = "valid-token";
