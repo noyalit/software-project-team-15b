@@ -52,7 +52,10 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.Policy
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
+
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class PurchasingService {
@@ -68,6 +71,7 @@ public class PurchasingService {
     private final ITicketSupplyAPI ticketProvider;
     private final IAuth auth;
     private final INotifier notifier;
+    private final UserDomainService userDomainService;
 
     public PurchasingService(
             PurchasingDomainService purchasingDomainService,
@@ -80,6 +84,33 @@ public class PurchasingService {
             IAuth auth,
             INotifier notifier
     ) {
+        this(
+                purchasingDomainService,
+                memberRepository,
+                eventDomainService,
+                queueDomainService,
+                lotteryDomainService,
+                paymentGateway,
+                ticketProvider,
+                auth,
+                notifier,
+                new UserDomainService(memberRepository)
+        );
+    }
+
+    @Autowired
+    public PurchasingService(
+            PurchasingDomainService purchasingDomainService,
+            IMemberRepository memberRepository,
+            IEventDomainService eventDomainService,
+            IQueueDomainService queueDomainService,
+            ILotteryDomainService lotteryDomainService,
+            IPaymentAPI paymentGateway,
+            ITicketSupplyAPI ticketProvider,
+            IAuth auth,
+            INotifier notifier,
+            UserDomainService userDomainService
+    ) {
         this.purchasingDomainService = Objects.requireNonNull(purchasingDomainService);
         this.memberRepository = Objects.requireNonNull(memberRepository);
         this.eventDomainService = Objects.requireNonNull(eventDomainService);
@@ -89,6 +120,7 @@ public class PurchasingService {
         this.ticketProvider = Objects.requireNonNull(ticketProvider);
         this.auth = Objects.requireNonNull(auth);
         this.notifier = Objects.requireNonNull(notifier);
+        this.userDomainService = Objects.requireNonNull(userDomainService);
     }
 
     @Transactional(noRollbackFor = TimeExpiredException.class)
@@ -590,12 +622,18 @@ public class PurchasingService {
                 //event sold out
                 int remaining = eventView.areas().stream().mapToInt(a -> a.availableCapacity()).sum();
                 if (remaining == 0) {
-                    notifier.notifyEventManagers(activeOrder.getEventId(), new NotificationDTO(
+                    NotificationDTO soldOut = new NotificationDTO(
                             NotificationType.EVENT_SOLD_OUT,
                             "Event Sold Out",
                             "Event " + eventView.name() + " is now sold out.",
-                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC))
-                        );
+                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+                    );
+
+                    notifier.notifyEventManagers(activeOrder.getEventId(), soldOut);
+
+                    for (UUID managerId : userDomainService.getApprovedEventManagerUserIds(activeOrder.getEventId())) {
+                        notifier.notifyUser(managerId, soldOut);
+                    }
                 }
             }
 

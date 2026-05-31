@@ -7,6 +7,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -768,6 +769,20 @@ public class UserDomainService {
         return memberRepository.findByUsername(username)
                 .orElseThrow(() ->
                         new InvalidCredentialsException("Invalid username or password"));
+    }
+
+    @Transactional(readOnly = true)
+    public Set<UUID> getApprovedEventManagerUserIds(UUID eventId) {
+        Objects.requireNonNull(eventId, "eventId");
+        return memberRepository.findAll().stream()
+                .filter(m -> m.getAssignedRoles() != null)
+                .filter(m -> m.getAssignedRoles().stream().anyMatch(r ->
+                        r instanceof Manager mgr
+                                && mgr.isAppointmentApproved()
+                                && eventId.equals(mgr.getEventId())
+                ))
+                .map(Member::getUserId)
+                .collect(Collectors.toSet());
     }
 
     /*

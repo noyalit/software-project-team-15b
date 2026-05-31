@@ -283,12 +283,18 @@ public class EventManagementService implements IEventManagementService, EventSub
             EventDTO afterUpdate = eventDomainService.getEvent(eventId);
 
             if (cmd.startsAt() != null && !Objects.equals(beforeUpdate.startsAt(), afterUpdate.startsAt())) {
-                notifier.notifyEventAttendees(eventId, new NotificationDTO(
+                NotificationDTO dto = new NotificationDTO(
                         com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationType.EVENT_TIME_CHANGED,
                         "Event Time Changed",
                         "Event " + afterUpdate.name() + " has been rescheduled from "
                                 + beforeUpdate.startsAt() + " to " + afterUpdate.startsAt() + ".",
-                        java.time.LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)));
+                        java.time.LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC));
+
+                notifier.notifyEventAttendees(eventId, dto);
+
+                for (UUID attendeeId : eventDomainService.collectAttendeeUserIds(eventId)) {
+                    notifier.notifyUser(attendeeId, dto);
+                }
             }
 
             AUDIT.info("op=updateEvent event={} caller={} result=ok", eventId, callerId);
