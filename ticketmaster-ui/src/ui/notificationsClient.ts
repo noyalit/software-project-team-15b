@@ -1,5 +1,5 @@
 import { Client, type IMessage } from '@stomp/stompjs';
-import SockJS from 'sockjs-client';
+import SockJS from 'sockjs-client/dist/sockjs';
 import type { AssignedRoleDTO, NotificationDTO } from '../api/types';
 import { useNotificationsStore } from './notificationsStore';
 
