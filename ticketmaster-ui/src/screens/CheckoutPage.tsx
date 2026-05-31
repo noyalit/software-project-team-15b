@@ -12,7 +12,7 @@ import type {
 } from '../api/types';
 import { getApiErrorMessage } from '../api/errors';
 import { useAuthStore } from '../ui/authStore';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 type ActiveOrderDTO = {
   orderId: string;
@@ -39,6 +39,20 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { token, userType, clearAuth } = useAuthStore();
+
+  const isCouponPolicy = (p: DiscountPolicyDTO) => {
+    const anyP = p as any;
+    const t = (anyP?.type ?? anyP?.policyType ?? anyP?.kind) as string | undefined;
+    return t === 'COUPON' || typeof anyP?.code === 'string';
+  };
+
+  const couponPolicyExpiresAtMs = (p: DiscountPolicyDTO) => {
+    const anyP = p as any;
+    const raw = anyP?.expiresAt;
+    if (typeof raw !== 'string' || !raw) return null;
+    const ms = new Date(raw).getTime();
+    return Number.isFinite(ms) ? ms : null;
+  };
 
   const describePurchasePolicy = (p: PurchasePolicyDTO) => {
     const anyP = p as any;
@@ -69,6 +83,13 @@ export default function CheckoutPage() {
 
   const [couponCode, setCouponCode] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const [nowTick, setNowTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowTick(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const activeOrderId =
     orderId ?? sessionStorage.getItem('activeOrderId') ?? localStorage.getItem('activeOrderId') ?? null;
@@ -178,6 +199,19 @@ export default function CheckoutPage() {
     },
     enabled: Boolean(eventQuery.data?.eventId),
   });
+
+  const hasActiveCoupon = (discountPoliciesQuery.data ?? []).some((p) => {
+    if (!isCouponPolicy(p)) return false;
+    const exp = couponPolicyExpiresAtMs(p);
+    if (exp == null) return false;
+    return exp > nowTick;
+  });
+
+  useEffect(() => {
+    if (!hasActiveCoupon && couponCode) {
+      setCouponCode('');
+    }
+  }, [hasActiveCoupon, couponCode]);
 
   const priceQuoteQuery = useQuery({
     queryKey: [
@@ -393,15 +427,17 @@ export default function CheckoutPage() {
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <label className="block text-sm font-semibold text-slate-900">
-              Coupon code
-              <input
-                value={couponCode}
-                onChange={(e) => setCouponCode(e.target.value)}
-                placeholder="Optional"
-                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-              />
-            </label>
+            {hasActiveCoupon && (
+              <label className="block text-sm font-semibold text-slate-900">
+                Coupon code
+                <input
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value)}
+                  placeholder="Optional"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+              </label>
+            )}
 
             <div className="mt-4 grid gap-3">
               <div className="text-sm font-semibold text-slate-900">Policies & discounts</div>
@@ -451,7 +487,13 @@ export default function CheckoutPage() {
                   <div className="mt-2 grid gap-1">
                     {(discountPoliciesQuery.data ?? []).map((p, idx) => (
                       <div key={idx} className="text-sm text-slate-800">
-                        {describeDiscountPolicy(p)}
+                        {(() => {
+                          const label = describeDiscountPolicy(p);
+                          if (!isCouponPolicy(p)) return label;
+                          const exp = couponPolicyExpiresAtMs(p);
+                          if (exp == null) return label;
+                          return exp > nowTick ? label : `${label} (expired)`;
+                        })()}
                       </div>
                     ))}
                   </div>
