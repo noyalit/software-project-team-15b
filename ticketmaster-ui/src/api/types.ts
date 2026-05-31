@@ -33,6 +33,17 @@ export type MoneyDTO = {
   currency: string;
 };
 
+export type PurchasePolicyDTO =
+  | { type: 'MAX_TICKETS_PER_ORDER'; max: number }
+  | { type: 'AGE_RESTRICTION'; minAge: number }
+  | { type: 'NO_LONELY_SEAT' }
+  | { type: string; [k: string]: unknown };
+
+export type DiscountPolicyDTO =
+  | { type: 'COUPON'; code: string; percentage: number; expiresAt: string }
+  | { type: 'EARLY_BIRD'; percentage: number; until: string }
+  | { type: string; [k: string]: unknown };
+
 export type TicketDTO = {
   seatId: string;
   basePrice: MoneyDTO | null;

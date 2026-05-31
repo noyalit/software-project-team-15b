@@ -3,7 +3,14 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { http } from '../api/http';
 import { getApiErrorMessage } from '../api/errors';
-import type { ApiResponse, CompanyDTO, EventDTO, MemberDTO } from '../api/types';
+import type {
+  ApiResponse,
+  CompanyDTO,
+  DiscountPolicyDTO,
+  EventDTO,
+  MemberDTO,
+  PurchasePolicyDTO,
+} from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 
 const categories = ['CONCERT', 'SPORTS', 'THEATER', 'CONFERENCE', 'FESTIVAL', 'OTHER'];
@@ -75,6 +82,20 @@ export default function MyEventsPage() {
   const [editStandingCapacity, setEditStandingCapacity] = useState('');
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+  const [policyEventId, setPolicyEventId] = useState<string | null>(null);
+  const [purchasePoliciesDraft, setPurchasePoliciesDraft] = useState<PurchasePolicyDTO[]>([]);
+  const [discountPoliciesDraft, setDiscountPoliciesDraft] = useState<DiscountPolicyDTO[]>([]);
+
+  const [newPurchaseType, setNewPurchaseType] = useState<'MAX_TICKETS_PER_ORDER' | 'AGE_RESTRICTION' | 'NO_LONELY_SEAT'>('MAX_TICKETS_PER_ORDER');
+  const [newMaxTickets, setNewMaxTickets] = useState('4');
+  const [newMinAge, setNewMinAge] = useState('18');
+
+  const [newDiscountType, setNewDiscountType] = useState<'COUPON' | 'EARLY_BIRD'>('COUPON');
+  const [newCouponCode, setNewCouponCode] = useState('');
+  const [newDiscountPercentage, setNewDiscountPercentage] = useState('10');
+  const [newCouponExpiresAt, setNewCouponExpiresAt] = useState('');
+  const [newEarlyBirdUntil, setNewEarlyBirdUntil] = useState('');
 
   const meQuery = useQuery({
     queryKey: ['me', token],
@@ -503,6 +524,54 @@ export default function MyEventsPage() {
 
   const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
 
+  const purchasePoliciesQuery = useQuery({
+    queryKey: ['event', 'purchase-policies', policyEventId],
+    queryFn: async () => {
+      if (!policyEventId) return [] as PurchasePolicyDTO[];
+      const res = await http.get<ApiResponse<PurchasePolicyDTO[]>>(
+        `/api/events/${policyEventId}/purchase-policies`
+      );
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
+    },
+    enabled: Boolean(policyEventId),
+  });
+
+  const discountPoliciesQuery = useQuery({
+    queryKey: ['event', 'discount-policies', policyEventId],
+    queryFn: async () => {
+      if (!policyEventId) return [] as DiscountPolicyDTO[];
+      const res = await http.get<ApiResponse<DiscountPolicyDTO[]>>(
+        `/api/events/${policyEventId}/discount-policies`
+      );
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
+    },
+    enabled: Boolean(policyEventId),
+  });
+
+  const replacePurchasePoliciesMutation = useMutation({
+    mutationFn: async ({ eventId, policies }: { eventId: string; policies: PurchasePolicyDTO[] }) => {
+      const res = await http.put<ApiResponse<null>>(`/api/events/${eventId}/purchase-policies`, policies);
+      if (res.data.error) throw new Error(res.data.error);
+    },
+    onSuccess: async (_data, variables) => {
+      setSuccessMessage('Purchase policies saved successfully.');
+      await qc.invalidateQueries({ queryKey: ['event', 'purchase-policies', variables.eventId] });
+    },
+  });
+
+  const replaceDiscountPoliciesMutation = useMutation({
+    mutationFn: async ({ eventId, policies }: { eventId: string; policies: DiscountPolicyDTO[] }) => {
+      const res = await http.put<ApiResponse<null>>(`/api/events/${eventId}/discount-policies`, policies);
+      if (res.data.error) throw new Error(res.data.error);
+    },
+    onSuccess: async (_data, variables) => {
+      setSuccessMessage('Discount policies saved successfully.');
+      await qc.invalidateQueries({ queryKey: ['event', 'discount-policies', variables.eventId] });
+    },
+  });
+
   return (
     <div className="space-y-4">
       <div>
@@ -634,6 +703,10 @@ export default function MyEventsPage() {
                                 const isOpen = openEventDetailsId === event.eventId;
 
                                 setOpenEventDetailsId(isOpen ? null : event.eventId);
+                                setPolicyEventId(isOpen ? null : event.eventId);
+                                setPurchasePoliciesDraft([]);
+                                setDiscountPoliciesDraft([]);
+                                setSuccessMessage(null);
 
                                 if (isOpen) {
                                 setAreaEventId(null);
@@ -800,6 +873,290 @@ export default function MyEventsPage() {
                           )}
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {openEventDetailsId === event.eventId && !isCancelled && (
+                    <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+                      <div className="font-semibold text-slate-900">Event policies</div>
+
+                      <div className="mt-2 text-sm text-slate-600">
+                        Define purchase restrictions and discount rules for this event.
+                      </div>
+
+                      <div className="mt-4 grid gap-4 md:grid-cols-2">
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                          <div className="font-semibold text-slate-900">Purchase policies</div>
+
+                          {purchasePoliciesQuery.isPending ? (
+                            <div className="mt-2 text-sm text-slate-600">Loading…</div>
+                          ) : purchasePoliciesQuery.isError ? (
+                            <div className="mt-2 text-sm text-rose-700">
+                              {getApiErrorMessage(purchasePoliciesQuery.error)}
+                            </div>
+                          ) : (
+                            <div className="mt-3 space-y-2">
+                              {(purchasePoliciesDraft.length ? purchasePoliciesDraft : purchasePoliciesQuery.data ?? []).map(
+                                (p, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2"
+                                  >
+                                    <div className="text-sm text-slate-800">
+                                      {p.type === 'MAX_TICKETS_PER_ORDER'
+                                        ? `Max tickets per order: ${(p as any).max}`
+                                        : p.type === 'AGE_RESTRICTION'
+                                          ? `Age restriction: ${(p as any).minAge}+`
+                                          : p.type === 'NO_LONELY_SEAT'
+                                            ? 'No lonely seat'
+                                            : `Unknown policy: ${p.type}`}
+                                    </div>
+                                    <button
+                                      onClick={() => {
+                                        const base = purchasePoliciesDraft.length
+                                          ? purchasePoliciesDraft
+                                          : purchasePoliciesQuery.data ?? [];
+                                        setPurchasePoliciesDraft(base.filter((_, i) => i !== idx));
+                                      }}
+                                      className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-900"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                )
+                              )}
+
+                              {(purchasePoliciesDraft.length ? purchasePoliciesDraft : purchasePoliciesQuery.data ?? [])
+                                .length === 0 && <div className="text-sm text-slate-600">No purchase policies.</div>}
+                            </div>
+                          )}
+
+                          <div className="mt-4 grid gap-2">
+                            <select
+                              value={newPurchaseType}
+                              onChange={(e) => setNewPurchaseType(e.target.value as any)}
+                              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                            >
+                              <option value="MAX_TICKETS_PER_ORDER">Max tickets per order</option>
+                              <option value="AGE_RESTRICTION">Age restriction</option>
+                              <option value="NO_LONELY_SEAT">No lonely seat</option>
+                            </select>
+
+                            {newPurchaseType === 'MAX_TICKETS_PER_ORDER' && (
+                              <input
+                                value={newMaxTickets}
+                                onChange={(e) => setNewMaxTickets(e.target.value)}
+                                placeholder="Max"
+                                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                              />
+                            )}
+
+                            {newPurchaseType === 'AGE_RESTRICTION' && (
+                              <input
+                                value={newMinAge}
+                                onChange={(e) => setNewMinAge(e.target.value)}
+                                placeholder="Min age"
+                                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                              />
+                            )}
+
+                            <button
+                              onClick={() => {
+                                const base = purchasePoliciesDraft.length
+                                  ? purchasePoliciesDraft
+                                  : purchasePoliciesQuery.data ?? [];
+
+                                if (newPurchaseType === 'MAX_TICKETS_PER_ORDER') {
+                                  const max = Number(newMaxTickets);
+                                  if (!Number.isFinite(max) || max < 1) return;
+                                  setPurchasePoliciesDraft([...base, { type: 'MAX_TICKETS_PER_ORDER', max }]);
+                                  return;
+                                }
+
+                                if (newPurchaseType === 'AGE_RESTRICTION') {
+                                  const minAge = Number(newMinAge);
+                                  if (!Number.isFinite(minAge) || minAge < 0) return;
+                                  setPurchasePoliciesDraft([...base, { type: 'AGE_RESTRICTION', minAge }]);
+                                  return;
+                                }
+
+                                setPurchasePoliciesDraft([...base, { type: 'NO_LONELY_SEAT' }]);
+                              }}
+                              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                            >
+                              Add purchase policy
+                            </button>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              const eventId = event.eventId;
+                              const policies = purchasePoliciesDraft.length
+                                ? purchasePoliciesDraft
+                                : purchasePoliciesQuery.data ?? [];
+                              replacePurchasePoliciesMutation.mutate({ eventId, policies });
+                            }}
+                            disabled={replacePurchasePoliciesMutation.isPending}
+                            className="mt-4 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                          >
+                            {replacePurchasePoliciesMutation.isPending ? 'Saving…' : 'Save purchase policies'}
+                          </button>
+
+                          <button
+                            onClick={() => setPurchasePoliciesDraft([])}
+                            className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
+                          >
+                            Reset purchase policies
+                          </button>
+                        </div>
+
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                          <div className="font-semibold text-slate-900">Discount policies</div>
+
+                          {discountPoliciesQuery.isPending ? (
+                            <div className="mt-2 text-sm text-slate-600">Loading…</div>
+                          ) : discountPoliciesQuery.isError ? (
+                            <div className="mt-2 text-sm text-rose-700">
+                              {getApiErrorMessage(discountPoliciesQuery.error)}
+                            </div>
+                          ) : (
+                            <div className="mt-3 space-y-2">
+                              {(discountPoliciesDraft.length ? discountPoliciesDraft : discountPoliciesQuery.data ?? []).map(
+                                (p, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2"
+                                  >
+                                    <div className="text-sm text-slate-800">
+                                      {p.type === 'COUPON'
+                                        ? `Coupon ${(p as any).code} — ${(p as any).percentage}%`
+                                        : p.type === 'EARLY_BIRD'
+                                          ? `Early bird — ${(p as any).percentage}%`
+                                          : `Unknown policy: ${p.type}`}
+                                    </div>
+                                    <button
+                                      onClick={() => {
+                                        const base = discountPoliciesDraft.length
+                                          ? discountPoliciesDraft
+                                          : discountPoliciesQuery.data ?? [];
+                                        setDiscountPoliciesDraft(base.filter((_, i) => i !== idx));
+                                      }}
+                                      className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-900"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                )
+                              )}
+
+                              {(discountPoliciesDraft.length ? discountPoliciesDraft : discountPoliciesQuery.data ?? [])
+                                .length === 0 && <div className="text-sm text-slate-600">No discount policies.</div>}
+                            </div>
+                          )}
+
+                          <div className="mt-4 grid gap-2">
+                            <select
+                              value={newDiscountType}
+                              onChange={(e) => setNewDiscountType(e.target.value as any)}
+                              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                            >
+                              <option value="COUPON">Coupon</option>
+                              <option value="EARLY_BIRD">Early bird</option>
+                            </select>
+
+                            <input
+                              value={newDiscountPercentage}
+                              onChange={(e) => setNewDiscountPercentage(e.target.value)}
+                              placeholder="Percentage"
+                              className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                            />
+
+                            {newDiscountType === 'COUPON' && (
+                              <>
+                                <input
+                                  value={newCouponCode}
+                                  onChange={(e) => setNewCouponCode(e.target.value)}
+                                  placeholder="Coupon code"
+                                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                                />
+                                <input
+                                  type="datetime-local"
+                                  value={newCouponExpiresAt}
+                                  onChange={(e) => setNewCouponExpiresAt(e.target.value)}
+                                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                                />
+                              </>
+                            )}
+
+                            {newDiscountType === 'EARLY_BIRD' && (
+                              <input
+                                type="datetime-local"
+                                value={newEarlyBirdUntil}
+                                onChange={(e) => setNewEarlyBirdUntil(e.target.value)}
+                                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                              />
+                            )}
+
+                            <button
+                              onClick={() => {
+                                const base = discountPoliciesDraft.length
+                                  ? discountPoliciesDraft
+                                  : discountPoliciesQuery.data ?? [];
+                                const percentage = Number(newDiscountPercentage);
+                                if (!Number.isFinite(percentage) || percentage < 0) return;
+
+                                if (newDiscountType === 'COUPON') {
+                                  if (!newCouponCode.trim() || !newCouponExpiresAt) return;
+                                  setDiscountPoliciesDraft([
+                                    ...base,
+                                    {
+                                      type: 'COUPON',
+                                      code: newCouponCode.trim(),
+                                      percentage,
+                                      expiresAt: new Date(newCouponExpiresAt).toISOString(),
+                                    },
+                                  ]);
+                                  return;
+                                }
+
+                                if (!newEarlyBirdUntil) return;
+                                setDiscountPoliciesDraft([
+                                  ...base,
+                                  {
+                                    type: 'EARLY_BIRD',
+                                    percentage,
+                                    until: new Date(newEarlyBirdUntil).toISOString(),
+                                  },
+                                ]);
+                              }}
+                              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                            >
+                              Add discount policy
+                            </button>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              const eventId = event.eventId;
+                              const policies = discountPoliciesDraft.length
+                                ? discountPoliciesDraft
+                                : discountPoliciesQuery.data ?? [];
+                              replaceDiscountPoliciesMutation.mutate({ eventId, policies });
+                            }}
+                            disabled={replaceDiscountPoliciesMutation.isPending}
+                            className="mt-4 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                          >
+                            {replaceDiscountPoliciesMutation.isPending ? 'Saving…' : 'Save discount policies'}
+                          </button>
+
+                          <button
+                            onClick={() => setDiscountPoliciesDraft([])}
+                            className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
+                          >
+                            Reset discount policies
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   )}
 
