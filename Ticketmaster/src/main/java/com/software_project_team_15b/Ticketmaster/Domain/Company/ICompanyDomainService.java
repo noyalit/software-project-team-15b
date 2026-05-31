@@ -121,4 +121,13 @@ public interface ICompanyDomainService {
      * @return an {@link Optional} containing the company if found, or empty when the id is null
      */
     Optional<Company> findCompany(UUID companyId);
+
+    /**
+     * Returns whether the company exists and is in {@link CompanyStatus#ACTIVE} state.
+     *
+     * @param companyId the company's id; must not be null
+     * @return {@code true} if a company with {@code companyId} exists and is active, {@code false} otherwise
+     * @throws IllegalArgumentException if {@code companyId} is null
+     */
+    boolean isCompanyActive(UUID companyId);
 }
