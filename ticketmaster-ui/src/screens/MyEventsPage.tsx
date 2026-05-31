@@ -92,6 +92,8 @@ export default function MyEventsPage() {
   const [purchasePoliciesDirty, setPurchasePoliciesDirty] = useState(false);
   const [discountPoliciesDirty, setDiscountPoliciesDirty] = useState(false);
 
+  const [showSavedPolicies, setShowSavedPolicies] = useState(false);
+
   const [newPurchaseType, setNewPurchaseType] = useState<'MAX_TICKETS_PER_ORDER' | 'AGE_RESTRICTION' | 'NO_LONELY_SEAT'>('MAX_TICKETS_PER_ORDER');
   const [newMaxTickets, setNewMaxTickets] = useState('4');
   const [newMinAge, setNewMinAge] = useState('18');
@@ -735,6 +737,7 @@ export default function MyEventsPage() {
                                 setDiscountPoliciesDraft([]);
                                 setPurchasePoliciesDirty(false);
                                 setDiscountPoliciesDirty(false);
+                                setShowSavedPolicies(false);
                                 setSuccessMessage(null);
                                 setPolicySuccessMessage(null);
 
@@ -913,6 +916,75 @@ export default function MyEventsPage() {
                       <div className="mt-2 text-sm text-slate-600">
                         Define purchase restrictions and discount rules for this event.
                       </div>
+
+                      <button
+                        onClick={() => setShowSavedPolicies((v) => !v)}
+                        className="mt-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                      >
+                        {showSavedPolicies ? 'Hide policies' : 'View policies'}
+                      </button>
+
+                      {showSavedPolicies && (
+                        <div className="mt-3 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                              Current purchase policies
+                            </div>
+
+                            {purchasePoliciesQuery.isPending ? (
+                              <div className="mt-1 text-sm text-slate-600">Loading…</div>
+                            ) : purchasePoliciesQuery.isError ? (
+                              <div className="mt-1 text-sm text-rose-700">
+                                {getApiErrorMessage(purchasePoliciesQuery.error)}
+                              </div>
+                            ) : (purchasePoliciesQuery.data ?? []).length === 0 ? (
+                              <div className="mt-1 text-sm text-slate-600">No purchase policies.</div>
+                            ) : (
+                              <div className="mt-2 grid gap-1">
+                                {(purchasePoliciesQuery.data ?? []).map((p, idx) => (
+                                  <div key={idx} className="text-sm text-slate-800">
+                                    {p.type === 'MAX_TICKETS_PER_ORDER'
+                                      ? `Max tickets per order: ${(p as any).max}`
+                                      : p.type === 'AGE_RESTRICTION'
+                                        ? `Age restriction: ${(p as any).minAge}+`
+                                        : p.type === 'NO_LONELY_SEAT'
+                                          ? 'No lonely seat'
+                                          : `Unknown policy: ${p.type}`}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div>
+                            <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                              Current discount policies
+                            </div>
+
+                            {discountPoliciesQuery.isPending ? (
+                              <div className="mt-1 text-sm text-slate-600">Loading…</div>
+                            ) : discountPoliciesQuery.isError ? (
+                              <div className="mt-1 text-sm text-rose-700">
+                                {getApiErrorMessage(discountPoliciesQuery.error)}
+                              </div>
+                            ) : (discountPoliciesQuery.data ?? []).length === 0 ? (
+                              <div className="mt-1 text-sm text-slate-600">No discount policies.</div>
+                            ) : (
+                              <div className="mt-2 grid gap-1">
+                                {(discountPoliciesQuery.data ?? []).map((p, idx) => (
+                                  <div key={idx} className="text-sm text-slate-800">
+                                    {p.type === 'COUPON'
+                                      ? `Coupon ${(p as any).code} — ${(p as any).percentage}%`
+                                      : p.type === 'EARLY_BIRD'
+                                        ? `Early bird — ${(p as any).percentage}%`
+                                        : `Unknown policy: ${p.type}`}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {policySuccessMessage && (
                         <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
