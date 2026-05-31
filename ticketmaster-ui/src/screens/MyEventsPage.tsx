@@ -702,6 +702,10 @@ export default function MyEventsPage() {
                           <button
                             onClick={() => {
                                 setOpenEventDetailsId(event.eventId);
+                                setPolicyEventId(event.eventId);
+                                setPolicySuccessMessage(null);
+                                setPurchasePoliciesDirty(false);
+                                setDiscountPoliciesDirty(false);
                                 setAreaEventId(
                                   canEditMap && areaEventId !== event.eventId ? event.eventId : null
                                 );
