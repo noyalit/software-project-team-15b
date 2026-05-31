@@ -79,4 +79,42 @@ class RoleTest {
     void getRoleName_shouldReturnRoleName() {
         assertEquals("TestRole", role.getRoleName());
     }
+
+    @Test
+    void getId_shouldReturnNullBeforePersistence() {
+        assertNull(role.getId());
+    }
+
+    @Test
+    void setCompanyId_shouldUpdateCompanyId() {
+        UUID newCompanyId = UUID.randomUUID();
+        role.setCompanyId(newCompanyId);
+        assertEquals(newCompanyId, role.getCompanyId());
+    }
+
+    @Test
+    void setCompanyId_shouldThrow_whenNull() {
+        assertThrows(InvalidMemberInputException.class, () -> role.setCompanyId(null));
+    }
+
+    @Test
+    void belongsToCompany_shouldReturnTrue_forSameCompanyId() {
+        assertTrue(role.belongsToCompany(companyId));
+    }
+
+    @Test
+    void belongsToCompany_shouldReturnFalse_forDifferentCompanyId() {
+        assertFalse(role.belongsToCompany(UUID.randomUUID()));
+    }
+
+    // JPA requires a protected no-arg constructor; cover it via a concrete subclass
+    private static class JpaRole extends Role {
+        @Override
+        public String getRoleName() { return "Jpa"; }
+    }
+
+    @Test
+    void protectedConstructor_createsInstance() {
+        assertDoesNotThrow(() -> new JpaRole());
+    }
 }

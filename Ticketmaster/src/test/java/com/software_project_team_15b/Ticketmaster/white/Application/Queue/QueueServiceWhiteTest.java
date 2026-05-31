@@ -26,9 +26,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import com.software_project_team_15b.Ticketmaster.Application.events.TempTokenAcceptedFromQueueEvent;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNotFoundException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService;
+import com.software_project_team_15b.Ticketmaster.DTO.SiteQueueSnapshotDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
@@ -318,5 +321,331 @@ class QueueServiceWhiteTest {
         verify(queueDomainService, times(2)).getAcceptedTokens();
         verify(queueDomainService).acceptUsersFromSiteQueue();
         verify(eventPublisher).publishEvent(any(TempTokenAcceptedFromQueueEvent.class));
+    }
+
+    // =========================================================================
+    // getQueueAccessView — null / invalid token guards
+    // =========================================================================
+
+    @Test
+    void getQueueAccessView_throwsWhenTokenIsNull() {
+        assertThatThrownBy(() -> service.getQueueAccessView(null, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getQueueAccessView_throwsWhenEventIdIsNull() {
+        assertThatThrownBy(() -> service.getQueueAccessView("tok", null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getQueueAccessView_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid("bad-tok")).thenReturn(false);
+        assertThatThrownBy(() -> service.getQueueAccessView("bad-tok", EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    // =========================================================================
+    // createEventQueue — guard paths
+    // =========================================================================
+
+    @Test
+    void createEventQueue_throwsWhenTokenIsNull() {
+        assertThatThrownBy(() -> service.createEventQueue(null, EVENT_ID, 100, 10))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void createEventQueue_throwsWhenEventIdIsNull() {
+        assertThatThrownBy(() -> service.createEventQueue(ADMIN_TOKEN, null, 100, 10))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void createEventQueue_throwsWhenCapacityIsNegative() {
+        assertThatThrownBy(() -> service.createEventQueue(ADMIN_TOKEN, EVENT_ID, -1, 10))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void createEventQueue_throwsWhenMaxAcceptedIsNegative() {
+        assertThatThrownBy(() -> service.createEventQueue(ADMIN_TOKEN, EVENT_ID, 100, -1))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void createEventQueue_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(false);
+        assertThatThrownBy(() -> service.createEventQueue(ADMIN_TOKEN, EVENT_ID, 100, 10))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void createEventQueue_throwsWhenNotAdmin() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(false);
+        assertThatThrownBy(() -> service.createEventQueue(ADMIN_TOKEN, EVENT_ID, 100, 10))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    // =========================================================================
+    // deleteEventQueue — guard paths
+    // =========================================================================
+
+    @Test
+    void deleteEventQueue_throwsWhenTokenIsNull() {
+        assertThatThrownBy(() -> service.deleteEventQueue(null, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void deleteEventQueue_throwsWhenEventIdIsNull() {
+        assertThatThrownBy(() -> service.deleteEventQueue(ADMIN_TOKEN, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void deleteEventQueue_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(false);
+        assertThatThrownBy(() -> service.deleteEventQueue(ADMIN_TOKEN, EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void deleteEventQueue_throwsWhenNotAdmin() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(false);
+        assertThatThrownBy(() -> service.deleteEventQueue(ADMIN_TOKEN, EVENT_ID))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    // =========================================================================
+    // clearEventQueue — guard paths
+    // =========================================================================
+
+    @Test
+    void clearEventQueue_throwsWhenTokenIsNull() {
+        assertThatThrownBy(() -> service.clearEventQueue(null, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void clearEventQueue_throwsWhenEventIdIsNull() {
+        assertThatThrownBy(() -> service.clearEventQueue(ADMIN_TOKEN, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void clearEventQueue_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(false);
+        assertThatThrownBy(() -> service.clearEventQueue(ADMIN_TOKEN, EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void clearEventQueue_throwsWhenNotAdmin() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(false);
+        assertThatThrownBy(() -> service.clearEventQueue(ADMIN_TOKEN, EVENT_ID))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    // =========================================================================
+    // getQueueSnapshot — guard paths
+    // =========================================================================
+
+    @Test
+    void getQueueSnapshot_throwsWhenAdminTokenIsNull() {
+        assertThatThrownBy(() -> service.getQueueSnapshot(null, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getQueueSnapshot_throwsWhenEventIdIsNull() {
+        assertThatThrownBy(() -> service.getQueueSnapshot(ADMIN_TOKEN, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getQueueSnapshot_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(false);
+        assertThatThrownBy(() -> service.getQueueSnapshot(ADMIN_TOKEN, EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void getQueueSnapshot_throwsWhenNotAdmin() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(false);
+        assertThatThrownBy(() -> service.getQueueSnapshot(ADMIN_TOKEN, EVENT_ID))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    // =========================================================================
+    // updateEventQueueSettings — guard paths
+    // =========================================================================
+
+    @Test
+    void updateEventQueueSettings_throwsWhenTokenIsNull() {
+        assertThatThrownBy(() -> service.updateEventQueueSettings(null, EVENT_ID, 100, 10))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void updateEventQueueSettings_throwsWhenEventIdIsNull() {
+        assertThatThrownBy(() -> service.updateEventQueueSettings(ADMIN_TOKEN, null, 100, 10))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void updateEventQueueSettings_throwsWhenCapacityIsNegative() {
+        assertThatThrownBy(() -> service.updateEventQueueSettings(ADMIN_TOKEN, EVENT_ID, -1, 10))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void updateEventQueueSettings_throwsWhenMaxAcceptedIsNegative() {
+        assertThatThrownBy(() -> service.updateEventQueueSettings(ADMIN_TOKEN, EVENT_ID, 100, -1))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void updateEventQueueSettings_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(false);
+        assertThatThrownBy(() -> service.updateEventQueueSettings(ADMIN_TOKEN, EVENT_ID, 100, 10))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void updateEventQueueSettings_throwsWhenNotAdmin() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(false);
+        assertThatThrownBy(() -> service.updateEventQueueSettings(ADMIN_TOKEN, EVENT_ID, 100, 10))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    // =========================================================================
+    // getAllQueueSnapshots — guard paths
+    // =========================================================================
+
+    @Test
+    void getAllQueueSnapshots_throwsWhenAdminTokenIsNull() {
+        assertThatThrownBy(() -> service.getAllQueueSnapshots(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getAllQueueSnapshots_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(false);
+        assertThatThrownBy(() -> service.getAllQueueSnapshots(ADMIN_TOKEN))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void getAllQueueSnapshots_throwsWhenNotAdmin() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(false);
+        assertThatThrownBy(() -> service.getAllQueueSnapshots(ADMIN_TOKEN))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    // =========================================================================
+    // getSiteQueueSnapshot — happy path + guard paths
+    // =========================================================================
+
+    @Test
+    void getSiteQueueSnapshot_checksAdminThenDelegatesAndReturnsSnapshot() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+        SiteQueueSnapshotDTO expected = new SiteQueueSnapshotDTO(500, 10, 3);
+        when(queueDomainService.getSiteQueueSnapshot()).thenReturn(expected);
+
+        SiteQueueSnapshotDTO result = service.getSiteQueueSnapshot(ADMIN_TOKEN);
+
+        assertThat(result).isSameAs(expected);
+        var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isTokenValid(ADMIN_TOKEN);
+        inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);
+        inOrder.verify(queueDomainService).getSiteQueueSnapshot();
+    }
+
+    @Test
+    void getSiteQueueSnapshot_throwsWhenAdminTokenIsNull() {
+        assertThatThrownBy(() -> service.getSiteQueueSnapshot(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getSiteQueueSnapshot_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(false);
+        assertThatThrownBy(() -> service.getSiteQueueSnapshot(ADMIN_TOKEN))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void getSiteQueueSnapshot_throwsWhenNotAdmin() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(false);
+        assertThatThrownBy(() -> service.getSiteQueueSnapshot(ADMIN_TOKEN))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    // =========================================================================
+    // updateSiteQueueSettings — happy path + guard paths
+    // =========================================================================
+
+    @Test
+    void updateSiteQueueSettings_checksAdminThenDelegatesAndReturnsSnapshot() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+        SiteQueueSnapshotDTO expected = new SiteQueueSnapshotDTO(200, 5, 2);
+        when(queueDomainService.getSiteQueueSnapshot()).thenReturn(expected);
+
+        SiteQueueSnapshotDTO result = service.updateSiteQueueSettings(ADMIN_TOKEN, 200);
+
+        assertThat(result).isSameAs(expected);
+        var inOrder = inOrder(auth, queueDomainService);
+        inOrder.verify(auth).isTokenValid(ADMIN_TOKEN);
+        inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);
+        inOrder.verify(queueDomainService).updateSiteQueueSettings(200);
+        inOrder.verify(queueDomainService).getSiteQueueSnapshot();
+    }
+
+    @Test
+    void updateSiteQueueSettings_throwsWhenAdminTokenIsNull() {
+        assertThatThrownBy(() -> service.updateSiteQueueSettings(null, 100))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void updateSiteQueueSettings_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(false);
+        assertThatThrownBy(() -> service.updateSiteQueueSettings(ADMIN_TOKEN, 100))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void updateSiteQueueSettings_throwsWhenNotAdmin() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(false);
+        assertThatThrownBy(() -> service.updateSiteQueueSettings(ADMIN_TOKEN, 100))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void updateSiteQueueSettings_throwsWhenMaxVisitorsIsZero() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+        assertThatThrownBy(() -> service.updateSiteQueueSettings(ADMIN_TOKEN, 0))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void updateSiteQueueSettings_throwsWhenMaxVisitorsIsNegative() {
+        when(auth.isTokenValid(ADMIN_TOKEN)).thenReturn(true);
+        when(auth.isSystemAdmin(ADMIN_TOKEN)).thenReturn(true);
+        assertThatThrownBy(() -> service.updateSiteQueueSettings(ADMIN_TOKEN, -1))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }

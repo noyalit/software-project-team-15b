@@ -60,4 +60,36 @@ class ManagerTest {
         assertThrows(UnsupportedOperationException.class,
                 () -> manager.getPermissions().add(ManagerPermission.HANDLE_INQUIRIES));
     }
+
+    @Test
+    void setPermissions_shouldThrow_whenNull() {
+        assertThrows(InvalidManagerPermissionsException.class,
+                () -> manager.setPermissions(null));
+    }
+
+    @Test
+    void setPermissions_shouldThrow_whenEmpty() {
+        assertThrows(InvalidManagerPermissionsException.class,
+                () -> manager.setPermissions(Set.of()));
+    }
+
+    @Test
+    void setEventId_shouldUpdateEventId() {
+        UUID newEventId = UUID.randomUUID();
+        manager.setEventId(newEventId);
+        assertEquals(newEventId, manager.getEventId());
+    }
+
+    @Test
+    void hasPermission_shouldReturnFalse_forAbsentPermission() {
+        assertFalse(manager.hasPermission(ManagerPermission.DEFINE_PURCHASE_POLICY));
+    }
+
+    // JPA requires a protected no-arg constructor; cover it via a concrete subclass
+    private static class JpaManager extends Manager {}
+
+    @Test
+    void protectedConstructor_createsInstance() {
+        assertDoesNotThrow(() -> new JpaManager());
+    }
 }

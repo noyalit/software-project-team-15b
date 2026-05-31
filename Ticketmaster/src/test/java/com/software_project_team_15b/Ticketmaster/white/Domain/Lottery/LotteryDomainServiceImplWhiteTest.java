@@ -488,4 +488,170 @@ class LotteryDomainServiceImplWhiteTest {
                 .isInstanceOf(LotteryNotFoundException.class);
         verify(lotteryRepository, never()).updateLottery(any());
     }
+
+    // =========================================================================
+    // popRandomFromEventLottery (single) — lottery not found
+    // =========================================================================
+
+    @Test
+    void popRandomFromEventLottery_single_lotteryNotFound_throwsLotteryNotFoundException() {
+        ExposedLotteryService exposed = createExposed();
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
+
+        assertThatThrownBy(() -> exposed.popRandomFromEventLottery(EVENT_ID))
+                .isInstanceOf(LotteryNotFoundException.class);
+        verify(lotteryRepository, never()).updateLottery(any());
+    }
+
+    // =========================================================================
+    // runEventLottery — lottery not found
+    // =========================================================================
+
+    @Test
+    void runEventLottery_lotteryNotFound_throwsLotteryNotFoundException() {
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
+
+        assertThatThrownBy(() -> service.runEventLottery(EVENT_ID, 1, EXPIRY))
+                .isInstanceOf(LotteryNotFoundException.class);
+        verify(lotteryRepository, never()).updateLottery(any());
+    }
+
+    // =========================================================================
+    // hasAccess — additional branches
+    // =========================================================================
+
+    @Test
+    void hasAccess_returnsTrue_whenWinnerAndExpiryInFuture() {
+        Lottery lottery = new Lottery(EVENT_ID);
+        lottery.add(USER_A);
+        lottery.popRandom(1);
+        lottery.setExpirationTime(LocalDateTime.now().plusHours(1));
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
+
+        assertThat(service.hasAccess(USER_A, EVENT_ID)).isTrue();
+    }
+
+    @Test
+    void hasAccess_returnsFalse_whenLotteryIsNull() {
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
+
+        assertThat(service.hasAccess(USER_A, EVENT_ID)).isFalse();
+    }
+
+    @Test
+    void hasAccess_returnsFalse_whenExpiryIsNull() {
+        Lottery lottery = new Lottery(EVENT_ID);
+        lottery.add(USER_A);
+        lottery.popRandom(1);
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
+
+        assertThat(service.hasAccess(USER_A, EVENT_ID)).isFalse();
+    }
+
+    @Test
+    void hasAccess_returnsFalse_whenUserIsNotAWinner() {
+        Lottery lottery = new Lottery(EVENT_ID);
+        lottery.add(USER_A);
+        lottery.popRandom(1);
+        lottery.setExpirationTime(LocalDateTime.now().plusHours(1));
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
+
+        assertThat(service.hasAccess(USER_B, EVENT_ID)).isFalse();
+    }
+
+    // =========================================================================
+    // getLotteryEligibilityForEvent — all status branches
+    // =========================================================================
+
+    @Test
+    void getLotteryEligibilityForEvent_noLottery_returnsNoLotteryRequired() {
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
+
+        LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
+
+        assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.NO_LOTTERY_REQUIRED);
+    }
+
+    @Test
+    void getLotteryEligibilityForEvent_openLotteryWithEntry_returnsLotteryOpenEntered() {
+        Lottery lottery = new Lottery(EVENT_ID);
+        lottery.add(USER_A);
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
+
+        LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
+
+        assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.LOTTERY_OPEN_ENTERED);
+    }
+
+    @Test
+    void getLotteryEligibilityForEvent_openLotteryWithoutEntry_returnsLotteryOpenNotEntered() {
+        Lottery lottery = new Lottery(EVENT_ID);
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
+
+        LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
+
+        assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.LOTTERY_OPEN_NOT_ENTERED);
+    }
+
+    @Test
+    void getLotteryEligibilityForEvent_drawnLotteryUserNotSelected_returnsNotSelected() {
+        Lottery lottery = new Lottery(EVENT_ID);
+        lottery.add(USER_A);
+        lottery.popRandom(1);
+        lottery.setExpirationTime(EXPIRY);
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
+
+        LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(USER_B, EVENT_ID);
+
+        assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.NOT_SELECTED);
+    }
+
+    @Test
+    void getLotteryEligibilityForEvent_winnerWithValidExpiry_returnsWonAndAccessValid() {
+        Lottery lottery = new Lottery(EVENT_ID);
+        lottery.add(USER_A);
+        lottery.popRandom(1);
+        lottery.setExpirationTime(LocalDateTime.now().plusHours(1));
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
+
+        LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
+
+        assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.WON_AND_ACCESS_VALID);
+    }
+
+    @Test
+    void getLotteryEligibilityForEvent_winnerWithNullExpiry_returnsWonAndAccessValid() {
+        Lottery lottery = new Lottery(EVENT_ID);
+        lottery.add(USER_A);
+        lottery.popRandom(1);
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
+
+        LotteryEligibilityDTO result = service.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
+
+        assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.WON_AND_ACCESS_VALID);
+    }
+
+    // =========================================================================
+    // getEventLotteryWinners — positive
+    // =========================================================================
+
+    @Test
+    void getEventLotteryWinners_returnsWinnersSet() {
+        Lottery lottery = new Lottery(EVENT_ID);
+        lottery.add(USER_A);
+        lottery.popRandom(1);
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(lottery);
+
+        Set<UUID> winners = service.getEventLotteryWinners(EVENT_ID);
+
+        assertThat(winners).containsExactly(USER_A);
+    }
+
+    @Test
+    void getEventLotteryWinners_lotteryNotFound_throwsLotteryNotFoundException() {
+        when(lotteryRepository.getLottery(EVENT_ID)).thenReturn(null);
+
+        assertThatThrownBy(() -> service.getEventLotteryWinners(EVENT_ID))
+                .isInstanceOf(LotteryNotFoundException.class);
+    }
 }
