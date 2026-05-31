@@ -207,6 +207,25 @@ export default function CheckoutPage() {
     return exp > nowTick;
   });
 
+  const activeCouponCodes = new Set(
+    (discountPoliciesQuery.data ?? [])
+      .filter((p) => {
+        if (!isCouponPolicy(p)) return false;
+        const exp = couponPolicyExpiresAtMs(p);
+        return exp != null && exp > nowTick;
+      })
+      .map((p) => String((p as any)?.code ?? ''))
+      .filter(Boolean)
+  );
+
+  const enteredCouponCode = couponCode.trim();
+  const shouldShowCouponPolicies = Boolean(enteredCouponCode) && activeCouponCodes.has(enteredCouponCode);
+
+  const visibleDiscountPolicies = (discountPoliciesQuery.data ?? []).filter((p) => {
+    if (!isCouponPolicy(p)) return true;
+    return shouldShowCouponPolicies;
+  });
+
   useEffect(() => {
     if (!hasActiveCoupon && couponCode) {
       setCouponCode('');
@@ -481,11 +500,11 @@ export default function CheckoutPage() {
                   <div className="mt-1 text-sm text-rose-700">
                     {getApiErrorMessage(discountPoliciesQuery.error)}
                   </div>
-                ) : (discountPoliciesQuery.data ?? []).length === 0 ? (
+                ) : visibleDiscountPolicies.length === 0 ? (
                   <div className="mt-1 text-sm text-slate-600">No discount policies.</div>
                 ) : (
                   <div className="mt-2 grid gap-1">
-                    {(discountPoliciesQuery.data ?? []).map((p, idx) => (
+                    {visibleDiscountPolicies.map((p, idx) => (
                       <div key={idx} className="text-sm text-slate-800">
                         {(() => {
                           const label = describeDiscountPolicy(p);
