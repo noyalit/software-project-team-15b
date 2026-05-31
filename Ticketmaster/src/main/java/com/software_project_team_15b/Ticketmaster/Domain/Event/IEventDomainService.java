@@ -45,6 +45,9 @@ public interface IEventDomainService {
 
     EventDTO getEvent(UUID eventId);
 
+    // Collect distinct user IDs of non-cancelled orders for an event
+    java.util.List<java.util.UUID> collectAttendeeUserIds(UUID eventId);
+
     List<EventDTO> search(SearchCriteria criteria);
 
     List<EventDTO> searchInCompany(UUID companyId, SearchCriteria criteria);

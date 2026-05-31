@@ -462,6 +462,37 @@ public class UserController {
         }
     }
 
+    /**
+     * Sends a free-text message from a system admin to a target user.
+     *
+     * <p>The sender's token (Authorization header) must belong to a system admin;
+     * authorization and delivery are handled by
+     * {@link UserService#sendMessageToUser(String, UUID, String)}.</p>
+     *
+     * @param token   the sender's authentication token
+     * @param request body carrying the target {@code userId} and the {@code message}
+     * @return 200 OK on success, 401 if the sender is not a system admin,
+     *         400 for invalid input
+     */
+    @Operation(summary = "Send a message to a user (system admin only)")
+    @PostMapping(path = "/admin/notify", consumes = "application/json")
+    public ResponseEntity<ApiResponse<Void>> sendMessageToUser(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @RequestBody SendMessageRequest request
+    ) {
+        try {
+            userService.sendMessageToUser(token, request.userId(), request.message());
+            return ResponseEntity.ok(new ApiResponse<>(null, null));
+
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     public record RegisterMemberRequest(
             String username,
             String password,
@@ -532,6 +563,12 @@ public class UserController {
 
     public record CancelMemberRequest(
             UUID memberIdToCancel
+    ) {
+    }
+
+    public record SendMessageRequest(
+            UUID userId,
+            String message
     ) {
     }
 

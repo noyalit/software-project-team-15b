@@ -64,7 +64,6 @@ class EventCatalogManagementE2ETest {
     private String founderToken;
     private UUID founderId;
     private UUID ownerId;
-    private String ownerToken;
     private UUID mgrManageEventsId;  private String mgrManageEventsToken;
     private UUID mgrConfigHallId;    private String mgrConfigHallToken;
     private UUID mgrUpdateMapId;     private String mgrUpdateMapToken;
@@ -87,7 +86,6 @@ class EventCatalogManagementE2ETest {
 
         Actor owner = registerAndApproveOwner("cat_owner_" + sfx);
         ownerId = owner.id();
-        ownerToken = owner.token();
 
         // Manager candidates: per-event appointment happens in createDraftEvent().
         Actor mMe = registerAndLogin("cat_mgr_me_" + sfx);

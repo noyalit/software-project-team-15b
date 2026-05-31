@@ -5,6 +5,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Invalid
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
@@ -63,6 +64,9 @@ class GetActiveOrderBlackTest {
     @Mock
     private IAuth auth;
 
+    @Mock
+    private INotifier notifier;
+
     private PurchasingService service;
 
     private String token;
@@ -83,7 +87,8 @@ class GetActiveOrderBlackTest {
                 lotteryDomainService,
                 paymentGateway,
                 ticketProvider,
-                auth
+                auth,
+                notifier
         );
 
         token = "valid-token";

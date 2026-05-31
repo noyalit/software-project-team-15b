@@ -39,7 +39,10 @@ import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.IPasswordEncoder;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
+
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
+
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Founder;
@@ -61,6 +64,7 @@ class UserServiceTest {
     @Mock private IPasswordEncoder passwordEncoder;
     @Mock private QueueDomainServiceImpl queueDomainService;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private INotifier notifier;
 
     private UserService service;
     private UserDomainService userDomainService;
@@ -69,7 +73,7 @@ class UserServiceTest {
     void setUp() {
 
         userDomainService = Mockito.spy(new UserDomainService(memberRepository));
-        service = new UserService(userDomainService, auth, passwordEncoder, queueDomainService, systemAdminRepository, eventPublisher);
+        service = new UserService(userDomainService, auth, passwordEncoder, queueDomainService, systemAdminRepository, eventPublisher, notifier);
     }
 
     ///------------------------------ II.1.3: Register ---------------------------------

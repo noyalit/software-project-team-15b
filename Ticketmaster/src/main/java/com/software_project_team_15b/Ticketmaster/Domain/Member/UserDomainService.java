@@ -3,6 +3,7 @@ package com.software_project_team_15b.Ticketmaster.Domain.Member;
 import java.time.LocalDate;
 import java.util.*;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,7 +23,14 @@ import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 public class UserDomainService {
 
     private final IMemberRepository memberRepository;
-    
+
+    /**
+     * Primary constructor used by the Spring container.
+     *
+     * @param memberRepository repository for member persistence
+     * @param notifier         port used to deliver notifications to users
+     */
+    @Autowired
     public UserDomainService(IMemberRepository memberRepository) {
         this.memberRepository = memberRepository;
     }
