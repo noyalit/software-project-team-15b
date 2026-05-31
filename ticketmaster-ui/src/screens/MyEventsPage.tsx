@@ -131,17 +131,6 @@ export default function MyEventsPage() {
   activeRole === 'Founder' ||
   ((activeRole === 'Owner' || activeRole === 'Manager') && isApprovedAppointment);
 
-  if (!canManageEvents) {
-    return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-extrabold text-slate-900">My Events</h1>
-        <p className="mt-2 text-slate-600">
-          Your appointment must be approved before you can manage events.
-        </p>
-      </div>
-    );
-  }
-
   const deleteLotteryMutation = useMutation({
     mutationFn: async ({ companyId, eventId }: { companyId: string; eventId: string }) => {
       setSuccessMessage(null);
@@ -509,21 +498,6 @@ export default function MyEventsPage() {
     );
   }
 
-  const actionError =
-    createEventMutation.error ||
-    updateEventMutation.error ||
-    publishMutation.error ||
-    cancelMutation.error ||
-    addAreaMutation.error ||
-    updateAreaMutation.error ||
-    removeAreaMutation.error ||
-    createLotteryMutation.error ||
-    deleteLotteryMutation.error ||
-    drawLotteryMutation.error ||
-    fetchWinnersMutation.error;
-
-  const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
-
   const purchasePoliciesQuery = useQuery({
     queryKey: ['event', 'purchase-policies', policyEventId],
     queryFn: async () => {
@@ -572,17 +546,45 @@ export default function MyEventsPage() {
     },
   });
 
+  const actionError =
+    createEventMutation.error ||
+    updateEventMutation.error ||
+    publishMutation.error ||
+    cancelMutation.error ||
+    addAreaMutation.error ||
+    updateAreaMutation.error ||
+    removeAreaMutation.error ||
+    createLotteryMutation.error ||
+    deleteLotteryMutation.error ||
+    drawLotteryMutation.error ||
+    fetchWinnersMutation.error ||
+    replacePurchasePoliciesMutation.error ||
+    replaceDiscountPoliciesMutation.error;
+
+  const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
+
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900">My Events</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          Select a company, create events, manage areas, and define the event map.
-        </p>
-      </div>
+      {!canManageEvents && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h1 className="text-2xl font-extrabold text-slate-900">My Events</h1>
+          <p className="mt-2 text-slate-600">
+            Your appointment must be approved before you can manage events.
+          </p>
+        </div>
+      )}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-900">Select company</h2>
+      {canManageEvents && (
+        <>
+          <div>
+            <h1 className="text-2xl font-extrabold text-slate-900">My Events</h1>
+            <p className="mt-1 text-sm text-slate-600">
+              Select a company, create events, manage areas, and define the event map.
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-900">Select company</h2>
 
         <select
           value={selectedCompanyId}
@@ -990,6 +992,7 @@ export default function MyEventsPage() {
 
                           <button
                             onClick={() => {
+                              setSuccessMessage(null);
                               const eventId = event.eventId;
                               const policies = purchasePoliciesDraft.length
                                 ? purchasePoliciesDraft
@@ -1002,8 +1005,18 @@ export default function MyEventsPage() {
                             {replacePurchasePoliciesMutation.isPending ? 'Saving…' : 'Save purchase policies'}
                           </button>
 
+                          {replacePurchasePoliciesMutation.isError && (
+                            <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                              {getApiErrorMessage(replacePurchasePoliciesMutation.error)}
+                            </div>
+                          )}
+
                           <button
-                            onClick={() => setPurchasePoliciesDraft([])}
+                            onClick={() => {
+                              setPurchasePoliciesDraft([]);
+                              setSuccessMessage('Purchase policies reset successfully.');
+                            }}
+                            disabled={replacePurchasePoliciesMutation.isPending}
                             className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
                           >
                             Reset purchase policies
@@ -1137,6 +1150,7 @@ export default function MyEventsPage() {
 
                           <button
                             onClick={() => {
+                              setSuccessMessage(null);
                               const eventId = event.eventId;
                               const policies = discountPoliciesDraft.length
                                 ? discountPoliciesDraft
@@ -1149,8 +1163,18 @@ export default function MyEventsPage() {
                             {replaceDiscountPoliciesMutation.isPending ? 'Saving…' : 'Save discount policies'}
                           </button>
 
+                          {replaceDiscountPoliciesMutation.isError && (
+                            <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                              {getApiErrorMessage(replaceDiscountPoliciesMutation.error)}
+                            </div>
+                          )}
+
                           <button
-                            onClick={() => setDiscountPoliciesDraft([])}
+                            onClick={() => {
+                              setDiscountPoliciesDraft([]);
+                              setSuccessMessage('Discount policies reset successfully.');
+                            }}
+                            disabled={replaceDiscountPoliciesMutation.isPending}
                             className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
                           >
                             Reset discount policies
@@ -1397,7 +1421,9 @@ export default function MyEventsPage() {
               {actionErrorMessage}
             </div>
           )}
-        </div>
+                </div>
+      )}
+        </>
       )}
     </div>
   );
