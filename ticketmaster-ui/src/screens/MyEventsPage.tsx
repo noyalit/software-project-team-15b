@@ -112,6 +112,8 @@ export default function MyEventsPage() {
 
   const [policySuccessMessage, setPolicySuccessMessage] = useState<string | null>(null);
 
+  const [policyErrorMessage, setPolicyErrorMessage] = useState<string | null>(null);
+
   const [policyEventId, setPolicyEventId] = useState<string | null>(null);
   const [purchasePoliciesDraft, setPurchasePoliciesDraft] = useState<PurchasePolicyDTO[]>([]);
   const [discountPoliciesDraft, setDiscountPoliciesDraft] = useState<DiscountPolicyDTO[]>([]);
@@ -767,6 +769,7 @@ export default function MyEventsPage() {
                                 setShowSavedPolicies(false);
                                 setSuccessMessage(null);
                                 setPolicySuccessMessage(null);
+                                setPolicyErrorMessage(null);
 
                                 if (isOpen) {
                                 setAreaEventId(null);
@@ -1003,6 +1006,12 @@ export default function MyEventsPage() {
                         </div>
                       )}
 
+                      {policyErrorMessage && (
+                        <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                          {policyErrorMessage}
+                        </div>
+                      )}
+
                       {policySuccessMessage && (
                         <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
                           {policySuccessMessage}
@@ -1107,6 +1116,7 @@ export default function MyEventsPage() {
 
                           <button
                             onClick={() => {
+                              setPolicyErrorMessage(null);
                               setPolicySuccessMessage(null);
                               const eventId = event.eventId;
                               let policies = purchasePoliciesDraft;
@@ -1116,11 +1126,17 @@ export default function MyEventsPage() {
                                   const max = Number(newMaxTickets);
                                   if (Number.isFinite(max) && max >= 1) {
                                     policies = [{ type: 'MAX_TICKETS_PER_ORDER', max }];
+                                  } else {
+                                    setPolicyErrorMessage('Please enter a valid max tickets value.');
+                                    return;
                                   }
                                 } else if (newPurchaseType === 'AGE_RESTRICTION') {
                                   const minAge = Number(newMinAge);
                                   if (Number.isFinite(minAge) && minAge >= 0) {
                                     policies = [{ type: 'AGE_RESTRICTION', minAge }];
+                                  } else {
+                                    setPolicyErrorMessage('Please enter a valid minimum age.');
+                                    return;
                                   }
                                 } else {
                                   policies = [{ type: 'NO_LONELY_SEAT' }];
@@ -1277,6 +1293,7 @@ export default function MyEventsPage() {
 
                           <button
                             onClick={() => {
+                              setPolicyErrorMessage(null);
                               setPolicySuccessMessage(null);
                               const eventId = event.eventId;
                               let policies = discountPoliciesDraft;
@@ -1284,11 +1301,15 @@ export default function MyEventsPage() {
                               if (policies.length === 0) {
                                 const percentage = Number(newDiscountPercentage);
                                 if (!Number.isFinite(percentage) || percentage < 0) {
+                                  setPolicyErrorMessage('Please enter a valid discount percentage.');
                                   return;
                                 }
 
                                 if (newDiscountType === 'COUPON') {
-                                  if (!newCouponCode.trim() || !newCouponExpiresAt) return;
+                                  if (!newCouponCode.trim() || !newCouponExpiresAt) {
+                                    setPolicyErrorMessage('Coupon policy requires a code and an expiration date.');
+                                    return;
+                                  }
                                   policies = [
                                     {
                                       type: 'COUPON',
@@ -1298,7 +1319,10 @@ export default function MyEventsPage() {
                                     },
                                   ];
                                 } else {
-                                  if (!newEarlyBirdUntil) return;
+                                  if (!newEarlyBirdUntil) {
+                                    setPolicyErrorMessage('Early bird policy requires an until date/time.');
+                                    return;
+                                  }
                                   policies = [
                                     {
                                       type: 'EARLY_BIRD',
