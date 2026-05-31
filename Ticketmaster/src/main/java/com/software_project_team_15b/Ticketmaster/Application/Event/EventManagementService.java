@@ -12,11 +12,13 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Upd
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
+import com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationType;
 import com.software_project_team_15b.Ticketmaster.DTO.EventAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.SeatsAvailabilityDTO;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
+import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
@@ -59,14 +61,17 @@ public class EventManagementService implements IEventManagementService, EventSub
     private final UserDomainService userDomainService;
     private final EventCancelManager cancelManager;
     private final IAuth auth;
+    private final INotifier notifier;
 
     public EventManagementService(IEventDomainService eventDomainService, UserDomainService userDomainService,
                                   EventCancelManager cancelManager,
-                                  IAuth auth) {
+                                  IAuth auth,
+                                  INotifier notifier) {
         this.eventDomainService = eventDomainService;
         this.userDomainService = userDomainService;
         this.cancelManager = cancelManager;
         this.auth = auth;
+        this.notifier = notifier;
         try {
             this.cancelManager.subscribe(this);
         } catch (Exception e) {
@@ -273,7 +278,19 @@ public class EventManagementService implements IEventManagementService, EventSub
             Objects.requireNonNull(callerId, "callerId");
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.MANAGE_EVENTS);
+            EventDTO beforeUpdate = eventDomainService.getEvent(eventId);
             eventDomainService.updateEvent(eventId, cmd);
+            EventDTO afterUpdate = eventDomainService.getEvent(eventId);
+
+            if (cmd.startsAt() != null && !Objects.equals(beforeUpdate.startsAt(), afterUpdate.startsAt())) {
+                notifier.notifyEventAttendees(eventId, new NotificationDTO(
+                        com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationType.EVENT_TIME_CHANGED,
+                        "Event Time Changed",
+                        "Event " + afterUpdate.name() + " has been rescheduled from "
+                                + beforeUpdate.startsAt() + " to " + afterUpdate.startsAt() + ".",
+                        java.time.LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)));
+            }
+
             AUDIT.info("op=updateEvent event={} caller={} result=ok", eventId, callerId);
         } catch (RuntimeException e) {
             AUDIT.warn("op=updateEvent event={} caller={} result=rejected reason={}",
@@ -381,13 +398,32 @@ public class EventManagementService implements IEventManagementService, EventSub
 
     @Override
     public void notifyEventIsCancelled(UUID event) {
+        Objects.requireNonNull(event, "event");
+        EventDTO snapshot = eventDomainService.getEvent(event);
+        var attendeeIds = eventDomainService.collectAttendeeUserIds(event);
+
         try {
             Objects.requireNonNull(event, "event");
             eventDomainService.cancel(event);
+
+            NotificationDTO dtoBase = new NotificationDTO(
+                    NotificationType.EVENT_CANCELLED,
+                    "Event Cancelled",
+                    snapshot == null ? "We regret to inform you that the event you purchased tickets for has been cancelled. You will receive a refund if you have already paid." :
+                            ("We regret to inform you that '" + snapshot.name() + "' has been cancelled. You will receive a refund if you have already paid."),
+                    java.time.LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+            );
+
+            for (UUID userId : attendeeIds) {
+                notifier.notifyUser(userId, dtoBase);
+            }
+
             AUDIT.info("op=notifyEventIsCancelled event={} result=ok", event);
         } catch (RuntimeException e) {
             AUDIT.warn("op=notifyEventIsCancelled event={} result=rejected reason={}", event, e.getMessage());
             throw e;
         }
     }
+
+    
 }

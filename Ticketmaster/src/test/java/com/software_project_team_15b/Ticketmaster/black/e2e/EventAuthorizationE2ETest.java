@@ -78,7 +78,6 @@ class EventAuthorizationE2ETest {
 
     // Owner (company-scoped, set up once)
     private UUID ownerId;
-    private String ownerToken;
 
     // Manager candidates — registered and logged in, but not yet appointed.
     // They are appointed lazily per-event via setupManagersForEvent(eventId).
@@ -111,7 +110,6 @@ class EventAuthorizationE2ETest {
         // ── Owner ─────────────────────────────────────────────────────────────
         Actor owner = registerAndApproveOwner("auth_owner_" + sfx);
         ownerId = owner.id();
-        ownerToken = owner.token();
 
         // ── Manager candidates ────────────────────────────────────────────────
         // Managers are bound to a specific eventId at appointment time, so we only
