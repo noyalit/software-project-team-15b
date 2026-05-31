@@ -15,6 +15,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
@@ -45,6 +46,9 @@ class GetActiveOrderBlackTest {
 
     @Mock
     private IMemberRepository memberRepository;
+
+    @Mock
+    private UserDomainService userDomainService;
 
     @Mock
     private IEventDomainService eventDomainService;
@@ -82,6 +86,7 @@ class GetActiveOrderBlackTest {
         service = new PurchasingService(
                 purchasingDomainService,
                 memberRepository,
+                userDomainService,
                 eventDomainService,
                 queueDomainService,
                 lotteryDomainService,

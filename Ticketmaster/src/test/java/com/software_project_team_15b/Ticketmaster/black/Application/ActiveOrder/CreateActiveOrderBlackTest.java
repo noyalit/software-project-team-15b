@@ -15,6 +15,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainServi
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,6 +41,9 @@ class CreateActiveOrderBlackTest {
 
     @Mock
     private IMemberRepository memberRepository;
+
+    @Mock
+    private UserDomainService userDomainService;
 
     @Mock
     private IEventDomainService eventDomainService;
@@ -75,6 +79,7 @@ class CreateActiveOrderBlackTest {
         service = new PurchasingService(
                 purchasingDomainService,
                 memberRepository,
+                userDomainService,
                 eventDomainService,
                 queueDomainService,
                 lotteryDomainService,

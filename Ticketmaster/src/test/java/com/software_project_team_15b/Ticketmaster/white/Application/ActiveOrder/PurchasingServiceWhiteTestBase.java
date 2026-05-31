@@ -20,6 +20,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -42,6 +43,9 @@ abstract class PurchasingServiceWhiteTestBase {
 
     @Mock
     protected IMemberRepository memberRepository;
+
+    @Mock
+    protected UserDomainService userDomainService;
 
     @Mock
     protected IEventDomainService eventDomainService;
@@ -77,15 +81,16 @@ abstract class PurchasingServiceWhiteTestBase {
     @BeforeEach
     void setUpBase() {
         service = new PurchasingService(
-                purchasingDomainService,
-                memberRepository,
-                eventDomainService,
-                queueDomainService,
-                lotteryDomainService,
-                paymentGateway,
-                ticketProvider,
-                auth,
-                notifier
+            purchasingDomainService,
+            memberRepository,
+            userDomainService,
+            eventDomainService,
+            queueDomainService,
+            lotteryDomainService,
+            paymentGateway,
+            ticketProvider,
+            auth,
+            notifier
         );
 
         token = "valid-token";

@@ -64,6 +64,7 @@ public class PurchasingService {
 
     private final PurchasingDomainService purchasingDomainService;
     private final IMemberRepository memberRepository;
+    private final UserDomainService userDomainService;
     private final IEventDomainService eventDomainService;
     private final IQueueDomainService queueDomainService;
     private final ILotteryDomainService lotteryDomainService;
@@ -71,11 +72,12 @@ public class PurchasingService {
     private final ITicketSupplyAPI ticketProvider;
     private final IAuth auth;
     private final INotifier notifier;
-    private final UserDomainService userDomainService;
 
+    @Autowired
     public PurchasingService(
             PurchasingDomainService purchasingDomainService,
             IMemberRepository memberRepository,
+            UserDomainService userDomainService,
             IEventDomainService eventDomainService,
             IQueueDomainService queueDomainService,
             ILotteryDomainService lotteryDomainService,
@@ -84,35 +86,9 @@ public class PurchasingService {
             IAuth auth,
             INotifier notifier
     ) {
-        this(
-                purchasingDomainService,
-                memberRepository,
-                eventDomainService,
-                queueDomainService,
-                lotteryDomainService,
-                paymentGateway,
-                ticketProvider,
-                auth,
-                notifier,
-                new UserDomainService(memberRepository)
-        );
-    }
-
-    @Autowired
-    public PurchasingService(
-            PurchasingDomainService purchasingDomainService,
-            IMemberRepository memberRepository,
-            IEventDomainService eventDomainService,
-            IQueueDomainService queueDomainService,
-            ILotteryDomainService lotteryDomainService,
-            IPaymentAPI paymentGateway,
-            ITicketSupplyAPI ticketProvider,
-            IAuth auth,
-            INotifier notifier,
-            UserDomainService userDomainService
-    ) {
         this.purchasingDomainService = Objects.requireNonNull(purchasingDomainService);
         this.memberRepository = Objects.requireNonNull(memberRepository);
+        this.userDomainService = Objects.requireNonNull(userDomainService);
         this.eventDomainService = Objects.requireNonNull(eventDomainService);
         this.queueDomainService = Objects.requireNonNull(queueDomainService);
         this.lotteryDomainService = Objects.requireNonNull(lotteryDomainService);
@@ -120,7 +96,6 @@ public class PurchasingService {
         this.ticketProvider = Objects.requireNonNull(ticketProvider);
         this.auth = Objects.requireNonNull(auth);
         this.notifier = Objects.requireNonNull(notifier);
-        this.userDomainService = Objects.requireNonNull(userDomainService);
     }
 
     @Transactional(noRollbackFor = TimeExpiredException.class)
@@ -137,32 +112,12 @@ public class PurchasingService {
             ensureOrderIsModifiable(activeOrder);
             requireAccessForPurchase(token, userId, activeOrder.getEventId());
 
-            Set<UUID> candidates = eventDomainService.areaSeats(activeOrder.getEventId(), activeOrder.getAreaId())
-                    .stream()
-                    .map(EventDTO.SeatView::seatId)
-                    .collect(java.util.stream.Collectors.toSet());
-
-            Map<Boolean, Set<UUID>> availability = eventDomainService.getSeatsAvailability(
+            Set<UUID> toAdd = eventDomainService.selectAvailableStandingSeats(
                     activeOrder.getEventId(),
                     activeOrder.getAreaId(),
-                    candidates
+                    activeOrder.getOrderSeats(),
+                    quantity
             );
-            Set<UUID> available = availability.getOrDefault(Boolean.TRUE, Set.of());
-            int needed = quantity;
-            Set<UUID> toAdd = new HashSet<>();
-            for (UUID seatId : available) {
-                if (activeOrder.getOrderSeats().contains(seatId)) {
-                    continue;
-                }
-                toAdd.add(seatId);
-                if (toAdd.size() == needed) {
-                    break;
-                }
-            }
-            if (toAdd.size() != needed) {
-                throw new OrderSeatsUnavailableException("Not enough standing tickets available");
-            }
-
             purchasingDomainService.addSeatsToOrder(activeOrder, toAdd);
 
             AUDIT.info(
@@ -197,16 +152,13 @@ public class PurchasingService {
             ActiveOrder activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
             ensureOrderIsModifiable(activeOrder);
             requireAccessForPurchase(token, userId, activeOrder.getEventId());
+            eventDomainService.requireStandingArea(activeOrder.getEventId(), activeOrder.getAreaId());
 
             if (activeOrder.getOrderSeats().size() < quantity) {
                 throw new IllegalArgumentException("Cannot remove more tickets than exist in the order");
             }
 
-            Set<UUID> toRemove = new HashSet<>();
-            for (UUID seatId : activeOrder.getOrderSeats()) {
-                toRemove.add(seatId);
-                if (toRemove.size() == quantity) break;
-            }
+            Set<UUID> toRemove = selectFirstSeats(activeOrder.getOrderSeats(), quantity);
 
             purchasingDomainService.removeSeatsFromOrder(activeOrder, toRemove);
 
@@ -273,34 +225,10 @@ public class PurchasingService {
             requireCreateActiveOrderArguments(eventId, areaId);
             userId = requireValidUser(token);
 
-            QueueAccessDTO access = queueDomainService.requestAccess(token, eventId);
-            if (access != null && access.status() == com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.WAITING) {
-                Integer position = access.position();
-                throw new TimeExpiredException(
-                        "User does not have access. Queue is currently active for this event" +
-                                (position != null ? " (position: " + (position + 1) + ")" : "") +
-                                ". Please wait until you are admitted."
-                );
-            }
-
-            if (access != null
-                    && access.status() != com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.NO_QUEUE
-                    && queueDomainService.getQueueSnapshot(eventId).maxAccepted() > 0
-                    && purchasingDomainService.countActiveOrdersForEvent(eventId)
-                        >= queueDomainService.getQueueSnapshot(eventId).maxAccepted()) {
-                throw new TimeExpiredException(
-                        "User does not have access. Queue is currently active for this event. Please wait until you are admitted."
-                );
-            }
-
-            purchasingDomainService.requireEventCanBeBooked(
-                    eventId,
-                    eventDomainService.getEventAvailability(eventId)
-            );
-            purchasingDomainService.requireAreaCanBeBooked(
-                    areaId,
-                    eventDomainService.getAreaAvailability(eventId, areaId)
-            );
+            QueueAccessDTO access = requestQueueAccessOrThrow(token, eventId);
+            requireQueueCapacityAllowsCreation(eventId, access);
+            requireEventCanBeBooked(eventId);
+            requireAreaCanBeBooked(eventId, areaId);
             requireAccessForPurchase(token, userId, eventId);
 
             UUID orderId = purchasingDomainService.createActiveOrder(userId, eventId, areaId);
@@ -1019,6 +947,47 @@ public class PurchasingService {
         }
     }
 
+    private QueueAccessDTO requestQueueAccessOrThrow(String token, UUID eventId) {
+        QueueAccessDTO access = queueDomainService.requestAccess(token, eventId);
+        if (access != null && access.status() == com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.WAITING) {
+            Integer position = access.position();
+            throw new TimeExpiredException(
+                    "User does not have access. Queue is currently active for this event" +
+                            (position != null ? " (position: " + (position + 1) + ")" : "") +
+                            ". Please wait until you are admitted."
+            );
+        }
+        return access;
+    }
+
+    private void requireQueueCapacityAllowsCreation(UUID eventId, QueueAccessDTO access) {
+        if (access == null
+                || access.status() == com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.NO_QUEUE) {
+            return;
+        }
+
+        int maxAccepted = queueDomainService.getQueueSnapshot(eventId).maxAccepted();
+        if (maxAccepted > 0 && purchasingDomainService.countActiveOrdersForEvent(eventId) >= maxAccepted) {
+            throw new TimeExpiredException(
+                    "User does not have access. Queue is currently active for this event. Please wait until you are admitted."
+            );
+        }
+    }
+
+    private void requireEventCanBeBooked(UUID eventId) {
+        purchasingDomainService.requireEventCanBeBooked(
+                eventId,
+                eventDomainService.getEventAvailability(eventId)
+        );
+    }
+
+    private void requireAreaCanBeBooked(UUID eventId, UUID areaId) {
+        purchasingDomainService.requireAreaCanBeBooked(
+                areaId,
+                eventDomainService.getAreaAvailability(eventId, areaId)
+        );
+    }
+
     private void requireRemoveOrAddSeatsFromActiveOrderCommand(RemoveOrAddSeatsFromActiveOrderCommand cmd) {
         if (cmd == null) {
             throw new IllegalArgumentException("Command cannot be null");
@@ -1038,5 +1007,16 @@ public class PurchasingService {
                 throw new IllegalArgumentException("Seat IDs cannot contain null values");
             }
         }
+    }
+
+    private Set<UUID> selectFirstSeats(Set<UUID> seatIds, int quantity) {
+        Set<UUID> selected = new HashSet<>();
+        for (UUID seatId : seatIds) {
+            selected.add(seatId);
+            if (selected.size() == quantity) {
+                break;
+            }
+        }
+        return selected;
     }
 }

@@ -77,6 +77,12 @@ public interface ICompanyDomainService {
     List<Company> findCompaniesByOwner(UUID ownerId);
 
     /**
+     * Returns companies where the given member is either founder or owner.
+     * Duplicates are removed while keeping founder matches first.
+     */
+    List<Company> findCompaniesByMember(UUID memberId);
+
+    /**
      * Returns all companies in the system.
      *
      * @return a non-null, possibly empty list of all companies

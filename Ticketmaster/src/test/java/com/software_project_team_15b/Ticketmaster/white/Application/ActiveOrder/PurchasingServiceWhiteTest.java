@@ -24,6 +24,7 @@ import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
@@ -37,6 +38,7 @@ public class PurchasingServiceWhiteTest {
     PurchasingService service;
     PurchasingDomainService purchasingDomainService;
     IMemberRepository memberRepository;
+    UserDomainService userDomainService;
     IEventDomainService eventDomainService;
     IQueueDomainService queueDomainService;
     ILotteryDomainService lotteryDomainService;
@@ -49,6 +51,7 @@ public class PurchasingServiceWhiteTest {
     public void setUp() {
         purchasingDomainService = mock(PurchasingDomainService.class);
         memberRepository = mock(IMemberRepository.class);
+        userDomainService = mock(UserDomainService.class);
         eventDomainService = mock(IEventDomainService.class);
         queueDomainService = mock(IQueueDomainService.class);
         lotteryDomainService = mock(ILotteryDomainService.class);
@@ -58,15 +61,16 @@ public class PurchasingServiceWhiteTest {
         notifier = mock(INotifier.class);
 
         service = new PurchasingService(
-                purchasingDomainService,
-                memberRepository,
-                eventDomainService,
-                queueDomainService,
-                lotteryDomainService,
-                paymentGateway,
-                ticketProvider,
-                auth,
-                notifier
+            purchasingDomainService,
+            memberRepository,
+            userDomainService,
+            eventDomainService,
+            queueDomainService,
+            lotteryDomainService,
+            paymentGateway,
+            ticketProvider,
+            auth,
+            notifier
         );
     }
 

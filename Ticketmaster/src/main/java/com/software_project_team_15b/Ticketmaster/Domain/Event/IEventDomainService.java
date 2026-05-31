@@ -54,6 +54,10 @@ public interface IEventDomainService {
 
     List<EventDTO.SeatView> areaSeats(UUID eventId, UUID areaId);
 
+    void requireStandingArea(UUID eventId, UUID areaId);
+
+    Set<UUID> selectAvailableStandingSeats(UUID eventId, UUID areaId, Set<UUID> excludedSeatIds, int quantity);
+
     EventAvailability getEventAvailability(UUID eventId);
 
     boolean getAreaAvailability(UUID eventId, UUID areaId);

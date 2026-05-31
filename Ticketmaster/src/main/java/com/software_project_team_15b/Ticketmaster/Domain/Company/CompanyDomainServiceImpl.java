@@ -9,6 +9,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -147,6 +148,28 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
             throw new IllegalStateException("Repository returned null for findByOwner; expected an empty list");
         }
         return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Company> findCompaniesByMember(UUID memberId) {
+        if (memberId == null) {
+            throw new IllegalArgumentException("memberId cannot be null");
+        }
+
+        LinkedHashMap<UUID, Company> unique = new LinkedHashMap<>();
+        for (Company company : findCompaniesByFounder(memberId)) {
+            if (company != null && company.getId() != null) {
+                unique.put(company.getId(), company);
+            }
+        }
+        for (Company company : findCompaniesByOwner(memberId)) {
+            if (company != null && company.getId() != null) {
+                unique.putIfAbsent(company.getId(), company);
+            }
+        }
+
+        return List.copyOf(unique.values());
     }
 
     @Override
