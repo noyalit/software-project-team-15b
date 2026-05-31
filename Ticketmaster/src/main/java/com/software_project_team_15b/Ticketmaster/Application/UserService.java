@@ -580,19 +580,18 @@ public class UserService {
         }
     }
 
-    /**
-     * Sends a message from a system admin to a target user.
-     * <p>
-     * The caller's token must be valid and belong to a system admin. Once authorized,
-     * delivery is delegated to {@link UserDomainService#notifyUser(UUID, String)}, which
-     * forwards the message to the notification system.
-     *
-     * @param token        the authentication token of the sending system admin; must be a valid admin token
-     * @param targetUserId the ID of the user to receive the message; must not be {@code null}
-     * @param message      the textual content of the message; must not be {@code null} or blank
-     * @throws InvalidTokenException    if the token is null/blank, invalid, or does not belong to a system admin
-     * @throws IllegalArgumentException if {@code targetUserId} is {@code null} or {@code message} is null/blank
-     */
+     /**
+      * Sends an admin message to a target user.
+      * <p>
+      * The caller's token must be valid and belong to a system admin. The user must exist,
+      * and the notification is dispatched from the application layer.
+      *
+      * @param token        the authentication token of the sending system admin; must be a valid admin token
+      * @param targetUserId the ID of the user to receive the message; must not be {@code null}
+      * @param message      the textual content of the message; must not be {@code null} or blank
+      * @throws InvalidTokenException    if the token is null/blank, invalid, or does not belong to a system admin
+      * @throws IllegalArgumentException if {@code targetUserId} is {@code null} or {@code message} is null/blank
+      */
     public void sendMessageToUser(String token, UUID targetUserId, String message) {
         try {
             if (token == null || token.isBlank() || !auth.isTokenValid(token) || !auth.isSystemAdmin(token)) {
@@ -606,7 +605,15 @@ public class UserService {
             }
 
             UUID systemAdminId = auth.extractUserId(token);
-            userDomainService.notifyUser(targetUserId, message);
+            // Verify the target user exists before sending the notification.
+            userDomainService.watchPersonalDetails(targetUserId);
+
+            notifier.notifyUser(targetUserId, new NotificationDTO(
+                NotificationType.ADMIN_MESSAGE,
+                "Message from System Administration",
+                message,
+                LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+            ));
             AUDIT.info("op=send-message-to-user systemAdminId={} targetUserId={}", systemAdminId, targetUserId);
         } catch (RuntimeException e) {
             AUDIT.warn("op=send-message-to-user targetUserId={} result=rejected reason={}", targetUserId, e.getMessage());

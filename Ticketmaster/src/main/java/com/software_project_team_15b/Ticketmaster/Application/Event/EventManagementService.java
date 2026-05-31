@@ -19,7 +19,6 @@ import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.SeatsAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;

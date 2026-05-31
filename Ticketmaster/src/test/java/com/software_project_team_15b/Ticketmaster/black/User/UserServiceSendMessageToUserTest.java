@@ -26,18 +26,20 @@ import com.software_project_team_15b.Ticketmaster.Application.IPasswordEncoder;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
+import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 
 /**
  * Black-box tests for {@link UserService#sendMessageToUser(String, UUID, String)} — the
- * application-level admin-only operation that authorizes the sender and delegates delivery
- * to the domain layer.
+ * application-level admin-only operation that authorizes the sender and delivers the message
+ * through the notification port.
  */
 class UserServiceSendMessageToUserTest {
 
     private UserDomainService userDomainService;
+    private INotifier notifier;
     private IAuth auth;
     private UserService service;
 
@@ -46,6 +48,7 @@ class UserServiceSendMessageToUserTest {
     @BeforeEach
     void setUp() {
         userDomainService = mock(UserDomainService.class);
+        notifier = mock(INotifier.class);
         auth = mock(IAuth.class);
         service = new UserService(
                 userDomainService,
@@ -54,7 +57,7 @@ class UserServiceSendMessageToUserTest {
                 mock(IQueueDomainService.class),
                 mock(ISystemAdminRepository.class),
                 mock(ApplicationEventPublisher.class),
-                mock(INotifier.class)
+            notifier
         );
     }
 
@@ -73,7 +76,8 @@ class UserServiceSendMessageToUserTest {
 
         service.sendMessageToUser(adminToken, targetUserId, "Welcome aboard");
 
-        verify(userDomainService).notifyUser(targetUserId, "Welcome aboard");
+        verify(userDomainService).watchPersonalDetails(targetUserId);
+        verify(notifier).notifyUser(eq(targetUserId), any(NotificationDTO.class));
     }
 
     // -------- negative: authorization --------
@@ -86,7 +90,8 @@ class UserServiceSendMessageToUserTest {
         assertThatThrownBy(() -> service.sendMessageToUser(adminToken, UUID.randomUUID(), "hi"))
                 .isInstanceOf(InvalidTokenException.class);
 
-        verify(userDomainService, never()).notifyUser(any(), any());
+        verify(userDomainService, never()).watchPersonalDetails(any());
+        verify(notifier, never()).notifyUser(any(), any());
     }
 
     @Test
@@ -96,7 +101,8 @@ class UserServiceSendMessageToUserTest {
         assertThatThrownBy(() -> service.sendMessageToUser(adminToken, UUID.randomUUID(), "hi"))
                 .isInstanceOf(InvalidTokenException.class);
 
-        verify(userDomainService, never()).notifyUser(any(), any());
+        verify(userDomainService, never()).watchPersonalDetails(any());
+        verify(notifier, never()).notifyUser(any(), any());
     }
 
     @Test
@@ -104,7 +110,8 @@ class UserServiceSendMessageToUserTest {
         assertThatThrownBy(() -> service.sendMessageToUser(null, UUID.randomUUID(), "hi"))
                 .isInstanceOf(InvalidTokenException.class);
 
-        verify(userDomainService, never()).notifyUser(any(), any());
+        verify(userDomainService, never()).watchPersonalDetails(any());
+        verify(notifier, never()).notifyUser(any(), any());
     }
 
     // -------- negative: input validation --------
@@ -117,7 +124,8 @@ class UserServiceSendMessageToUserTest {
         assertThatThrownBy(() -> service.sendMessageToUser(adminToken, null, "hi"))
                 .isInstanceOf(IllegalArgumentException.class);
 
-        verify(userDomainService, never()).notifyUser(any(), any());
+        verify(userDomainService, never()).watchPersonalDetails(any());
+        verify(notifier, never()).notifyUser(any(), any());
     }
 
     @Test
@@ -128,7 +136,8 @@ class UserServiceSendMessageToUserTest {
         assertThatThrownBy(() -> service.sendMessageToUser(adminToken, UUID.randomUUID(), "   "))
                 .isInstanceOf(IllegalArgumentException.class);
 
-        verify(userDomainService, never()).notifyUser(any(), any());
+        verify(userDomainService, never()).watchPersonalDetails(any());
+        verify(notifier, never()).notifyUser(any(), any());
     }
 
     // -------- concurrency --------
@@ -167,6 +176,7 @@ class UserServiceSendMessageToUserTest {
         }
 
         assertThat(failures.get()).isZero();
-        verify(userDomainService, times(threadCount)).notifyUser(any(UUID.class), eq("broadcast"));
+        verify(userDomainService, times(threadCount)).watchPersonalDetails(any(UUID.class));
+        verify(notifier, times(threadCount)).notifyUser(any(UUID.class), any(NotificationDTO.class));
     }
 }

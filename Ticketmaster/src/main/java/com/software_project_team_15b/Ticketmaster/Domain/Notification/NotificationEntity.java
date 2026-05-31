@@ -2,6 +2,7 @@ package com.software_project_team_15b.Ticketmaster.Domain.Notification;
 
 import java.time.Instant;
 import java.util.UUID;
+import java.util.Objects;
 
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
@@ -29,13 +30,16 @@ public class NotificationEntity {
     private UUID id;
 
     /** Identifier of the user this notification is addressed to. */
+    @Column(name = "user_id", nullable = false, updatable = false)
     private UUID userId;
 
     /** Category of the notification. */
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false, updatable = false)
     private NotificationType type;
 
     /** Short human-readable headline. */
+    @Column(nullable = false, updatable = false)
     private String title;
 
     /** Full human-readable body (bounded length for storage). */
@@ -43,9 +47,11 @@ public class NotificationEntity {
     private String message;
 
     /** The instant the notification was created. */
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     /** Whether the notification has already been delivered to and seen by the user. */
+    @Column(name = "is_read", nullable = false)
     private boolean read = false;
 
     /** No-args constructor required by JPA; not for application use. */
@@ -65,11 +71,18 @@ public class NotificationEntity {
                               String title,
                               String message,
                               Instant createdAt) {
-        this.userId = userId;
-        this.type = type;
-        this.title = title;
-        this.message = message;
-        this.createdAt = createdAt;
+        this.userId = Objects.requireNonNull(userId, "userId cannot be null");
+        this.type = Objects.requireNonNull(type, "type cannot be null");
+        this.title = Objects.requireNonNull(title, "title cannot be null");
+        this.message = Objects.requireNonNull(message, "message cannot be null");
+        this.createdAt = Objects.requireNonNull(createdAt, "createdAt cannot be null");
+
+        if (title.isBlank()) {
+            throw new IllegalArgumentException("title cannot be blank");
+        }
+        if (message.isBlank()) {
+            throw new IllegalArgumentException("message cannot be blank");
+        }
     }
 
     /** Marks this notification as read (delivered and seen). */
