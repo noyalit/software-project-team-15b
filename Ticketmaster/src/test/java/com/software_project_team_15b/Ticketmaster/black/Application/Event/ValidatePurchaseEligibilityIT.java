@@ -11,6 +11,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.Policy
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.AgeRestrictionPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.MaxTicketsPerOrderPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.black.Application.Event.EventTestAuthSupport.FounderActor;
 import java.time.Instant;
@@ -30,9 +31,12 @@ class ValidatePurchaseEligibilityIT {
     @Autowired
     IMemberRepository memberRepository;
 
+    @Autowired
+    ICompanyRepository companyRepository;
+
     @Test
     void GivenMaxTicketsAndAgePolicies_WhenRequestMeetsBoth_ThenDoesNotThrow() {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         List<IEventPurchasePolicy> policies = List.of(
                 new MaxTicketsPerOrderPolicy(4),
                 new AgeRestrictionPolicy(18)
@@ -50,7 +54,7 @@ class ValidatePurchaseEligibilityIT {
 
     @Test
     void GivenMaxTicketsPolicy_WhenRequestQuantityExceedsLimit_ThenThrowsPolicyViolation() {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         List<IEventPurchasePolicy> policies = List.of(
                 new MaxTicketsPerOrderPolicy(4),
                 new AgeRestrictionPolicy(18)
@@ -68,7 +72,7 @@ class ValidatePurchaseEligibilityIT {
 
     @Test
     void GivenAgeRestrictionPolicy_WhenBuyerIsMinor_ThenThrowsPolicyViolation() {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         List<IEventPurchasePolicy> policies = List.of(
                 new MaxTicketsPerOrderPolicy(4),
                 new AgeRestrictionPolicy(18)
@@ -86,7 +90,7 @@ class ValidatePurchaseEligibilityIT {
 
     @Test
     void GivenEventWithoutPurchasePolicies_WhenValidate_ThenDoesNotThrow() {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
                 actor.companyId(), "Show", "Artist", Category.CONCERT,
                 Instant.now().plusSeconds(86400), "Venue", null, null), actor.memberId());
