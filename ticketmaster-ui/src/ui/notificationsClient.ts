@@ -70,13 +70,13 @@ export function connectNotifications(userId: string, assignedRoles: AssignedRole
   next.activate();
 }
 
-export function disconnectNotifications() {
+export async function disconnectNotifications() {
   connectedUserId = null;
   const c = client;
   client = null;
   if (c) {
     try {
-      c.deactivate();
+      await c.deactivate();
     } catch {
       // ignore
     }

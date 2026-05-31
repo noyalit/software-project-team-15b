@@ -70,7 +70,9 @@ export default function AppShell() {
   }, [userType, meQuery.data?.userId, meQuery.data?.assignedRoles]);
 
   useEffect(() => {
-    const handler = () => disconnectNotifications();
+    const handler = () => {
+      void disconnectNotifications();
+    };
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, []);
@@ -153,10 +155,11 @@ const canAccessManagerPages =
                   </span>
                 )}
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     localStorage.removeItem('activeOrderId');
                     sessionStorage.removeItem('activeOrderId');
-                    disconnectNotifications();
+                    await disconnectNotifications();
+                    await new Promise((r) => setTimeout(r, 150));
                     logout();
                     window.location.href = '/';
                   }}
