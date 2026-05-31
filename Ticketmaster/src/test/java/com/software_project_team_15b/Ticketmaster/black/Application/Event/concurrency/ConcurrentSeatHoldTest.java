@@ -7,6 +7,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagem
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.SeatUnavailableException;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import java.util.List;
@@ -34,10 +35,13 @@ class ConcurrentSeatHoldTest {
     @Autowired
     IMemberRepository memberRepository;
 
+    @Autowired
+    ICompanyRepository companyRepository;
+
     @Test
     void GivenSingleSeat_WhenManyConcurrentHoldsRace_ThenExactlyOneSucceedsAndOthersFail() throws Exception {
         ConcurrencyTestSupport.SeatingSetup setup =
-                ConcurrencyTestSupport.publishedSeatingEvent(service, memberRepository, 1);
+                ConcurrencyTestSupport.publishedSeatingEvent(service, memberRepository, companyRepository, 1);
         UUID seatId = setup.seatIds().get(0);
 
         int N = 50;

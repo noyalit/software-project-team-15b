@@ -26,6 +26,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.AgeRestric
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.MaxTicketsPerOrderPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.EarlyBirdDiscountPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.black.Application.Event.EventTestAuthSupport.FounderActor;
 import java.time.Instant;
@@ -48,6 +49,9 @@ class EventCatalogMutabilityIT {
 
     @Autowired
     IMemberRepository memberRepository;
+
+    @Autowired
+    ICompanyRepository companyRepository;
 
     // ── updateEvent ──────────────────────────────────────────────────────────
 
@@ -226,7 +230,7 @@ class EventCatalogMutabilityIT {
 
     @Test
     void GivenEventWithStrictPolicies_WhenReplaceWithEmpty_ThenPreviouslyRejectedRequestPasses() {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         UUID strict = service.createEvent(new CreateEventCommand(
                 actor.companyId(), "Strict", "A", Category.OTHER,
                 Instant.now().plusSeconds(86400), "V",
@@ -307,7 +311,7 @@ class EventCatalogMutabilityIT {
     private record Setup(UUID eventId, UUID areaId, UUID callerId) {}
 
     private Setup createDraftSeatingEvent(int seatCount, String price) {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
                 actor.companyId(), "Test Event", "Artist", Category.CONCERT,
                 Instant.now().plusSeconds(86400), "Venue", null, null), actor.memberId());
@@ -325,7 +329,7 @@ class EventCatalogMutabilityIT {
     }
 
     private Setup createPublishedStandingEvent(int capacity, String price) {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
                 actor.companyId(), "Test Event", "Artist", Category.CONCERT,
                 Instant.now().plusSeconds(86400), "Venue", null, null), actor.memberId());
@@ -336,7 +340,7 @@ class EventCatalogMutabilityIT {
     }
 
     private Setup createPublishedSeatingEventWithEarlyBird(int seatCount, String price, int percentOff) {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         IEventDiscountPolicy earlyBird = new EarlyBirdDiscountPolicy(
                 java.math.BigDecimal.valueOf(percentOff),
                 Instant.now().plusSeconds(86400));

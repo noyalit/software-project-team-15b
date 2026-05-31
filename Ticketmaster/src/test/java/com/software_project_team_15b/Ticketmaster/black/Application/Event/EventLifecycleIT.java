@@ -14,6 +14,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.black.Application.Event.EventTestAuthSupport.FounderActor;
@@ -36,9 +37,12 @@ class EventLifecycleIT {
     @Autowired
     IMemberRepository memberRepository;
 
+    @Autowired
+    ICompanyRepository companyRepository;
+
     @Test
     void GivenDraftEventWithSeatingArea_WhenPublishHoldAndConfirm_ThenSeatsAreSoldAndAvailabilityDecreases() {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
 
         UUID eventId = service.createEvent(new CreateEventCommand(
                 actor.companyId(), "Rock Show", "The Band", Category.CONCERT,
@@ -69,7 +73,7 @@ class EventLifecycleIT {
 
     @Test
     void GivenHeldSeatsOnPublishedEvent_WhenEventIsCancelled_ThenConfirmFailsWithInvalidEventState() {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
                 actor.companyId(), "Show", "X", Category.OTHER,
                 Instant.now().plusSeconds(3600), "Hall", null, null), actor.memberId());
@@ -91,7 +95,7 @@ class EventLifecycleIT {
 
     @Test
     void GivenEventWithMatchingName_WhenSearchByName_ThenReturnsMatchingEvent() {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         service.createEvent(new CreateEventCommand(
                 actor.companyId(), "Taylor Swift Eras Tour", "Taylor", Category.CONCERT,
                 Instant.now().plusSeconds(86400), "Stadium", null, null), actor.memberId());
@@ -104,8 +108,8 @@ class EventLifecycleIT {
 
     @Test
     void GivenEventsInTwoCompanies_WhenSearchInCompany_ThenOnlyReturnsThatCompanysEvents() {
-        FounderActor founder1 = EventTestAuthSupport.newFounder(memberRepository);
-        FounderActor founder2 = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor founder1 = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
+        FounderActor founder2 = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         service.createEvent(new CreateEventCommand(
                 founder1.companyId(), "Company 1 Show", "A", Category.OTHER,
                 Instant.now().plusSeconds(86400), "L", null, null), founder1.memberId());
@@ -119,7 +123,7 @@ class EventLifecycleIT {
 
     @Test
     void GivenEventsInTwoCategories_WhenSearchByCategoryAndDate_ThenReturnsOnlyMatchingCategory() {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         Instant target = Instant.now().plusSeconds(86400);
         service.createEvent(new CreateEventCommand(
                 actor.companyId(), "Search Concert", "SC", Category.CONCERT,
