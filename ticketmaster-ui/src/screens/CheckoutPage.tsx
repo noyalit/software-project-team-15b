@@ -92,6 +92,15 @@ export default function CheckoutPage() {
           throw new Error('This active order has expired. Please start a new order.');
         }
 
+        if (status === 409) {
+          sessionStorage.removeItem('activeOrderId');
+          localStorage.removeItem('activeOrderId');
+          if (!orderId) {
+            navigate('/events', { replace: true });
+          }
+          throw new Error('This active order is no longer valid. Please start a new order.');
+        }
+
         throw e;
       }
     },
@@ -372,7 +381,9 @@ export default function CheckoutPage() {
                   Purchase policies
                 </div>
 
-                {purchasePoliciesQuery.isPending ? (
+                {!eventQuery.data?.eventId ? (
+                  <div className="mt-1 text-sm text-slate-600">Load the order to view policies.</div>
+                ) : purchasePoliciesQuery.isPending ? (
                   <div className="mt-1 text-sm text-slate-600">Loading…</div>
                 ) : purchasePoliciesQuery.isError ? (
                   <div className="mt-1 text-sm text-rose-700">
@@ -402,7 +413,9 @@ export default function CheckoutPage() {
                   Discount policies
                 </div>
 
-                {discountPoliciesQuery.isPending ? (
+                {!eventQuery.data?.eventId ? (
+                  <div className="mt-1 text-sm text-slate-600">Load the order to view policies.</div>
+                ) : discountPoliciesQuery.isPending ? (
                   <div className="mt-1 text-sm text-slate-600">Loading…</div>
                 ) : discountPoliciesQuery.isError ? (
                   <div className="mt-1 text-sm text-rose-700">
@@ -432,7 +445,7 @@ export default function CheckoutPage() {
                 setSuccessMessage(null);
                 completeCheckoutMutation.mutate();
               }}
-              disabled={completeCheckoutMutation.isPending}
+              disabled={completeCheckoutMutation.isPending || activeOrderQuery.isError}
               className="mt-4 inline-flex rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
             >
               Complete purchase

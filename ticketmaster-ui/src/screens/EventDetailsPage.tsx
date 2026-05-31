@@ -72,6 +72,31 @@ export default function EventDetailsPage() {
   });
   const [checkoutStarted, setCheckoutStarted] = useState(false);
 
+  const validateEligibility = async (input: {
+    areaId: string;
+    quantity: number;
+    seatIds: string[];
+  }) => {
+    if (!eventId) throw new Error('Event ID is missing.');
+    if (!input.areaId) throw new Error('Area ID is missing.');
+    if (!input.quantity || input.quantity < 1) throw new Error('Quantity must be at least 1.');
+
+    try {
+      const res = await http.post<ApiResponse<null>>(`/api/events/${eventId}/eligibility`, {
+        eventId,
+        areaId: input.areaId,
+        buyerId: null,
+        buyerBirthDate: null,
+        quantity: input.quantity,
+        seatIds: input.seatIds,
+        couponCode: null,
+      });
+      if (res.data.error) throw new Error(res.data.error);
+    } catch (e) {
+      throw new Error(getApiErrorMessage(e));
+    }
+  };
+
   const myActiveOrdersQuery = useQuery({
     queryKey: ['active-orders', 'my', token],
     queryFn: async () => {
@@ -91,6 +116,15 @@ export default function EventDetailsPage() {
         throw new Error("Checkout already started. You can't change tickets now.");
       }
       if (standingQuantity < 1) throw new Error('Please select at least 1 ticket.');
+
+      const areaId = selectedAreaId ?? activeOrderQuery.data?.areaId ?? null;
+      if (!areaId) throw new Error('Please select an area first.');
+
+      const currentCount =
+        (activeOrderQuery.data?.seats?.length ?? 0) || (activeOrderQuery.data?.seatIds?.length ?? 0);
+      const newQuantity = currentCount + standingQuantity;
+
+      await validateEligibility({ areaId, quantity: newQuantity, seatIds: [] });
 
       const res = await http.post<ApiResponse<null>>(
         `/api/active-orders/${activeOrderId}/standing/add`,
@@ -379,6 +413,15 @@ export default function EventDetailsPage() {
       }
       if (selectedSeatIds.length === 0) throw new Error('Please select at least one seat.');
 
+      const areaId = selectedAreaId ?? activeOrderQuery.data?.areaId ?? null;
+      if (!areaId) throw new Error('Please select an area first.');
+
+      const existing = (activeOrderQuery.data?.seatIds ?? []).map(String);
+      const combinedSeatIds = Array.from(new Set([...existing, ...selectedSeatIds]));
+      const newQuantity = combinedSeatIds.length;
+
+      await validateEligibility({ areaId, quantity: newQuantity, seatIds: combinedSeatIds });
+
       const res = await http.post<ApiResponse<null>>(
         `/api/active-orders/${activeOrderId}/seats/add`,
         {
@@ -427,6 +470,16 @@ export default function EventDetailsPage() {
     mutationFn: async () => {
       if (!activeOrderId) throw new Error('Please start an order first.');
       if (checkoutStarted) throw new Error('Checkout has already started for this order.');
+
+      const areaId = activeOrderQuery.data?.areaId ?? selectedAreaId;
+      if (!areaId) throw new Error('Area ID is missing.');
+
+      const seatIds = (activeOrderQuery.data?.seatIds ?? []).map(String);
+      const quantity =
+        (activeOrderQuery.data?.seats?.length ?? 0) || (activeOrderQuery.data?.seatIds?.length ?? 0);
+      if (!quantity) throw new Error('No tickets in order.');
+
+      await validateEligibility({ areaId, quantity, seatIds });
 
       if (userType === 'member') {
         const res = await http.post<ApiResponse<CheckoutStartedDTO>>(
