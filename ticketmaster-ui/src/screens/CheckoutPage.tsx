@@ -187,7 +187,6 @@ export default function CheckoutPage() {
       Boolean(token) &&
       Boolean(activeOrderQuery.data?.eventId) &&
       Boolean(activeOrderQuery.data?.areaId) &&
-      (userType !== 'member' || Boolean(meQuery.data?.userId)) &&
       !checkoutCompleted,
     retry: false,
   });
@@ -375,6 +374,10 @@ export default function CheckoutPage() {
 
                 {purchasePoliciesQuery.isPending ? (
                   <div className="mt-1 text-sm text-slate-600">Loading…</div>
+                ) : purchasePoliciesQuery.isError ? (
+                  <div className="mt-1 text-sm text-rose-700">
+                    {getApiErrorMessage(purchasePoliciesQuery.error)}
+                  </div>
                 ) : (purchasePoliciesQuery.data ?? []).length === 0 ? (
                   <div className="mt-1 text-sm text-slate-600">No purchase policies.</div>
                 ) : (
@@ -401,6 +404,10 @@ export default function CheckoutPage() {
 
                 {discountPoliciesQuery.isPending ? (
                   <div className="mt-1 text-sm text-slate-600">Loading…</div>
+                ) : discountPoliciesQuery.isError ? (
+                  <div className="mt-1 text-sm text-rose-700">
+                    {getApiErrorMessage(discountPoliciesQuery.error)}
+                  </div>
                 ) : (discountPoliciesQuery.data ?? []).length === 0 ? (
                   <div className="mt-1 text-sm text-slate-600">No discount policies.</div>
                 ) : (
