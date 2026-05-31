@@ -1098,7 +1098,27 @@ export default function MyEventsPage() {
                             onClick={() => {
                               setPolicySuccessMessage(null);
                               const eventId = event.eventId;
-                              const policies = purchasePoliciesDraft;
+                              let policies = purchasePoliciesDraft;
+
+                              if (policies.length === 0) {
+                                if (newPurchaseType === 'MAX_TICKETS_PER_ORDER') {
+                                  const max = Number(newMaxTickets);
+                                  if (Number.isFinite(max) && max >= 1) {
+                                    policies = [{ type: 'MAX_TICKETS_PER_ORDER', max }];
+                                  }
+                                } else if (newPurchaseType === 'AGE_RESTRICTION') {
+                                  const minAge = Number(newMinAge);
+                                  if (Number.isFinite(minAge) && minAge >= 0) {
+                                    policies = [{ type: 'AGE_RESTRICTION', minAge }];
+                                  }
+                                } else {
+                                  policies = [{ type: 'NO_LONELY_SEAT' }];
+                                }
+
+                                setPurchasePoliciesDirty(true);
+                                setPurchasePoliciesDraft(policies);
+                              }
+
                               replacePurchasePoliciesMutation.mutate({ eventId, policies });
                             }}
                             disabled={replacePurchasePoliciesMutation.isPending}
@@ -1252,7 +1272,39 @@ export default function MyEventsPage() {
                             onClick={() => {
                               setPolicySuccessMessage(null);
                               const eventId = event.eventId;
-                              const policies = discountPoliciesDraft;
+                              let policies = discountPoliciesDraft;
+
+                              if (policies.length === 0) {
+                                const percentage = Number(newDiscountPercentage);
+                                if (!Number.isFinite(percentage) || percentage < 0) {
+                                  return;
+                                }
+
+                                if (newDiscountType === 'COUPON') {
+                                  if (!newCouponCode.trim() || !newCouponExpiresAt) return;
+                                  policies = [
+                                    {
+                                      type: 'COUPON',
+                                      code: newCouponCode.trim(),
+                                      percentage,
+                                      expiresAt: new Date(newCouponExpiresAt).toISOString(),
+                                    },
+                                  ];
+                                } else {
+                                  if (!newEarlyBirdUntil) return;
+                                  policies = [
+                                    {
+                                      type: 'EARLY_BIRD',
+                                      percentage,
+                                      until: new Date(newEarlyBirdUntil).toISOString(),
+                                    },
+                                  ];
+                                }
+
+                                setDiscountPoliciesDirty(true);
+                                setDiscountPoliciesDraft(policies);
+                              }
+
                               replaceDiscountPoliciesMutation.mutate({ eventId, policies });
                             }}
                             disabled={replaceDiscountPoliciesMutation.isPending}
