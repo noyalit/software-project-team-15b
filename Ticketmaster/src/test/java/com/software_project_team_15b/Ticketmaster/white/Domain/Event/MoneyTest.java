@@ -131,4 +131,63 @@ class MoneyTest {
         String s = Money.of("25.50", "USD").toString();
         assertThat(s).contains("25.50").contains("USD");
     }
+
+    @Test
+    void GivenNullAmount_WhenConstruct_ThenThrowsNullPointer() {
+        assertThatThrownBy(() -> new Money(null, "USD")).isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void GivenNullCurrency_WhenConstruct_ThenThrowsIllegalArgument() {
+        assertThatThrownBy(() -> new Money(BigDecimal.TEN, null)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void GivenBlankCurrency_WhenConstruct_ThenThrowsIllegalArgument() {
+        assertThatThrownBy(() -> new Money(BigDecimal.TEN, " ")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void GivenNullAmount_WhenOf_ThenThrowsIllegalArgument() {
+        assertThatThrownBy(() -> Money.of(null, "USD")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void GivenBlankAmount_WhenOf_ThenThrowsIllegalArgument() {
+        assertThatThrownBy(() -> Money.of(" ", "USD")).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void GivenNullOther_WhenAdd_ThenThrowsNullPointer() {
+        assertThatThrownBy(() -> Money.of("10.00", "USD").add(null)).isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void GivenNullOther_WhenSubtract_ThenThrowsNullPointer() {
+        assertThatThrownBy(() -> Money.of("10.00", "USD").subtract(null)).isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void GivenNullPercentage_WhenPercent_ThenThrowsNullPointer() {
+        assertThatThrownBy(() -> Money.of("10.00", "USD").percent(null)).isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void GivenNegativeSubtraction_WhenIsNegative_ThenReturnsTrue() {
+        Money result = Money.of("5.00", "USD").subtract(Money.of("10.00", "USD"));
+        assertThat(result.isNegative()).isTrue();
+    }
+
+    @Test
+    void GivenNonMoneyObject_WhenEquals_ThenReturnsFalse() {
+        Money m = Money.of("10.00", "USD");
+        assertThat(m.equals("10.00 USD")).isFalse();
+        assertThat(m.equals(null)).isFalse();
+    }
+
+    @Test
+    void GivenSameInstance_WhenEquals_ThenReturnsTrue() {
+        Money m = Money.of("10.00", "USD");
+        assertThat(m.equals(m)).isTrue();
+    }
 }
