@@ -45,6 +45,33 @@ export default function MyEventsPage() {
   const qc = useQueryClient();
   const { token, userType } = useAuthStore();
 
+  const describePurchasePolicy = (p: PurchasePolicyDTO) => {
+    const anyP = p as any;
+    const t = (anyP?.type ?? anyP?.policyType ?? anyP?.kind) as string | undefined;
+    if (t === 'MAX_TICKETS_PER_ORDER' || anyP?.max != null) {
+      return `Max tickets per order: ${anyP?.max}`;
+    }
+    if (t === 'AGE_RESTRICTION' || anyP?.minAge != null) {
+      return `Age restriction: ${anyP?.minAge}+`;
+    }
+    if (t === 'NO_LONELY_SEAT') {
+      return 'No lonely seat';
+    }
+    return `Unknown policy: ${t ?? 'undefined'}`;
+  };
+
+  const describeDiscountPolicy = (p: DiscountPolicyDTO) => {
+    const anyP = p as any;
+    const t = (anyP?.type ?? anyP?.policyType ?? anyP?.kind) as string | undefined;
+    if (t === 'COUPON' || anyP?.code != null) {
+      return `Coupon ${anyP?.code} — ${anyP?.percentage}%`;
+    }
+    if (t === 'EARLY_BIRD' || anyP?.until != null) {
+      return `Early bird — ${anyP?.percentage}%`;
+    }
+    return `Unknown policy: ${t ?? 'undefined'}`;
+  };
+
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
 
   const [name, setName] = useState('');
@@ -943,13 +970,7 @@ export default function MyEventsPage() {
                               <div className="mt-2 grid gap-1">
                                 {(purchasePoliciesQuery.data ?? []).map((p, idx) => (
                                   <div key={idx} className="text-sm text-slate-800">
-                                    {p.type === 'MAX_TICKETS_PER_ORDER'
-                                      ? `Max tickets per order: ${(p as any).max}`
-                                      : p.type === 'AGE_RESTRICTION'
-                                        ? `Age restriction: ${(p as any).minAge}+`
-                                        : p.type === 'NO_LONELY_SEAT'
-                                          ? 'No lonely seat'
-                                          : `Unknown policy: ${p.type}`}
+                                    {describePurchasePolicy(p)}
                                   </div>
                                 ))}
                               </div>
@@ -973,11 +994,7 @@ export default function MyEventsPage() {
                               <div className="mt-2 grid gap-1">
                                 {(discountPoliciesQuery.data ?? []).map((p, idx) => (
                                   <div key={idx} className="text-sm text-slate-800">
-                                    {p.type === 'COUPON'
-                                      ? `Coupon ${(p as any).code} — ${(p as any).percentage}%`
-                                      : p.type === 'EARLY_BIRD'
-                                        ? `Early bird — ${(p as any).percentage}%`
-                                        : `Unknown policy: ${p.type}`}
+                                    {describeDiscountPolicy(p)}
                                   </div>
                                 ))}
                               </div>
@@ -1010,13 +1027,7 @@ export default function MyEventsPage() {
                                     className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2"
                                   >
                                     <div className="text-sm text-slate-800">
-                                      {p.type === 'MAX_TICKETS_PER_ORDER'
-                                        ? `Max tickets per order: ${(p as any).max}`
-                                        : p.type === 'AGE_RESTRICTION'
-                                          ? `Age restriction: ${(p as any).minAge}+`
-                                          : p.type === 'NO_LONELY_SEAT'
-                                            ? 'No lonely seat'
-                                            : `Unknown policy: ${p.type}`}
+                                      {describePurchasePolicy(p)}
                                     </div>
                                     <button
                                       onClick={() => {
@@ -1163,11 +1174,7 @@ export default function MyEventsPage() {
                                     className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2"
                                   >
                                     <div className="text-sm text-slate-800">
-                                      {p.type === 'COUPON'
-                                        ? `Coupon ${(p as any).code} — ${(p as any).percentage}%`
-                                        : p.type === 'EARLY_BIRD'
-                                          ? `Early bird — ${(p as any).percentage}%`
-                                          : `Unknown policy: ${p.type}`}
+                                      {describeDiscountPolicy(p)}
                                     </div>
                                     <button
                                       onClick={() => {
