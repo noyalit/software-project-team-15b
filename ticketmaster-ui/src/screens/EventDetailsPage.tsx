@@ -54,6 +54,21 @@ export default function EventDetailsPage() {
   const qc = useQueryClient();
   const { token, userType, clearAuth } = useAuthStore();
 
+  const describePurchasePolicy = (p: PurchasePolicyDTO) => {
+    const anyP = p as any;
+    const t = (anyP?.type ?? anyP?.policyType ?? anyP?.kind) as string | undefined;
+    if (t === 'MAX_TICKETS_PER_ORDER' || anyP?.max != null) {
+      return `Max tickets per order: ${anyP?.max}`;
+    }
+    if (t === 'AGE_RESTRICTION' || anyP?.minAge != null) {
+      return `Age restriction: ${anyP?.minAge}+`;
+    }
+    if (t === 'NO_LONELY_SEAT') {
+      return 'No lonely seat';
+    }
+    return `Unknown policy: ${t ?? 'undefined'}`;
+  };
+
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>([]);
   const [standingQuantity, setStandingQuantity] = useState(1);
@@ -655,13 +670,7 @@ export default function EventDetailsPage() {
               <div className="mt-2 grid gap-1">
                 {(purchasePoliciesQuery.data ?? []).map((p, idx) => (
                   <div key={idx} className="text-sm text-slate-800">
-                    {p.type === 'MAX_TICKETS_PER_ORDER'
-                      ? `Max tickets per order: ${(p as any).max}`
-                      : p.type === 'AGE_RESTRICTION'
-                        ? `Age restriction: ${(p as any).minAge}+`
-                        : p.type === 'NO_LONELY_SEAT'
-                          ? 'No lonely seat'
-                          : p.type}
+                    {describePurchasePolicy(p)}
                   </div>
                 ))}
               </div>
@@ -1002,13 +1011,7 @@ export default function EventDetailsPage() {
               <div className="mt-2 grid gap-1">
                 {(purchasePoliciesQuery.data ?? []).map((p, idx) => (
                   <div key={idx} className="text-sm text-slate-800">
-                    {p.type === 'MAX_TICKETS_PER_ORDER'
-                      ? `Max tickets per order: ${(p as any).max}`
-                      : p.type === 'AGE_RESTRICTION'
-                        ? `Age restriction: ${(p as any).minAge}+`
-                        : p.type === 'NO_LONELY_SEAT'
-                          ? 'No lonely seat'
-                          : p.type}
+                    {describePurchasePolicy(p)}
                   </div>
                 ))}
               </div>
