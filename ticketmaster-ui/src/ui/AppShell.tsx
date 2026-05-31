@@ -69,6 +69,12 @@ export default function AppShell() {
     };
   }, [userType, meQuery.data?.userId, meQuery.data?.assignedRoles]);
 
+  useEffect(() => {
+    const handler = () => disconnectNotifications();
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, []);
+
   const activeRole = meQuery.data?.activeRole;
 
   const appointmentApprovedQuery = useQuery({
@@ -150,6 +156,7 @@ const canAccessManagerPages =
                   onClick={() => {
                     localStorage.removeItem('activeOrderId');
                     sessionStorage.removeItem('activeOrderId');
+                    disconnectNotifications();
                     logout();
                     window.location.href = '/';
                   }}
