@@ -2,7 +2,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { AxiosError } from 'axios';
 import { http } from '../api/http';
-import type { ApiResponse, EventDTO } from '../api/types';
+import type {
+  ApiResponse,
+  DiscountPolicyDTO,
+  EventDTO,
+  MemberDTO,
+  PriceBreakdownDTO,
+  PurchasePolicyDTO,
+} from '../api/types';
 import { getApiErrorMessage } from '../api/errors';
 import { useAuthStore } from '../ui/authStore';
 import { useState } from 'react';
@@ -40,6 +47,21 @@ export default function CheckoutPage() {
     orderId ?? sessionStorage.getItem('activeOrderId') ?? localStorage.getItem('activeOrderId') ?? null;
 
   const checkoutCompleted = Boolean(successMessage);
+
+  const guestBirthDate =
+    userType === 'guest' ? (localStorage.getItem('guestBirthDate') ?? '') : '';
+
+  const meQuery = useQuery({
+    queryKey: ['me', token],
+    queryFn: async () => {
+      const res = await http.get<ApiResponse<MemberDTO>>('/api/users/me');
+      if (res.data.error) throw new Error(res.data.error);
+      if (!res.data.data) throw new Error('No profile data');
+      return res.data.data;
+    },
+    enabled: Boolean(token) && userType === 'member',
+    retry: false,
+  });
 
   const activeOrderQuery = useQuery({
     queryKey: ['active-order', activeOrderId, token],
@@ -88,6 +110,86 @@ export default function CheckoutPage() {
     },
     enabled: Boolean(activeOrderQuery.data?.eventId),
     staleTime: 60_000,
+  });
+
+  const purchasePoliciesQuery = useQuery({
+    queryKey: ['event', 'purchase-policies', eventQuery.data?.eventId],
+    queryFn: async () => {
+      const eventId = eventQuery.data?.eventId;
+      if (!eventId) return [] as PurchasePolicyDTO[];
+      const res = await http.get<ApiResponse<PurchasePolicyDTO[]>>(
+        `/api/events/${eventId}/purchase-policies`
+      );
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
+    },
+    enabled: Boolean(eventQuery.data?.eventId),
+  });
+
+  const discountPoliciesQuery = useQuery({
+    queryKey: ['event', 'discount-policies', eventQuery.data?.eventId],
+    queryFn: async () => {
+      const eventId = eventQuery.data?.eventId;
+      if (!eventId) return [] as DiscountPolicyDTO[];
+      const res = await http.get<ApiResponse<DiscountPolicyDTO[]>>(
+        `/api/events/${eventId}/discount-policies`
+      );
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
+    },
+    enabled: Boolean(eventQuery.data?.eventId),
+  });
+
+  const priceQuoteQuery = useQuery({
+    queryKey: [
+      'event',
+      'price-quote',
+      activeOrderQuery.data?.eventId,
+      activeOrderQuery.data?.areaId,
+      activeOrderQuery.data?.seatIds?.length,
+      activeOrderQuery.data?.seats?.length,
+      couponCode,
+      meQuery.data?.userId,
+      meQuery.data?.birthDate,
+      guestBirthDate,
+    ],
+    queryFn: async () => {
+      const eventId = activeOrderQuery.data?.eventId;
+      const areaId = activeOrderQuery.data?.areaId;
+      if (!eventId || !areaId) throw new Error('Missing event or area');
+
+      const seats = activeOrderQuery.data?.seats ?? [];
+      const seatIds = activeOrderQuery.data?.seatIds ?? [];
+      const quantity = seats.length > 0 ? seats.length : seatIds.length;
+      if (!quantity) throw new Error('No seats in order');
+
+      const buyerId = userType === 'member' ? (meQuery.data?.userId ?? null) : null;
+      const buyerBirthDate =
+        userType === 'member'
+          ? (meQuery.data?.birthDate ?? null)
+          : (guestBirthDate || null);
+
+      const res = await http.post<ApiResponse<PriceBreakdownDTO>>(
+        `/api/events/${eventId}/price-quote`,
+        {
+          areaId,
+          quantity,
+          buyerId,
+          buyerBirthDate,
+          couponCode: couponCode.trim() || null,
+        }
+      );
+      if (res.data.error) throw new Error(res.data.error);
+      if (!res.data.data) throw new Error('No price quote returned');
+      return res.data.data;
+    },
+    enabled:
+      Boolean(token) &&
+      Boolean(activeOrderQuery.data?.eventId) &&
+      Boolean(activeOrderQuery.data?.areaId) &&
+      (userType !== 'member' || Boolean(meQuery.data?.userId)) &&
+      !checkoutCompleted,
+    retry: false,
   });
 
   const completeCheckoutMutation = useMutation({
@@ -140,7 +242,7 @@ export default function CheckoutPage() {
   const actionErrorMessage =
     !successMessage && actionError ? getApiErrorMessage(actionError) : null;
 
-  const formatMoney = (m?: { amount: number; currency: string } | null) => {
+  const formatMoney = (m?: { amount: number | string; currency: string } | null) => {
     if (!m) return '—';
     return `${m.amount} ${m.currency}`;
   };
@@ -222,16 +324,33 @@ export default function CheckoutPage() {
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-600">Subtotal</span>
                 <span className="font-medium text-slate-900">
-                  {formatMoney(activeOrderQuery.data.subtotal)}
+                  {priceQuoteQuery.data
+                    ? formatMoney(priceQuoteQuery.data.subtotal)
+                    : formatMoney(activeOrderQuery.data.subtotal)}
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">Discount</span>
+                <span className="font-medium text-slate-900">
+                  {priceQuoteQuery.data ? formatMoney(priceQuoteQuery.data.discount) : '—'}
                 </span>
               </div>
 
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-600">Total</span>
                 <span className="font-semibold text-slate-900">
-                  {formatMoney(activeOrderQuery.data.total)}
+                  {priceQuoteQuery.data
+                    ? formatMoney(priceQuoteQuery.data.total)
+                    : formatMoney(activeOrderQuery.data.total)}
                 </span>
               </div>
+
+              {priceQuoteQuery.isError && (
+                <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  {getApiErrorMessage(priceQuoteQuery.error)}
+                </div>
+              )}
             </div>
           </div>
 
@@ -245,6 +364,60 @@ export default function CheckoutPage() {
                 className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
               />
             </label>
+
+            <div className="mt-4 grid gap-3">
+              <div className="text-sm font-semibold text-slate-900">Policies & discounts</div>
+
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Purchase policies
+                </div>
+
+                {purchasePoliciesQuery.isPending ? (
+                  <div className="mt-1 text-sm text-slate-600">Loading…</div>
+                ) : (purchasePoliciesQuery.data ?? []).length === 0 ? (
+                  <div className="mt-1 text-sm text-slate-600">No purchase policies.</div>
+                ) : (
+                  <div className="mt-2 grid gap-1">
+                    {(purchasePoliciesQuery.data ?? []).map((p, idx) => (
+                      <div key={idx} className="text-sm text-slate-800">
+                        {p.type === 'MAX_TICKETS_PER_ORDER'
+                          ? `Max tickets per order: ${(p as any).max}`
+                          : p.type === 'AGE_RESTRICTION'
+                            ? `Age restriction: ${(p as any).minAge}+`
+                            : p.type === 'NO_LONELY_SEAT'
+                              ? 'No lonely seat'
+                              : p.type}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                  Discount policies
+                </div>
+
+                {discountPoliciesQuery.isPending ? (
+                  <div className="mt-1 text-sm text-slate-600">Loading…</div>
+                ) : (discountPoliciesQuery.data ?? []).length === 0 ? (
+                  <div className="mt-1 text-sm text-slate-600">No discount policies.</div>
+                ) : (
+                  <div className="mt-2 grid gap-1">
+                    {(discountPoliciesQuery.data ?? []).map((p, idx) => (
+                      <div key={idx} className="text-sm text-slate-800">
+                        {p.type === 'COUPON'
+                          ? `Coupon ${(p as any).code} (${(p as any).percentage}%)`
+                          : p.type === 'EARLY_BIRD'
+                            ? `Early bird (${(p as any).percentage}%)`
+                            : p.type}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
 
             <button
               onClick={() => {

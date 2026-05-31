@@ -44,6 +44,13 @@ export type DiscountPolicyDTO =
   | { type: 'EARLY_BIRD'; percentage: number; until: string }
   | { type: string; [k: string]: unknown };
 
+export type PriceBreakdownDTO = {
+  basePrice: MoneyDTO;
+  subtotal: MoneyDTO;
+  discount: MoneyDTO;
+  total: MoneyDTO;
+};
+
 export type TicketDTO = {
   seatId: string;
   basePrice: MoneyDTO | null;

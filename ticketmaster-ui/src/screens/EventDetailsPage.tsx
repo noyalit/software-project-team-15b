@@ -2,7 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { http } from '../api/http';
-import type { ApiResponse, EventDTO } from '../api/types';
+import type {
+  ApiResponse,
+  DiscountPolicyDTO,
+  EventDTO,
+  PurchasePolicyDTO,
+} from '../api/types';
 import { getApiErrorMessage } from '../api/errors';
 import { useAuthStore } from '../ui/authStore';
 import type { AxiosError } from 'axios';
@@ -143,6 +148,30 @@ export default function EventDetailsPage() {
       if (res.data.error) throw new Error(res.data.error);
       if (!res.data.data) throw new Error('Event not found');
       return res.data.data;
+    },
+    enabled: Boolean(eventId),
+  });
+
+  const purchasePoliciesQuery = useQuery({
+    queryKey: ['event', 'purchase-policies', eventId],
+    queryFn: async () => {
+      const res = await http.get<ApiResponse<PurchasePolicyDTO[]>>(
+        `/api/events/${eventId}/purchase-policies`
+      );
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
+    },
+    enabled: Boolean(eventId),
+  });
+
+  const discountPoliciesQuery = useQuery({
+    queryKey: ['event', 'discount-policies', eventId],
+    queryFn: async () => {
+      const res = await http.get<ApiResponse<DiscountPolicyDTO[]>>(
+        `/api/events/${eventId}/discount-policies`
+      );
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
     },
     enabled: Boolean(eventId),
   });
@@ -552,6 +581,66 @@ export default function EventDetailsPage() {
             >
               Company
             </Link>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Purchase policies
+            </div>
+
+            {purchasePoliciesQuery.isPending ? (
+              <div className="mt-2 text-sm text-slate-600">Loading…</div>
+            ) : purchasePoliciesQuery.isError ? (
+              <div className="mt-2 text-sm text-rose-700">
+                {getApiErrorMessage(purchasePoliciesQuery.error)}
+              </div>
+            ) : (purchasePoliciesQuery.data ?? []).length === 0 ? (
+              <div className="mt-2 text-sm text-slate-600">No purchase policies.</div>
+            ) : (
+              <div className="mt-2 grid gap-1">
+                {(purchasePoliciesQuery.data ?? []).map((p, idx) => (
+                  <div key={idx} className="text-sm text-slate-800">
+                    {p.type === 'MAX_TICKETS_PER_ORDER'
+                      ? `Max tickets per order: ${(p as any).max}`
+                      : p.type === 'AGE_RESTRICTION'
+                        ? `Age restriction: ${(p as any).minAge}+`
+                        : p.type === 'NO_LONELY_SEAT'
+                          ? 'No lonely seat'
+                          : p.type}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Discount policies
+            </div>
+
+            {discountPoliciesQuery.isPending ? (
+              <div className="mt-2 text-sm text-slate-600">Loading…</div>
+            ) : discountPoliciesQuery.isError ? (
+              <div className="mt-2 text-sm text-rose-700">
+                {getApiErrorMessage(discountPoliciesQuery.error)}
+              </div>
+            ) : (discountPoliciesQuery.data ?? []).length === 0 ? (
+              <div className="mt-2 text-sm text-slate-600">No discount policies.</div>
+            ) : (
+              <div className="mt-2 grid gap-1">
+                {(discountPoliciesQuery.data ?? []).map((p, idx) => (
+                  <div key={idx} className="text-sm text-slate-800">
+                    {p.type === 'COUPON'
+                      ? `Coupon ${(p as any).code} (${(p as any).percentage}%)`
+                      : p.type === 'EARLY_BIRD'
+                        ? `Early bird (${(p as any).percentage}%)`
+                        : p.type}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
