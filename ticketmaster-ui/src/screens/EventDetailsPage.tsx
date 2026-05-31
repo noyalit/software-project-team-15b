@@ -985,6 +985,36 @@ export default function EventDetailsPage() {
             Order ID: {activeOrderId}
           </div>
 
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Purchase policies
+            </div>
+
+            {purchasePoliciesQuery.isPending ? (
+              <div className="mt-2 text-sm text-slate-600">Loading…</div>
+            ) : purchasePoliciesQuery.isError ? (
+              <div className="mt-2 text-sm text-rose-700">
+                {getApiErrorMessage(purchasePoliciesQuery.error)}
+              </div>
+            ) : (purchasePoliciesQuery.data ?? []).length === 0 ? (
+              <div className="mt-2 text-sm text-slate-600">No purchase policies.</div>
+            ) : (
+              <div className="mt-2 grid gap-1">
+                {(purchasePoliciesQuery.data ?? []).map((p, idx) => (
+                  <div key={idx} className="text-sm text-slate-800">
+                    {p.type === 'MAX_TICKETS_PER_ORDER'
+                      ? `Max tickets per order: ${(p as any).max}`
+                      : p.type === 'AGE_RESTRICTION'
+                        ? `Age restriction: ${(p as any).minAge}+`
+                        : p.type === 'NO_LONELY_SEAT'
+                          ? 'No lonely seat'
+                          : p.type}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {activeOrderQuery.isPending && (
             <div className="mt-3 text-sm text-slate-600">Loading order details…</div>
           )}
