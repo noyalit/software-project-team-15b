@@ -21,6 +21,7 @@ import WaitQueuePage from '../screens/WaitQueuePage';
 import CompanyOrdersPage from '../screens/CompanyOrdersPage';
 import CompanySalesReportPage from '../screens/CompanySalesReportPage';
 import HierarchyReportPage from '../screens/HierarchyReportPage';
+import NotificationsPage from '../screens/NotificationsPage';
 
 export default function App() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/me" element={<ProfilePage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
 
         <Route path="/companies/me" element={<MyCompaniesPage />} />
         <Route path="/companies/new" element={<CreateCompanyPage />} />

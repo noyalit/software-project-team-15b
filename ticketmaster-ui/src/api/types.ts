@@ -8,6 +8,26 @@ export type EventStatus = string;
 
 export type CompanyStatus = 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
 
+export type NotificationType =
+  | 'EVENT_SOLD_OUT'
+  | 'EVENT_CANCELLED'
+  | 'EVENT_TIME_CHANGED'
+  | 'REFUND_COMPLETED'
+  | 'PURCHASE_SUCCESS'
+  | 'PERMISSION_CHANGED'
+  | 'COMPANY_CLOSED'
+  | 'COMPANY_SUSPENDED'
+  | 'ORDER_EXPIRING_SOON'
+  | 'ADMIN_MESSAGE'
+  | string;
+
+export type NotificationDTO = {
+  type: NotificationType;
+  title: string;
+  message: string;
+  createdAt: string;
+};
+
 export type MoneyDTO = {
   amount: string;
   currency: string;

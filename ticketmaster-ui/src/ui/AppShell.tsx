@@ -1,9 +1,12 @@
+import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { http } from '../api/http';
 import type { ApiResponse, MemberDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 import logo from '../assets/Ticket4U_logo.jpeg';
+import NotificationsBell from './NotificationsBell';
+import { connectNotifications, disconnectNotifications } from './notificationsClient';
 
 function NavLink({ to, label }: { to: string; label: string }) {
   const { pathname } = useLocation();
@@ -50,6 +53,21 @@ export default function AppShell() {
     enabled: Boolean(token) && userType === 'member',
     staleTime: 60_000,
   });
+
+  useEffect(() => {
+    if (userType !== 'member') {
+      disconnectNotifications();
+      return;
+    }
+
+    const userId = meQuery.data?.userId;
+    if (!userId) return;
+    connectNotifications(userId, meQuery.data?.assignedRoles);
+
+    return () => {
+      disconnectNotifications();
+    };
+  }, [userType, meQuery.data?.userId, meQuery.data?.assignedRoles]);
 
   const activeRole = meQuery.data?.activeRole;
 
@@ -122,6 +140,7 @@ const canAccessManagerPages =
           <div className="flex items-center gap-2">
             {token && userType !== 'guest' ? (
               <>
+                {userType === 'member' && <NotificationsBell />}
                 {badgeText && (
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
                     {badgeText}
