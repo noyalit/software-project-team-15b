@@ -83,6 +83,8 @@ export default function MyEventsPage() {
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const [policySuccessMessage, setPolicySuccessMessage] = useState<string | null>(null);
+
   const [policyEventId, setPolicyEventId] = useState<string | null>(null);
   const [purchasePoliciesDraft, setPurchasePoliciesDraft] = useState<PurchasePolicyDTO[]>([]);
   const [discountPoliciesDraft, setDiscountPoliciesDraft] = useState<DiscountPolicyDTO[]>([]);
@@ -530,7 +532,7 @@ export default function MyEventsPage() {
       if (res.data.error) throw new Error(res.data.error);
     },
     onSuccess: async (_data, variables) => {
-      setSuccessMessage('Purchase policies saved successfully.');
+      setPolicySuccessMessage('Purchase policies saved successfully.');
       await qc.invalidateQueries({ queryKey: ['event', 'purchase-policies', variables.eventId] });
     },
   });
@@ -541,7 +543,7 @@ export default function MyEventsPage() {
       if (res.data.error) throw new Error(res.data.error);
     },
     onSuccess: async (_data, variables) => {
-      setSuccessMessage('Discount policies saved successfully.');
+      setPolicySuccessMessage('Discount policies saved successfully.');
       await qc.invalidateQueries({ queryKey: ['event', 'discount-policies', variables.eventId] });
     },
   });
@@ -709,6 +711,7 @@ export default function MyEventsPage() {
                                 setPurchasePoliciesDraft([]);
                                 setDiscountPoliciesDraft([]);
                                 setSuccessMessage(null);
+                                setPolicySuccessMessage(null);
 
                                 if (isOpen) {
                                 setAreaEventId(null);
@@ -886,6 +889,12 @@ export default function MyEventsPage() {
                         Define purchase restrictions and discount rules for this event.
                       </div>
 
+                      {policySuccessMessage && (
+                        <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                          {policySuccessMessage}
+                        </div>
+                      )}
+
                       <div className="mt-4 grid gap-4 md:grid-cols-2">
                         <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                           <div className="font-semibold text-slate-900">Purchase policies</div>
@@ -992,7 +1001,7 @@ export default function MyEventsPage() {
 
                           <button
                             onClick={() => {
-                              setSuccessMessage(null);
+                              setPolicySuccessMessage(null);
                               const eventId = event.eventId;
                               const policies = purchasePoliciesDraft.length
                                 ? purchasePoliciesDraft
@@ -1014,7 +1023,7 @@ export default function MyEventsPage() {
                           <button
                             onClick={() => {
                               setPurchasePoliciesDraft([]);
-                              setSuccessMessage('Purchase policies reset successfully.');
+                              setPolicySuccessMessage('Purchase policies reset successfully.');
                             }}
                             disabled={replacePurchasePoliciesMutation.isPending}
                             className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
@@ -1150,7 +1159,7 @@ export default function MyEventsPage() {
 
                           <button
                             onClick={() => {
-                              setSuccessMessage(null);
+                              setPolicySuccessMessage(null);
                               const eventId = event.eventId;
                               const policies = discountPoliciesDraft.length
                                 ? discountPoliciesDraft
@@ -1172,7 +1181,7 @@ export default function MyEventsPage() {
                           <button
                             onClick={() => {
                               setDiscountPoliciesDraft([]);
-                              setSuccessMessage('Discount policies reset successfully.');
+                              setPolicySuccessMessage('Discount policies reset successfully.');
                             }}
                             disabled={replaceDiscountPoliciesMutation.isPending}
                             className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900"
