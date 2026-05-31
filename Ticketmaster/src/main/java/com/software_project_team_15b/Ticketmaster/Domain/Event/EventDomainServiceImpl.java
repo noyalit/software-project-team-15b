@@ -72,6 +72,11 @@ public class EventDomainServiceImpl implements IEventDomainService {
     @Override
     @Transactional
     public UUID createEvent(CreateEventCommand cmd) {
+
+        if (!companyDomainService.isCompanyActive(cmd.companyId())) {
+            throw new InvalidEventStateException("company is not active: " + cmd.companyId());
+        }
+
         List<IEventPurchasePolicy> purchasePolicies = cmd.purchasePolicies() == null
                 ? List.of()
                 : cmd.purchasePolicies();

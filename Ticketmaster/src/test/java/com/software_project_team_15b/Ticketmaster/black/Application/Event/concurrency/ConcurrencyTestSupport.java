@@ -4,6 +4,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagem
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
@@ -23,8 +24,9 @@ public final class ConcurrencyTestSupport {
 
     public static SeatingSetup publishedSeatingEvent(EventManagementService service,
                                                      IMemberRepository memberRepository,
+                                                     ICompanyRepository companyRepository,
                                                      int seatCount) {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
                 actor.companyId(), "concurrency", "a", Category.OTHER,
                 Instant.now().plusSeconds(86400), "v", null, null), actor.memberId());
@@ -50,8 +52,9 @@ public final class ConcurrencyTestSupport {
 
     public static StandingSetup publishedStandingEvent(EventManagementService service,
                                                        IMemberRepository memberRepository,
+                                                       ICompanyRepository companyRepository,
                                                        int capacity) {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
                 actor.companyId(), "concurrency standing", "a", Category.OTHER,
                 Instant.now().plusSeconds(86400), "v", null, null), actor.memberId());

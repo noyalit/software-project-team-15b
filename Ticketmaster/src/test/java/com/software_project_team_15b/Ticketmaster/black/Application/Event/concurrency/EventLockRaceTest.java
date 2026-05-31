@@ -9,6 +9,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Add
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.CreateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.EventStatus;
@@ -46,6 +47,7 @@ class EventLockRaceTest {
     @Autowired IEventDomainService eventDomainService;
     @Autowired IEventRepository events;
     @Autowired IMemberRepository memberRepository;
+    @Autowired ICompanyRepository companyRepository;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Scenario 1
@@ -301,7 +303,7 @@ class EventLockRaceTest {
     private record DualAreaSetup(UUID eventId, UUID areaA, UUID seatA, UUID areaB, UUID seatB) {}
 
     private SeatingSetup buildSeatingEvent(int seatCount, String price) {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
                 actor.companyId(), "Race Event", "Artist", Category.CONCERT,
                 Instant.now().plusSeconds(86400), "Venue", null, null), actor.memberId());
@@ -323,7 +325,7 @@ class EventLockRaceTest {
     }
 
     private DualAreaSetup buildDualAreaEvent() {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
                 actor.companyId(), "Dual Area", "Artist", Category.CONCERT,
                 Instant.now().plusSeconds(86400), "Venue", null, null), actor.memberId());

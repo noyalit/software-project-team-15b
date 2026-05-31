@@ -246,6 +246,17 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         return companyRepository.findById(companyId);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isCompanyActive(UUID companyId) {
+        if (companyId == null) {
+            throw new IllegalArgumentException("companyId cannot be null");
+        }
+        return companyRepository.findById(companyId)
+                .map(c -> c.getStatus() == CompanyStatus.ACTIVE)
+                .orElse(false);
+    }
+
     private Company getCompanyOrThrow(UUID companyId) {
         return companyRepository.findById(companyId)
                 .orElseThrow(() -> new CompanyNotFoundException(

@@ -20,6 +20,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SeatStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.StandingEventArea;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.black.Application.Event.EventTestAuthSupport.FounderActor;
@@ -45,6 +46,9 @@ class EventServiceFeaturesIT {
 
     @Autowired
     IMemberRepository memberRepository;
+
+    @Autowired
+    ICompanyRepository companyRepository;
 
     // ── Task 1: releaseSeats ─────────────────────────────────────────────────
 
@@ -382,7 +386,7 @@ class EventServiceFeaturesIT {
     private record StandingSetup(UUID eventId, UUID areaId, UUID callerId) {}
 
     private StandingSetup createStandingEvent(int capacity, String price) {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
                 actor.companyId(), "Test Event", "Artist", Category.CONCERT,
                 Instant.now().plusSeconds(86400), "Venue", null, null), actor.memberId());
@@ -405,7 +409,7 @@ class EventServiceFeaturesIT {
     }
 
     private SeatingSetup createSeatingEvent(int seatCount, String price) {
-        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository);
+        FounderActor actor = EventTestAuthSupport.newFounder(memberRepository, companyRepository);
         UUID eventId = service.createEvent(new CreateEventCommand(
                 actor.companyId(), "Test Event", "Artist", Category.CONCERT,
                 Instant.now().plusSeconds(86400), "Venue", null, null), actor.memberId());
