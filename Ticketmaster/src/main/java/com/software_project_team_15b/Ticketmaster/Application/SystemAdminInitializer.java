@@ -1,7 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Application;
 
 import org.springframework.boot.ApplicationRunner;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 

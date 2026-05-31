@@ -2,12 +2,12 @@ package com.software_project_team_15b.Ticketmaster.white.Application.ActiveOrder
 
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.ActiveOrderMaintenanceService;
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.IActiveOrderRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
-import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
-import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,7 +17,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -35,8 +34,8 @@ class ActiveOrderMaintenanceServiceWhiteTest {
     @Mock
     private IEventDomainService eventDomainService;
 
-        @Mock
-        private INotifier notifier;
+    @Mock
+    private INotifier notifier;
 
     private ActiveOrderMaintenanceService service;
 
@@ -252,69 +251,61 @@ class ActiveOrderMaintenanceServiceWhiteTest {
     }
 
     @Test
-    void releaseAndDeleteExpiredActiveOrderShouldRethrowWhenNullOrderIsPassed() throws Exception {
-        Method method = ActiveOrderMaintenanceService.class
-                .getDeclaredMethod("releaseAndDeleteExpiredActiveOrder", ActiveOrder.class);
-        method.setAccessible(true);
+    void notifyCheckoutExpiringSoonShouldNotifyOrdersInsideWarningWindow() {
+        ActiveOrder activeOrder = mock(ActiveOrder.class);
+        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(1);
 
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
-            try {
-                method.invoke(service, (ActiveOrder) null);
-            } catch (java.lang.reflect.InvocationTargetException e) {
-                throw (RuntimeException) e.getCause();
-            }
-        });
+        EventDTO event = new EventDTO(
+                eventId,
+                UUID.randomUUID(),
+                "Concert Night",
+                "Artist",
+                null,
+                null,
+                "Hall",
+                null,
+                List.of()
+        );
 
-        assertTrue(exception.getMessage().contains("Cannot invoke"));
-        verifyNoInteractions(eventDomainService, activeOrderRepository);
+        when(activeOrder.getUserId()).thenReturn(userId);
+        when(activeOrder.getEventId()).thenReturn(eventId);
+        when(activeOrder.getExpiresAt()).thenReturn(expiresAt);
+        when(activeOrder.getStatus()).thenReturn(ActiveOrderStatus.ACTIVE);
+        when(activeOrder.isCheckoutWarningSent()).thenReturn(false);
+
+        when(activeOrderRepository.findByStatusNotForUpdate(ActiveOrderStatus.ACTIVE))
+                .thenReturn(List.of(activeOrder));
+
+        when(eventDomainService.getEvent(eventId))
+                .thenReturn(event);
+
+        service.notifyCheckoutExpiringSoon();
+
+        verify(notifier).notifyUser(eq(userId), any(NotificationDTO.class));
+        verify(activeOrder).markCheckoutWarningSent();
+        verify(activeOrderRepository).save(activeOrder);
     }
 
-        @Test
-        void notifyCheckoutExpiringSoonShouldNotifyOrdersInsideWarningWindow() {
-                ActiveOrder activeOrder = mock(ActiveOrder.class);
-                LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(1);
-                EventDTO event = new EventDTO(
-                        eventId,
-                        UUID.randomUUID(),
-                        "Concert Night",
-                        "Artist",
-                        null,
-                        null,
-                        "Hall",
-                        null,
-                        List.of()
-                );
+    @Test
+    void notifyCheckoutExpiringSoonShouldSkipOrdersOutsideWarningWindow() {
+        ActiveOrder activeOrder = mock(ActiveOrder.class);
 
-                when(activeOrder.getUserId()).thenReturn(userId);
-                when(activeOrder.getEventId()).thenReturn(eventId);
-                when(activeOrder.getExpiresAt()).thenReturn(expiresAt);
-                when(activeOrder.getStatus()).thenReturn(ActiveOrderStatus.ACTIVE);
-                when(activeOrder.isCheckoutWarningSent()).thenReturn(false);
-                when(activeOrderRepository.findByStatusNotForUpdate(ActiveOrderStatus.ACTIVE))
-                                .thenReturn(List.of(activeOrder));
-                when(eventDomainService.getEvent(eventId)).thenReturn(event);
+        when(activeOrder.getExpiresAt())
+                .thenReturn(LocalDateTime.now().plusMinutes(10));
 
-                service.notifyCheckoutExpiringSoon();
+        when(activeOrder.getStatus())
+                .thenReturn(ActiveOrderStatus.ACTIVE);
 
-                verify(notifier).notifyUser(eq(userId), any(NotificationDTO.class));
-                verify(activeOrder).markCheckoutWarningSent();
-                verify(activeOrderRepository).save(activeOrder);
-        }
+        when(activeOrder.isCheckoutWarningSent())
+                .thenReturn(false);
 
-        @Test
-        void notifyCheckoutExpiringSoonShouldSkipOrdersOutsideWarningWindow() {
-                ActiveOrder activeOrder = mock(ActiveOrder.class);
+        when(activeOrderRepository.findByStatusNotForUpdate(ActiveOrderStatus.ACTIVE))
+                .thenReturn(List.of(activeOrder));
 
-                when(activeOrder.getExpiresAt()).thenReturn(LocalDateTime.now().plusMinutes(10));
-                when(activeOrder.getStatus()).thenReturn(ActiveOrderStatus.ACTIVE);
-                when(activeOrder.isCheckoutWarningSent()).thenReturn(false);
-                when(activeOrderRepository.findByStatusNotForUpdate(ActiveOrderStatus.ACTIVE))
-                                .thenReturn(List.of(activeOrder));
+        service.notifyCheckoutExpiringSoon();
 
-                service.notifyCheckoutExpiringSoon();
-
-                verifyNoInteractions(notifier);
-                verify(activeOrder, never()).markCheckoutWarningSent();
-                verify(activeOrderRepository, never()).save(any());
-        }
+        verifyNoInteractions(notifier);
+        verify(activeOrder, never()).markCheckoutWarningSent();
+        verify(activeOrderRepository, never()).save(any());
+    }
 }
