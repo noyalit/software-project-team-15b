@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { http } from '../api/http';
 import { getApiErrorMessage } from '../api/errors';
@@ -88,6 +88,9 @@ export default function MyEventsPage() {
   const [policyEventId, setPolicyEventId] = useState<string | null>(null);
   const [purchasePoliciesDraft, setPurchasePoliciesDraft] = useState<PurchasePolicyDTO[]>([]);
   const [discountPoliciesDraft, setDiscountPoliciesDraft] = useState<DiscountPolicyDTO[]>([]);
+
+  const [purchasePoliciesDirty, setPurchasePoliciesDirty] = useState(false);
+  const [discountPoliciesDirty, setDiscountPoliciesDirty] = useState(false);
 
   const [newPurchaseType, setNewPurchaseType] = useState<'MAX_TICKETS_PER_ORDER' | 'AGE_RESTRICTION' | 'NO_LONELY_SEAT'>('MAX_TICKETS_PER_ORDER');
   const [newMaxTickets, setNewMaxTickets] = useState('4');
@@ -513,6 +516,13 @@ export default function MyEventsPage() {
     enabled: Boolean(policyEventId),
   });
 
+  useEffect(() => {
+    if (!policyEventId) return;
+    if (!purchasePoliciesQuery.isSuccess) return;
+    if (purchasePoliciesDirty) return;
+    setPurchasePoliciesDraft(purchasePoliciesQuery.data ?? []);
+  }, [policyEventId, purchasePoliciesDirty, purchasePoliciesQuery.data, purchasePoliciesQuery.isSuccess]);
+
   const discountPoliciesQuery = useQuery({
     queryKey: ['event', 'discount-policies', policyEventId],
     queryFn: async () => {
@@ -526,6 +536,13 @@ export default function MyEventsPage() {
     enabled: Boolean(policyEventId),
   });
 
+  useEffect(() => {
+    if (!policyEventId) return;
+    if (!discountPoliciesQuery.isSuccess) return;
+    if (discountPoliciesDirty) return;
+    setDiscountPoliciesDraft(discountPoliciesQuery.data ?? []);
+  }, [policyEventId, discountPoliciesDirty, discountPoliciesQuery.data, discountPoliciesQuery.isSuccess]);
+
   const replacePurchasePoliciesMutation = useMutation({
     mutationFn: async ({ eventId, policies }: { eventId: string; policies: PurchasePolicyDTO[] }) => {
       const res = await http.put<ApiResponse<null>>(`/api/events/${eventId}/purchase-policies`, policies);
@@ -533,6 +550,7 @@ export default function MyEventsPage() {
     },
     onSuccess: async (_data, variables) => {
       setPolicySuccessMessage('Purchase policies saved successfully.');
+      setPurchasePoliciesDirty(false);
       await qc.invalidateQueries({ queryKey: ['event', 'purchase-policies', variables.eventId] });
     },
   });
@@ -544,6 +562,7 @@ export default function MyEventsPage() {
     },
     onSuccess: async (_data, variables) => {
       setPolicySuccessMessage('Discount policies saved successfully.');
+      setDiscountPoliciesDirty(false);
       await qc.invalidateQueries({ queryKey: ['event', 'discount-policies', variables.eventId] });
     },
   });
@@ -710,6 +729,8 @@ export default function MyEventsPage() {
                                 setPolicyEventId(isOpen ? null : event.eventId);
                                 setPurchasePoliciesDraft([]);
                                 setDiscountPoliciesDraft([]);
+                                setPurchasePoliciesDirty(false);
+                                setDiscountPoliciesDirty(false);
                                 setSuccessMessage(null);
                                 setPolicySuccessMessage(null);
 
@@ -907,8 +928,7 @@ export default function MyEventsPage() {
                             </div>
                           ) : (
                             <div className="mt-3 space-y-2">
-                              {(purchasePoliciesDraft.length ? purchasePoliciesDraft : purchasePoliciesQuery.data ?? []).map(
-                                (p, idx) => (
+                              {purchasePoliciesDraft.map((p, idx) => (
                                   <div
                                     key={idx}
                                     className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2"
@@ -924,21 +944,19 @@ export default function MyEventsPage() {
                                     </div>
                                     <button
                                       onClick={() => {
-                                        const base = purchasePoliciesDraft.length
-                                          ? purchasePoliciesDraft
-                                          : purchasePoliciesQuery.data ?? [];
-                                        setPurchasePoliciesDraft(base.filter((_, i) => i !== idx));
+                                        setPurchasePoliciesDirty(true);
+                                        setPurchasePoliciesDraft(purchasePoliciesDraft.filter((_, i) => i !== idx));
                                       }}
                                       className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-900"
                                     >
                                       Remove
                                     </button>
                                   </div>
-                                )
-                              )}
+                                ))}
 
-                              {(purchasePoliciesDraft.length ? purchasePoliciesDraft : purchasePoliciesQuery.data ?? [])
-                                .length === 0 && <div className="text-sm text-slate-600">No purchase policies.</div>}
+                              {purchasePoliciesDraft.length === 0 && (
+                                <div className="text-sm text-slate-600">No purchase policies.</div>
+                              )}
                             </div>
                           )}
 
@@ -973,13 +991,12 @@ export default function MyEventsPage() {
 
                             <button
                               onClick={() => {
-                                const base = purchasePoliciesDraft.length
-                                  ? purchasePoliciesDraft
-                                  : purchasePoliciesQuery.data ?? [];
+                                const base = purchasePoliciesDraft;
 
                                 if (newPurchaseType === 'MAX_TICKETS_PER_ORDER') {
                                   const max = Number(newMaxTickets);
                                   if (!Number.isFinite(max) || max < 1) return;
+                                  setPurchasePoliciesDirty(true);
                                   setPurchasePoliciesDraft([...base, { type: 'MAX_TICKETS_PER_ORDER', max }]);
                                   return;
                                 }
@@ -987,10 +1004,12 @@ export default function MyEventsPage() {
                                 if (newPurchaseType === 'AGE_RESTRICTION') {
                                   const minAge = Number(newMinAge);
                                   if (!Number.isFinite(minAge) || minAge < 0) return;
+                                  setPurchasePoliciesDirty(true);
                                   setPurchasePoliciesDraft([...base, { type: 'AGE_RESTRICTION', minAge }]);
                                   return;
                                 }
 
+                                setPurchasePoliciesDirty(true);
                                 setPurchasePoliciesDraft([...base, { type: 'NO_LONELY_SEAT' }]);
                               }}
                               className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
@@ -1003,9 +1022,7 @@ export default function MyEventsPage() {
                             onClick={() => {
                               setPolicySuccessMessage(null);
                               const eventId = event.eventId;
-                              const policies = purchasePoliciesDraft.length
-                                ? purchasePoliciesDraft
-                                : purchasePoliciesQuery.data ?? [];
+                              const policies = purchasePoliciesDraft;
                               replacePurchasePoliciesMutation.mutate({ eventId, policies });
                             }}
                             disabled={replacePurchasePoliciesMutation.isPending}
@@ -1022,6 +1039,7 @@ export default function MyEventsPage() {
 
                           <button
                             onClick={() => {
+                              setPurchasePoliciesDirty(true);
                               setPurchasePoliciesDraft([]);
                               setPolicySuccessMessage('Purchase policies reset successfully.');
                             }}
@@ -1043,8 +1061,7 @@ export default function MyEventsPage() {
                             </div>
                           ) : (
                             <div className="mt-3 space-y-2">
-                              {(discountPoliciesDraft.length ? discountPoliciesDraft : discountPoliciesQuery.data ?? []).map(
-                                (p, idx) => (
+                              {discountPoliciesDraft.map((p, idx) => (
                                   <div
                                     key={idx}
                                     className="flex items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2"
@@ -1058,21 +1075,19 @@ export default function MyEventsPage() {
                                     </div>
                                     <button
                                       onClick={() => {
-                                        const base = discountPoliciesDraft.length
-                                          ? discountPoliciesDraft
-                                          : discountPoliciesQuery.data ?? [];
-                                        setDiscountPoliciesDraft(base.filter((_, i) => i !== idx));
+                                        setDiscountPoliciesDirty(true);
+                                        setDiscountPoliciesDraft(discountPoliciesDraft.filter((_, i) => i !== idx));
                                       }}
                                       className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-900"
                                     >
                                       Remove
                                     </button>
                                   </div>
-                                )
-                              )}
+                                ))}
 
-                              {(discountPoliciesDraft.length ? discountPoliciesDraft : discountPoliciesQuery.data ?? [])
-                                .length === 0 && <div className="text-sm text-slate-600">No discount policies.</div>}
+                              {discountPoliciesDraft.length === 0 && (
+                                <div className="text-sm text-slate-600">No discount policies.</div>
+                              )}
                             </div>
                           )}
 
@@ -1121,14 +1136,13 @@ export default function MyEventsPage() {
 
                             <button
                               onClick={() => {
-                                const base = discountPoliciesDraft.length
-                                  ? discountPoliciesDraft
-                                  : discountPoliciesQuery.data ?? [];
+                                const base = discountPoliciesDraft;
                                 const percentage = Number(newDiscountPercentage);
                                 if (!Number.isFinite(percentage) || percentage < 0) return;
 
                                 if (newDiscountType === 'COUPON') {
                                   if (!newCouponCode.trim() || !newCouponExpiresAt) return;
+                                  setDiscountPoliciesDirty(true);
                                   setDiscountPoliciesDraft([
                                     ...base,
                                     {
@@ -1142,6 +1156,7 @@ export default function MyEventsPage() {
                                 }
 
                                 if (!newEarlyBirdUntil) return;
+                                setDiscountPoliciesDirty(true);
                                 setDiscountPoliciesDraft([
                                   ...base,
                                   {
@@ -1161,9 +1176,7 @@ export default function MyEventsPage() {
                             onClick={() => {
                               setPolicySuccessMessage(null);
                               const eventId = event.eventId;
-                              const policies = discountPoliciesDraft.length
-                                ? discountPoliciesDraft
-                                : discountPoliciesQuery.data ?? [];
+                              const policies = discountPoliciesDraft;
                               replaceDiscountPoliciesMutation.mutate({ eventId, policies });
                             }}
                             disabled={replaceDiscountPoliciesMutation.isPending}
@@ -1180,6 +1193,7 @@ export default function MyEventsPage() {
 
                           <button
                             onClick={() => {
+                              setDiscountPoliciesDirty(true);
                               setDiscountPoliciesDraft([]);
                               setPolicySuccessMessage('Discount policies reset successfully.');
                             }}
