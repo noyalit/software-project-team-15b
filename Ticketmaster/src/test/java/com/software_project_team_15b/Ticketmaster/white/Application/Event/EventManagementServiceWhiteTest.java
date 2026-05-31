@@ -18,6 +18,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Upd
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
@@ -38,12 +39,13 @@ class EventManagementServiceWhiteTest {
     @Mock UserDomainService userDomainService;
     @Mock EventCancelManager cancelManager;
     @Mock IAuth auth;
+    @Mock INotifier notifier;
 
     EventManagementService service;
 
     @BeforeEach
     void setUp() {
-        service = new EventManagementService(eventDomainService, userDomainService, cancelManager, auth);
+        service = new EventManagementService(eventDomainService, userDomainService, cancelManager, auth, notifier);
     }
 
     // -------------------- resolveMemberCallerId branches --------------------
@@ -431,7 +433,7 @@ class EventManagementServiceWhiteTest {
         doThrow(new IllegalStateException("subscribe failed")).when(bad).subscribe(any());
 
         assertThatThrownBy(() -> new EventManagementService(
-                eventDomainService, userDomainService, bad, auth))
+                eventDomainService, userDomainService, bad, auth, notifier))
                 .isInstanceOf(RuntimeException.class);
     }
 
