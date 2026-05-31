@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import java.util.List;
 import java.util.UUID;
@@ -30,10 +31,13 @@ class HoldThenConfirmRaceTest {
     @Autowired
     IMemberRepository memberRepository;
 
+    @Autowired
+    ICompanyRepository companyRepository;
+
     @Test
     void GivenSeatHeldByTokenA_WhenTokenAConfirmsAndTokenBTriesToHoldSameSeat_ThenTokenBHoldsAreRejected() throws Exception {
         ConcurrencyTestSupport.SeatingSetup setup =
-                ConcurrencyTestSupport.publishedSeatingEvent(service, memberRepository, 1);
+                ConcurrencyTestSupport.publishedSeatingEvent(service, memberRepository, companyRepository, 1);
         UUID seatId = setup.seatIds().get(0);
 
         UUID tokenA = UUID.randomUUID();
