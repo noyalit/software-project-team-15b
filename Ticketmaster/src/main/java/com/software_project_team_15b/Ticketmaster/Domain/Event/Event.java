@@ -55,7 +55,7 @@ public class Event {
     private long version;
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    @JoinColumn(name = "event_id")
+    @JoinColumn(name = "event_id", nullable = false)
     @OrderColumn(name = "area_order")
     private List<EventArea> areas = new ArrayList<>();
 

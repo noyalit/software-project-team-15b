@@ -87,6 +87,7 @@ public class LotteryController {
     @PostMapping("/entries")
     public ResponseEntity<ApiResponse<Void>> addToEventLottery(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID companyId,
             @PathVariable UUID eventId
     ) {
         try {
@@ -108,14 +109,20 @@ public class LotteryController {
 
     @Operation(summary = "Run the lottery draw for an event (manager/owner/founder only)")
     @PostMapping(path = "/draw", consumes = "application/json")
-    public ResponseEntity<ApiResponse<Set<UUID>>> runEventLottery(
+    public ResponseEntity<ApiResponse<Set<String>>> runEventLottery(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
             @PathVariable UUID companyId,
             @PathVariable UUID eventId,
             @RequestBody DrawRequest request
     ) {
         try {
-            Set<UUID> winners = lotteryService.runEventLottery(token, companyId, eventId, request.count(), request.expirationTime());
+            Set<String> winners = lotteryService.runEventLotteryUsernames(
+                    token,
+                    companyId,
+                    eventId,
+                    request.count(),
+                    request.expirationTime()
+            );
             return ResponseEntity.ok(new ApiResponse<>(winners, null));
         } catch (InvalidTokenException ex) {
             return unauthorized(ex);
@@ -134,13 +141,13 @@ public class LotteryController {
 
     @Operation(summary = "Get the winners of the lottery for an event (manager/owner/founder only)")
     @GetMapping("/winners")
-    public ResponseEntity<ApiResponse<Set<UUID>>> getEventLotteryWinners(
+    public ResponseEntity<ApiResponse<Set<String>>> getEventLotteryWinners(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
             @PathVariable UUID companyId,
             @PathVariable UUID eventId
     ) {
         try {
-            Set<UUID> winners = lotteryService.getEventLotteryWinners(token, companyId, eventId);
+            Set<String> winners = lotteryService.getEventLotteryWinnerUsernames(token, companyId, eventId);
             return ResponseEntity.ok(new ApiResponse<>(winners, null));
         } catch (InvalidTokenException ex) {
             return unauthorized(ex);
@@ -201,7 +208,11 @@ public class LotteryController {
     }
 
     private <T> ResponseEntity<ApiResponse<T>> internalServerError(Exception ex) {
+        String msg = ex == null || ex.getMessage() == null || ex.getMessage().isBlank()
+                ? "The request failed due to a server error. Please try again later."
+                : ex.getMessage();
+
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ApiResponse<>(null, "Internal server error"));
+                .body(new ApiResponse<>(null, msg));
     }
 }

@@ -19,6 +19,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Invalid
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
+import com.software_project_team_15b.Ticketmaster.DTO.CompanyRoleTreeDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 
@@ -49,7 +50,7 @@ public class UserController {
     @Operation(summary = "Register a new member")
     @PostMapping(path = "/register", consumes = "application/json")
     public ResponseEntity<ApiResponse<MemberDTO>> registerMember(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+                    @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token,
             @RequestBody RegisterMemberRequest request
     ) {
         try {
@@ -75,7 +76,7 @@ public class UserController {
     @Operation(summary = "Login as member")
     @PostMapping(path = "/login", consumes = "application/json")
     public ResponseEntity<ApiResponse<String>> login(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+                    @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token,
             @RequestBody LoginRequest request
     ) {
         try {
@@ -94,7 +95,7 @@ public class UserController {
     @Operation(summary = "Login as system admin")
     @PostMapping(path = "/login/system-admin", consumes = "application/json")
     public ResponseEntity<ApiResponse<String>> loginSystemAdmin(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+                    @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token,
             @RequestBody LoginRequest request
     ) {
         try {
@@ -443,6 +444,43 @@ public class UserController {
         }
     }
 
+    @Operation(summary = "Check if current active appointment is approved")
+    @GetMapping("/roles/approved")
+    public ResponseEntity<ApiResponse<Boolean>> isAppointmentApproved(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+    ) {
+        try {
+            return ResponseEntity.ok(new ApiResponse<>(userService.isAppointmentApproved(token), null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Get company role tree with manager permissions (Hierarchical Format)")
+    @GetMapping("/companies/{companyId}/roles/tree")
+    public ResponseEntity<ApiResponse<CompanyRoleTreeDTO>> getCompanyRoleTree(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID companyId
+    ) {
+        try {
+            return ResponseEntity.ok(new ApiResponse<>(
+                    userService.getCompanyRoleTree(token, companyId),
+                    null
+            ));
+
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     @Operation(summary = "Cancel member account by system admin")
     @PostMapping(path = "/admin/cancel-member", consumes = "application/json")
     public ResponseEntity<ApiResponse<Boolean>> cancelMemberAccountBySystemAdmin(
@@ -588,7 +626,11 @@ public class UserController {
     }
 
     private <T> ResponseEntity<ApiResponse<T>> internalServerError(Exception ex) {
+        String msg = ex == null || ex.getMessage() == null || ex.getMessage().isBlank()
+                ? "The request failed due to a server error. Please try again later."
+                : ex.getMessage();
+
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ApiResponse<>(null, "Internal server error"));
+                .body(new ApiResponse<>(null, msg));
     }
 }

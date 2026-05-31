@@ -41,6 +41,22 @@ public class PurchasingDomainService {
         return orderId;
     }
 
+    public boolean existsActiveOrderForEvent(UUID eventId) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID cannot be null");
+        }
+
+        return activeOrderRepository.existsByEventIdAndStatus(eventId, ActiveOrderStatus.ACTIVE);
+    }
+
+    public long countActiveOrdersForEvent(UUID eventId) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("Event ID cannot be null");
+        }
+
+        return activeOrderRepository.countByEventIdAndStatus(eventId, ActiveOrderStatus.ACTIVE);
+    }
+
     public void requireEventCanBeBooked(UUID eventId, EventAvailability eventAvailability) {
         if (eventId == null) {
             throw new IllegalArgumentException("Event ID cannot be null");
@@ -69,6 +85,18 @@ public class PurchasingDomainService {
             throw new IllegalArgumentException("User ID, event ID, and lottery eligibility result cannot be null");
         }
         if (!lotteryEligibilityDTO.canCreateActiveOrder()) {
+            if (lotteryEligibilityDTO.status() == com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus.LOTTERY_OPEN_NOT_ENTERED) {
+                throw new IllegalStateException("You must enter the lottery draw to be eligible to purchase tickets for this event");
+            }
+            if (lotteryEligibilityDTO.status() == com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus.LOTTERY_OPEN_ENTERED) {
+                throw new IllegalStateException("You are registered to the lottery draw. You can purchase only if you win after the draw");
+            }
+            if (lotteryEligibilityDTO.status() == com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus.NOT_SELECTED) {
+                throw new IllegalStateException("You were not selected in the lottery draw for this event");
+            }
+            if (lotteryEligibilityDTO.status() == com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus.ACCESS_EXPIRED) {
+                throw new IllegalStateException("Your lottery winner access has expired");
+            }
             throw new IllegalStateException("User is not eligible to create an active order for this event: " + lotteryEligibilityDTO.status());
         }
         if (!queueAccess) {
@@ -98,6 +126,16 @@ public class PurchasingDomainService {
         ActiveOrder activeOrder = getOwnedOrderForUpdate(userId, orderId);
         validateOrderIsInCheckout(activeOrder);
         return activeOrder;
+    }
+
+    public List<ActiveOrder> findByUserIdAndStatus(UUID userId, ActiveOrderStatus status) {
+        if (userId == null) {
+            throw new IllegalArgumentException("User ID cannot be null");
+        }
+        if (status == null) {
+            throw new IllegalArgumentException("Status cannot be null");
+        }
+        return activeOrderRepository.findByUserIdAndStatus(userId, status);
     }
 
     public void validateOrderIsActive(ActiveOrder activeOrder) {

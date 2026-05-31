@@ -4,11 +4,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
-
-import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -16,10 +11,14 @@ import org.springframework.stereotype.Service;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
 /**
  * Application-level facade for {@link Company} use cases.
@@ -59,6 +58,7 @@ public class CompanyService {
             requireNonBlank(name, "Company name");
             UUID founderId = requireAuthenticatedMember(token);
             var company = companyDomainService.createCompany(name, founderId);
+            userDomainService.appointFounder(founderId, company.getId());
             AUDIT.info("op=createCompany founderId={} companyId={} name={} result=ok",
                     founderId, company.getId(), name);
             return CompanyDTO.from(company);
@@ -86,23 +86,23 @@ public class CompanyService {
                 .toList();
     }
 
-    /**
-     * Replaces the purchase policy of the specified company.
-     * The caller must be an active founder or owner of the company, or an approved manager who holds
-     * the {@link com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission#DEFINE_PURCHASE_POLICY}
-     * permission for that company.
-     *
-     * @param token     the caller's member session token
-     * @param companyId the UUID of the target company
-     * @param policy    the new purchase policy to apply (must not be null)
-     * @return a {@link CompanyDTO} reflecting the updated state
-     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
-     *         if the token is invalid or expired
-     * @throws UnauthorizedCompanyActionException if the caller lacks the required role or permission
-     * @throws IllegalArgumentException           if {@code companyId} or {@code policy} is null
-     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
-     *         if no company exists with the given {@code companyId}
-     */
+    public List<CompanyDTO> getMyCompanies(String token) {
+        requireValidToken(token);
+        UUID memberId = requireAuthenticatedMember(token);
+        return companyDomainService.findCompaniesByMember(memberId).stream()
+                .map(CompanyDTO::from)
+                .toList();
+    }
+
+    public List<CompanyDTO> getAllCompanies(String token) {
+        requireValidToken(token);
+        if (!auth.isSystemAdmin(token)) {
+            throw new UnauthorizedCompanyActionException("Only system admins can view all companies");
+        }
+        return companyDomainService.findAll().stream()
+                .map(CompanyDTO::from)
+                .toList();
+    }
     public CompanyDTO updatePurchasePolicy(String token, UUID companyId, ICompanyPurchasePolicy policy) {
         try {
             requireNonNull(companyId, "Company ID");

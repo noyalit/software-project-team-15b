@@ -69,6 +69,27 @@ public interface ICompanyDomainService {
     List<Company> findCompaniesByFounder(UUID founderId);
 
     /**
+     * Returns all companies in which the given member is listed as an owner.
+     *
+     * @param ownerId the owner's id; must not be null
+     * @return a non-null, possibly empty list of matching companies
+     */
+    List<Company> findCompaniesByOwner(UUID ownerId);
+
+    /**
+     * Returns companies where the given member is either founder or owner.
+     * Duplicates are removed while keeping founder matches first.
+     */
+    List<Company> findCompaniesByMember(UUID memberId);
+
+    /**
+     * Returns all companies in the system.
+     *
+     * @return a non-null, possibly empty list of all companies
+     */
+    List<Company> findAll();
+
+    /**
      * Replaces the company's purchase policy. The company must be {@link CompanyStatus#ACTIVE}.
      *
      * @param companyId the target company's id; must not be null

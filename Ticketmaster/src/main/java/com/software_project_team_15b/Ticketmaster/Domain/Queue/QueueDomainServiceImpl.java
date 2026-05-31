@@ -8,6 +8,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.QueueNo
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.SiteQueueSnapshotDTO;
 
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.retry.annotation.Backoff;
@@ -41,8 +42,9 @@ import java.util.concurrent.TimeUnit;
 public class QueueDomainServiceImpl implements IQueueDomainService {
 
     private static final int ACCESS_TIME = 100;
-    private static final int MAX_VISITORS = 100;
     private static final int EVENT_QUEUE_INTERVAL = 5;
+
+    private int maxVisitors = 100;
 
     private final IQueueRepository queueRepository;
 
@@ -110,7 +112,7 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      * {@link #MAX_VISITORS} concurrent visitors are admitted or the queue is empty.
      */
     public synchronized void acceptUsersFromSiteQueue() {
-        while (!siteQueue.isEmpty() && acceptedTokens.size() < MAX_VISITORS) {
+        while (!siteQueue.isEmpty() && acceptedTokens.size() < maxVisitors) {
             acceptedTokens.add(siteQueue.poll());
         }
     }
@@ -127,6 +129,17 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
             throw new IllegalArgumentException("User is already in the site queue");
         }
         siteQueue.add(token);
+    }
+
+    @Override
+    public synchronized SiteQueueSnapshotDTO getSiteQueueSnapshot() {
+        return new SiteQueueSnapshotDTO(maxVisitors, siteQueue.size(), acceptedTokens.size());
+    }
+
+    @Override
+    public synchronized void updateSiteQueueSettings(int maxVisitors) {
+        if (maxVisitors <= 0) throw new IllegalArgumentException("maxVisitors must be positive");
+        this.maxVisitors = maxVisitors;
     }
 
     /**
@@ -217,6 +230,8 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
         }
         if (queue.hasAccess(token) == null) {
             pushToEventQueue(eventId, token);
+            queue.advanceQueue(LocalDateTime.now().plusSeconds(ACCESS_TIME));
+            queueRepository.updateQueue(queue);
         }
         return getQueueAccessView(token, eventId);
     }
@@ -346,7 +361,7 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
             throw new QueueNotFoundException("Queue not found for eventId: " + eventId);
         }
         if (queue.isFull()) {
-            throw new QueueIsFullException("Event queue is full (eventId: " + eventId + ")");
+            throw new QueueIsFullException("Event queue is full. Please try again later.");
         }
         if (queue.contains(token)) {
             throw new AlreadyInQueueException("Token " + token + " is already in the queue for eventId: " + eventId);
@@ -357,13 +372,13 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
 
     /**
      * Returns {@code true} if the site currently has capacity for additional visitors,
-     * i.e. the number of admitted tokens is below {@link #MAX_VISITORS}.
+     * i.e. the number of admitted tokens is below the configured max-visitors limit.
      *
      * @return {@code true} if below the cap; {@code false} if at or above it
      */
     @Override
     public boolean canAccessWebsite() {
-        return acceptedTokens.size() < MAX_VISITORS;
+        return acceptedTokens.size() < maxVisitors;
     }
 
     /**

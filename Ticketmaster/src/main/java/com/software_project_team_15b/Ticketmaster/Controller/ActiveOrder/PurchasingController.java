@@ -12,6 +12,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedToIssueTicketsException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.OrderSeatsUnavailableException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.UnactiveOrderException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -31,6 +32,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -56,6 +58,79 @@ public class PurchasingController {
 
             return ResponseEntity.ok(new ApiResponse<>(access, null));
 
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (IllegalStateException ex) {
+            return conflict(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Add a quantity of standing tickets to an existing active order")
+    @PostMapping(path = "/{orderId}/standing/add", consumes = "application/json")
+    public ResponseEntity<ApiResponse<Void>> addStandingQuantityToExistingOrder(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID orderId,
+            @RequestBody QuantityRequest request
+    ) {
+        try {
+            purchasingService.addStandingQuantityToExistingOrder(token, orderId, request.quantity());
+            return ResponseEntity.ok(new ApiResponse<>(null, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (TimeExpiredException ex) {
+            return gone(ex);
+        } catch (OrderSeatsUnavailableException ex) {
+            return conflict(ex);
+        } catch (UnactiveOrderException ex) {
+            return conflict(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (IllegalStateException ex) {
+            return conflict(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Remove a quantity of standing tickets from an existing active order")
+    @PostMapping(path = "/{orderId}/standing/remove", consumes = "application/json")
+    public ResponseEntity<ApiResponse<Void>> removeStandingQuantityFromExistingOrder(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID orderId,
+            @RequestBody QuantityRequest request
+    ) {
+        try {
+            purchasingService.removeStandingQuantityFromExistingOrder(token, orderId, request.quantity());
+            return ResponseEntity.ok(new ApiResponse<>(null, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (TimeExpiredException ex) {
+            return gone(ex);
+        } catch (OrderSeatsUnavailableException ex) {
+            return conflict(ex);
+        } catch (UnactiveOrderException ex) {
+            return conflict(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (IllegalStateException ex) {
+            return conflict(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Get all active orders for the logged in user")
+    @GetMapping("/my")
+    public ResponseEntity<ApiResponse<List<ActiveOrderDTO>>> getMyActiveOrders(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+    ) {
+        try {
+            List<ActiveOrderDTO> orders = purchasingService.getMyActiveOrders(token);
+            return ResponseEntity.ok(new ApiResponse<>(orders, null));
         } catch (InvalidTokenException ex) {
             return unauthorized(ex);
         } catch (IllegalArgumentException ex) {
@@ -119,6 +194,8 @@ public class PurchasingController {
             return gone(ex);
         } catch (OrderSeatsUnavailableException ex) {
             return conflict(ex);
+        } catch (UnactiveOrderException ex) {
+            return conflict(ex);
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         } catch (IllegalStateException ex) {
@@ -147,6 +224,8 @@ public class PurchasingController {
             return unauthorized(ex);
         } catch (TimeExpiredException ex) {
             return gone(ex);
+        } catch (OrderSeatsUnavailableException ex) {
+            return conflict(ex);
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         } catch (IllegalStateException ex) {
@@ -171,6 +250,10 @@ public class PurchasingController {
             return unauthorized(ex);
         } catch (TimeExpiredException ex) {
             return gone(ex);
+        } catch (OrderSeatsUnavailableException ex) {
+            return conflict(ex);
+        } catch (UnactiveOrderException ex) {
+            return conflict(ex);
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         } catch (IllegalStateException ex) {
@@ -320,6 +403,11 @@ public class PurchasingController {
     ) {
     }
 
+    public record QuantityRequest(
+            int quantity
+    ) {
+    }
+
     public record GuestCheckoutRequest(
             LocalDate birthDate
     ) {
@@ -367,8 +455,11 @@ public class PurchasingController {
     }
 
     private <T> ResponseEntity<ApiResponse<T>> internalServerError(Exception ex) {
+        String msg = ex == null || ex.getMessage() == null || ex.getMessage().isBlank()
+                ? "The request failed due to a server error. Please try again later."
+                : ex.getMessage();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(new ApiResponse<>(null, "Internal server error"));
+                .body(new ApiResponse<>(null, msg));
     }
 
     private <T> ResponseEntity<ApiResponse<T>> unauthorized(Exception ex) {

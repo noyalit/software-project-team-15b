@@ -337,7 +337,7 @@ class LotteryDomainServiceImplBlackTest {
 
         LotteryEligibilityDTO result = domainService.getLotteryEligibilityForEvent(USER_A, EVENT_ID);
 
-        assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.NOT_SELECTED);
+        assertThat(result.status()).isEqualTo(LotteryEligibilityStatus.LOTTERY_OPEN_NOT_ENTERED);
         assertThat(result.canCreateActiveOrder()).isFalse();
     }
 

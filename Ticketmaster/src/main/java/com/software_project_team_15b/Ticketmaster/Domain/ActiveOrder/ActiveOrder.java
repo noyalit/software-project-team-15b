@@ -199,7 +199,7 @@ public class ActiveOrder {
                 .collect(java.util.stream.Collectors.toSet());
 
         if (!duplicates.isEmpty()) {
-            throw new AlreadyDoneException("Seats already in order: " + duplicates);
+            throw new AlreadyDoneException("Some selected seats are already taken by another order.");
         }
 
         orderSeats.addAll(seatIds);
@@ -214,7 +214,7 @@ public class ActiveOrder {
                 .collect(java.util.stream.Collectors.toSet());
 
         if (!missingSeats.isEmpty()) {
-            throw new AlreadyDoneException("Seats not found in order: " + missingSeats);
+            throw new AlreadyDoneException("Some selected seats are not in your order.");
         }
 
         orderSeats.removeAll(seatIds);

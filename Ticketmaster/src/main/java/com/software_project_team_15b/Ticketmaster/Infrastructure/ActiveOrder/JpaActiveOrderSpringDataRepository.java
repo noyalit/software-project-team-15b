@@ -72,4 +72,8 @@ public interface JpaActiveOrderSpringDataRepository
         UUID eventId,
         ActiveOrderStatus status
         );
+
+        boolean existsByEventIdAndStatus(UUID eventId, ActiveOrderStatus status);
+
+        long countByEventIdAndStatus(UUID eventId, ActiveOrderStatus status);
 }

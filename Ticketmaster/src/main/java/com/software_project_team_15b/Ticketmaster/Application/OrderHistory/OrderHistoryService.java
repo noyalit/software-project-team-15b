@@ -1,42 +1,42 @@
 package com.software_project_team_15b.Ticketmaster.Application.OrderHistory;
 
-import java.util.UUID;
-import java.util.stream.Collectors;
-import java.util.Set;
-import java.util.List;
-import java.util.Collections;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.function.Function;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
+import java.util.stream.Collectors;
 
-import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
-import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.Manager;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.OrderHistoryDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.TicketDTO;
-import org.springframework.transaction.annotation.Transactional;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Manager;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
 
 @Service
 public class OrderHistoryService implements EventSubscriber{
@@ -47,6 +47,7 @@ public class OrderHistoryService implements EventSubscriber{
     private final IPaymentAPI paymentGateway;
     private final ITicketSupplyAPI ticketProvider;
     private final IEventRepository eventsRepository;
+    private final ICompanyRepository companyRepository;
     private final IAuth auth;
     private final UserDomainService userDomainService;
     private final IMemberRepository memberRepository;
@@ -68,11 +69,21 @@ public class OrderHistoryService implements EventSubscriber{
         this.eventsRepository = eventsRepository;
         this.auth = auth;
         this.userDomainService = userDomainService;
+        this.companyRepository = companyRepository;
         this.memberRepository = memberRepository;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         eventCancelManager.subscribe(this);
     }
 
+    private boolean isFounderOrOwner(UUID callerId, UUID companyId) {
+        if (callerId == null || companyId == null) return false;
+        try {
+            return companyRepository.findByFounder(callerId).stream().anyMatch(c -> companyId.equals(c.getId()))
+                    || companyRepository.findByOwner(callerId).stream().anyMatch(c -> companyId.equals(c.getId()));
+        } catch (RuntimeException ignored) {
+            return false;
+        }
+    }
 
     @Override
     public void notifyEventIsCancelled(UUID event) {
@@ -142,6 +153,123 @@ public class OrderHistoryService implements EventSubscriber{
             return Collections.unmodifiableList(dtos);
         } catch (RuntimeException e) {
             AUDIT.warn("op=getOrderHistoryByUserId callerId={} result=error reason={}", userId, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderHistoryDTO> getGlobalOrderHistoryAll(String token) {
+        UUID callerId = null;
+        try {
+            if (token == null) {
+                throw new IllegalArgumentException("token cannot be null");
+            }
+
+            validateUser(token);
+            callerId = auth.extractUserId(token);
+            if (!auth.isSystemAdmin(token)) {
+                throw new UnauthorizedCompanyActionException("Only system admin can view global order history");
+            }
+
+            List<OrderHistoryDTO> result = orderHistoryRepository.findAll().stream()
+                    .map(this::toOrderHistoryDTO)
+                    .collect(Collectors.toList());
+            AUDIT.info("op=getGlobalOrderHistoryAll callerId={} orders={}", callerId, result.size());
+            return Collections.unmodifiableList(result);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=getGlobalOrderHistoryAll callerId={} result=error reason={}", callerId, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderHistoryDTO> getGlobalOrderHistoryByUser(String token, UUID userId) {
+        UUID callerId = null;
+        try {
+            if (token == null) {
+                throw new IllegalArgumentException("token cannot be null");
+            }
+            if (userId == null) {
+                throw new IllegalArgumentException("userId cannot be null");
+            }
+
+            validateUser(token);
+            callerId = auth.extractUserId(token);
+            if (!auth.isSystemAdmin(token)) {
+                throw new UnauthorizedCompanyActionException("Only system admin can view global order history");
+            }
+
+            List<OrderHistoryDTO> result = orderHistoryRepository.findByUserId(userId).stream()
+                    .map(this::toOrderHistoryDTO)
+                    .collect(Collectors.toList());
+            AUDIT.info("op=getGlobalOrderHistoryByUser callerId={} userId={} orders={}", callerId, userId, result.size());
+            return Collections.unmodifiableList(result);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=getGlobalOrderHistoryByUser callerId={} userId={} result=error reason={}", callerId, userId, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderHistoryDTO> getGlobalOrderHistoryByEvent(String token, UUID eventId) {
+        UUID callerId = null;
+        try {
+            if (token == null) {
+                throw new IllegalArgumentException("token cannot be null");
+            }
+            if (eventId == null) {
+                throw new IllegalArgumentException("eventId cannot be null");
+            }
+
+            validateUser(token);
+            callerId = auth.extractUserId(token);
+            if (!auth.isSystemAdmin(token)) {
+                throw new UnauthorizedCompanyActionException("Only system admin can view global order history");
+            }
+
+            List<OrderHistoryDTO> result = orderHistoryRepository.findByEventId(eventId).stream()
+                    .map(this::toOrderHistoryDTO)
+                    .collect(Collectors.toList());
+            AUDIT.info("op=getGlobalOrderHistoryByEvent callerId={} eventId={} orders={}", callerId, eventId, result.size());
+            return Collections.unmodifiableList(result);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=getGlobalOrderHistoryByEvent callerId={} eventId={} result=error reason={}", callerId, eventId, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderHistoryDTO> getGlobalOrderHistoryByCompany(String token, UUID companyId) {
+        UUID callerId = null;
+        try {
+            if (token == null) {
+                throw new IllegalArgumentException("token cannot be null");
+            }
+            if (companyId == null) {
+                throw new IllegalArgumentException("companyId cannot be null");
+            }
+
+            validateUser(token);
+            callerId = auth.extractUserId(token);
+            if (!auth.isSystemAdmin(token)) {
+                throw new UnauthorizedCompanyActionException("Only system admin can view global order history");
+            }
+
+            SearchCriteria criteria = SearchCriteria.empty();
+            List<Event> events = eventsRepository.searchByCompany(companyId, criteria);
+            if (events.isEmpty()) {
+                AUDIT.info("op=getGlobalOrderHistoryByCompany callerId={} companyId={} result=no_events", callerId, companyId);
+                return List.of();
+            }
+
+            List<UUID> eventIds = events.stream().map(Event::eventId).toList();
+            List<OrderHistoryDTO> result = orderHistoryRepository.findByEventIdIn(eventIds).stream()
+                    .map(this::toOrderHistoryDTO)
+                    .collect(Collectors.toList());
+            AUDIT.info("op=getGlobalOrderHistoryByCompany callerId={} companyId={} orders={}", callerId, companyId, result.size());
+            return Collections.unmodifiableList(result);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=getGlobalOrderHistoryByCompany callerId={} companyId={} result=error reason={}", callerId, companyId, e.getMessage(), e);
             throw e;
         }
     }
@@ -219,10 +347,17 @@ public class OrderHistoryService implements EventSubscriber{
                 return emptyReport;
             }
 
-            Set<UUID> managedEventIds = getEventIdsManagedBy(visibleManagers, companyId);
-            List<Event> filteredEvents = events.stream()
-                .filter(event -> managedEventIds.contains(event.eventId()))
-                    .toList();
+            boolean isOwnerOrFounder = isFounderOrOwner(callerId, companyId);
+
+            List<Event> filteredEvents;
+            if (isOwnerOrFounder) {
+                filteredEvents = events;
+            } else {
+                Set<UUID> managedEventIds = getEventIdsManagedBy(visibleManagers, companyId);
+                filteredEvents = events.stream()
+                        .filter(event -> managedEventIds.contains(event.eventId()))
+                        .toList();
+            }
 
             if (filteredEvents.isEmpty()) {
                 Map<String, Object> emptyReport = Map.of("ticketsSold", 0, "totalRevenue", Money.zero("USD"), "orders", List.of());
@@ -243,6 +378,69 @@ public class OrderHistoryService implements EventSubscriber{
             return Collections.unmodifiableMap(report);
         } catch (RuntimeException e) {
             AUDIT.warn("op=generateSalesReport companyId={} result=error reason={}", companyId, e.getMessage(), e);
+            throw e;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<OrderHistoryDTO> getOrderHistoryForCompany(String token, UUID companyId) {
+        UUID callerId = null;
+        try {
+            if (token == null) {
+                throw new IllegalArgumentException("token cannot be null");
+            }
+            if (companyId == null) {
+                throw new IllegalArgumentException("companyId cannot be null");
+            }
+
+            validateUser(token);
+            callerId = auth.extractUserId(token);
+
+            if (!hasPermission(callerId, companyId, ManagerPermission.VIEW_PURCHASE_AND_ORDER_HISTORY)) {
+                throw new UnauthorizedCompanyActionException(
+                        "Caller does not have permission to view order history for this company"
+                );
+            }
+
+            List<Event> events = eventsRepository.searchByCompany(companyId, SearchCriteria.empty());
+            if (events.isEmpty()) {
+                AUDIT.info("op=getOrderHistoryForCompany callerId={} companyId={} result=no_events", callerId, companyId);
+                return List.of();
+            }
+
+            boolean isOwnerOrFounder = isFounderOrOwner(callerId, companyId);
+
+            List<UUID> visibleEventIds;
+            if (isOwnerOrFounder) {
+                visibleEventIds = events.stream().map(Event::eventId).toList();
+            } else {
+                List<UUID> appointedMembers = userDomainService.getAppointedMembersTree(callerId, companyId);
+                List<UUID> visibleManagers = appointedMembers.contains(callerId)
+                        ? appointedMembers
+                        : new ArrayList<>(appointedMembers);
+                if (!visibleManagers.contains(callerId)) {
+                    visibleManagers.add(callerId);
+                }
+                Set<UUID> managedEventIds = getEventIdsManagedBy(visibleManagers, companyId);
+                visibleEventIds = events.stream()
+                        .map(Event::eventId)
+                        .filter(managedEventIds::contains)
+                        .toList();
+            }
+
+            if (visibleEventIds.isEmpty()) {
+                AUDIT.info("op=getOrderHistoryForCompany callerId={} companyId={} result=no_visible_events", callerId, companyId);
+                return List.of();
+            }
+
+            List<OrderHistoryDTO> result = orderHistoryRepository.findByEventIdIn(visibleEventIds).stream()
+                    .map(this::toOrderHistoryDTO)
+                    .collect(Collectors.toList());
+
+            AUDIT.info("op=getOrderHistoryForCompany callerId={} companyId={} orders={}", callerId, companyId, result.size());
+            return Collections.unmodifiableList(result);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=getOrderHistoryForCompany callerId={} companyId={} result=error reason={}", callerId, companyId, e.getMessage(), e);
             throw e;
         }
     }
@@ -375,7 +573,7 @@ public class OrderHistoryService implements EventSubscriber{
             .filter(manager -> manager.isAppointmentApproved())
             .anyMatch(manager -> manager.hasPermission(requiredPermission));
 
-        return (isPermittedManager || userDomainService.isActiveOwner(callerId, companyId) || userDomainService.isActiveFounder(callerId, companyId));
+        return (isPermittedManager || isFounderOrOwner(callerId, companyId));
         }
 
     

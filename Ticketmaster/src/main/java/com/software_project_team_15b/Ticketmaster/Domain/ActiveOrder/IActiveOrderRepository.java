@@ -42,5 +42,9 @@ public interface IActiveOrderRepository {
 
     List<ActiveOrder> findByStatusNotForUpdate(ActiveOrderStatus status);
 
+    boolean existsByEventIdAndStatus(UUID eventId, ActiveOrderStatus status);
+
     Optional<ActiveOrder> findByIdForUpdate(UUID orderId);
+    
+    long countByEventIdAndStatus(UUID eventId, ActiveOrderStatus status);
 }

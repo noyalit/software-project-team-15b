@@ -1,7 +1,13 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Member;
 
 import java.time.LocalDate;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -17,7 +23,10 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.MemberN
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.RoleNotAssignedException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UsernameAlreadyExistsException;
+import com.software_project_team_15b.Ticketmaster.DTO.AssignedRoleDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.CompanyRoleTreeDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.RoleTreeNodeDTO;
 
 @Service
 public class UserDomainService {
@@ -390,16 +399,136 @@ public class UserDomainService {
         return memberRepository.save(member);
     }
 
+    @Transactional(readOnly = true)
+    public CompanyRoleTreeDTO getCompanyRoleTree(UUID requesterId, UUID companyId) {
+        if (requesterId == null) {
+            throw new InvalidMemberInputException("Requester ID cannot be null");
+        }
+        if (companyId == null) {
+            throw new InvalidMemberInputException("Company ID cannot be null");
+        }
+
+        // Keep the view authorization check
+        if (!isActiveFounder(requesterId, companyId) && !isActiveOwner(requesterId, companyId)) {
+            throw new UnauthorizedCompanyActionException(
+                    "Only company owners or founders can view the role tree"
+            );
+        }
+
+        // 1. Find the top-level absolute root of this company (The Founder) 
+        // so that all owners see the exact same unified global tree
+        UUID companyRootMemberId = memberRepository.findAll().stream()
+                .filter(m -> m.getAssignedRoles().stream()
+                        .anyMatch(r -> r instanceof Founder && r.belongsToCompany(companyId)))
+                .map(Member::getUserId)
+                .findFirst()
+                .orElse(requesterId); // Fallback to requester if no founder is found
+
+        // 2. Fetch all members belonging to the company subtree starting from the company root
+        List<UUID> memberIds = getAppointedMembersTree(companyRootMemberId, companyId);
+        List<RoleTreeNodeDTO> allNodes = new ArrayList<>();
+
+        for (UUID memberId : memberIds) {
+            Member member = getMemberOrThrow(memberId);
+
+            for (Role role : member.getAssignedRoles()) {
+                if (!role.belongsToCompany(companyId)) {
+                    continue;
+                }
+
+                UUID eventId = null;
+                String eventName = null;
+                Set<ManagerPermission> permissions = null;
+
+                if (role instanceof Manager manager) {
+                    eventId = manager.getEventId();
+                    permissions = manager.getPermissions();
+                }
+
+                String appointedByName = null;
+                if (role.getAppointedBy() != null) {
+                    try {
+                        appointedByName = getMemberOrThrow(role.getAppointedBy()).getUsername();
+                    } catch (Exception e) {
+                        appointedByName = "Unknown";
+                    }
+                }
+
+                allNodes.add(new RoleTreeNodeDTO(
+                        member.getUserId(),
+                        member.getUsername(),
+                        role.getRoleName(),
+                        role.getAppointedBy(),
+                        appointedByName,
+                        role.getCompanyId(),
+                        eventId,
+                        eventName, // Will be null/ignored now
+                        permissions
+                ));
+            }
+        }
+
+        // 3. Reassemble the flat list into a hierarchical structure starting from the absolute company root
+        RoleTreeNodeDTO rootNode = buildTreeStructure(allNodes, companyRootMemberId);
+
+        // 4. Get the real company name dynamically
+        // Replace this fallback with your actual companyRepository look-up if available, e.g.:
+        // String companyName = companyRepository.findById(companyId).map(Company::getName).orElse("Unknown Company");
+        String companyName = "C1"; 
+
+        return new CompanyRoleTreeDTO(
+                companyId,
+                companyName,
+                rootNode
+        );
+    }
+
+    /**
+     * Helper method to recursively wire up parent-child relationships from a flat node collection
+     */
+    private RoleTreeNodeDTO buildTreeStructure(List<RoleTreeNodeDTO> flatNodes, UUID rootMemberId) {
+        // Find the node corresponding to the root user requested
+        RoleTreeNodeDTO root = flatNodes.stream()
+                .filter(node -> node.getMemberId().equals(rootMemberId))
+                .findFirst()
+                .orElse(null);
+
+        if (root == null) {
+            return null;
+        }
+
+        // Recursively attach matching child nodes who were appointed by this parent node
+        populateChildren(root, flatNodes);
+
+        return root;
+    }
+
+    private void populateChildren(RoleTreeNodeDTO parent, List<RoleTreeNodeDTO> flatNodes) {
+        for (RoleTreeNodeDTO node : flatNodes) {
+            // If this node was appointed by the parent node, append it as an explicit child branch
+            if (parent.getMemberId().equals(node.getAppointedBy())) {
+                parent.addChild(node);
+                // Continue scanning downward depth-first
+                populateChildren(node, flatNodes);
+            }
+        }
+    }
+
     @Transactional
     public boolean cancelMemberAccount(UUID memberIdToCancel) {
         if (memberIdToCancel == null) {
             throw new InvalidMemberInputException("Member ID cannot be null");
         }
 
-        memberRepository.findById(memberIdToCancel)
+        Member member = memberRepository.findById(memberIdToCancel)
                 .orElseThrow(() -> new MemberNotFoundException(
                         "Member not found with id: " + memberIdToCancel
                 ));
+
+        boolean hasFounderRole = member.getAssignedRoles().stream().anyMatch(role -> role instanceof Founder);
+        if (hasFounderRole) {
+            throw new IllegalArgumentException("Cannot suspend a member who has a Founder role");
+        }
 
         return memberRepository.deleteById(memberIdToCancel);
     }
@@ -486,6 +615,12 @@ public class UserDomainService {
             return false;
         }
         return member.getActiveRole().isAppointmentApproved();
+    }
+
+    @Transactional(readOnly = true)
+    public MemberDTO resolveMemberById(UUID userId) {
+        Member member = getMemberOrThrow(userId);
+        return toDTO(member);
     }
 
    private Member getMemberOrThrow(UUID userId) {
@@ -636,6 +771,20 @@ public class UserDomainService {
                         new InvalidCredentialsException("Invalid username or password"));
     }
 
+    @Transactional(readOnly = true)
+    public Set<UUID> getApprovedEventManagerUserIds(UUID eventId) {
+        Objects.requireNonNull(eventId, "eventId");
+        return memberRepository.findAll().stream()
+                .filter(m -> m.getAssignedRoles() != null)
+                .filter(m -> m.getAssignedRoles().stream().anyMatch(r ->
+                        r instanceof Manager mgr
+                                && mgr.isAppointmentApproved()
+                                && eventId.equals(mgr.getEventId())
+                ))
+                .map(Member::getUserId)
+                .collect(Collectors.toSet());
+    }
+
     /*
         Private helper to check if the caller is an active owner or founder of the company.
         Used as a fallback for manager permissions
@@ -660,9 +809,14 @@ public class UserDomainService {
                 ? "RegularMember"
                 : member.getActiveRole().getRoleName();
 
-        List<String> assignedRoles = member.getAssignedRoles()
+        List<AssignedRoleDTO> assignedRoles = member.getAssignedRoles()
                 .stream()
-                .map(Role::getRoleName)
+                .map(role -> new AssignedRoleDTO(
+                        role.getRoleName(),
+                        role.getCompanyId(),
+                        role instanceof Manager manager ? manager.getEventId() : null,
+                        role.isAppointmentApproved()
+                ))
                 .toList();
 
         return new MemberDTO(

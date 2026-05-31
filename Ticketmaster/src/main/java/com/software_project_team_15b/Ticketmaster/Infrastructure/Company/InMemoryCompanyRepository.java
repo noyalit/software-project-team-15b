@@ -1,12 +1,5 @@
 package com.software_project_team_15b.Ticketmaster.Infrastructure.Company;
 
-import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
-import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.Founder;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
-
 import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +11,13 @@ import java.util.stream.Collectors;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
+
+import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Founder;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Owner;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.Role;
 
 @Repository
 @ConditionalOnProperty(name = "app.storage.mode", havingValue = "memory", matchIfMissing = true)
@@ -92,8 +92,7 @@ public class InMemoryCompanyRepository implements ICompanyRepository {
         }
         return memberRepository.findById(ownerId)
                 .map(member -> member.getAssignedRoles().stream()
-                        .filter(role -> (role instanceof Owner || role instanceof Founder)
-                                && role.isAppointmentApproved())
+                        .filter(role -> (role instanceof Owner || role instanceof Founder))
                         .map(Role::getCompanyId)
                         .filter(Objects::nonNull)
                         .distinct()
@@ -102,6 +101,11 @@ public class InMemoryCompanyRepository implements ICompanyRepository {
                         .map(Optional::get)
                         .collect(Collectors.toList()))
                 .orElse(List.of());
+    }
+
+    @Override
+    public List<Company> findAll() {
+        return store.values().stream().collect(Collectors.toList());
     }
 
     /**

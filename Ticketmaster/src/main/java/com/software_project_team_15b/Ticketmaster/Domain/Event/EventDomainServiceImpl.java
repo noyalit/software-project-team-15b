@@ -287,6 +287,48 @@ public class EventDomainServiceImpl implements IEventDomainService {
 
     @Override
     @Transactional(readOnly = true)
+    public void requireStandingArea(UUID eventId, UUID areaId) {
+        Objects.requireNonNull(areaId, "areaId");
+        Event event = requireEvent(eventId);
+        EventArea area = requireArea(event, areaId);
+        if (!(area instanceof StandingEventArea)) {
+            throw new InvalidEventStateException("area is not a standing area: " + areaId);
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Set<UUID> selectAvailableStandingSeats(UUID eventId, UUID areaId, Set<UUID> excludedSeatIds, int quantity) {
+        requireStandingArea(eventId, areaId);
+        Objects.requireNonNull(excludedSeatIds, "excludedSeatIds");
+        if (quantity < 1) {
+            throw new IllegalArgumentException("Quantity must be >= 1");
+        }
+
+        Set<UUID> candidates = areaSeats(eventId, areaId).stream()
+                .map(EventDTO.SeatView::seatId)
+                .collect(java.util.stream.Collectors.toSet());
+
+        Map<Boolean, Set<UUID>> availability = getSeatsAvailability(eventId, areaId, candidates);
+        Set<UUID> available = new HashSet<>(availability.getOrDefault(Boolean.TRUE, Set.of()));
+        available.removeAll(excludedSeatIds);
+
+        if (available.size() < quantity) {
+            throw new InvalidEventStateException("not enough standing tickets available");
+        }
+
+        Set<UUID> selected = new HashSet<>();
+        for (UUID seatId : available) {
+            selected.add(seatId);
+            if (selected.size() == quantity) {
+                break;
+            }
+        }
+        return selected;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public EventAvailability getEventAvailability(UUID eventId) {
         return requireEvent(eventId).bookingStatus();
     }

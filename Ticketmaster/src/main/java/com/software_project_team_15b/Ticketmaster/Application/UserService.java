@@ -14,8 +14,8 @@ import org.springframework.stereotype.Service;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.Application.events.TempTokenAcceptedFromQueueEvent;
+import com.software_project_team_15b.Ticketmaster.DTO.CompanyRoleTreeDTO;
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
-
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 
@@ -72,6 +72,9 @@ public class UserService {
      */
     public MemberDTO registerMember(String token, String username, String password, LocalDate birthDate) {
         try {
+            if (token == null || token.isBlank()) {
+                token = enterAsGuest();
+            }
             validateEntranceToken(token);
             userDomainService.validateRawPassword(password);
 
@@ -100,6 +103,9 @@ public class UserService {
      */
     public String login(String token, String username, String password) {
         try {
+            if (token == null || token.isBlank()) {
+                token = enterAsGuest();
+            }
             validateEntranceToken(token);
             auth.exitSystem(token);
             Member member = userDomainService.getMemberByUsername(username);
@@ -199,6 +205,9 @@ public class UserService {
      */
     public String loginSystemAdmin(String token, String username, String password) {
         // System admins authenticate with a pre-existing SystemAdmin record.
+        if (token == null || token.isBlank()) {
+            token = enterAsGuest();
+        }
         validateEntranceToken(token);
         auth.exitSystem(token);
         SystemAdmin admin = systemAdminRepository.findByUsername(username)
@@ -563,6 +572,47 @@ public class UserService {
         }
     }
 
+    public boolean isAppointmentApproved(String token) {
+        try {
+            UUID userId = getAuthenticatedMemberId(token);
+            boolean approved = userDomainService.isAppointmentApproved(userId);
+            AUDIT.info("op=is-appointment-approved userId={} approved={}", userId, approved);
+            return approved;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=is-appointment-approved userId={} result=rejected reason={}",
+                    auth.extractUserId(token), e.getMessage());
+            throw e;
+        }
+    }
+
+    public CompanyRoleTreeDTO getCompanyRoleTree(String token, UUID companyId) {
+        try {
+            UUID requesterId = getAuthenticatedMemberId(token);
+
+            CompanyRoleTreeDTO tree = userDomainService.getCompanyRoleTree(
+                    requesterId,
+                    companyId
+            );
+
+            AUDIT.info(
+                    "op=get-company-role-tree requesterId={} companyId={}",
+                    requesterId,
+                    companyId
+            );
+
+            return tree;
+
+        } catch (RuntimeException e) {
+            AUDIT.warn(
+                    "op=get-company-role-tree companyId={} result=rejected reason={}",
+                    companyId,
+                    e.getMessage()
+            );
+
+            throw e;
+        }
+    }
+
      public boolean cancelMemberAccountBySystemAdmin(String token, UUID memberIdToCancel) {
         try{
             if (!auth.isTokenValid(token) || !auth.isSystemAdmin(token)) {
@@ -638,7 +688,7 @@ public class UserService {
             throw new InvalidTokenException("Invalid or expired token");
         }
 
-        if (!(auth.isGuest(token))) {
+        if (!(auth.isGuest(token) || auth.isTemp(token))) {
             throw new InvalidTokenException("Only guest or temporary token can perform this action");
         }
     }

@@ -405,7 +405,12 @@ class UserServiceTest {
 
         MemberDTO saved = service.appointFounder(memberId, token, companyId);
 
-        assertThat(saved.getAssignedRoles()).contains("Founder");
+        assertThat(saved.getAssignedRoles())
+            .anySatisfy(role -> {
+                assertThat(role.roleName()).isEqualTo("Founder");
+                assertThat(role.companyId()).isEqualTo(companyId);
+                assertThat(role.approved()).isTrue();
+            });
 
         verify(memberRepository).save(member);
     }
@@ -638,7 +643,13 @@ class UserServiceTest {
                 Set.of(ManagerPermission.MANAGE_EVENTS)
         );
 
-        assertThat(saved.getAssignedRoles()).contains("Manager");
+        assertThat(saved.getAssignedRoles())
+            .anySatisfy(role -> {
+                assertThat(role.roleName()).isEqualTo("Manager");
+                assertThat(role.companyId()).isEqualTo(companyId);
+                assertThat(role.eventId()).isEqualTo(eventId);
+                assertThat(role.approved()).isFalse();
+            });
 
         verify(memberRepository).save(target);
     }
@@ -736,7 +747,12 @@ class UserServiceTest {
 
         MemberDTO saved = service.appointOwner(targetId, token, companyId);
 
-        assertThat(saved.getAssignedRoles()).contains("Owner");
+        assertThat(saved.getAssignedRoles())
+            .anySatisfy(role -> {
+                assertThat(role.roleName()).isEqualTo("Owner");
+                assertThat(role.companyId()).isEqualTo(companyId);
+                assertThat(role.approved()).isFalse();
+            });
 
         verify(memberRepository).save(target);
     }
@@ -867,7 +883,7 @@ class UserServiceTest {
 
         MemberDTO saved = service.removeOwnerAppointment(token, owner2Id, companyId);
 
-        assertThat(saved.getAssignedRoles()).doesNotContain("Owner");
+        assertThat(saved.getAssignedRoles()).noneSatisfy(role -> assertThat(role.roleName()).isEqualTo("Owner"));
 
         verify(memberRepository).save(owner2);
     }
@@ -926,7 +942,8 @@ class UserServiceTest {
 
         MemberDTO saved = service.ownerResign(token, companyId);
 
-        assertThat(saved.getAssignedRoles()).doesNotContain("Owner");
+        assertThat(saved.getAssignedRoles())
+            .noneSatisfy(role -> assertThat(role.roleName()).isEqualTo("Owner"));
 
         verify(memberRepository).save(owner);
     }
@@ -994,7 +1011,13 @@ class UserServiceTest {
                 Set.of(ManagerPermission.MANAGE_EVENTS, ManagerPermission.UPDATE_EVENT_MAP)
         );
 
-        assertThat(saved.getAssignedRoles()).contains("Manager");
+        assertThat(saved.getAssignedRoles())
+            .anySatisfy(role -> {
+                assertThat(role.roleName()).isEqualTo("Manager");
+                assertThat(role.companyId()).isEqualTo(companyId);
+                assertThat(role.eventId()).isEqualTo(eventId);
+                assertThat(role.approved()).isTrue();
+            });
 
         verify(memberRepository).save(manager);
     }
@@ -1065,7 +1088,8 @@ class UserServiceTest {
 
         MemberDTO saved = service.removeManagerAppointment(token, managerId, companyId, eventId);
 
-        assertThat(saved.getAssignedRoles()).doesNotContain("Manager");
+        assertThat(saved.getAssignedRoles())
+            .noneSatisfy(role -> assertThat(role.roleName()).isEqualTo("Manager"));
 
         verify(memberRepository).save(manager);
     }

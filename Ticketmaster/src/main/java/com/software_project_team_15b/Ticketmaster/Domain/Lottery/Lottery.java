@@ -226,6 +226,13 @@ public class Lottery {
         return drawn;
     }
 
+    public boolean hasEntry(UUID userId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId cannot be null");
+        }
+        return lotterySet.contains(userId);
+    }
+
     private void requireNotDrawn() {
         if (drawn) {
             throw new IllegalStateException("lottery has already been drawn");

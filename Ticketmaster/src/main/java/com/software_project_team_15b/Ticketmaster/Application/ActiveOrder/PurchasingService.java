@@ -8,6 +8,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.HashSet;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,22 +18,25 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.RemoveOrAddSeatsFromActiveOrderCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationType;
 import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutCompletedDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutStartedDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedPaymentException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedToIssueTicketsException;
@@ -48,7 +52,10 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.Policy
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
+
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class PurchasingService {
@@ -57,6 +64,7 @@ public class PurchasingService {
 
     private final PurchasingDomainService purchasingDomainService;
     private final IMemberRepository memberRepository;
+    private final UserDomainService userDomainService;
     private final IEventDomainService eventDomainService;
     private final IQueueDomainService queueDomainService;
     private final ILotteryDomainService lotteryDomainService;
@@ -65,9 +73,11 @@ public class PurchasingService {
     private final IAuth auth;
     private final INotifier notifier;
 
+    @Autowired
     public PurchasingService(
             PurchasingDomainService purchasingDomainService,
             IMemberRepository memberRepository,
+            UserDomainService userDomainService,
             IEventDomainService eventDomainService,
             IQueueDomainService queueDomainService,
             ILotteryDomainService lotteryDomainService,
@@ -78,6 +88,7 @@ public class PurchasingService {
     ) {
         this.purchasingDomainService = Objects.requireNonNull(purchasingDomainService);
         this.memberRepository = Objects.requireNonNull(memberRepository);
+        this.userDomainService = Objects.requireNonNull(userDomainService);
         this.eventDomainService = Objects.requireNonNull(eventDomainService);
         this.queueDomainService = Objects.requireNonNull(queueDomainService);
         this.lotteryDomainService = Objects.requireNonNull(lotteryDomainService);
@@ -85,6 +96,109 @@ public class PurchasingService {
         this.ticketProvider = Objects.requireNonNull(ticketProvider);
         this.auth = Objects.requireNonNull(auth);
         this.notifier = Objects.requireNonNull(notifier);
+    }
+
+    @Transactional(noRollbackFor = TimeExpiredException.class)
+    public void addStandingQuantityToExistingOrder(String token, UUID orderId, int quantity) {
+        UUID userId = null;
+        try {
+            requireOrderId(orderId);
+            if (quantity < 1) {
+                throw new IllegalArgumentException("Quantity must be >= 1");
+            }
+            userId = requireValidUser(token);
+
+            ActiveOrder activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
+            ensureOrderIsModifiable(activeOrder);
+            requireAccessForPurchase(token, userId, activeOrder.getEventId());
+
+            Set<UUID> toAdd = eventDomainService.selectAvailableStandingSeats(
+                    activeOrder.getEventId(),
+                    activeOrder.getAreaId(),
+                    activeOrder.getOrderSeats(),
+                    quantity
+            );
+            purchasingDomainService.addSeatsToOrder(activeOrder, toAdd);
+
+            AUDIT.info(
+                    "op=addStandingQuantityToExistingOrder order={} user={} event={} area={} qty={} result=ok",
+                    orderId,
+                    userId,
+                    activeOrder.getEventId(),
+                    activeOrder.getAreaId(),
+                    quantity
+            );
+        } catch (RuntimeException e) {
+            AUDIT.warn(
+                    "op=addStandingQuantityToExistingOrder order={} user={} result=rejected reason={} ",
+                    orderId,
+                    userId,
+                    e.getMessage()
+            );
+            throw e;
+        }
+    }
+
+    @Transactional(noRollbackFor = TimeExpiredException.class)
+    public void removeStandingQuantityFromExistingOrder(String token, UUID orderId, int quantity) {
+        UUID userId = null;
+        try {
+            requireOrderId(orderId);
+            if (quantity < 1) {
+                throw new IllegalArgumentException("Quantity must be >= 1");
+            }
+            userId = requireValidUser(token);
+
+            ActiveOrder activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
+            ensureOrderIsModifiable(activeOrder);
+            requireAccessForPurchase(token, userId, activeOrder.getEventId());
+            eventDomainService.requireStandingArea(activeOrder.getEventId(), activeOrder.getAreaId());
+
+            if (activeOrder.getOrderSeats().size() < quantity) {
+                throw new IllegalArgumentException("Cannot remove more tickets than exist in the order");
+            }
+
+            Set<UUID> toRemove = selectFirstSeats(activeOrder.getOrderSeats(), quantity);
+
+            purchasingDomainService.removeSeatsFromOrder(activeOrder, toRemove);
+
+            AUDIT.info(
+                    "op=removeStandingQuantityFromExistingOrder order={} user={} event={} area={} qty={} result=ok",
+                    orderId,
+                    userId,
+                    activeOrder.getEventId(),
+                    activeOrder.getAreaId(),
+                    quantity
+            );
+        } catch (RuntimeException e) {
+            AUDIT.warn(
+                    "op=removeStandingQuantityFromExistingOrder order={} user={} result=rejected reason={} ",
+                    orderId,
+                    userId,
+                    e.getMessage()
+            );
+            throw e;
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public List<ActiveOrderDTO> getMyActiveOrders(String token) {
+        UUID userId = null;
+        try {
+            userId = requireValidUser(token);
+            List<ActiveOrder> activeOrders = purchasingDomainService.findByUserIdAndStatus(
+                    userId,
+                    ActiveOrderStatus.ACTIVE
+            );
+            List<ActiveOrderDTO> views = activeOrders.stream()
+                    .map(this::buildActiveOrderView)
+                    .toList();
+            AUDIT.info("op=getMyActiveOrders user={} count={} result=ok", userId, views.size());
+            return List.copyOf(views);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=getMyActiveOrders user={} result=rejected reason={}", userId, e.getMessage());
+            throw e;
+        }
     }
 
     public QueueAccessDTO requestAccessToCreateActiveOrder(String token, UUID eventId) {
@@ -106,17 +220,15 @@ public class PurchasingService {
 
     @Transactional
     public UUID createActiveOrder(String token, UUID eventId, UUID areaId) {
+        UUID userId = null;
         try {
             requireCreateActiveOrderArguments(eventId, areaId);
-            UUID userId = requireValidUser(token);
-            purchasingDomainService.requireEventCanBeBooked(
-                    eventId,
-                    eventDomainService.getEventAvailability(eventId)
-            );
-            purchasingDomainService.requireAreaCanBeBooked(
-                    areaId,
-                    eventDomainService.getAreaAvailability(eventId, areaId)
-            );
+            userId = requireValidUser(token);
+
+            QueueAccessDTO access = requestQueueAccessOrThrow(token, eventId);
+            requireQueueCapacityAllowsCreation(eventId, access);
+            requireEventCanBeBooked(eventId);
+            requireAreaCanBeBooked(eventId, areaId);
             requireAccessForPurchase(token, userId, eventId);
 
             UUID orderId = purchasingDomainService.createActiveOrder(userId, eventId, areaId);
@@ -127,10 +239,15 @@ public class PurchasingService {
             return orderId;
 
         } catch (DataIntegrityViolationException e) {
-            AUDIT.warn("op=createActiveOrder event={} result=rejected reason=concurrent_order", eventId);
+            AUDIT.warn(
+                    "op=createActiveOrder event={} user={} result=rejected reason=concurrent_order",
+                    eventId,
+                    userId
+            );
+
             throw new IllegalStateException("User already has an active order for this event", e);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=createActiveOrder event={} result=rejected reason={}",
+            AUDIT.warn("op=createActiveOrder event={} result=rejected reason={} ",
                     eventId,
                     e.getMessage());
             throw e;
@@ -306,7 +423,8 @@ public class PurchasingService {
             AUDIT.warn(
                     "op=startCheckout order={} result=rejected reason={}",
                     orderId,
-                    e.getMessage()
+                    e.getMessage(),
+                    e
             );
 
             throw e;
@@ -432,12 +550,18 @@ public class PurchasingService {
                 //event sold out
                 int remaining = eventView.areas().stream().mapToInt(a -> a.availableCapacity()).sum();
                 if (remaining == 0) {
-                    notifier.notifyEventManagers(activeOrder.getEventId(), new NotificationDTO(
+                    NotificationDTO soldOut = new NotificationDTO(
                             NotificationType.EVENT_SOLD_OUT,
                             "Event Sold Out",
                             "Event " + eventView.name() + " is now sold out.",
-                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC))
-                        );
+                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+                    );
+
+                    notifier.notifyEventManagers(activeOrder.getEventId(), soldOut);
+
+                    for (UUID managerId : userDomainService.getApprovedEventManagerUserIds(activeOrder.getEventId())) {
+                        notifier.notifyUser(managerId, soldOut);
+                    }
                 }
             }
 
@@ -509,7 +633,11 @@ public class PurchasingService {
         if (!auth.isTokenValid(token)) {
             throw new InvalidTokenException("Token is invalid or expired");
         }
-        return auth.extractUserId(token);
+        UUID userId = auth.extractUserId(token);
+        if (userId == null) {
+            throw new InvalidTokenException("Token does not contain a valid user id");
+        }
+        return userId;
     }
 
     private void requireToken(String token) {
@@ -545,8 +673,43 @@ public class PurchasingService {
     }
 
     private ActiveOrderDTO buildActiveOrderView(ActiveOrder activeOrder) {
-        PriceBreakdown pricing = getPriceBreakdown(activeOrder, null, null);
-        return ActiveOrderDTO.from(activeOrder, eventDomainService.getEvent(activeOrder.getEventId()), pricing);
+        EventDTO event = eventDomainService.getEvent(activeOrder.getEventId());
+        PriceBreakdown pricing;
+        int qty = activeOrder.getOrderSeats() == null ? 0 : activeOrder.getOrderSeats().size();
+
+        if (qty == 0) {
+            EventDTO.AreaView area = event.areas().stream()
+                    .filter(a -> a.areaId().equals(activeOrder.getAreaId()))
+                    .findFirst()
+                    .orElse(null);
+
+            Money base = area != null && area.basePrice() != null
+                    ? new Money(area.basePrice().amount(), area.basePrice().currency())
+                    : Money.zero("ILS");
+            Money zero = Money.zero(base.currency());
+            pricing = new PriceBreakdown(base, zero, zero, zero);
+
+            return ActiveOrderDTO.from(activeOrder, event, pricing);
+        }
+
+        try {
+            pricing = getPriceBreakdown(activeOrder, null, null);
+        } catch (RuntimeException e) {
+            // Temporary fallback so ActiveOrder view (including seats) can be returned
+            // even if pricing calculation isn't implemented yet.
+            EventDTO.AreaView area = event.areas().stream()
+                    .filter(a -> a.areaId().equals(activeOrder.getAreaId()))
+                    .findFirst()
+                    .orElse(null);
+
+            Money base = area != null && area.basePrice() != null
+                    ? new Money(area.basePrice().amount(), area.basePrice().currency())
+                    : Money.zero("ILS");
+            Money subtotal = base.multiply(qty);
+            pricing = new PriceBreakdown(base, subtotal, Money.zero(base.currency()), subtotal);
+        }
+
+        return ActiveOrderDTO.from(activeOrder, event, pricing);
     }
 
     private void releaseHold(ActiveOrder activeOrder) {
@@ -610,7 +773,11 @@ public class PurchasingService {
         if (mem.isEmpty()) {
             throw new IllegalStateException("User not found: " + userId);
         }
-        return mem.get().getBirthDate();
+        LocalDate birthDate = mem.get().getBirthDate();
+        if (birthDate == null) {
+            throw new IllegalStateException("User birth date is missing");
+        }
+        return birthDate;
     }
 
     private PriceBreakdown getPriceBreakdown(ActiveOrder activeOrder, String couponCode, LocalDate birthDate) {
@@ -632,6 +799,23 @@ public class PurchasingService {
             throw new IllegalArgumentException("Active order cannot be null and must have seats");
         }
 
+        EventDTO event = eventDomainService.getEvent(activeOrder.getEventId());
+        EventDTO.AreaView area = null;
+        if (event != null && event.areas() != null) {
+            area = event.areas().stream()
+                    .filter(a -> a.areaId().equals(activeOrder.getAreaId()))
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        if (area != null && "STANDING".equalsIgnoreCase(String.valueOf(area.type()))) {
+            int qty = activeOrder.getOrderSeats().size();
+            return eventDomainService.hold(
+                    activeOrder.getEventId(),
+                    new HoldCommand(activeOrder.getAreaId(), List.of(), qty, activeOrder.getOrderId())
+            );
+        }
+
         return eventDomainService.holdSeats(
                 activeOrder.getEventId(),
                 activeOrder.getAreaId(),
@@ -645,6 +829,23 @@ public class PurchasingService {
             throw new IllegalArgumentException("Active order cannot be null");
         }
         if (activeOrder.getOrderSeats().isEmpty()) {
+            return false;
+        }
+
+        // If the order is already in checkout, we must not mutate it (remove seats),
+        // otherwise read-only operations like GET /api/active-orders/{id} can fail with
+        // "already in checkout".
+        if (activeOrder.getExpiresAt() != null && !activeOrder.hasTimeExpired()) {
+            Map<Boolean, Set<UUID>> seatsAvailability =
+                    eventDomainService.getSeatsAvailability(
+                            activeOrder.getEventId(),
+                            activeOrder.getAreaId(),
+                            activeOrder.getOrderSeats()
+                    );
+            Set<UUID> unavailableSeats = seatsAvailability.getOrDefault(false, Set.of());
+            if (!unavailableSeats.isEmpty()) {
+                throw new OrderSeatsUnavailableException("Some seats in the order are no longer available");
+            }
             return false;
         }
 
@@ -665,12 +866,37 @@ public class PurchasingService {
 
         LotteryEligibilityDTO eligibility = lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId);
         boolean queueAccess = queueDomainService.hasAccess(token, eventId);
-        purchasingDomainService.requirePurchaseAccess(
-                userId,
-                eventId,
-                eligibility,
-                queueAccess
-        );
+
+        // Keep domain validation/mocking expectations intact (tests verify this call),
+        // but enrich the error message when access is denied due to queue.
+        try {
+            purchasingDomainService.requirePurchaseAccess(
+                    userId,
+                    eventId,
+                    eligibility,
+                    queueAccess
+            );
+        } catch (TimeExpiredException e) {
+            if (!queueAccess) {
+                try {
+                    QueueAccessDTO view = queueDomainService.getQueueAccessView(token, eventId);
+                    if (view.status() == com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.WAITING) {
+                        Integer position = view.position();
+                        throw new TimeExpiredException(
+                                e.getMessage() + ". Queue is currently active for this event. You are in line" +
+                                        (position != null ? " (position: " + (position + 1) + ")" : "") +
+                                        ". Please wait until you are admitted."
+                        );
+                    }
+                } catch (RuntimeException ignored) {
+                    // fall through to default message below
+                }
+                throw new TimeExpiredException(
+                        e.getMessage() + ". Queue is currently active for this event. Please join the queue and wait until admitted."
+                );
+            }
+            throw e;
+        }
     }
 
     private void requirePurchaseEligibility(ActiveOrder activeOrder, LocalDate birthDate) {
@@ -721,6 +947,47 @@ public class PurchasingService {
         }
     }
 
+    private QueueAccessDTO requestQueueAccessOrThrow(String token, UUID eventId) {
+        QueueAccessDTO access = queueDomainService.requestAccess(token, eventId);
+        if (access != null && access.status() == com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.WAITING) {
+            Integer position = access.position();
+            throw new TimeExpiredException(
+                    "User does not have access. Queue is currently active for this event" +
+                            (position != null ? " (position: " + (position + 1) + ")" : "") +
+                            ". Please wait until you are admitted."
+            );
+        }
+        return access;
+    }
+
+    private void requireQueueCapacityAllowsCreation(UUID eventId, QueueAccessDTO access) {
+        if (access == null
+                || access.status() == com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.NO_QUEUE) {
+            return;
+        }
+
+        int maxAccepted = queueDomainService.getQueueSnapshot(eventId).maxAccepted();
+        if (maxAccepted > 0 && purchasingDomainService.countActiveOrdersForEvent(eventId) >= maxAccepted) {
+            throw new TimeExpiredException(
+                    "User does not have access. Queue is currently active for this event. Please wait until you are admitted."
+            );
+        }
+    }
+
+    private void requireEventCanBeBooked(UUID eventId) {
+        purchasingDomainService.requireEventCanBeBooked(
+                eventId,
+                eventDomainService.getEventAvailability(eventId)
+        );
+    }
+
+    private void requireAreaCanBeBooked(UUID eventId, UUID areaId) {
+        purchasingDomainService.requireAreaCanBeBooked(
+                areaId,
+                eventDomainService.getAreaAvailability(eventId, areaId)
+        );
+    }
+
     private void requireRemoveOrAddSeatsFromActiveOrderCommand(RemoveOrAddSeatsFromActiveOrderCommand cmd) {
         if (cmd == null) {
             throw new IllegalArgumentException("Command cannot be null");
@@ -740,5 +1007,16 @@ public class PurchasingService {
                 throw new IllegalArgumentException("Seat IDs cannot contain null values");
             }
         }
+    }
+
+    private Set<UUID> selectFirstSeats(Set<UUID> seatIds, int quantity) {
+        Set<UUID> selected = new HashSet<>();
+        for (UUID seatId : seatIds) {
+            selected.add(seatId);
+            if (selected.size() == quantity) {
+                break;
+            }
+        }
+        return selected;
     }
 }
