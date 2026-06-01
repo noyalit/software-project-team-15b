@@ -410,6 +410,26 @@ public class LotteryTest {
         assertTrue(lottery.getWinners().contains(ALICE));
     }
 
+    // --- hasEntry ---
+
+    @Test
+    void hasEntry_returnsFalse_whenEntryNotPresent() {
+        assertFalse(lottery.hasEntry(ALICE));
+    }
+
+    @Test
+    void hasEntry_returnsTrue_whenEntryAdded() {
+        lottery.add(ALICE);
+        assertTrue(lottery.hasEntry(ALICE));
+    }
+
+    @Test
+    void hasEntry_returnsFalse_afterEntryIsPopped() {
+        lottery.add(ALICE);
+        lottery.pop(ALICE);
+        assertFalse(lottery.hasEntry(ALICE));
+    }
+
     // --- expirationTime ---
 
     @Test
@@ -429,5 +449,10 @@ public class LotteryTest {
         lottery.setExpirationTime(LocalDateTime.now().plusDays(1));
         lottery.setExpirationTime(null);
         assertNull(lottery.getExpirationTime());
+    }
+
+    @Test
+    void hasEntry_throwsWhenUserIdIsNull() {
+        assertThrows(IllegalArgumentException.class, () -> lottery.hasEntry(null));
     }
 }

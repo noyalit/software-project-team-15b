@@ -43,4 +43,12 @@ class OwnerTest {
 
         assertTrue(owner.isAppointmentApproved());
     }
+
+    // JPA requires a protected no-arg constructor; cover it via a concrete subclass
+    private static class JpaOwner extends Owner {}
+
+    @Test
+    void protectedConstructor_createsInstance() {
+        assertDoesNotThrow(() -> new JpaOwner());
+    }
 }

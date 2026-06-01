@@ -660,6 +660,124 @@ class PurchasingDomainServiceTest {
         verify(activeOrderRepository, never()).save(any());
     }
 
+    @Test
+    void existsActiveOrderForEventShouldThrowWhenEventIdIsNull() {
+        assertThrows(IllegalArgumentException.class, () ->
+                domainService.existsActiveOrderForEvent(null)
+        );
+    }
+
+    @Test
+    void existsActiveOrderForEventShouldReturnRepositoryResult() {
+        when(activeOrderRepository.existsByEventIdAndStatus(eventId, ActiveOrderStatus.ACTIVE))
+                .thenReturn(true);
+
+        assertTrue(domainService.existsActiveOrderForEvent(eventId));
+
+        when(activeOrderRepository.existsByEventIdAndStatus(eventId, ActiveOrderStatus.ACTIVE))
+                .thenReturn(false);
+
+        assertFalse(domainService.existsActiveOrderForEvent(eventId));
+    }
+
+    @Test
+    void countActiveOrdersForEventShouldThrowWhenEventIdIsNull() {
+        assertThrows(IllegalArgumentException.class, () ->
+                domainService.countActiveOrdersForEvent(null)
+        );
+    }
+
+    @Test
+    void countActiveOrdersForEventShouldReturnRepositoryResult() {
+        when(activeOrderRepository.countByEventIdAndStatus(eventId, ActiveOrderStatus.ACTIVE))
+                .thenReturn(3L);
+
+        assertEquals(3L, domainService.countActiveOrdersForEvent(eventId));
+    }
+
+    @Test
+    void requirePurchaseAccessShouldThrowWhenStatusIsLotteryOpenNotEntered() {
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
+        when(eligibility.canCreateActiveOrder()).thenReturn(false);
+        when(eligibility.status()).thenReturn(com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus.LOTTERY_OPEN_NOT_ENTERED);
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                domainService.requirePurchaseAccess(userId, eventId, eligibility, true)
+        );
+        assertTrue(ex.getMessage().contains("lottery draw"));
+    }
+
+    @Test
+    void requirePurchaseAccessShouldThrowWhenStatusIsLotteryOpenEntered() {
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
+        when(eligibility.canCreateActiveOrder()).thenReturn(false);
+        when(eligibility.status()).thenReturn(com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus.LOTTERY_OPEN_ENTERED);
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                domainService.requirePurchaseAccess(userId, eventId, eligibility, true)
+        );
+        assertTrue(ex.getMessage().contains("lottery draw"));
+    }
+
+    @Test
+    void requirePurchaseAccessShouldThrowWhenStatusIsAccessExpired() {
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
+        when(eligibility.canCreateActiveOrder()).thenReturn(false);
+        when(eligibility.status()).thenReturn(com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus.ACCESS_EXPIRED);
+
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                domainService.requirePurchaseAccess(userId, eventId, eligibility, true)
+        );
+        assertTrue(ex.getMessage().contains("expired"));
+    }
+
+    @Test
+    void requirePurchaseAccessShouldThrowFallbackWhenStatusIsUnknown() {
+        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
+        when(eligibility.canCreateActiveOrder()).thenReturn(false);
+        when(eligibility.status()).thenReturn(com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus.WON_AND_ACCESS_VALID);
+
+        assertThrows(IllegalStateException.class, () ->
+                domainService.requirePurchaseAccess(userId, eventId, eligibility, true)
+        );
+    }
+
+    @Test
+    void findByUserIdAndStatusShouldThrowWhenUserIdIsNull() {
+        assertThrows(IllegalArgumentException.class, () ->
+                domainService.findByUserIdAndStatus(null, ActiveOrderStatus.ACTIVE)
+        );
+    }
+
+    @Test
+    void findByUserIdAndStatusShouldThrowWhenStatusIsNull() {
+        assertThrows(IllegalArgumentException.class, () ->
+                domainService.findByUserIdAndStatus(userId, null)
+        );
+    }
+
+    @Test
+    void findByUserIdAndStatusShouldReturnOrdersFromRepository() {
+        List<ActiveOrder> orders = List.of(activeOrder());
+        when(activeOrderRepository.findByUserIdAndStatus(userId, ActiveOrderStatus.ACTIVE))
+                .thenReturn(orders);
+
+        List<ActiveOrder> result = domainService.findByUserIdAndStatus(userId, ActiveOrderStatus.ACTIVE);
+
+        assertEquals(orders, result);
+    }
+
+    @Test
+    void removeUnavailableSeatsFromOrderShouldRemoveSeatsAndReturnTrueWhenSeatsUnavailable() {
+        ActiveOrder order = activeOrderWithSeats(seatId1, seatId2);
+
+        boolean result = domainService.removeUnavailableSeatsFromOrder(order, Set.of(seatId1));
+
+        assertTrue(result);
+        assertEquals(Set.of(seatId2), order.getOrderSeats());
+        verify(activeOrderRepository).save(order);
+    }
+
     private ActiveOrder activeOrder() {
         return new ActiveOrder(orderId, userId, eventId, areaId);
     }

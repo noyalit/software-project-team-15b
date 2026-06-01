@@ -37,4 +37,22 @@ class FounderTest {
         assertThrows(InvalidAppointmentStateException.class,
                 () -> founder.setAppointedBy(UUID.randomUUID()));
     }
+
+    @Test
+    void belongsToCompany_shouldReturnTrue_forSameCompanyId() {
+        assertTrue(founder.belongsToCompany(companyId));
+    }
+
+    @Test
+    void belongsToCompany_shouldReturnFalse_forDifferentCompanyId() {
+        assertFalse(founder.belongsToCompany(UUID.randomUUID()));
+    }
+
+    // JPA requires a protected no-arg constructor; cover it via a concrete subclass
+    private static class JpaFounder extends Founder {}
+
+    @Test
+    void protectedConstructor_createsInstance() {
+        assertDoesNotThrow(() -> new JpaFounder());
+    }
 }

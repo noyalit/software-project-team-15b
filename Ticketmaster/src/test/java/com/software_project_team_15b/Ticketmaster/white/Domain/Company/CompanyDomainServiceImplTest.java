@@ -613,4 +613,137 @@ class CompanyDomainServiceImplTest {
         when(repo.findById(any())).thenReturn(Optional.of(company));
         assertThat(service.findCompany(UUID.randomUUID())).contains(company);
     }
+
+    // ===========================================================================================
+    // findCompaniesByOwner
+
+    @Test
+    void findCompaniesByOwner_returns_list_from_repo() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        when(repo.findByOwner(any())).thenReturn(List.of(company));
+        assertThat(service.findCompaniesByOwner(UUID.randomUUID())).containsExactly(company);
+    }
+
+    @Test
+    void findCompaniesByOwner_throws_when_repo_returns_null() {
+        when(repo.findByOwner(any())).thenReturn(null);
+        assertThatThrownBy(() -> service.findCompaniesByOwner(UUID.randomUUID()))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    // ===========================================================================================
+    // findAll
+
+    @Test
+    void findAll_returns_list_from_repo() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        when(repo.findAll()).thenReturn(List.of(company));
+        assertThat(service.findAll()).containsExactly(company);
+    }
+
+    @Test
+    void findAll_throws_when_repo_returns_null() {
+        when(repo.findAll()).thenReturn(null);
+        assertThatThrownBy(() -> service.findAll())
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    // ===========================================================================================
+    // isCompanyActive
+
+    @Test
+    void isCompanyActive_throws_when_companyId_is_null() {
+        assertThatThrownBy(() -> service.isCompanyActive(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("companyId");
+    }
+
+    @Test
+    void isCompanyActive_returns_true_for_active_company() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+        assertThat(service.isCompanyActive(UUID.randomUUID())).isTrue();
+    }
+
+    @Test
+    void isCompanyActive_returns_false_when_company_not_found() {
+        when(repo.findById(any())).thenReturn(Optional.empty());
+        assertThat(service.isCompanyActive(UUID.randomUUID())).isFalse();
+    }
+
+    @Test
+    void isCompanyActive_returns_false_for_suspended_company() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        company.changeStatus(CompanyStatus.SUSPENDED);
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+        assertThat(service.isCompanyActive(UUID.randomUUID())).isFalse();
+    }
+
+    // ===========================================================================================
+    // changeStatus – valid ACTIVE→CLOSED and CLOSED→ACTIVE transitions
+
+    @Test
+    void changeStatus_allows_transition_from_active_to_closed() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Company result = service.changeStatus(UUID.randomUUID(), CompanyStatus.CLOSED);
+
+        assertThat(result.getStatus()).isEqualTo(CompanyStatus.CLOSED);
+    }
+
+    @Test
+    void changeStatus_allows_transition_from_closed_to_active() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        company.changeStatus(CompanyStatus.CLOSED);
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+        when(repo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        Company result = service.changeStatus(UUID.randomUUID(), CompanyStatus.ACTIVE);
+
+        assertThat(result.getStatus()).isEqualTo(CompanyStatus.ACTIVE);
+    }
+
+    // ===========================================================================================
+    // getCompany – suspended company with canViewClosed=false
+
+    @Test
+    void getCompany_throws_when_suspended_and_canViewClosed_is_false() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        company.changeStatus(CompanyStatus.SUSPENDED);
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+
+        assertThatThrownBy(() -> service.getCompany(UUID.randomUUID(), false))
+                .isInstanceOf(UnauthorizedCompanyActionException.class);
+    }
+
+    // ===========================================================================================
+    // findCompaniesByMember
+
+    @Test
+    void findCompaniesByMember_throws_when_memberId_is_null() {
+        assertThatThrownBy(() -> service.findCompaniesByMember(null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("memberId");
+    }
+
+    @Test
+    void findCompaniesByMember_deduplicates_across_founder_and_owner_lists() {
+        UUID memberId = UUID.randomUUID();
+        Company company = new Company("Acme", UUID.randomUUID());
+        try {
+            Field idField = Company.class.getDeclaredField("id");
+            idField.setAccessible(true);
+            idField.set(company, UUID.randomUUID());
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+        when(repo.findByFounder(memberId)).thenReturn(List.of(company));
+        when(repo.findByOwner(memberId)).thenReturn(List.of(company));
+
+        List<Company> result = service.findCompaniesByMember(memberId);
+
+        assertThat(result).hasSize(1).containsExactly(company);
+    }
 }

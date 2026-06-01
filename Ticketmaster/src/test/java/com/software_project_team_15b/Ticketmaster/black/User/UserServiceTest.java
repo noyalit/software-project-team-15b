@@ -25,6 +25,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.software_project_team_15b.Ticketmaster.Application.events.TempTokenAcceptedFromQueueEvent;
+import com.software_project_team_15b.Ticketmaster.DTO.CompanyRoleTreeDTO;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyOwnerInCompanyException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AppointmentCycleDetectedException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidCredentialsException;
@@ -793,6 +795,481 @@ class UserServiceTest {
         return m;
     }
 
+    // =========================================================================
+    // enterAsGuest
+    // =========================================================================
+
+    @Test
+    void enterAsGuest_returnsGuestToken() {
+        when(auth.generateGuestToken()).thenReturn("g-tok");
+        assertThat(service.enterAsGuest()).isEqualTo("g-tok");
+        verify(auth).generateGuestToken();
+    }
+
+    // =========================================================================
+    // enterSystem
+    // =========================================================================
+
+    @Test
+    void enterSystem_returnsGuestToken_whenCanAccessWebsite() {
+        when(queueDomainService.canAccessWebsite()).thenReturn(true);
+        when(auth.generateGuestToken()).thenReturn("g-tok");
+
+        String result = service.enterSystem();
+
+        assertThat(result).isEqualTo("g-tok");
+        verify(queueDomainService).canAccessWebsite();
+        verify(auth).generateGuestToken();
+    }
+
+    @Test
+    void enterSystem_returnsTempToken_whenCannotAccessWebsite() {
+        when(queueDomainService.canAccessWebsite()).thenReturn(false);
+        when(auth.generateTempToken()).thenReturn("tmp-tok");
+
+        String result = service.enterSystem();
+
+        assertThat(result).isEqualTo("tmp-tok");
+        verify(queueDomainService).canAccessWebsite();
+        verify(auth).generateTempToken();
+        verify(queueDomainService).addUserToSiteQueue("tmp-tok");
+    }
+
+    // =========================================================================
+    // tryEnterFromQueue
+    // =========================================================================
+
+    @Test
+    void tryEnterFromQueue_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid("bad")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.tryEnterFromQueue("bad"))
+                .isInstanceOf(InvalidTokenException.class)
+                .hasMessageContaining("Invalid or expired token");
+    }
+
+    @Test
+    void tryEnterFromQueue_throwsWhenTokenIsNotTemp() {
+        when(auth.isTokenValid("member-tok")).thenReturn(true);
+        when(auth.isTemp("member-tok")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.tryEnterFromQueue("member-tok"))
+                .isInstanceOf(InvalidTokenException.class)
+                .hasMessageContaining("not a temporary queue token");
+    }
+
+    @Test
+    void tryEnterFromQueue_returnsGuestToken_whenSuccessful() {
+        when(auth.isTokenValid("tmp-tok")).thenReturn(true);
+        when(auth.isTemp("tmp-tok")).thenReturn(true);
+        when(auth.generateGuestToken()).thenReturn("g-tok");
+
+        String result = service.tryEnterFromQueue("tmp-tok");
+
+        assertThat(result).isEqualTo("g-tok");
+        verify(auth).exitSystem("tmp-tok");
+        verify(auth).generateGuestToken();
+    }
+
+    // =========================================================================
+    // handleTempTokenAcceptedFromQueue
+    // =========================================================================
+
+    @Test
+    void handleTempTokenAcceptedFromQueue_callsTryEnterFromQueue() {
+        when(auth.isTokenValid("tmp-tok")).thenReturn(true);
+        when(auth.isTemp("tmp-tok")).thenReturn(true);
+        when(auth.generateGuestToken()).thenReturn("g-tok");
+
+        service.handleTempTokenAcceptedFromQueue(new TempTokenAcceptedFromQueueEvent("tmp-tok"));
+
+        verify(auth).exitSystem("tmp-tok");
+        verify(auth).generateGuestToken();
+    }
+
+    @Test
+    void handleTempTokenAcceptedFromQueue_propagatesException() {
+        when(auth.isTokenValid("tmp-tok")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.handleTempTokenAcceptedFromQueue(
+                new TempTokenAcceptedFromQueueEvent("tmp-tok")))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    // =========================================================================
+    // exitSystem
+    // =========================================================================
+
+    @Test
+    void exitSystem_delegatesToAuth() {
+        service.exitSystem("some-tok");
+        verify(auth).exitSystem("some-tok");
+    }
+
+    // =========================================================================
+    // logout — system admin and unsupported type branches
+    // =========================================================================
+
+    @Test
+    void logout_sysAdmin_exitsSystemAndReturnsNull() {
+        String sysAdminToken = "sysadmin-tok";
+
+        when(auth.isTokenValid(sysAdminToken)).thenReturn(true);
+        when(auth.isGuest(sysAdminToken)).thenReturn(false);
+        when(auth.isMember(sysAdminToken)).thenReturn(false);
+        when(auth.isSystemAdmin(sysAdminToken)).thenReturn(true);
+
+        String result = service.logout(sysAdminToken);
+
+        assertThat(result).isNull();
+        verify(auth).exitSystem(sysAdminToken);
+    }
+
+    @Test
+    void logout_unsupportedUserType_throwsIllegalArgumentException() {
+        String token = "unknown-tok";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isGuest(token)).thenReturn(false);
+        when(auth.isMember(token)).thenReturn(false);
+        when(auth.isSystemAdmin(token)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.logout(token))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unsupported user type");
+    }
+
+    // =========================================================================
+    // loginSystemAdmin — additional negative paths
+    // =========================================================================
+
+    @Test
+    void loginSystemAdmin_throwsWhenAdminNotFound() {
+        String entranceToken = "entrance";
+        when(auth.isTokenValid(entranceToken)).thenReturn(true);
+        when(auth.isGuest(entranceToken)).thenReturn(true);
+        when(systemAdminRepository.findByUsername("unknown")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.loginSystemAdmin(entranceToken, "unknown", "Pass1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid username or password");
+
+        verify(auth).exitSystem(entranceToken);
+    }
+
+    @Test
+    void loginSystemAdmin_throwsWhenPasswordMismatch() {
+        String entranceToken = "entrance";
+        when(auth.isTokenValid(entranceToken)).thenReturn(true);
+        when(auth.isGuest(entranceToken)).thenReturn(true);
+        SystemAdmin admin = new SystemAdmin("admin", "correctHash");
+        when(systemAdminRepository.findByUsername("admin")).thenReturn(Optional.of(admin));
+        when(passwordEncoder.matches("WrongPass1", "correctHash")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.loginSystemAdmin(entranceToken, "admin", "WrongPass1"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid username or password");
+    }
+
+    @Test
+    void loginSystemAdmin_withNullToken_autoEntersAsGuest() {
+        when(auth.generateGuestToken()).thenReturn("g-tok");
+        when(auth.isTokenValid("g-tok")).thenReturn(true);
+        when(auth.isGuest("g-tok")).thenReturn(true);
+        SystemAdmin admin = new SystemAdmin("admin", "hash");
+        when(systemAdminRepository.findByUsername("admin")).thenReturn(Optional.of(admin));
+        when(passwordEncoder.matches("Password1", "hash")).thenReturn(true);
+        when(auth.generateSystemAdminToken(admin)).thenReturn("admin-tok");
+
+        String result = service.loginSystemAdmin(null, "admin", "Password1");
+
+        assertThat(result).isEqualTo("admin-tok");
+        verify(auth).generateGuestToken();
+        verify(auth).exitSystem("g-tok");
+    }
+
+    // =========================================================================
+    // registerMember — null token auto-guest path
+    // =========================================================================
+
+    @Test
+    void registerMember_withNullToken_autoEntersAsGuest() {
+        when(auth.generateGuestToken()).thenReturn("g-tok");
+        when(auth.isTokenValid("g-tok")).thenReturn(true);
+        when(auth.isGuest("g-tok")).thenReturn(true);
+        when(passwordEncoder.encode("Password1")).thenReturn("hashed");
+        doReturn(new Member("john", "hashed", null, LocalDate.of(2000, 1, 1)))
+                .when(userDomainService)
+                .registerMember(eq("john"), eq("hashed"), eq(LocalDate.of(2000, 1, 1)));
+
+        MemberDTO saved = service.registerMember(null, "john", "Password1", LocalDate.of(2000, 1, 1));
+
+        assertThat(saved.getUsername()).isEqualTo("john");
+        verify(auth).generateGuestToken();
+    }
+
+    // =========================================================================
+    // changeRoleToManager/Owner/Founder/RegularMember — success paths
+    // =========================================================================
+
+    @Test
+    void changeRoleToManager_success_delegatesAndNotifiesUser() {
+        UUID memberId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        String token = "member-tok";
+        Member member = memberWithId(memberId, null);
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(memberId);
+        doReturn(member).when(userDomainService).changeRoleToManager(memberId, eventId);
+
+        MemberDTO result = service.changeRoleToManager(token, eventId);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getUserId()).isEqualTo(memberId);
+        verify(notifier).notifyUser(eq(memberId), any());
+    }
+
+    @Test
+    void changeRoleToOwner_success_delegatesAndNotifiesUser() {
+        UUID memberId = UUID.randomUUID();
+        UUID companyId = UUID.randomUUID();
+        String token = "member-tok";
+        Member member = memberWithId(memberId, null);
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(memberId);
+        doReturn(member).when(userDomainService).changeRoleToOwner(memberId, companyId);
+
+        MemberDTO result = service.changeRoleToOwner(token, companyId);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getUserId()).isEqualTo(memberId);
+        verify(notifier).notifyUser(eq(memberId), any());
+    }
+
+    @Test
+    void changeRoleToFounder_success_delegatesAndNotifiesUser() {
+        UUID memberId = UUID.randomUUID();
+        UUID companyId = UUID.randomUUID();
+        String token = "member-tok";
+        Member member = memberWithId(memberId, null);
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(memberId);
+        doReturn(member).when(userDomainService).changeRoleToFounder(memberId, companyId);
+
+        MemberDTO result = service.changeRoleToFounder(token, companyId);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getUserId()).isEqualTo(memberId);
+        verify(notifier).notifyUser(eq(memberId), any());
+    }
+
+    @Test
+    void changeRoleToRegularMember_success_delegatesAndNotifiesUser() {
+        UUID memberId = UUID.randomUUID();
+        String token = "member-tok";
+        Member member = memberWithId(memberId, null);
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(memberId);
+        doReturn(member).when(userDomainService).changeRoleToRegularMember(memberId);
+
+        MemberDTO result = service.changeRoleToRegularMember(token);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getUserId()).isEqualTo(memberId);
+        verify(notifier).notifyUser(eq(memberId), any());
+    }
+
+    // =========================================================================
+    // approveAppointment and isAppointmentApproved
+    // =========================================================================
+
+    @Test
+    void approveAppointment_success_returnsUpdatedMember() {
+        UUID memberId = UUID.randomUUID();
+        String token = "member-tok";
+        Member member = memberWithId(memberId, null);
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(memberId);
+        doReturn(member).when(userDomainService).approveAppointment(memberId);
+
+        MemberDTO result = service.approveAppointment(token);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getUserId()).isEqualTo(memberId);
+    }
+
+    @Test
+    void isAppointmentApproved_returnsTrue_whenApproved() {
+        UUID memberId = UUID.randomUUID();
+        String token = "member-tok";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(memberId);
+        doReturn(true).when(userDomainService).isAppointmentApproved(memberId);
+
+        boolean result = service.isAppointmentApproved(token);
+
+        assertThat(result).isTrue();
+    }
+
+    // =========================================================================
+    // getCompanyRoleTree and getManagerPermissions
+    // =========================================================================
+
+    @Test
+    void getCompanyRoleTree_success_returnsTree() {
+        UUID memberId = UUID.randomUUID();
+        UUID companyId = UUID.randomUUID();
+        String token = "member-tok";
+        CompanyRoleTreeDTO expected = new CompanyRoleTreeDTO(companyId, "TestCo", null);
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(memberId);
+        doReturn(expected).when(userDomainService).getCompanyRoleTree(memberId, companyId);
+
+        CompanyRoleTreeDTO result = service.getCompanyRoleTree(token, companyId);
+
+        assertThat(result).isSameAs(expected);
+    }
+
+    @Test
+    void getManagerPermissions_success_returnsPermissions() {
+        UUID requesterId = UUID.randomUUID();
+        UUID managerId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        String token = "member-tok";
+        Set<ManagerPermission> expected = Set.of(ManagerPermission.MANAGE_EVENTS);
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(requesterId);
+        doReturn(expected).when(userDomainService).getManagerPermissions(requesterId, managerId, eventId);
+
+        Set<ManagerPermission> result = service.getManagerPermissions(token, managerId, eventId);
+
+        assertThat(result).isEqualTo(expected);
+    }
+
+    // =========================================================================
+    // sendMessageToUser
+    // =========================================================================
+
+    @Test
+    void sendMessageToUser_success_notifiesTargetUser() {
+        String adminToken = "admin-tok";
+        UUID adminId = UUID.randomUUID();
+        UUID targetId = UUID.randomUUID();
+        Member targetMember = memberWithId(targetId, null);
+
+        when(auth.isTokenValid(adminToken)).thenReturn(true);
+        when(auth.isSystemAdmin(adminToken)).thenReturn(true);
+        when(auth.extractUserId(adminToken)).thenReturn(adminId);
+        when(memberRepository.findById(targetId)).thenReturn(Optional.of(targetMember));
+
+        service.sendMessageToUser(adminToken, targetId, "Hello!");
+
+        verify(notifier).notifyUser(eq(targetId), any());
+    }
+
+    @Test
+    void sendMessageToUser_throwsWhenTokenIsNull() {
+        assertThatThrownBy(() -> service.sendMessageToUser(null, UUID.randomUUID(), "Hello!"))
+                .isInstanceOf(InvalidTokenException.class)
+                .hasMessageContaining("Only a system admin");
+    }
+
+    @Test
+    void sendMessageToUser_throwsWhenTokenIsBlank() {
+        assertThatThrownBy(() -> service.sendMessageToUser("  ", UUID.randomUUID(), "Hello!"))
+                .isInstanceOf(InvalidTokenException.class)
+                .hasMessageContaining("Only a system admin");
+    }
+
+    @Test
+    void sendMessageToUser_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid("bad-tok")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.sendMessageToUser("bad-tok", UUID.randomUUID(), "Hello!"))
+                .isInstanceOf(InvalidTokenException.class)
+                .hasMessageContaining("Only a system admin");
+    }
+
+    @Test
+    void sendMessageToUser_throwsWhenNotSysAdmin() {
+        String memberTok = "member-tok";
+        when(auth.isTokenValid(memberTok)).thenReturn(true);
+        when(auth.isSystemAdmin(memberTok)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.sendMessageToUser(memberTok, UUID.randomUUID(), "Hello!"))
+                .isInstanceOf(InvalidTokenException.class)
+                .hasMessageContaining("Only a system admin");
+    }
+
+    @Test
+    void sendMessageToUser_throwsWhenTargetUserIdIsNull() {
+        String adminToken = "admin-tok";
+        when(auth.isTokenValid(adminToken)).thenReturn(true);
+        when(auth.isSystemAdmin(adminToken)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.sendMessageToUser(adminToken, null, "Hello!"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Target user ID cannot be null");
+    }
+
+    @Test
+    void sendMessageToUser_throwsWhenMessageIsNull() {
+        String adminToken = "admin-tok";
+        UUID targetId = UUID.randomUUID();
+        when(auth.isTokenValid(adminToken)).thenReturn(true);
+        when(auth.isSystemAdmin(adminToken)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.sendMessageToUser(adminToken, targetId, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Message cannot be null or empty");
+    }
+
+    @Test
+    void sendMessageToUser_throwsWhenMessageIsBlank() {
+        String adminToken = "admin-tok";
+        UUID targetId = UUID.randomUUID();
+        when(auth.isTokenValid(adminToken)).thenReturn(true);
+        when(auth.isSystemAdmin(adminToken)).thenReturn(true);
+
+        assertThatThrownBy(() -> service.sendMessageToUser(adminToken, targetId, "  "))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Message cannot be null or empty");
+    }
+
+    // =========================================================================
+    // cancelMemberAccountBySystemAdmin — invalid token branch
+    // =========================================================================
+
+    @Test
+    void cancelMemberAccountBySystemAdmin_throwsWhenTokenIsInvalid() {
+        String badToken = "bad-tok";
+        UUID memberId = UUID.randomUUID();
+
+        when(auth.isTokenValid(badToken)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.cancelMemberAccountBySystemAdmin(badToken, memberId))
+                .isInstanceOf(InvalidTokenException.class)
+                .hasMessageContaining("Only a system admin can cancel member accounts");
+
+        verify(memberRepository, never()).deleteById(any());
+    }
+
     @Test
     void appointOwner_throws_when_appointment_would_create_cycle() {
         UUID companyId = UUID.randomUUID();
@@ -1127,8 +1604,152 @@ class UserServiceTest {
     }
 
 
+    // =========================================================================
+    // approveAppointment — success with non-null active role (covers ternary branch)
+    // =========================================================================
+
+    @Test
+    void approveAppointment_success_withActiveRole_coversAuditTernary() {
+        UUID memberId = UUID.randomUUID();
+        String token = "member-tok";
+        Role ownerRole = new Owner(UUID.randomUUID(), UUID.randomUUID());
+        ownerRole.approveAppointment();
+        Member member = memberWithId(memberId, ownerRole);
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(memberId);
+        doReturn(member).when(userDomainService).approveAppointment(memberId);
+
+        MemberDTO result = service.approveAppointment(token);
+
+        assertThat(result.getUserId()).isEqualTo(memberId);
+    }
+
+    // =========================================================================
+    // Catch-block error paths — cover AUDIT.warn lines in changeRole*/approveAppointment/isAppointmentApproved/getManagerPermissions/getCompanyRoleTree
+    // =========================================================================
+
+    @Test
+    void changeRoleToManager_catchBlock_coversAudit() {
+        UUID memberId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        String token = "member-tok";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(memberId);
+        doThrow(new RoleNotAssignedException("no role")).when(userDomainService).changeRoleToManager(memberId, eventId);
+
+        assertThatThrownBy(() -> service.changeRoleToManager(token, eventId))
+                .isInstanceOf(RoleNotAssignedException.class);
+    }
+
+    @Test
+    void changeRoleToOwner_catchBlock_coversAudit() {
+        UUID memberId = UUID.randomUUID();
+        UUID companyId = UUID.randomUUID();
+        String token = "member-tok";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(memberId);
+        doThrow(new RoleNotAssignedException("no role")).when(userDomainService).changeRoleToOwner(memberId, companyId);
+
+        assertThatThrownBy(() -> service.changeRoleToOwner(token, companyId))
+                .isInstanceOf(RoleNotAssignedException.class);
+    }
+
+    @Test
+    void changeRoleToFounder_catchBlock_coversAudit() {
+        UUID memberId = UUID.randomUUID();
+        UUID companyId = UUID.randomUUID();
+        String token = "member-tok";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(memberId);
+        doThrow(new RoleNotAssignedException("no role")).when(userDomainService).changeRoleToFounder(memberId, companyId);
+
+        assertThatThrownBy(() -> service.changeRoleToFounder(token, companyId))
+                .isInstanceOf(RoleNotAssignedException.class);
+    }
+
+    @Test
+    void changeRoleToRegularMember_catchBlock_coversAudit() {
+        UUID memberId = UUID.randomUUID();
+        String token = "member-tok";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(memberId);
+        doThrow(new RoleNotAssignedException("no role")).when(userDomainService).changeRoleToRegularMember(memberId);
+
+        assertThatThrownBy(() -> service.changeRoleToRegularMember(token))
+                .isInstanceOf(RoleNotAssignedException.class);
+    }
+
+    @Test
+    void approveAppointment_catchBlock_coversAudit() {
+        UUID memberId = UUID.randomUUID();
+        String token = "member-tok";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(memberId);
+        doThrow(new RoleNotAssignedException("no role")).when(userDomainService).approveAppointment(memberId);
+
+        assertThatThrownBy(() -> service.approveAppointment(token))
+                .isInstanceOf(RoleNotAssignedException.class);
+    }
+
+    @Test
+    void isAppointmentApproved_catchBlock_coversAudit() {
+        UUID memberId = UUID.randomUUID();
+        String token = "member-tok";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(memberId);
+        doThrow(new RoleNotAssignedException("no role")).when(userDomainService).isAppointmentApproved(memberId);
+
+        assertThatThrownBy(() -> service.isAppointmentApproved(token))
+                .isInstanceOf(RoleNotAssignedException.class);
+    }
+
+    @Test
+    void getManagerPermissions_catchBlock_coversAudit() {
+        UUID requesterId = UUID.randomUUID();
+        UUID managerId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        String token = "member-tok";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(requesterId);
+        doThrow(new RoleNotAssignedException("no role")).when(userDomainService).getManagerPermissions(requesterId, managerId, eventId);
+
+        assertThatThrownBy(() -> service.getManagerPermissions(token, managerId, eventId))
+                .isInstanceOf(RoleNotAssignedException.class);
+    }
+
+    @Test
+    void getCompanyRoleTree_catchBlock_coversAudit() {
+        UUID requesterId = UUID.randomUUID();
+        UUID companyId = UUID.randomUUID();
+        String token = "member-tok";
+
+        when(auth.isTokenValid(token)).thenReturn(true);
+        when(auth.isMember(token)).thenReturn(true);
+        when(auth.extractUserId(token)).thenReturn(requesterId);
+        doThrow(new UnauthorizedCompanyActionException("denied")).when(userDomainService).getCompanyRoleTree(requesterId, companyId);
+
+        assertThatThrownBy(() -> service.getCompanyRoleTree(token, companyId))
+                .isInstanceOf(UnauthorizedCompanyActionException.class);
+    }
+
     ///------------------------------ II.6.2: Cancel Member Account ---------------------------------
-    
+
     @Test
     void cancelMemberAccountBySystemAdmin_deletesMember_whenSystemAdminTokenAndMemberExists() {
         String adminToken = "admin-token";
@@ -1174,6 +1795,53 @@ class UserServiceTest {
                 .hasMessageContaining("Member not found with id: " + memberId);
 
         verify(memberRepository, never()).deleteById(any());
+    }
+
+    // =========================================================================
+    // getAuthenticatedMemberId — invalid token path (lines 675-676)
+    // =========================================================================
+
+    @Test
+    void changeRoleToManager_throws_whenTokenIsInvalid() {
+        when(auth.isTokenValid("bad-tok")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.changeRoleToManager("bad-tok", UUID.randomUUID()))
+                .isInstanceOf(InvalidTokenException.class)
+                .hasMessageContaining("Invalid or expired token");
+    }
+
+    // =========================================================================
+    // validateEntranceToken — invalid token path (line 688)
+    // =========================================================================
+
+    @Test
+    void login_throwsWhenEntranceTokenIsInvalid() {
+        String invalidToken = "invalid-tok";
+        when(auth.isTokenValid(invalidToken)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.login(invalidToken, "john", "Password1"))
+                .isInstanceOf(InvalidTokenException.class)
+                .hasMessageContaining("Invalid or expired token");
+    }
+
+    // =========================================================================
+    // login — null token auto-guest path (lines 106-107)
+    // =========================================================================
+
+    @Test
+    void login_withNullToken_autoEntersAsGuest() {
+        when(auth.generateGuestToken()).thenReturn("g-tok");
+        when(auth.isTokenValid("g-tok")).thenReturn(true);
+        when(auth.isGuest("g-tok")).thenReturn(true);
+        Member member = new Member("john", "hash", null, LocalDate.of(2000, 1, 1));
+        doReturn(member).when(userDomainService).getMemberByUsername("john");
+        when(passwordEncoder.matches("Password1", "hash")).thenReturn(true);
+        when(auth.generateMemberToken(member)).thenReturn("member-tok");
+
+        String result = service.login(null, "john", "Password1");
+
+        assertThat(result).isEqualTo("member-tok");
+        verify(auth).generateGuestToken();
     }
 
 }

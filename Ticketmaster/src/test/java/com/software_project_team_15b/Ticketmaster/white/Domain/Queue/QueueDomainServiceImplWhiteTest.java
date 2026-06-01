@@ -830,4 +830,121 @@ class QueueDomainServiceImplWhiteTest {
         assertThat(service.getAcceptedTokens()).hasSize(100);
         assertThat(service.canAccessWebsite()).isFalse();
     }
+
+    // =========================================================================
+    // getSiteQueueSnapshot — basic coverage
+    // =========================================================================
+
+    @Test
+    void getSiteQueueSnapshot_returnsCorrectFields() {
+        service.addUserToSiteQueue("waiting-a");
+        service.addUserToSiteQueue("waiting-b");
+        service.acceptUsersFromSiteQueue();
+        service.addUserToSiteQueue("waiting-c");
+
+        var snap = service.getSiteQueueSnapshot();
+
+        assertThat(snap.maxVisitors()).isEqualTo(100);
+        assertThat(snap.waitingCount()).isEqualTo(1);
+        assertThat(snap.admittedCount()).isEqualTo(2);
+    }
+
+    // =========================================================================
+    // updateSiteQueueSettings — basic coverage
+    // =========================================================================
+
+    @Test
+    void updateSiteQueueSettings_updatesMaxVisitors() {
+        service.updateSiteQueueSettings(50);
+
+        var snap = service.getSiteQueueSnapshot();
+        assertThat(snap.maxVisitors()).isEqualTo(50);
+    }
+
+    @Test
+    void updateSiteQueueSettings_throws_whenMaxVisitorsIsZero() {
+        assertThatThrownBy(() -> service.updateSiteQueueSettings(0))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("maxVisitors");
+    }
+
+    @Test
+    void updateSiteQueueSettings_throws_whenMaxVisitorsIsNegative() {
+        assertThatThrownBy(() -> service.updateSiteQueueSettings(-5))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // =========================================================================
+    // removeAcceptedToken — token not found
+    // =========================================================================
+
+    @Test
+    void removeAcceptedToken_negative_tokenNotInSet_throwsInvalidToken() {
+        assertThatThrownBy(() -> service.removeAcceptedToken("unknown-token"))
+                .isInstanceOf(com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException.class);
+    }
+
+    // =========================================================================
+    // hasAccess — queue-null and access branches
+    // =========================================================================
+
+    @Test
+    void hasAccess_returnsTrueWhenNoQueueExists() {
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
+
+        assertThat(service.hasAccess("any-token", EVENT_ID)).isTrue();
+    }
+
+    @Test
+    void hasAccess_returnsTrueWhenTokenIsAdmitted() {
+        VirtualQueue queue = admittedQueue(EVENT_ID, "token-a");
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+
+        assertThat(service.hasAccess("token-a", EVENT_ID)).isTrue();
+    }
+
+    @Test
+    void hasAccess_returnsFalseWhenTokenIsNotAdmitted() {
+        VirtualQueue queue = new VirtualQueue(EVENT_ID, 100, 10);
+        queue.push("token-a");
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+
+        assertThat(service.hasAccess("token-a", EVENT_ID)).isFalse();
+    }
+
+    // =========================================================================
+    // getQueueAccessView — queue-null and admitted branches
+    // =========================================================================
+
+    @Test
+    void getQueueAccessView_returnsNoQueue_whenQueueDoesNotExist() {
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
+
+        var view = service.getQueueAccessView("token-a", EVENT_ID);
+
+        assertThat(view.status()).isEqualTo(QueueAccessStatus.NO_QUEUE);
+    }
+
+    @Test
+    void getQueueAccessView_returnsAdmitted_whenTokenIsAdmitted() {
+        VirtualQueue queue = admittedQueue(EVENT_ID, "token-a");
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
+
+        var view = service.getQueueAccessView("token-a", EVENT_ID);
+
+        assertThat(view.status()).isEqualTo(QueueAccessStatus.ADMITTED);
+    }
+
+    // =========================================================================
+    // requestAccess — no-queue branch
+    // =========================================================================
+
+    @Test
+    void requestAccess_returnsNoQueue_whenNoQueueExistsForEvent() {
+        when(queueRepository.getQueue(EVENT_ID)).thenReturn(null);
+
+        var view = service.requestAccess("token-a", EVENT_ID);
+
+        assertThat(view.status()).isEqualTo(QueueAccessStatus.NO_QUEUE);
+    }
 }

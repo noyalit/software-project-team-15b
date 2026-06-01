@@ -1,9 +1,12 @@
 package com.software_project_team_15b.Ticketmaster.white.Application.Lottery;
 
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryService;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
+import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
@@ -41,6 +44,7 @@ class LotteryServiceWhiteTest {
     @Mock private ILotteryDomainService lotteryDomainService;
     @Mock private UserDomainService userDomainService;
     @Mock private IAuth auth;
+    @Mock private MemberDTO memberDTO;
     @InjectMocks private LotteryService service;
 
     private static final UUID EVENT_ID   = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -250,5 +254,412 @@ class LotteryServiceWhiteTest {
         verify(auth, times(threads)).extractUserId(TOKEN_A);
         verify(userDomainService, times(threads)).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService, times(threads)).createEventLottery(EVENT_ID);
+    }
+
+    // =========================================================================
+    // Constructor null checks
+    // =========================================================================
+
+    @Test
+    void constructor_throws_when_lotteryDomainService_is_null() {
+        assertThatThrownBy(() -> new LotteryService(null, userDomainService, auth))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void constructor_throws_when_userDomainService_is_null() {
+        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, null, auth))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void constructor_throws_when_auth_is_null() {
+        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, userDomainService, null))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    // =========================================================================
+    // requireEventPermissions — owner and founder paths
+    // =========================================================================
+
+    @Test
+    void createEventLottery_succeedsWhenCallerIsOwner() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(true);
+
+        service.createEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID);
+
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(userDomainService).isActiveOwner(USER_A, COMPANY_ID);
+        verify(lotteryDomainService).createEventLottery(EVENT_ID);
+    }
+
+    @Test
+    void createEventLottery_succeedsWhenCallerIsFounder() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(false);
+        when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(true);
+
+        service.createEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID);
+
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(userDomainService).isActiveOwner(USER_A, COMPANY_ID);
+        verify(userDomainService).isActiveFounder(USER_A, COMPANY_ID);
+        verify(lotteryDomainService).createEventLottery(EVENT_ID);
+    }
+
+    @Test
+    void createEventLottery_throwsWhenUnauthorized() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(false);
+        when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.createEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID))
+                .isInstanceOf(UnauthorizedException.class);
+
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(userDomainService).isActiveOwner(USER_A, COMPANY_ID);
+        verify(userDomainService).isActiveFounder(USER_A, COMPANY_ID);
+    }
+
+    // =========================================================================
+    // createEventLottery — null / invalid token guards
+    // =========================================================================
+
+    @Test
+    void createEventLottery_throwsWhenTokenIsNull() {
+        assertThatThrownBy(() -> service.createEventLottery(null, COMPANY_ID, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void createEventLottery_throwsWhenEventIdIsNull() {
+        assertThatThrownBy(() -> service.createEventLottery(TOKEN_A, COMPANY_ID, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void createEventLottery_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.createEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
+
+        verify(auth).isTokenValid(TOKEN_A);
+    }
+
+    // =========================================================================
+    // deleteEventLottery — null / invalid token / unauthorized guards
+    // =========================================================================
+
+    @Test
+    void deleteEventLottery_throwsWhenTokenIsNull() {
+        assertThatThrownBy(() -> service.deleteEventLottery(null, COMPANY_ID, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void deleteEventLottery_throwsWhenEventIdIsNull() {
+        assertThatThrownBy(() -> service.deleteEventLottery(TOKEN_A, COMPANY_ID, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void deleteEventLottery_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.deleteEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
+
+        verify(auth).isTokenValid(TOKEN_A);
+    }
+
+    @Test
+    void deleteEventLottery_throwsWhenUnauthorized() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(false);
+        when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.deleteEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID))
+                .isInstanceOf(UnauthorizedException.class);
+
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(userDomainService).isActiveOwner(USER_A, COMPANY_ID);
+        verify(userDomainService).isActiveFounder(USER_A, COMPANY_ID);
+    }
+
+    // =========================================================================
+    // addToEventLottery — null / invalid token / not-member guards
+    // =========================================================================
+
+    @Test
+    void addToEventLottery_throwsWhenEventIdIsNull() {
+        assertThatThrownBy(() -> service.addToEventLottery(null, TOKEN_A))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void addToEventLottery_throwsWhenTokenIsNull() {
+        assertThatThrownBy(() -> service.addToEventLottery(EVENT_ID, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void addToEventLottery_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.addToEventLottery(EVENT_ID, TOKEN_A))
+                .isInstanceOf(InvalidTokenException.class);
+
+        verify(auth).isTokenValid(TOKEN_A);
+    }
+
+    @Test
+    void addToEventLottery_throwsWhenNotMember() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.isMember(TOKEN_A)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.addToEventLottery(EVENT_ID, TOKEN_A))
+                .isInstanceOf(UnauthorizedException.class);
+
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).isMember(TOKEN_A);
+    }
+
+    // =========================================================================
+    // runEventLottery — argument guards
+    // =========================================================================
+
+    @Test
+    void runEventLottery_throwsWhenTokenIsNull() {
+        assertThatThrownBy(() -> service.runEventLottery(null, COMPANY_ID, EVENT_ID, 1, EXPIRY))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void runEventLottery_throwsWhenEventIdIsNull() {
+        assertThatThrownBy(() -> service.runEventLottery(TOKEN_A, COMPANY_ID, null, 1, EXPIRY))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void runEventLottery_throwsWhenCountIsNegative() {
+        assertThatThrownBy(() -> service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, -1, EXPIRY))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void runEventLottery_throwsWhenExpirationTimeIsNull() {
+        assertThatThrownBy(() -> service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 1, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void runEventLottery_throwsWhenExpirationTimeIsInPast() {
+        LocalDateTime pastTime = LocalDateTime.now().minusHours(1);
+        assertThatThrownBy(() -> service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 1, pastTime))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void runEventLottery_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 1, EXPIRY))
+                .isInstanceOf(InvalidTokenException.class);
+
+        verify(auth).isTokenValid(TOKEN_A);
+    }
+
+    @Test
+    void runEventLottery_throwsWhenUnauthorized() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(false);
+        when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 1, EXPIRY))
+                .isInstanceOf(UnauthorizedException.class);
+
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(userDomainService).isActiveOwner(USER_A, COMPANY_ID);
+        verify(userDomainService).isActiveFounder(USER_A, COMPANY_ID);
+    }
+
+    // =========================================================================
+    // getEventLotteryWinners — null / invalid token / unauthorized guards
+    // =========================================================================
+
+    @Test
+    void getEventLotteryWinners_throwsWhenTokenIsNull() {
+        assertThatThrownBy(() -> service.getEventLotteryWinners(null, COMPANY_ID, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getEventLotteryWinners_throwsWhenCompanyIdIsNull() {
+        assertThatThrownBy(() -> service.getEventLotteryWinners(TOKEN_A, null, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getEventLotteryWinners_throwsWhenEventIdIsNull() {
+        assertThatThrownBy(() -> service.getEventLotteryWinners(TOKEN_A, COMPANY_ID, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getEventLotteryWinners_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getEventLotteryWinners(TOKEN_A, COMPANY_ID, EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
+
+        verify(auth).isTokenValid(TOKEN_A);
+    }
+
+    @Test
+    void getEventLotteryWinners_throwsWhenUnauthorized() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(false);
+        when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getEventLotteryWinners(TOKEN_A, COMPANY_ID, EVENT_ID))
+                .isInstanceOf(UnauthorizedException.class);
+
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(userDomainService).isActiveOwner(USER_A, COMPANY_ID);
+        verify(userDomainService).isActiveFounder(USER_A, COMPANY_ID);
+    }
+
+    // =========================================================================
+    // getLotteryEligibilityForEvent — null / invalid token guards
+    // =========================================================================
+
+    @Test
+    void getLotteryEligibilityForEvent_throwsWhenTokenIsNull() {
+        assertThatThrownBy(() -> service.getLotteryEligibilityForEvent(null, EVENT_ID))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getLotteryEligibilityForEvent_throwsWhenEventIdIsNull() {
+        assertThatThrownBy(() -> service.getLotteryEligibilityForEvent(TOKEN_A, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getLotteryEligibilityForEvent_throwsWhenTokenIsInvalid() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getLotteryEligibilityForEvent(TOKEN_A, EVENT_ID))
+                .isInstanceOf(InvalidTokenException.class);
+
+        verify(auth).isTokenValid(TOKEN_A);
+    }
+
+    // =========================================================================
+    // runEventLotteryUsernames — username resolution and fallback
+    // =========================================================================
+
+    @Test
+    void runEventLotteryUsernames_returnsResolvedUsername() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        when(lotteryDomainService.runEventLottery(EVENT_ID, 1, EXPIRY)).thenReturn(Set.of(USER_A));
+        when(userDomainService.resolveMemberById(USER_A)).thenReturn(memberDTO);
+        when(memberDTO.getUsername()).thenReturn("alice");
+
+        Set<String> result = service.runEventLotteryUsernames(TOKEN_A, COMPANY_ID, EVENT_ID, 1, EXPIRY);
+
+        assertThat(result).containsExactly("alice");
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(lotteryDomainService).runEventLottery(EVENT_ID, 1, EXPIRY);
+        verify(userDomainService).resolveMemberById(USER_A);
+    }
+
+    @Test
+    void runEventLotteryUsernames_fallsBackToIdStringWhenResolveFails() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        when(lotteryDomainService.runEventLottery(EVENT_ID, 1, EXPIRY)).thenReturn(Set.of(USER_A));
+        when(userDomainService.resolveMemberById(USER_A)).thenThrow(new RuntimeException("not found"));
+
+        Set<String> result = service.runEventLotteryUsernames(TOKEN_A, COMPANY_ID, EVENT_ID, 1, EXPIRY);
+
+        assertThat(result).containsExactly(USER_A.toString());
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(lotteryDomainService).runEventLottery(EVENT_ID, 1, EXPIRY);
+        verify(userDomainService).resolveMemberById(USER_A);
+    }
+
+    // =========================================================================
+    // getEventLotteryWinnerUsernames — username resolution and fallback
+    // =========================================================================
+
+    @Test
+    void getEventLotteryWinnerUsernames_returnsResolvedUsername() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        when(lotteryDomainService.getEventLotteryWinners(EVENT_ID)).thenReturn(Set.of(USER_A));
+        when(userDomainService.resolveMemberById(USER_A)).thenReturn(memberDTO);
+        when(memberDTO.getUsername()).thenReturn("alice");
+
+        Set<String> result = service.getEventLotteryWinnerUsernames(TOKEN_A, COMPANY_ID, EVENT_ID);
+
+        assertThat(result).containsExactly("alice");
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(lotteryDomainService).getEventLotteryWinners(EVENT_ID);
+        verify(userDomainService).resolveMemberById(USER_A);
+    }
+
+    @Test
+    void getEventLotteryWinnerUsernames_fallsBackToIdStringWhenResolveFails() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        when(lotteryDomainService.getEventLotteryWinners(EVENT_ID)).thenReturn(Set.of(USER_A));
+        when(userDomainService.resolveMemberById(USER_A)).thenThrow(new RuntimeException("not found"));
+
+        Set<String> result = service.getEventLotteryWinnerUsernames(TOKEN_A, COMPANY_ID, EVENT_ID);
+
+        assertThat(result).containsExactly(USER_A.toString());
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(lotteryDomainService).getEventLotteryWinners(EVENT_ID);
+        verify(userDomainService).resolveMemberById(USER_A);
     }
 }

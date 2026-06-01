@@ -17,6 +17,9 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.RoleNot
 
 class MemberTest {
 
+    // JPA requires a protected no-arg constructor; cover it via a concrete subclass
+    private static class JpaMember extends Member {}
+
     private static final String USERNAME = "john";
     private static final String PASSWORD_HASH = "hashedPassword123";
     private static final LocalDate BIRTH_DATE = LocalDate.of(2000, 1, 1);
@@ -188,5 +191,92 @@ class MemberTest {
 
         assertThrows(InvalidMemberInputException.class,
                 () -> member.setPassword(null));
+    }
+
+    @Test
+    void addRole_shouldKeepFirstRoleAsActive_whenSecondRoleAdded() {
+        Role first = new Owner(UUID.randomUUID(), UUID.randomUUID());
+        Role second = new Owner(UUID.randomUUID(), UUID.randomUUID());
+
+        member.addRole(first);
+        member.addRole(second);
+
+        assertEquals(first, member.getActiveRole());
+        assertEquals(2, member.getAssignedRoles().size());
+    }
+
+    @Test
+    void removeRole_shouldDoNothing_whenRoleIsNull() {
+        assertDoesNotThrow(() -> member.removeRole(null));
+    }
+
+    @Test
+    void removeRole_shouldNullActiveRole_whenActiveRoleIsRemoved() {
+        Role role = new Owner(UUID.randomUUID(), UUID.randomUUID());
+        member.addRole(role);
+        assertEquals(role, member.getActiveRole());
+
+        member.removeRole(role);
+
+        assertNull(member.getActiveRole());
+        assertFalse(member.getAssignedRoles().contains(role));
+    }
+
+    @Test
+    void setRole_shouldAddAndActivateNonNullRole() {
+        Role role = new Owner(UUID.randomUUID(), UUID.randomUUID());
+        member.setRole(role);
+
+        assertEquals(role, member.getActiveRole());
+        assertTrue(member.getAssignedRoles().contains(role));
+    }
+
+    @Test
+    void clearRoles_shouldRemoveAllRolesAndNullActiveRole() {
+        member.addRole(new Owner(UUID.randomUUID(), UUID.randomUUID()));
+        member.clearRoles();
+
+        assertTrue(member.getAssignedRoles().isEmpty());
+        assertNull(member.getActiveRole());
+    }
+
+    @Test
+    void getRole_shouldReturnSameAsGetActiveRole() {
+        Role role = new Owner(UUID.randomUUID(), UUID.randomUUID());
+        member.setRole(role);
+
+        assertEquals(member.getActiveRole(), member.getRole());
+    }
+
+    @Test
+    void protectedConstructor_createsInstance() {
+        assertDoesNotThrow(() -> new JpaMember());
+    }
+
+    @Test
+    void prePersist_setsUserId_whenNull() {
+        JpaMember jpa = new JpaMember();
+        assertNull(jpa.getUserId());
+        ReflectionTestUtils.invokeMethod(jpa, "prePersist");
+        assertNotNull(jpa.getUserId());
+    }
+
+    @Test
+    void equals_shouldReturnFalse_forNonMemberObject() {
+        assertNotEquals(member, "not a member");
+    }
+
+    @Test
+    void removeRole_shouldKeepActiveRole_whenNonActiveRoleIsRemoved() {
+        Role first = new Owner(UUID.randomUUID(), UUID.randomUUID());
+        Role second = new Owner(UUID.randomUUID(), UUID.randomUUID());
+        member.addRole(first);
+        member.addRole(second);
+        assertEquals(first, member.getActiveRole());
+
+        member.removeRole(second);
+
+        assertEquals(first, member.getActiveRole());
+        assertFalse(member.getAssignedRoles().contains(second));
     }
 }
