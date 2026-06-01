@@ -1170,6 +1170,17 @@ class UserDomainServiceTest {
         assertThat(userDomainService.isActiveOwner(userId, companyId)).isFalse();
     }
 
+    @Test
+    void isActiveOwner_returnsFalse_whenOwnerRoleIsNotApproved() {
+        UUID userId = UUID.randomUUID();
+        UUID companyId = UUID.randomUUID();
+        Owner ownerRole = new Owner(UUID.randomUUID(), companyId);
+        Member member = memberWithId(userId, ownerRole);
+        when(memberRepository.findById(userId)).thenReturn(Optional.of(member));
+
+        assertThat(userDomainService.isActiveOwner(userId, companyId)).isFalse();
+    }
+
     // -------- isActiveManager --------
 
     @Test
@@ -1191,6 +1202,19 @@ class UserDomainServiceTest {
         UUID companyId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         Manager mgr = new Manager(UUID.randomUUID(), companyId, eventId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        Member member = memberWithId(userId, mgr);
+        when(memberRepository.findById(userId)).thenReturn(Optional.of(member));
+
+        assertThat(userDomainService.isActiveManager(userId, companyId, eventId)).isFalse();
+    }
+
+    @Test
+    void isActiveManager_returnsFalse_whenManagerApprovedButDifferentCompany() {
+        UUID userId = UUID.randomUUID();
+        UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        Manager mgr = new Manager(UUID.randomUUID(), UUID.randomUUID(), eventId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        mgr.approveAppointment();
         Member member = memberWithId(userId, mgr);
         when(memberRepository.findById(userId)).thenReturn(Optional.of(member));
 
@@ -1375,6 +1399,20 @@ class UserDomainServiceTest {
     }
 
     @Test
+    void getApprovedEventManagerUserIds_excludesUnapprovedManager() {
+        UUID eventId = UUID.randomUUID();
+        UUID companyId = UUID.randomUUID();
+        UUID managerId = UUID.randomUUID();
+        Manager mgr = new Manager(UUID.randomUUID(), companyId, eventId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        Member managerMember = memberWithId(managerId, mgr);
+
+        when(memberRepository.findAll()).thenReturn(List.of(managerMember));
+
+        Set<UUID> result = userDomainService.getApprovedEventManagerUserIds(eventId);
+        assertThat(result).isEmpty();
+    }
+
+    @Test
     void getApprovedEventManagerUserIds_excludesMemberWithNonManagerRole() {
         UUID eventId = UUID.randomUUID();
         UUID companyId = UUID.randomUUID();
@@ -1540,6 +1578,49 @@ class UserDomainServiceTest {
         assertThat(tree.root().getMemberId()).isEqualTo(founderId);
     }
 
+    @Test
+    void getCompanyRoleTree_returnsTree_whenRequesterIsOwner() {
+        UUID companyId = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+        UUID founderId = UUID.randomUUID();
+        Founder founderRole = new Founder(null, companyId);
+        Member founderMember = memberWithId(founderId, founderRole);
+        repo.store(founderMember);
+
+        UUID ownerId = UUID.randomUUID();
+        Owner ownerRole = new Owner(founderId, companyId);
+        ownerRole.approveAppointment();
+        Member ownerMember = memberWithId(ownerId, ownerRole);
+        repo.store(ownerMember);
+
+        UserDomainService sut = new UserDomainService(repo);
+        CompanyRoleTreeDTO tree = sut.getCompanyRoleTree(ownerId, companyId);
+
+        assertThat(tree).isNotNull();
+    }
+
+    @Test
+    void getCompanyRoleTree_withOtherCompanyFounderInRepo_coversFounderNotInCompanyBranch() {
+        UUID companyId = UUID.randomUUID();
+        UUID otherCompanyId = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+        UUID founderId = UUID.randomUUID();
+        Founder founderRole = new Founder(null, companyId);
+        Member founderMember = memberWithId(founderId, founderRole);
+        repo.store(founderMember);
+
+        UUID otherFounderId = UUID.randomUUID();
+        Founder otherFounderRole = new Founder(null, otherCompanyId);
+        Member otherFounderMember = memberWithId(otherFounderId, otherFounderRole);
+        repo.store(otherFounderMember);
+
+        UserDomainService sut = new UserDomainService(repo);
+        CompanyRoleTreeDTO tree = sut.getCompanyRoleTree(founderId, companyId);
+
+        assertThat(tree).isNotNull();
+        assertThat(tree.companyId()).isEqualTo(companyId);
+    }
+
     // -------- getAppointedMembersTree --------
 
     @Test
@@ -1577,6 +1658,59 @@ class UserDomainServiceTest {
         assertThat(result).contains(founderId);
     }
 
+    @Test
+    void getAppointedMembersTree_throws_whenMemberHasApprovedRoleInDifferentCompany() {
+        UUID companyId = UUID.randomUUID();
+        UUID otherCompanyId = UUID.randomUUID();
+        UUID memberId = UUID.randomUUID();
+        Owner ownerRole = new Owner(UUID.randomUUID(), otherCompanyId);
+        ownerRole.approveAppointment();
+        Member member = memberWithId(memberId, ownerRole);
+        when(memberRepository.findById(memberId)).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> userDomainService.getAppointedMembersTree(memberId, companyId))
+                .isInstanceOf(UnauthorizedCompanyActionException.class);
+    }
+
+    @Test
+    void getAppointedMembersTree_skipsAlreadyVisitedMember() {
+        UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+
+        UUID founderId = UUID.randomUUID();
+        Founder founderRole = new Founder(null, companyId);
+        Member founderMember = memberWithId(founderId, founderRole);
+        repo.store(founderMember);
+
+        UUID ownerBId = UUID.randomUUID();
+        Owner ownerBRole = new Owner(founderId, companyId);
+        ownerBRole.approveAppointment();
+        Member ownerBMember = memberWithId(ownerBId, ownerBRole);
+        repo.store(ownerBMember);
+
+        UUID ownerCId = UUID.randomUUID();
+        Owner ownerCRole = new Owner(ownerBId, companyId);
+        ownerCRole.approveAppointment();
+        Member ownerCMember = memberWithId(ownerCId, ownerCRole);
+        repo.store(ownerCMember);
+
+        UUID managerId = UUID.randomUUID();
+        Manager managerRoleB = new Manager(ownerBId, companyId, eventId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        managerRoleB.approveAppointment();
+        Manager managerRoleC = new Manager(ownerCId, companyId, eventId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        managerRoleC.approveAppointment();
+        Member managerMember = memberWithId(managerId, managerRoleB);
+        managerMember.addRole(managerRoleC);
+        repo.store(managerMember);
+
+        UserDomainService sut = new UserDomainService(repo);
+        List<UUID> result = sut.getAppointedMembersTree(founderId, companyId);
+
+        assertThat(result).contains(founderId, ownerBId, ownerCId, managerId);
+        assertThat(result.stream().filter(id -> id.equals(managerId)).count()).isEqualTo(1L);
+    }
+
     // -------- isLegalEventManager — manager exists but not approved (L383 branch) --------
 
     @Test
@@ -1585,6 +1719,23 @@ class UserDomainServiceTest {
         UUID companyId = UUID.randomUUID();
         UUID eventId = UUID.randomUUID();
         Manager mgr = new Manager(UUID.randomUUID(), companyId, eventId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        Member member = memberWithId(userId, mgr);
+        when(memberRepository.findById(userId)).thenReturn(Optional.of(member));
+
+        assertThatThrownBy(() -> userDomainService.isLegalEventManager(eventId, userId, companyId, ManagerPermission.MANAGE_EVENTS))
+                .isInstanceOf(com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidManagerPermissionsException.class);
+    }
+
+    // -------- isLegalEventManager — approved manager in right company but wrong event (L385 branch) --------
+
+    @Test
+    void isLegalEventManager_throws_whenManagerApprovedRightCompanyButWrongEvent() {
+        UUID userId = UUID.randomUUID();
+        UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        UUID differentEventId = UUID.randomUUID();
+        Manager mgr = new Manager(UUID.randomUUID(), companyId, differentEventId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        mgr.approveAppointment();
         Member member = memberWithId(userId, mgr);
         when(memberRepository.findById(userId)).thenReturn(Optional.of(member));
 
@@ -1640,6 +1791,59 @@ class UserDomainServiceTest {
 
         assertThatThrownBy(() -> userDomainService.getAppointedMembersTree(memberId, companyId))
                 .isInstanceOf(UnauthorizedCompanyActionException.class);
+    }
+
+    // -------- appointOwner — target has Manager role covers instanceof Owner=false branch (L188) --------
+
+    @Test
+    void appointOwner_succeeds_whenTargetHasManagerRole() {
+        UUID companyId = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+        UUID ownerId = UUID.randomUUID();
+        Founder ownerRole = new Founder(null, companyId);
+        Member ownerMember = memberWithId(ownerId, ownerRole);
+        repo.store(ownerMember);
+
+        UUID memberId = UUID.randomUUID();
+        Manager existingMgrRole = new Manager(ownerId, companyId, UUID.randomUUID(), Set.of(ManagerPermission.MANAGE_EVENTS));
+        Member member = memberWithId(memberId, existingMgrRole);
+        repo.store(member);
+
+        UserDomainService sut = new UserDomainService(repo);
+        Member result = sut.appointOwner(memberId, ownerId, companyId);
+
+        assertThat(result.getAssignedRoles()).anyMatch(r -> r instanceof Owner && !(r instanceof Founder));
+    }
+
+    // -------- appointOwner — Manager in chain covers instanceof Owner=false at L681 --------
+
+    @Test
+    void appointOwner_succeeds_whenAppointerWasAppointedByManagerInChain() {
+        UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+
+        // personX has ONLY a Manager role (null appointer so cycle check terminates cleanly)
+        UUID personXId = UUID.randomUUID();
+        Manager xManagerRole = new Manager(null, companyId, eventId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        Member personX = memberWithId(personXId, xManagerRole);
+        repo.store(personX);
+
+        // ownerB has an approved Owner role, appointedBy=personXId (artificial chain)
+        UUID ownerBId = UUID.randomUUID();
+        Owner ownerBRole = new Owner(personXId, companyId);
+        ownerBRole.approveAppointment();
+        Member ownerB = memberWithId(ownerBId, ownerBRole);
+        repo.store(ownerB);
+
+        UUID newMemberId = UUID.randomUUID();
+        Member newMember = memberWithId(newMemberId, null);
+        repo.store(newMember);
+
+        UserDomainService sut = new UserDomainService(repo);
+        Member result = sut.appointOwner(newMemberId, ownerBId, companyId);
+
+        assertThat(result.getAssignedRoles()).anyMatch(r -> r instanceof Owner && !(r instanceof Founder));
     }
 
     // -------- appointOwner — Founder as target covers !(instanceof Founder)=false branch (L188) --------
@@ -1731,6 +1935,72 @@ class UserDomainServiceTest {
         when(memberRepository.findById(userId)).thenReturn(Optional.of(member));
 
         assertThat(userDomainService.isActiveFounder(userId, companyId)).isFalse();
+    }
+
+    // -------- changeManagerPermissions — caller has Manager role but not Owner (L638 branch) --------
+
+    @Test
+    void changeManagerPermissions_throws_whenCallerHasManagerButNoOwnerRole() {
+        UUID companyId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+        UUID callerId = UUID.randomUUID();
+        Manager callerManagerRole = new Manager(UUID.randomUUID(), companyId, eventId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        callerManagerRole.approveAppointment();
+        Member callerMember = memberWithId(callerId, callerManagerRole);
+        repo.store(callerMember);
+
+        UUID managerId = UUID.randomUUID();
+        Manager mgr = new Manager(callerId, companyId, eventId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        Member managerMember = memberWithId(managerId, mgr);
+        repo.store(managerMember);
+
+        UserDomainService sut = new UserDomainService(repo);
+        assertThatThrownBy(() -> sut.changeManagerPermissions(callerId, managerId, eventId, Set.of(ManagerPermission.DEFINE_PURCHASE_POLICY)))
+                .isInstanceOf(UnauthorizedCompanyActionException.class);
+    }
+
+    // -------- removeOwnerAppointment — caller has Manager role (L651 branch) --------
+
+    @Test
+    void removeOwnerAppointment_throws_whenCallerHasManagerButNotOwnerRole() {
+        UUID companyId = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+        UUID callerId = UUID.randomUUID();
+        Manager callerManagerRole = new Manager(UUID.randomUUID(), companyId, UUID.randomUUID(), Set.of(ManagerPermission.MANAGE_EVENTS));
+        Member callerMember = memberWithId(callerId, callerManagerRole);
+        repo.store(callerMember);
+
+        UUID memberId = UUID.randomUUID();
+        Owner ownerToRemove = new Owner(callerId, companyId);
+        Member member = memberWithId(memberId, ownerToRemove);
+        repo.store(member);
+
+        UserDomainService sut = new UserDomainService(repo);
+        assertThatThrownBy(() -> sut.removeOwnerAppointment(callerId, memberId, companyId))
+                .isInstanceOf(UnauthorizedCompanyActionException.class);
+    }
+
+    // -------- removeOwnerAppointment — caller Owner is for different company (L653 branch) --------
+
+    @Test
+    void removeOwnerAppointment_throws_whenCallerOwnerRoleIsForDifferentCompany() {
+        UUID companyId = UUID.randomUUID();
+        UUID otherCompanyId = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+        UUID callerId = UUID.randomUUID();
+        Owner callerOwnerRole = new Owner(UUID.randomUUID(), otherCompanyId);
+        callerOwnerRole.approveAppointment();
+        Member callerMember = memberWithId(callerId, callerOwnerRole);
+        repo.store(callerMember);
+
+        UUID memberId = UUID.randomUUID();
+        Member member = memberWithId(memberId, null);
+        repo.store(member);
+
+        UserDomainService sut = new UserDomainService(repo);
+        assertThatThrownBy(() -> sut.removeOwnerAppointment(callerId, memberId, companyId))
+                .isInstanceOf(UnauthorizedCompanyActionException.class);
     }
 
     // -------- validateOwnerAppointer — owner role exists but not approved (L638 branch) --------
