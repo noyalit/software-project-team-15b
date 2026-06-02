@@ -58,6 +58,21 @@ public class CompanyService {
         return createCompany(token, name, null, null);
     }
 
+    /**
+     * Creates a new production company with optional initial policies.
+     * Behaves like {@link #createCompany(String, String)} but additionally sets the company's
+     * purchase and/or discount policy immediately after creation when non-null arguments are provided.
+     *
+     * @param token          the caller's member session token
+     * @param name           the desired company name (must not be null or blank)
+     * @param purchasePolicy an initial purchase policy, or {@code null} to leave unset
+     * @param discountPolicy an initial discount policy, or {@code null} to leave unset
+     * @return a {@link CompanyDTO} representing the newly created company
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
+     *         if the token is invalid, expired, or belongs to a non-member
+     * @throws UnauthorizedCompanyActionException if the caller is not a member
+     * @throws IllegalArgumentException          if {@code name} is null or blank
+     */
     public CompanyDTO createCompany(
             String token,
             String name,
@@ -103,6 +118,15 @@ public class CompanyService {
                 .toList();
     }
 
+    /**
+     * Returns all companies in which the authenticated caller is either the founder or an owner.
+     *
+     * @param token the caller's member session token; must not be null or blank
+     * @return a (possibly empty) deduplicated list of {@link CompanyDTO}s for the caller's companies
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
+     *         if the token is null, blank, or invalid
+     * @throws UnauthorizedCompanyActionException if the caller is not a member
+     */
     public List<CompanyDTO> getMyCompanies(String token) {
         requireValidToken(token);
         UUID memberId = requireAuthenticatedMember(token);
@@ -111,6 +135,15 @@ public class CompanyService {
                 .toList();
     }
 
+    /**
+     * Returns every company in the system. Only a system admin may call this method.
+     *
+     * @param token a valid system-admin session token; must not be null or blank
+     * @return a (possibly empty) list of all {@link CompanyDTO}s
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
+     *         if the token is null, blank, or invalid
+     * @throws UnauthorizedCompanyActionException if the caller is not a system admin
+     */
     public List<CompanyDTO> getAllCompanies(String token) {
         requireValidToken(token);
         if (!auth.isSystemAdmin(token)) {
@@ -121,6 +154,22 @@ public class CompanyService {
                 .toList();
     }
 
+    /**
+     * Replaces the purchase policy of the specified company.
+     * The caller must be an active founder or owner of the company, or an approved manager who holds
+     * the purchase-policy permission for that company.
+     *
+     * @param token     the caller's member session token
+     * @param companyId the UUID of the target company
+     * @param policy    the new purchase policy to apply (must not be null)
+     * @return a {@link CompanyDTO} reflecting the updated state
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
+     *         if the token is invalid or expired
+     * @throws UnauthorizedCompanyActionException if the caller lacks the required role or permission
+     * @throws IllegalArgumentException          if {@code companyId} or {@code policy} is null
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
+     *         if no company exists with the given {@code companyId}
+     */
     public CompanyDTO updatePurchasePolicy(String token, UUID companyId, ICompanyPurchasePolicy policy) {
         try {
             requireNonNull(companyId, "Company ID");
@@ -235,19 +284,20 @@ public class CompanyService {
     }
 
     /**
-     * Reactivates a suspended or closed company.
+     * Reactivates a closed company. The caller must be the company's active founder.
      * <ul>
-     *   <li>A {@link CompanyStatus#SUSPENDED} company may only be reactivated by a system admin.</li>
-     *   <li>A {@link CompanyStatus#CLOSED} company may only be reopened by its founder.</li>
+     *   <li>A {@link CompanyStatus#CLOSED} company may only be reopened by its active founder.</li>
+     *   <li>A {@link CompanyStatus#SUSPENDED} company cannot be reactivated through this method;
+     *       the domain state machine does not permit {@code SUSPENDED → ACTIVE}.</li>
      *   <li>An {@link CompanyStatus#ACTIVE} company cannot be activated again.</li>
      * </ul>
      *
-     * @param token     a valid token; must not be null or blank
+     * @param token     a valid member token for the founder; must not be null or blank
      * @param companyId the target company's id; must not be null
      * @return the updated company with status {@link CompanyStatus#ACTIVE}
      * @throws InvalidTokenException             if the token is null, blank, or not valid
-     * @throws UnauthorizedCompanyActionException if the caller lacks permission for the current status
-     * @throws IllegalArgumentException          if the company is already active
+     * @throws UnauthorizedCompanyActionException if the caller is not the active founder
+     * @throws IllegalStateException             if the company is not in {@link CompanyStatus#CLOSED} state
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
      *                                           if no company with {@code companyId} exists
      */
@@ -268,6 +318,20 @@ public class CompanyService {
         }
     }
 
+    /**
+     * Retrieves the company with the given id. The caller must supply a valid token.
+     * Closed and suspended companies are visible only to system admins, the company's
+     * active founder, or its active owners.
+     *
+     * @param token     a valid session token; must not be null
+     * @param companyId the UUID of the target company; must not be null
+     * @return the {@link CompanyDTO} for the requested company
+     * @throws IllegalArgumentException          if {@code token} or {@code companyId} is null
+     * @throws UnauthorizedCompanyActionException if the company is closed/suspended and the caller
+     *                                            lacks the required role
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
+     *         if no company exists with the given {@code companyId}
+     */
     public CompanyDTO getCompany(String token, UUID companyId) {
         requireNonNull(token, "Token");
         requireNonNull(companyId, "Company ID");
@@ -278,6 +342,22 @@ public class CompanyService {
         return CompanyDTO.from(companyDomainService.getCompany(companyId, canViewClosed));
     }
 
+    /**
+     * Returns the current purchase policies of the specified company.
+     * Closed and suspended companies are visible only to system admins, the company's
+     * active founder, or its active owners.
+     *
+     * @param token     a valid session token; must not be null or blank
+     * @param companyId the UUID of the target company; must not be null
+     * @return an unmodifiable list of {@link ICompanyPurchasePolicy} instances, possibly empty
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
+     *         if the token is null, blank, or invalid
+     * @throws IllegalArgumentException          if {@code companyId} is null
+     * @throws UnauthorizedCompanyActionException if the company is closed/suspended and the caller
+     *                                            lacks the required role
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
+     *         if no company exists with the given {@code companyId}
+     */
     public List<ICompanyPurchasePolicy> getCompanyPurchasePolicies(String token, UUID companyId) {
         requireValidToken(token);
         requireNonNull(companyId, "Company ID");
@@ -289,6 +369,22 @@ public class CompanyService {
         return company.getPurchasePolicies();
     }
 
+    /**
+     * Returns the current discount policies of the specified company.
+     * Closed and suspended companies are visible only to system admins, the company's
+     * active founder, or its active owners.
+     *
+     * @param token     a valid session token; must not be null or blank
+     * @param companyId the UUID of the target company; must not be null
+     * @return an unmodifiable list of {@link ICompanyDiscountPolicy} instances, possibly empty
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
+     *         if the token is null, blank, or invalid
+     * @throws IllegalArgumentException          if {@code companyId} is null
+     * @throws UnauthorizedCompanyActionException if the company is closed/suspended and the caller
+     *                                            lacks the required role
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
+     *         if no company exists with the given {@code companyId}
+     */
     public List<ICompanyDiscountPolicy> getCompanyDiscountPolicies(String token, UUID companyId) {
         requireValidToken(token);
         requireNonNull(companyId, "Company ID");

@@ -753,4 +753,156 @@ class CompanyServiceBlackTest {
         CompanyDTO result = service.getCompany(founderToken, dto.companyId());
         assertThat(result.status()).isEqualTo(CompanyStatus.CLOSED);
     }
+
+    // ===========================================================================================
+    // createCompany with purchase and discount policies
+
+    @Test
+    void createCompany_with_both_policies_applies_them_on_creation() {
+        UUID founderId = UUID.randomUUID();
+        String token = registerMember(founderId);
+        ICompanyPurchasePolicy purchasePolicy = (req, c) -> {};
+        ICompanyDiscountPolicy discountPolicy = (subtotal, req) -> subtotal;
+
+        CompanyDTO dto = service.createCompany(token, "Acme", purchasePolicy, discountPolicy);
+
+        Company saved = repo.findById(dto.companyId()).orElseThrow();
+        assertThat(saved.getPurchasePolicies()).containsExactly(purchasePolicy);
+        assertThat(saved.getDiscountPolicies()).containsExactly(discountPolicy);
+    }
+
+    @Test
+    void createCompany_with_null_policies_creates_company_without_policies() {
+        UUID founderId = UUID.randomUUID();
+        String token = registerMember(founderId);
+
+        CompanyDTO dto = service.createCompany(token, "Acme", null, null);
+
+        Company saved = repo.findById(dto.companyId()).orElseThrow();
+        assertThat(saved.getPurchasePolicies()).isEmpty();
+        assertThat(saved.getDiscountPolicies()).isEmpty();
+    }
+
+    @Test
+    void createCompany_with_purchase_policy_only_leaves_discount_policy_empty() {
+        UUID founderId = UUID.randomUUID();
+        String token = registerMember(founderId);
+        ICompanyPurchasePolicy purchasePolicy = (req, c) -> {};
+
+        CompanyDTO dto = service.createCompany(token, "Acme", purchasePolicy, null);
+
+        Company saved = repo.findById(dto.companyId()).orElseThrow();
+        assertThat(saved.getPurchasePolicies()).containsExactly(purchasePolicy);
+        assertThat(saved.getDiscountPolicies()).isEmpty();
+    }
+
+    // ===========================================================================================
+    // getCompanyPurchasePolicies
+
+    @Test
+    void getCompanyPurchasePolicies_returns_policies_for_active_company() {
+        UUID founderId = UUID.randomUUID();
+        String token = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(token, "Acme");
+        ICompanyPurchasePolicy policy = (req, c) -> {};
+        service.updatePurchasePolicy(token, dto.companyId(), policy);
+
+        List<ICompanyPurchasePolicy> result = service.getCompanyPurchasePolicies(token, dto.companyId());
+
+        assertThat(result).containsExactly(policy);
+    }
+
+    @Test
+    void getCompanyPurchasePolicies_returns_empty_when_no_policies_set() {
+        UUID founderId = UUID.randomUUID();
+        String token = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(token, "Acme");
+
+        assertThat(service.getCompanyPurchasePolicies(token, dto.companyId())).isEmpty();
+    }
+
+    @Test
+    void getCompanyPurchasePolicies_throws_when_token_is_invalid() {
+        assertThatThrownBy(() -> service.getCompanyPurchasePolicies("bad", UUID.randomUUID()))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void getCompanyPurchasePolicies_throws_when_companyId_is_null() {
+        String token = registerMember(UUID.randomUUID());
+        assertThatThrownBy(() -> service.getCompanyPurchasePolicies(token, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getCompanyPurchasePolicies_throws_when_company_is_closed_and_caller_not_privileged() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+        service.closeCompany(founderToken, dto.companyId());
+
+        UUID strangerId = UUID.randomUUID();
+        String strangerToken = registerMember(strangerId);
+        when(userDomainService.isActiveFounder(strangerId, dto.companyId())).thenReturn(false);
+        when(userDomainService.isActiveOwner(strangerId, dto.companyId())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getCompanyPurchasePolicies(strangerToken, dto.companyId()))
+                .isInstanceOf(UnauthorizedCompanyActionException.class);
+    }
+
+    // ===========================================================================================
+    // getCompanyDiscountPolicies
+
+    @Test
+    void getCompanyDiscountPolicies_returns_policies_for_active_company() {
+        UUID founderId = UUID.randomUUID();
+        String token = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(token, "Acme");
+        ICompanyDiscountPolicy policy = (subtotal, req) -> subtotal;
+        service.updateDiscountPolicy(token, dto.companyId(), policy);
+
+        List<ICompanyDiscountPolicy> result = service.getCompanyDiscountPolicies(token, dto.companyId());
+
+        assertThat(result).containsExactly(policy);
+    }
+
+    @Test
+    void getCompanyDiscountPolicies_returns_empty_when_no_policies_set() {
+        UUID founderId = UUID.randomUUID();
+        String token = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(token, "Acme");
+
+        assertThat(service.getCompanyDiscountPolicies(token, dto.companyId())).isEmpty();
+    }
+
+    @Test
+    void getCompanyDiscountPolicies_throws_when_token_is_invalid() {
+        assertThatThrownBy(() -> service.getCompanyDiscountPolicies("bad", UUID.randomUUID()))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void getCompanyDiscountPolicies_throws_when_companyId_is_null() {
+        String token = registerMember(UUID.randomUUID());
+        assertThatThrownBy(() -> service.getCompanyDiscountPolicies(token, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void getCompanyDiscountPolicies_throws_when_company_is_closed_and_caller_not_privileged() {
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        when(userDomainService.isActiveFounder(founderId, dto.companyId())).thenReturn(true);
+        service.closeCompany(founderToken, dto.companyId());
+
+        UUID strangerId = UUID.randomUUID();
+        String strangerToken = registerMember(strangerId);
+        when(userDomainService.isActiveFounder(strangerId, dto.companyId())).thenReturn(false);
+        when(userDomainService.isActiveOwner(strangerId, dto.companyId())).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getCompanyDiscountPolicies(strangerToken, dto.companyId()))
+                .isInstanceOf(UnauthorizedCompanyActionException.class);
+    }
 }
