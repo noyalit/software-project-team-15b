@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Application.Company;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -54,10 +55,26 @@ public class CompanyService {
      * @throws IllegalArgumentException           if {@code name} is null or blank
      */
     public CompanyDTO createCompany(String token, String name) {
+        return createCompany(token, name, null, null);
+    }
+
+    public CompanyDTO createCompany(
+            String token,
+            String name,
+            ICompanyPurchasePolicy purchasePolicy,
+            ICompanyDiscountPolicy discountPolicy) {
         try {
             requireNonBlank(name, "Company name");
             UUID founderId = requireAuthenticatedMember(token);
             var company = companyDomainService.createCompany(name, founderId);
+
+            if (purchasePolicy != null) {
+                company = companyDomainService.updatePurchasePolicy(company.getId(), purchasePolicy);
+            }
+            if (discountPolicy != null) {
+                company = companyDomainService.updateDiscountPolicy(company.getId(), discountPolicy);
+            }
+
             userDomainService.appointFounder(founderId, company.getId());
             AUDIT.info("op=createCompany founderId={} companyId={} name={} result=ok",
                     founderId, company.getId(), name);
@@ -89,9 +106,27 @@ public class CompanyService {
     public List<CompanyDTO> getMyCompanies(String token) {
         requireValidToken(token);
         UUID memberId = requireAuthenticatedMember(token);
-        return companyDomainService.findCompaniesByMember(memberId).stream()
+
+        List<CompanyDTO> asFounder = companyDomainService.findCompaniesByFounder(memberId).stream()
                 .map(CompanyDTO::from)
                 .toList();
+        List<CompanyDTO> asOwner = companyDomainService.findCompaniesByOwner(memberId).stream()
+                .map(CompanyDTO::from)
+                .toList();
+
+        LinkedHashMap<UUID, CompanyDTO> unique = new LinkedHashMap<>();
+        for (CompanyDTO dto : asFounder) {
+            if (dto != null && dto.companyId() != null) {
+                unique.put(dto.companyId(), dto);
+            }
+        }
+        for (CompanyDTO dto : asOwner) {
+            if (dto != null && dto.companyId() != null) {
+                unique.putIfAbsent(dto.companyId(), dto);
+            }
+        }
+
+        return List.copyOf(unique.values());
     }
 
     public List<CompanyDTO> getAllCompanies(String token) {

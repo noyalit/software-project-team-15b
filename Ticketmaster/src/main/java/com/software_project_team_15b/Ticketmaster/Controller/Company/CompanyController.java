@@ -21,6 +21,8 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Invalid
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -43,7 +45,12 @@ public class CompanyController {
             @RequestBody CreateCompanyRequest request
     ) {
         try {
-            CompanyDTO company = companyService.createCompany(token, request.name());
+            CompanyDTO company = companyService.createCompany(
+                    token,
+                    request.name(),
+                    request.purchasePolicy(),
+                    request.discountPolicy()
+            );
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(new ApiResponse<>(company, null));
         } catch (InvalidTokenException ex) {
@@ -183,7 +190,11 @@ public class CompanyController {
         }
     }
 
-    public record CreateCompanyRequest(String name) {}
+    public record CreateCompanyRequest(
+            String name,
+            ICompanyPurchasePolicy purchasePolicy,
+            ICompanyDiscountPolicy discountPolicy
+    ) {}
 
     private <T> ResponseEntity<ApiResponse<T>> badRequest(Exception ex) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
