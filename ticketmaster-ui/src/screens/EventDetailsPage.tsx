@@ -69,6 +69,67 @@ export default function EventDetailsPage() {
     return `Unknown policy: ${t ?? 'undefined'}`;
   };
 
+  const describeCompanyPurchasePolicy = (p: any, depth = 0): string[] => {
+    if (!p || typeof p !== 'object') return ['Unknown policy'];
+    const cls = String(p['@class'] ?? '');
+
+    if (Array.isArray(p.children)) {
+      const header = cls.includes('OrPurchasePolicy')
+        ? 'Any of:'
+        : cls.includes('AndPurchasePolicy')
+          ? 'All of:'
+          : 'Group:';
+      const lines: string[] = [];
+      lines.push(header);
+      for (const child of p.children) {
+        const childLines = describeCompanyPurchasePolicy(child, depth + 1);
+        for (const l of childLines) lines.push('  '.repeat(depth + 1) + l);
+      }
+      return lines;
+    }
+
+    if (p.max != null) return [`Max tickets per order: ${p.max}`];
+    if (p.minAge != null) return [`Age restriction: ${p.minAge}+`];
+    if (p.min != null) return [`Min tickets per order: ${p.min}`];
+
+    if (cls) return [cls.split('.').pop() ?? cls];
+    return ['Unknown policy'];
+  };
+
+  const describeCompanyDiscountPolicy = (p: any): string => {
+    if (!p || typeof p !== 'object') return 'Unknown policy';
+    const cls = String(p['@class'] ?? '');
+
+    if (p.percent != null && cls.includes('SimpleDiscountPolicy')) {
+      return `Simple discount (${p.percent}%)`;
+    }
+
+    if (p.percent != null && cls.includes('ConditionalDiscountPolicy')) {
+      const cond = p.condition;
+      if (cond && typeof cond === 'object') {
+        const condCls = String(cond['@class'] ?? '');
+        if (cond.max != null && condCls.includes('MaxTicketsCondition')) {
+          return `Conditional discount (${p.percent}%) when quantity <= ${cond.max}`;
+        }
+        if (cond.min != null && condCls.includes('MinTicketsCondition')) {
+          return `Conditional discount (${p.percent}%) when quantity >= ${cond.min}`;
+        }
+        if (condCls.includes('TimeWindowCondition')) {
+          const from = cond.from ? new Date(cond.from).toLocaleString() : null;
+          const to = cond.to ? new Date(cond.to).toLocaleString() : null;
+          if (from && to) return `Conditional discount (${p.percent}%) between ${from} and ${to}`;
+          if (from) return `Conditional discount (${p.percent}%) from ${from}`;
+          if (to) return `Conditional discount (${p.percent}%) until ${to}`;
+          return `Conditional discount (${p.percent}%)`;
+        }
+      }
+      return `Conditional discount (${p.percent}%)`;
+    }
+
+    if (cls) return cls.split('.').pop() ?? cls;
+    return 'Unknown policy';
+  };
+
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
   const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>([]);
   const [standingQuantity, setStandingQuantity] = useState(1);
@@ -199,6 +260,30 @@ export default function EventDetailsPage() {
       return res.data.data;
     },
     enabled: Boolean(eventId),
+  });
+
+  const companyPurchasePoliciesQuery = useQuery({
+    queryKey: ['company', 'purchase-policies', eventQuery.data?.companyId],
+    queryFn: async () => {
+      const companyId = eventQuery.data?.companyId;
+      if (!companyId) return [] as any[];
+      const res = await http.get<ApiResponse<any[]>>(`/api/companies/${companyId}/purchase-policies`);
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
+    },
+    enabled: Boolean(token) && Boolean(eventQuery.data?.companyId),
+  });
+
+  const companyDiscountPoliciesQuery = useQuery({
+    queryKey: ['company', 'discount-policies', eventQuery.data?.companyId],
+    queryFn: async () => {
+      const companyId = eventQuery.data?.companyId;
+      if (!companyId) return [] as any[];
+      const res = await http.get<ApiResponse<any[]>>(`/api/companies/${companyId}/discount-policies`);
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
+    },
+    enabled: Boolean(token) && Boolean(eventQuery.data?.companyId),
   });
 
   const purchasePoliciesQuery = useQuery({
@@ -613,6 +698,33 @@ export default function EventDetailsPage() {
 
             </div>
 
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Company purchase policies
+            </div>
+
+            {companyPurchasePoliciesQuery.isPending ? (
+              <div className="mt-2 text-sm text-slate-600">Loading…</div>
+            ) : companyPurchasePoliciesQuery.isError ? (
+              <div className="mt-2 text-sm text-rose-700">
+                {getApiErrorMessage(companyPurchasePoliciesQuery.error)}
+              </div>
+            ) : (companyPurchasePoliciesQuery.data ?? []).length === 0 ? (
+              <div className="mt-2 text-sm text-slate-600">No company purchase policies.</div>
+            ) : (
+              <div className="mt-2 grid gap-1">
+                {(companyPurchasePoliciesQuery.data ?? []).flatMap((p, idx) => {
+                  const lines = describeCompanyPurchasePolicy(p);
+                  return lines.map((line, j) => (
+                    <div key={`${idx}-${j}`} className="text-sm text-slate-800">
+                      {line}
+                    </div>
+                  ));
+                })}
+              </div>
+            )}
+          </div>
+
             <span className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
               Exit
             </span>
@@ -655,7 +767,7 @@ export default function EventDetailsPage() {
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-              Purchase policies
+              Event purchase policies
             </div>
 
             {purchasePoliciesQuery.isPending ? (
@@ -679,7 +791,7 @@ export default function EventDetailsPage() {
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-              Discount policies
+              Event discount policies
             </div>
 
             {discountPoliciesQuery.isPending ? (
@@ -699,6 +811,30 @@ export default function EventDetailsPage() {
                       : p.type === 'EARLY_BIRD'
                         ? `Early bird (${(p as any).percentage}%)`
                         : p.type}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Company discount policies
+            </div>
+
+            {companyDiscountPoliciesQuery.isPending ? (
+              <div className="mt-2 text-sm text-slate-600">Loading…</div>
+            ) : companyDiscountPoliciesQuery.isError ? (
+              <div className="mt-2 text-sm text-rose-700">
+                {getApiErrorMessage(companyDiscountPoliciesQuery.error)}
+              </div>
+            ) : (companyDiscountPoliciesQuery.data ?? []).length === 0 ? (
+              <div className="mt-2 text-sm text-slate-600">No company discount policies.</div>
+            ) : (
+              <div className="mt-2 grid gap-1">
+                {(companyDiscountPoliciesQuery.data ?? []).map((p, idx) => (
+                  <div key={idx} className="text-sm text-slate-800">
+                    {describeCompanyDiscountPolicy(p)}
                   </div>
                 ))}
               </div>
