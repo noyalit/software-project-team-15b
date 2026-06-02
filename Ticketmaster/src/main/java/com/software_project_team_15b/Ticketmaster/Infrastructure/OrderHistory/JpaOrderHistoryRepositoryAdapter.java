@@ -11,10 +11,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 @Repository
-@ConditionalOnProperty(
-        name = "app.storage.mode",
-        havingValue = "jpa"
-)
+@ConditionalOnProperty(name = "app.storage.mode", havingValue = "db")
 public class JpaOrderHistoryRepositoryAdapter implements IOrderHistoryRepository {
 
     private final JpaOrderHistorySpringDataRepository jpaRepo;
