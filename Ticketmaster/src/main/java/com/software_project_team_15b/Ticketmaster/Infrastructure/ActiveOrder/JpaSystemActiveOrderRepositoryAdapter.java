@@ -13,10 +13,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 @Repository
-@ConditionalOnProperty(
-    name = "app.storage.mode",
-    havingValue = "jpa"
-)
+@ConditionalOnProperty(name = "app.storage.mode", havingValue = "db")
 public class JpaSystemActiveOrderRepositoryAdapter implements IActiveOrderRepository {
     
     private final JpaActiveOrderSpringDataRepository jpaActiveOrderSpringDataRepository;
