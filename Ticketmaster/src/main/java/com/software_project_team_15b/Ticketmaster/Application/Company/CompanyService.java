@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -54,10 +55,26 @@ public class CompanyService {
      * @throws IllegalArgumentException           if {@code name} is null or blank
      */
     public CompanyDTO createCompany(String token, String name) {
+        return createCompany(token, name, null, null);
+    }
+
+    public CompanyDTO createCompany(
+            String token,
+            String name,
+            ICompanyPurchasePolicy purchasePolicy,
+            ICompanyDiscountPolicy discountPolicy) {
         try {
             requireNonBlank(name, "Company name");
             UUID founderId = requireAuthenticatedMember(token);
             var company = companyDomainService.createCompany(name, founderId);
+
+            if (purchasePolicy != null) {
+                company = companyDomainService.updatePurchasePolicy(company.getId(), purchasePolicy);
+            }
+            if (discountPolicy != null) {
+                company = companyDomainService.updateDiscountPolicy(company.getId(), discountPolicy);
+            }
+
             userDomainService.appointFounder(founderId, company.getId());
             AUDIT.info("op=createCompany founderId={} companyId={} name={} result=ok",
                     founderId, company.getId(), name);
@@ -103,6 +120,7 @@ public class CompanyService {
                 .map(CompanyDTO::from)
                 .toList();
     }
+
     public CompanyDTO updatePurchasePolicy(String token, UUID companyId, ICompanyPurchasePolicy policy) {
         try {
             requireNonNull(companyId, "Company ID");
@@ -258,6 +276,28 @@ public class CompanyService {
                 || userDomainService.isActiveFounder(callerId, companyId)
                 || userDomainService.isActiveOwner(callerId, companyId);
         return CompanyDTO.from(companyDomainService.getCompany(companyId, canViewClosed));
+    }
+
+    public List<ICompanyPurchasePolicy> getCompanyPurchasePolicies(String token, UUID companyId) {
+        requireValidToken(token);
+        requireNonNull(companyId, "Company ID");
+        UUID callerId = auth.extractUserId(token);
+        boolean canViewClosed = auth.isSystemAdmin(token)
+                || userDomainService.isActiveFounder(callerId, companyId)
+                || userDomainService.isActiveOwner(callerId, companyId);
+        Company company = companyDomainService.getCompany(companyId, canViewClosed);
+        return company.getPurchasePolicies();
+    }
+
+    public List<ICompanyDiscountPolicy> getCompanyDiscountPolicies(String token, UUID companyId) {
+        requireValidToken(token);
+        requireNonNull(companyId, "Company ID");
+        UUID callerId = auth.extractUserId(token);
+        boolean canViewClosed = auth.isSystemAdmin(token)
+                || userDomainService.isActiveFounder(callerId, companyId)
+                || userDomainService.isActiveOwner(callerId, companyId);
+        Company company = companyDomainService.getCompany(companyId, canViewClosed);
+        return company.getDiscountPolicies();
     }
 
     /**

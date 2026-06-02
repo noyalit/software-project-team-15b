@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AxiosError } from 'axios';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { getApiErrorMessage } from '../api/errors';
 import { http } from '../api/http';
@@ -36,6 +36,110 @@ export default function CompanyPage() {
 
   const [managerSuccessMessage, setManagerSuccessMessage] = useState<string | null>(null);
   const [removeManagerSuccessMessage, setRemoveManagerSuccessMessage] = useState<string | null>(null);
+
+  const [purchasePolicyKind, setPurchasePolicyKind] = useState<
+    'NONE' | 'MAX_TICKETS' | 'MIN_AGE' | 'MIN_TICKETS'
+  >('NONE');
+  const [maxTickets, setMaxTickets] = useState('');
+  const [minAge, setMinAge] = useState('');
+  const [minTickets, setMinTickets] = useState('');
+  const [purchasePolicySuccessMessage, setPurchasePolicySuccessMessage] = useState<string | null>(null);
+
+  const [discountPolicyKind, setDiscountPolicyKind] = useState<'NONE' | 'SIMPLE' | 'CONDITIONAL'>('NONE');
+  const [discountPercent, setDiscountPercent] = useState('');
+  const [conditionKind, setConditionKind] = useState<'MAX_TICKETS' | 'MIN_TICKETS' | 'TIME_WINDOW'>(
+    'MAX_TICKETS'
+  );
+  const [conditionMaxTickets, setConditionMaxTickets] = useState('');
+  const [conditionMinTickets, setConditionMinTickets] = useState('');
+  const [windowFrom, setWindowFrom] = useState('');
+  const [windowTo, setWindowTo] = useState('');
+  const [discountPolicySuccessMessage, setDiscountPolicySuccessMessage] = useState<string | null>(null);
+
+  const describeCompanyPurchasePolicy = (p: any, depth = 0): string[] => {
+    if (!p || typeof p !== 'object') return ['Unknown policy'];
+    const cls = String(p['@class'] ?? '');
+
+    if (Array.isArray(p.children)) {
+      const header = cls.includes('OrPurchasePolicy')
+        ? 'Any of:'
+        : cls.includes('AndPurchasePolicy')
+          ? 'All of:'
+          : 'Group:';
+      const lines: string[] = [];
+      lines.push(header);
+      for (const child of p.children) {
+        const childLines = describeCompanyPurchasePolicy(child, depth + 1);
+        for (const l of childLines) lines.push('  '.repeat(depth + 1) + l);
+      }
+      return lines;
+    }
+
+    if (p.max != null) return [`Max tickets per order: ${p.max}`];
+    if (p.minAge != null) return [`Age restriction: ${p.minAge}+`];
+    if (p.min != null) return [`Min tickets per order: ${p.min}`];
+
+    if (cls) return [cls.split('.').pop() ?? cls];
+    return ['Unknown policy'];
+  };
+
+  const describeCompanyDiscountPolicy = (raw: any): string => {
+    const p = raw?.policy && typeof raw.policy === 'object' ? raw.policy : raw;
+    if (!p || typeof p !== 'object') return 'Unknown policy';
+
+    const cls = String(p['@class'] ?? raw?.['@class'] ?? '');
+    const clsShort = cls ? (cls.split('.').pop() ?? cls) : '';
+    const percent =
+      p.percent ??
+      p.percentage ??
+      p.discountPercent ??
+      p.discountPercentage ??
+      raw?.percent ??
+      raw?.percentage;
+
+    const condition =
+      (p.condition && typeof p.condition === 'object' ? p.condition : null) ??
+      (p.discountCondition && typeof p.discountCondition === 'object' ? p.discountCondition : null) ??
+      (raw?.condition && typeof raw.condition === 'object' ? raw.condition : null);
+
+    const looksLikeSimple = clsShort.includes('SimpleDiscountPolicy') || (condition == null && percent != null);
+    const looksLikeConditional =
+      clsShort.includes('ConditionalDiscountPolicy') ||
+      (condition != null && percent != null);
+
+    if (looksLikeSimple && percent != null) {
+      return `Simple discount (${percent}%)`;
+    }
+
+    if (looksLikeConditional && percent != null) {
+      const cond = condition;
+      if (cond && typeof cond === 'object') {
+        const condCls = String(cond['@class'] ?? '');
+        if (cond.max != null || condCls.includes('MaxTicketsCondition')) {
+          return cond.max != null
+            ? `Conditional discount (${percent}%) when quantity <= ${cond.max}`
+            : `Conditional discount (${percent}%)`;
+        }
+        if (cond.min != null || condCls.includes('MinTicketsCondition')) {
+          return cond.min != null
+            ? `Conditional discount (${percent}%) when quantity >= ${cond.min}`
+            : `Conditional discount (${percent}%)`;
+        }
+        if (condCls.includes('TimeWindowCondition') || cond.from != null || cond.to != null) {
+          const from = cond.from ? new Date(cond.from).toLocaleString() : null;
+          const to = cond.to ? new Date(cond.to).toLocaleString() : null;
+          if (from && to) return `Conditional discount (${percent}%) between ${from} and ${to}`;
+          if (from) return `Conditional discount (${percent}%) from ${from}`;
+          if (to) return `Conditional discount (${percent}%) until ${to}`;
+          return `Conditional discount (${percent}%)`;
+        }
+      }
+      return `Conditional discount (${percent}%)`;
+    }
+
+    if (clsShort) return clsShort;
+    return 'Unknown policy';
+  };
 
 
 
@@ -145,6 +249,198 @@ export default function CompanyPage() {
       return res.data.data ?? [];
     },
     enabled: Boolean(companyId),
+  });
+
+  const companyPurchasePoliciesQuery = useQuery({
+    queryKey: ['company', 'purchase-policies', companyId],
+    queryFn: async () => {
+      if (!companyId) return [] as any[];
+      const res = await http.get<ApiResponse<any[]>>(`/api/companies/${companyId}/purchase-policies`);
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
+    },
+    enabled: Boolean(companyId) && Boolean(token) && userType === 'member',
+  });
+
+  const companyDiscountPoliciesQuery = useQuery({
+    queryKey: ['company', 'discount-policies', companyId],
+    queryFn: async () => {
+      if (!companyId) return [] as any[];
+      const res = await http.get<ApiResponse<any[]>>(`/api/companies/${companyId}/discount-policies`);
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
+    },
+    enabled: Boolean(companyId) && Boolean(token) && userType === 'member',
+  });
+
+  useEffect(() => {
+    const p = (companyPurchasePoliciesQuery.data ?? [])[0] as any;
+    if (!p || typeof p !== 'object') return;
+
+    if (p.max != null) {
+      setPurchasePolicyKind('MAX_TICKETS');
+      setMaxTickets(String(p.max));
+      return;
+    }
+    if (p.minAge != null) {
+      setPurchasePolicyKind('MIN_AGE');
+      setMinAge(String(p.minAge));
+      return;
+    }
+    if (p.min != null) {
+      setPurchasePolicyKind('MIN_TICKETS');
+      setMinTickets(String(p.min));
+      return;
+    }
+  }, [companyPurchasePoliciesQuery.data]);
+
+  useEffect(() => {
+    const p = (companyDiscountPoliciesQuery.data ?? [])[0] as any;
+    if (!p || typeof p !== 'object') return;
+
+    const percent = p.percent ?? p.percentage ?? null;
+    if (percent != null) setDiscountPercent(String(percent));
+
+    const cond = p.condition && typeof p.condition === 'object' ? p.condition : null;
+    if (cond) {
+      setDiscountPolicyKind('CONDITIONAL');
+      const condCls = String(cond['@class'] ?? '');
+      if (cond.max != null || condCls.includes('MaxTicketsCondition')) {
+        setConditionKind('MAX_TICKETS');
+        if (cond.max != null) setConditionMaxTickets(String(cond.max));
+      } else if (cond.min != null || condCls.includes('MinTicketsCondition')) {
+        setConditionKind('MIN_TICKETS');
+        if (cond.min != null) setConditionMinTickets(String(cond.min));
+      } else {
+        setConditionKind('TIME_WINDOW');
+        if (cond.from) setWindowFrom(String(cond.from).slice(0, 16));
+        if (cond.to) setWindowTo(String(cond.to).slice(0, 16));
+      }
+      return;
+    }
+
+    if (percent != null) {
+      setDiscountPolicyKind('SIMPLE');
+    }
+  }, [companyDiscountPoliciesQuery.data]);
+
+  const buildPurchasePolicy = () => {
+    if (purchasePolicyKind === 'NONE') {
+      throw new Error('Removing company policies is not supported. Please select a policy type.');
+    }
+    if (purchasePolicyKind === 'MAX_TICKETS') {
+      const v = Number(maxTickets);
+      if (!Number.isFinite(v) || v < 1) throw new Error('Max tickets must be a number >= 1');
+      return {
+        '@class': 'com.software_project_team_15b.Ticketmaster.Domain.policy.MaxTicketsRule',
+        max: v,
+      };
+    }
+    if (purchasePolicyKind === 'MIN_AGE') {
+      const v = Number(minAge);
+      if (!Number.isFinite(v) || v < 0) throw new Error('Minimum age must be a number >= 0');
+      return {
+        '@class': 'com.software_project_team_15b.Ticketmaster.Domain.policy.MinAgeRule',
+        minAge: v,
+      };
+    }
+    if (purchasePolicyKind === 'MIN_TICKETS') {
+      const v = Number(minTickets);
+      if (!Number.isFinite(v) || v < 1) throw new Error('Min tickets must be a number >= 1');
+      return {
+        '@class': 'com.software_project_team_15b.Ticketmaster.Domain.policy.MinTicketsRule',
+        min: v,
+      };
+    }
+    throw new Error('Invalid purchase policy');
+  };
+
+  const buildDiscountPolicy = () => {
+    if (discountPolicyKind === 'NONE') {
+      throw new Error('Removing company policies is not supported. Please select a policy type.');
+    }
+
+    const percent = Number(discountPercent);
+    if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
+      throw new Error('Discount percent must be a number between 0 and 100');
+    }
+
+    if (discountPolicyKind === 'SIMPLE') {
+      return {
+        '@class': 'com.software_project_team_15b.Ticketmaster.Domain.policy.SimpleDiscountPolicy',
+        percent,
+      };
+    }
+
+    if (discountPolicyKind === 'CONDITIONAL') {
+      let condition: any;
+      if (conditionKind === 'MAX_TICKETS') {
+        const v = Number(conditionMaxTickets);
+        if (!Number.isFinite(v) || v < 1) throw new Error('Condition max tickets must be a number >= 1');
+        condition = {
+          '@class': 'com.software_project_team_15b.Ticketmaster.Domain.policy.condition.MaxTicketsCondition',
+          max: v,
+        };
+      } else if (conditionKind === 'MIN_TICKETS') {
+        const v = Number(conditionMinTickets);
+        if (!Number.isFinite(v) || v < 1) throw new Error('Condition min tickets must be a number >= 1');
+        condition = {
+          '@class': 'com.software_project_team_15b.Ticketmaster.Domain.policy.condition.MinTicketsCondition',
+          min: v,
+        };
+      } else {
+        const from = windowFrom ? new Date(windowFrom).toISOString() : null;
+        const to = windowTo ? new Date(windowTo).toISOString() : null;
+        if (from && to && new Date(from).getTime() > new Date(to).getTime()) {
+          throw new Error('Time window: From must be before To');
+        }
+        condition = {
+          '@class': 'com.software_project_team_15b.Ticketmaster.Domain.policy.condition.TimeWindowCondition',
+          from,
+          to,
+        };
+      }
+
+      return {
+        '@class': 'com.software_project_team_15b.Ticketmaster.Domain.policy.ConditionalDiscountPolicy',
+        percent,
+        condition,
+      };
+    }
+
+    throw new Error('Invalid discount policy');
+  };
+
+  const updatePurchasePolicyMutation = useMutation({
+    mutationFn: async () => {
+      setPurchasePolicySuccessMessage(null);
+      if (!companyId) throw new Error('Company ID is missing.');
+      const policy = buildPurchasePolicy();
+      const res = await http.put<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}/purchase-policy`, policy);
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? null;
+    },
+    onSuccess: async () => {
+      setPurchasePolicySuccessMessage('Company purchase policy saved successfully.');
+      await qc.invalidateQueries({ queryKey: ['company', companyId, token] });
+      await qc.invalidateQueries({ queryKey: ['company', 'purchase-policies', companyId] });
+    },
+  });
+
+  const updateDiscountPolicyMutation = useMutation({
+    mutationFn: async () => {
+      setDiscountPolicySuccessMessage(null);
+      if (!companyId) throw new Error('Company ID is missing.');
+      const policy = buildDiscountPolicy();
+      const res = await http.put<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}/discount-policy`, policy);
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? null;
+    },
+    onSuccess: async () => {
+      setDiscountPolicySuccessMessage('Company discount policy saved successfully.');
+      await qc.invalidateQueries({ queryKey: ['company', companyId, token] });
+      await qc.invalidateQueries({ queryKey: ['company', 'discount-policies', companyId] });
+    },
   });
 
   const appointOwnerMutation = useMutation({
@@ -601,6 +897,255 @@ export default function CompanyPage() {
           )}
         </div>
       )}
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="text-slate-900 font-semibold">Company policies</div>
+        <div className="mt-2 text-sm text-slate-600">
+          Update company-level purchase and discount policies.
+        </div>
+
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Current purchase policies
+            </div>
+
+            {companyPurchasePoliciesQuery.isPending ? (
+              <div className="mt-2 text-sm text-slate-600">Loading…</div>
+            ) : companyPurchasePoliciesQuery.isError ? (
+              <div className="mt-2 text-sm text-rose-700">
+                {getApiErrorMessage(companyPurchasePoliciesQuery.error)}
+              </div>
+            ) : (companyPurchasePoliciesQuery.data ?? []).length === 0 ? (
+              <div className="mt-2 text-sm text-slate-600">No company purchase policies.</div>
+            ) : (
+              <div className="mt-2 grid gap-1">
+                {(companyPurchasePoliciesQuery.data ?? []).flatMap((p: any, idx: number) => {
+                  const lines = describeCompanyPurchasePolicy(p);
+                  return lines.map((line, j) => (
+                    <div key={`${idx}-${j}`} className="text-sm text-slate-800">
+                      {line}
+                    </div>
+                  ));
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Current discount policies
+            </div>
+
+            {companyDiscountPoliciesQuery.isPending ? (
+              <div className="mt-2 text-sm text-slate-600">Loading…</div>
+            ) : companyDiscountPoliciesQuery.isError ? (
+              <div className="mt-2 text-sm text-rose-700">
+                {getApiErrorMessage(companyDiscountPoliciesQuery.error)}
+              </div>
+            ) : (companyDiscountPoliciesQuery.data ?? []).length === 0 ? (
+              <div className="mt-2 text-sm text-slate-600">No company discount policies.</div>
+            ) : (
+              <div className="mt-2 grid gap-1">
+                {(companyDiscountPoliciesQuery.data ?? []).map((p: any, idx: number) => (
+                  <div key={idx} className="text-sm text-slate-800">
+                    {describeCompanyDiscountPolicy(p)}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-6 md:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-900">Purchase policy</div>
+
+            <div className="mt-3">
+              <div className="text-sm font-medium text-slate-700">Policy type</div>
+              <select
+                value={purchasePolicyKind}
+                onChange={(e) => setPurchasePolicyKind(e.target.value as any)}
+                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              >
+                <option value="NONE">Select purchase policy…</option>
+                <option value="MAX_TICKETS">Max tickets per order</option>
+                <option value="MIN_TICKETS">Min tickets per order</option>
+                <option value="MIN_AGE">Age restriction</option>
+              </select>
+            </div>
+
+            {purchasePolicyKind === 'MAX_TICKETS' && (
+              <div className="mt-3">
+                <div className="text-sm font-medium text-slate-700">Max tickets</div>
+                <input
+                  value={maxTickets}
+                  onChange={(e) => setMaxTickets(e.target.value)}
+                  placeholder="e.g. 4"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+              </div>
+            )}
+
+            {purchasePolicyKind === 'MIN_TICKETS' && (
+              <div className="mt-3">
+                <div className="text-sm font-medium text-slate-700">Min tickets</div>
+                <input
+                  value={minTickets}
+                  onChange={(e) => setMinTickets(e.target.value)}
+                  placeholder="e.g. 2"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+              </div>
+            )}
+
+            {purchasePolicyKind === 'MIN_AGE' && (
+              <div className="mt-3">
+                <div className="text-sm font-medium text-slate-700">Minimum age</div>
+                <input
+                  value={minAge}
+                  onChange={(e) => setMinAge(e.target.value)}
+                  placeholder="e.g. 18"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+              </div>
+            )}
+
+            <button
+              onClick={() => updatePurchasePolicyMutation.mutate()}
+              disabled={updatePurchasePolicyMutation.isPending}
+              className="mt-4 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+            >
+              {updatePurchasePolicyMutation.isPending ? 'Saving…' : 'Save purchase policy'}
+            </button>
+
+            {updatePurchasePolicyMutation.isError && (
+              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                {(updatePurchasePolicyMutation.error as Error).message}
+              </div>
+            )}
+
+            {purchasePolicySuccessMessage && !updatePurchasePolicyMutation.isError && (
+              <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                {purchasePolicySuccessMessage}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-900">Discount policy</div>
+
+            <div className="mt-3">
+              <div className="text-sm font-medium text-slate-700">Policy type</div>
+              <select
+                value={discountPolicyKind}
+                onChange={(e) => setDiscountPolicyKind(e.target.value as any)}
+                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              >
+                <option value="NONE">Select discount policy…</option>
+                <option value="SIMPLE">Simple discount</option>
+                <option value="CONDITIONAL">Conditional discount</option>
+              </select>
+            </div>
+
+            {(discountPolicyKind === 'SIMPLE' || discountPolicyKind === 'CONDITIONAL') && (
+              <div className="mt-3">
+                <div className="text-sm font-medium text-slate-700">Discount percent</div>
+                <input
+                  value={discountPercent}
+                  onChange={(e) => setDiscountPercent(e.target.value)}
+                  placeholder="e.g. 10"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+              </div>
+            )}
+
+            {discountPolicyKind === 'CONDITIONAL' && (
+              <div className="mt-3 grid gap-3">
+                <div>
+                  <div className="text-sm font-medium text-slate-700">Condition</div>
+                  <select
+                    value={conditionKind}
+                    onChange={(e) => setConditionKind(e.target.value as any)}
+                    className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                  >
+                    <option value="MAX_TICKETS">Max tickets</option>
+                    <option value="MIN_TICKETS">Min tickets</option>
+                    <option value="TIME_WINDOW">Time window</option>
+                  </select>
+                </div>
+
+                {conditionKind === 'MAX_TICKETS' && (
+                  <div>
+                    <div className="text-sm font-medium text-slate-700">Max tickets</div>
+                    <input
+                      value={conditionMaxTickets}
+                      onChange={(e) => setConditionMaxTickets(e.target.value)}
+                      placeholder="e.g. 4"
+                      className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                    />
+                  </div>
+                )}
+
+                {conditionKind === 'MIN_TICKETS' && (
+                  <div>
+                    <div className="text-sm font-medium text-slate-700">Min tickets</div>
+                    <input
+                      value={conditionMinTickets}
+                      onChange={(e) => setConditionMinTickets(e.target.value)}
+                      placeholder="e.g. 2"
+                      className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                    />
+                  </div>
+                )}
+
+                {conditionKind === 'TIME_WINDOW' && (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <label className="block">
+                      <div className="text-sm font-medium text-slate-700">From</div>
+                      <input
+                        type="datetime-local"
+                        value={windowFrom}
+                        onChange={(e) => setWindowFrom(e.target.value)}
+                        className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                      />
+                    </label>
+                    <label className="block">
+                      <div className="text-sm font-medium text-slate-700">To</div>
+                      <input
+                        type="datetime-local"
+                        value={windowTo}
+                        onChange={(e) => setWindowTo(e.target.value)}
+                        className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button
+              onClick={() => updateDiscountPolicyMutation.mutate()}
+              disabled={updateDiscountPolicyMutation.isPending}
+              className="mt-4 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+            >
+              {updateDiscountPolicyMutation.isPending ? 'Saving…' : 'Save discount policy'}
+            </button>
+
+            {updateDiscountPolicyMutation.isError && (
+              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                {(updateDiscountPolicyMutation.error as Error).message}
+              </div>
+            )}
+
+            {discountPolicySuccessMessage && !updateDiscountPolicyMutation.isError && (
+              <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                {discountPolicySuccessMessage}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="text-slate-900 font-semibold">Add owner</div>
