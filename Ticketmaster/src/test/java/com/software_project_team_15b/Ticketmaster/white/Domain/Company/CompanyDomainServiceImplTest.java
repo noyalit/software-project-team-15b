@@ -746,4 +746,93 @@ class CompanyDomainServiceImplTest {
 
         assertThat(result).hasSize(1).containsExactly(company);
     }
+
+    // ===========================================================================================
+    // updateDiscountPolicy — company not active
+
+    @Test
+    void updateDiscountPolicy_throws_when_company_is_not_active() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        company.changeStatus(CompanyStatus.SUSPENDED);
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+
+        assertThatThrownBy(() -> service.updateDiscountPolicy(UUID.randomUUID(), (subtotal, req) -> subtotal))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    // ===========================================================================================
+    // findCompaniesByMember — additional positive cases
+
+    @Test
+    void findCompaniesByMember_returns_only_founder_companies_when_not_an_owner() {
+        UUID memberId = UUID.randomUUID();
+        Company company = new Company("Acme", UUID.randomUUID());
+        try {
+            Field idField = Company.class.getDeclaredField("id");
+            idField.setAccessible(true);
+            idField.set(company, UUID.randomUUID());
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+        when(repo.findByFounder(memberId)).thenReturn(List.of(company));
+        when(repo.findByOwner(memberId)).thenReturn(List.of());
+
+        assertThat(service.findCompaniesByMember(memberId)).containsExactly(company);
+    }
+
+    @Test
+    void findCompaniesByMember_returns_only_owner_companies_when_not_a_founder() {
+        UUID memberId = UUID.randomUUID();
+        Company company = new Company("Acme", UUID.randomUUID());
+        try {
+            Field idField = Company.class.getDeclaredField("id");
+            idField.setAccessible(true);
+            idField.set(company, UUID.randomUUID());
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+        when(repo.findByFounder(memberId)).thenReturn(List.of());
+        when(repo.findByOwner(memberId)).thenReturn(List.of(company));
+
+        assertThat(service.findCompaniesByMember(memberId)).containsExactly(company);
+    }
+
+    // ===========================================================================================
+    // findCompaniesByMember — concurrency
+
+    @Test
+    void concurrent_findCompaniesByMember_does_not_throw() throws Exception {
+        UUID memberId = UUID.randomUUID();
+        Company company = new Company("Acme", UUID.randomUUID());
+        try {
+            Field idField = Company.class.getDeclaredField("id");
+            idField.setAccessible(true);
+            idField.set(company, UUID.randomUUID());
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+        when(repo.findByFounder(memberId)).thenReturn(List.of(company));
+        when(repo.findByOwner(memberId)).thenReturn(List.of());
+
+        int N = 50;
+        ExecutorService pool = Executors.newFixedThreadPool(16);
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger failures = new AtomicInteger();
+
+        for (int i = 0; i < N; i++) {
+            pool.submit(() -> {
+                try {
+                    start.await();
+                    service.findCompaniesByMember(memberId);
+                } catch (Exception e) {
+                    failures.incrementAndGet();
+                }
+            });
+        }
+
+        start.countDown();
+        pool.shutdown();
+        assertThat(pool.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+        assertThat(failures.get()).isZero();
+    }
 }

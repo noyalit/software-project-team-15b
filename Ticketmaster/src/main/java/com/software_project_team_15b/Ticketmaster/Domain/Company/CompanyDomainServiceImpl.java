@@ -24,6 +24,7 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         this.companyRepository = Objects.requireNonNull(companyRepository, "companyRepository cannot be null");
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public Money cheapestPriceFor(UUID companyId, Money subtotal, PurchaseRequest request) {
@@ -49,6 +50,7 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         return best;
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public Money discountAmountFor(UUID companyId, Money subtotal, PurchaseRequest request) {
@@ -65,12 +67,17 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         return subtotal.subtract(cheapest);
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>This implementation always returns {@link DiscountCombineStrategy#SUM}.
+     */
     @Override
     @Transactional(readOnly = true)
     public DiscountCombineStrategy discountCombineStrategyFor(UUID companyId) {
         return DiscountCombineStrategy.SUM;
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public void validatePurchaseEligibility(UUID companyId, PurchaseRequest request) {
@@ -130,16 +137,7 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         return result;
     }
 
-    /**
-     * Replaces the company's purchase policy. The company must be {@link CompanyStatus#ACTIVE}.
-     *
-     * @param companyId the target company's id; must not be null
-     * @param policy    the new purchase policy; must not be null
-     * @return the updated, persisted company
-     * @throws IllegalArgumentException  if {@code companyId} or {@code policy} is null
-     * @throws IllegalStateException     if the company is not active
-     * @throws CompanyNotFoundException  if no company exists with the given id
-     */
+    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public List<Company> findCompaniesByOwner(UUID ownerId) {
@@ -150,6 +148,11 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         return result;
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>Founder matches are inserted first; companies appearing in both the founder
+     * and owner results are deduplicated by company id, keeping the first occurrence.
+     */
     @Override
     @Transactional(readOnly = true)
     public List<Company> findCompaniesByMember(UUID memberId) {
@@ -172,6 +175,7 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         return List.copyOf(unique.values());
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public List<Company> findAll() {
@@ -182,6 +186,11 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         return result;
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>Status enforcement is delegated to {@link Company#updatePurchasePolicy}, which throws
+     * {@link IllegalStateException} when the company is not {@link CompanyStatus#ACTIVE}.
+     */
     @Override
     @Transactional
     public Company updatePurchasePolicy(UUID companyId, ICompanyPurchasePolicy policy) {
@@ -222,11 +231,15 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
 
     /**
      * Transitions the company to the given status and persists the change.
+     * Valid transitions: {@code ACTIVE → CLOSED}, {@code ACTIVE → SUSPENDED},
+     * {@code CLOSED → ACTIVE}. The {@code SUSPENDED → ACTIVE} path is not permitted
+     * by the state machine.
      *
      * @param companyId the target company's id; must not be null
      * @param newStatus the status to transition to; must not be null
      * @return the updated, persisted company
      * @throws IllegalArgumentException if {@code companyId} or {@code newStatus} is null
+     * @throws IllegalStateException    if the requested transition is not permitted
      * @throws CompanyNotFoundException if no company exists with the given id
      */
     @Override
@@ -280,6 +293,11 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         return company;
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>Returns {@link java.util.Optional#empty()} immediately when {@code companyId} is {@code null},
+     * without querying the repository.
+     */
     @Override
     @Transactional(readOnly = true)
     public Optional<Company> findCompany(UUID companyId) {
@@ -289,6 +307,7 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         return companyRepository.findById(companyId);
     }
 
+    /** {@inheritDoc} */
     @Override
     @Transactional(readOnly = true)
     public boolean isCompanyActive(UUID companyId) {
