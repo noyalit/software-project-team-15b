@@ -96,37 +96,61 @@ export default function EventDetailsPage() {
     return ['Unknown policy'];
   };
 
-  const describeCompanyDiscountPolicy = (p: any): string => {
+  const describeCompanyDiscountPolicy = (raw: any): string => {
+    const p = raw?.policy && typeof raw.policy === 'object' ? raw.policy : raw;
     if (!p || typeof p !== 'object') return 'Unknown policy';
-    const cls = String(p['@class'] ?? '');
 
-    if (p.percent != null && cls.includes('SimpleDiscountPolicy')) {
-      return `Simple discount (${p.percent}%)`;
+    const cls = String(p['@class'] ?? raw?.['@class'] ?? '');
+    const clsShort = cls ? (cls.split('.').pop() ?? cls) : '';
+    const percent =
+      p.percent ??
+      p.percentage ??
+      p.discountPercent ??
+      p.discountPercentage ??
+      raw?.percent ??
+      raw?.percentage;
+
+    const condition =
+      (p.condition && typeof p.condition === 'object' ? p.condition : null) ??
+      (p.discountCondition && typeof p.discountCondition === 'object' ? p.discountCondition : null) ??
+      (raw?.condition && typeof raw.condition === 'object' ? raw.condition : null);
+
+    const looksLikeSimple = clsShort.includes('SimpleDiscountPolicy') || (condition == null && percent != null);
+    const looksLikeConditional =
+      clsShort.includes('ConditionalDiscountPolicy') ||
+      (condition != null && percent != null);
+
+    if (looksLikeSimple && percent != null) {
+      return `Simple discount (${percent}%)`;
     }
 
-    if (p.percent != null && cls.includes('ConditionalDiscountPolicy')) {
-      const cond = p.condition;
+    if (looksLikeConditional && percent != null) {
+      const cond = condition;
       if (cond && typeof cond === 'object') {
         const condCls = String(cond['@class'] ?? '');
-        if (cond.max != null && condCls.includes('MaxTicketsCondition')) {
-          return `Conditional discount (${p.percent}%) when quantity <= ${cond.max}`;
+        if (cond.max != null || condCls.includes('MaxTicketsCondition')) {
+          return cond.max != null
+            ? `Conditional discount (${percent}%) when quantity <= ${cond.max}`
+            : `Conditional discount (${percent}%)`;
         }
-        if (cond.min != null && condCls.includes('MinTicketsCondition')) {
-          return `Conditional discount (${p.percent}%) when quantity >= ${cond.min}`;
+        if (cond.min != null || condCls.includes('MinTicketsCondition')) {
+          return cond.min != null
+            ? `Conditional discount (${percent}%) when quantity >= ${cond.min}`
+            : `Conditional discount (${percent}%)`;
         }
-        if (condCls.includes('TimeWindowCondition')) {
+        if (condCls.includes('TimeWindowCondition') || cond.from != null || cond.to != null) {
           const from = cond.from ? new Date(cond.from).toLocaleString() : null;
           const to = cond.to ? new Date(cond.to).toLocaleString() : null;
-          if (from && to) return `Conditional discount (${p.percent}%) between ${from} and ${to}`;
-          if (from) return `Conditional discount (${p.percent}%) from ${from}`;
-          if (to) return `Conditional discount (${p.percent}%) until ${to}`;
-          return `Conditional discount (${p.percent}%)`;
+          if (from && to) return `Conditional discount (${percent}%) between ${from} and ${to}`;
+          if (from) return `Conditional discount (${percent}%) from ${from}`;
+          if (to) return `Conditional discount (${percent}%) until ${to}`;
+          return `Conditional discount (${percent}%)`;
         }
       }
-      return `Conditional discount (${p.percent}%)`;
+      return `Conditional discount (${percent}%)`;
     }
 
-    if (cls) return cls.split('.').pop() ?? cls;
+    if (clsShort) return clsShort;
     return 'Unknown policy';
   };
 
@@ -698,33 +722,6 @@ export default function EventDetailsPage() {
 
             </div>
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
-              Company purchase policies
-            </div>
-
-            {companyPurchasePoliciesQuery.isPending ? (
-              <div className="mt-2 text-sm text-slate-600">Loading…</div>
-            ) : companyPurchasePoliciesQuery.isError ? (
-              <div className="mt-2 text-sm text-rose-700">
-                {getApiErrorMessage(companyPurchasePoliciesQuery.error)}
-              </div>
-            ) : (companyPurchasePoliciesQuery.data ?? []).length === 0 ? (
-              <div className="mt-2 text-sm text-slate-600">No company purchase policies.</div>
-            ) : (
-              <div className="mt-2 grid gap-1">
-                {(companyPurchasePoliciesQuery.data ?? []).flatMap((p, idx) => {
-                  const lines = describeCompanyPurchasePolicy(p);
-                  return lines.map((line, j) => (
-                    <div key={`${idx}-${j}`} className="text-sm text-slate-800">
-                      {line}
-                    </div>
-                  ));
-                })}
-              </div>
-            )}
-          </div>
-
             <span className="rounded border border-slate-200 bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600">
               Exit
             </span>
@@ -791,6 +788,33 @@ export default function EventDetailsPage() {
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+              Company purchase policies
+            </div>
+
+            {companyPurchasePoliciesQuery.isPending ? (
+              <div className="mt-2 text-sm text-slate-600">Loading…</div>
+            ) : companyPurchasePoliciesQuery.isError ? (
+              <div className="mt-2 text-sm text-rose-700">
+                {getApiErrorMessage(companyPurchasePoliciesQuery.error)}
+              </div>
+            ) : (companyPurchasePoliciesQuery.data ?? []).length === 0 ? (
+              <div className="mt-2 text-sm text-slate-600">No company purchase policies.</div>
+            ) : (
+              <div className="mt-2 grid gap-1">
+                {(companyPurchasePoliciesQuery.data ?? []).flatMap((p: any, idx: number) => {
+                  const lines = describeCompanyPurchasePolicy(p);
+                  return lines.map((line, j) => (
+                    <div key={`${idx}-${j}`} className="text-sm text-slate-800">
+                      {line}
+                    </div>
+                  ));
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
               Event discount policies
             </div>
 
@@ -832,7 +856,7 @@ export default function EventDetailsPage() {
               <div className="mt-2 text-sm text-slate-600">No company discount policies.</div>
             ) : (
               <div className="mt-2 grid gap-1">
-                {(companyDiscountPoliciesQuery.data ?? []).map((p, idx) => (
+                {(companyDiscountPoliciesQuery.data ?? []).map((p: any, idx: number) => (
                   <div key={idx} className="text-sm text-slate-800">
                     {describeCompanyDiscountPolicy(p)}
                   </div>
