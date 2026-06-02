@@ -3,6 +3,7 @@ package com.software_project_team_15b.Ticketmaster.Infrastructure.Repositories;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -19,18 +20,24 @@ public class JpaMemberRepositoryAdapter implements IMemberRepository {
         this.springDataRepository = springDataRepository;
     }
 
+    /**
+     * Persists a member. Uniqueness of {@code username} is enforced by the DB
+     * (the {@code unique=true} constraint on {@link Member#getUsername()}) —
+     * not by a pre-check, which would be racy. A duplicate insert surfaces as
+     * a {@link DataIntegrityViolationException} from the driver, which we
+     * translate back into the {@link IllegalArgumentException} contract the
+     * in-memory adapter exposes.
+     */
     @Override
     public Member save(Member member) {
         if (member == null) {
             throw new IllegalArgumentException("Member cannot be null");
         }
-
-        Optional<Member> existing = springDataRepository.findByUsername(member.getUsername());
-        if (existing.isPresent() && !existing.get().getUserId().equals(member.getUserId())) {
-            throw new IllegalArgumentException("Username already exists");
+        try {
+            return springDataRepository.saveAndFlush(member);
+        } catch (DataIntegrityViolationException e) {
+            throw new IllegalArgumentException("Username already exists", e);
         }
-
-        return springDataRepository.save(member);
     }
 
     @Override
