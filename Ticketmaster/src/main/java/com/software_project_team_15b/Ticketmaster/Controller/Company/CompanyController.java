@@ -64,6 +64,48 @@ public class CompanyController {
         }
     }
 
+    @Operation(summary = "List the company's purchase-policy chain in order")
+    @GetMapping("/{companyId}/purchase-policies")
+    public ResponseEntity<ApiResponse<List<ICompanyPurchasePolicy>>> getCompanyPurchasePolicies(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID companyId
+    ) {
+        try {
+            return ResponseEntity.ok(new ApiResponse<>(companyService.getCompanyPurchasePolicies(token, companyId), null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
+        } catch (CompanyNotFoundException ex) {
+            return notFound(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "List the company's discount-policy chain in order")
+    @GetMapping("/{companyId}/discount-policies")
+    public ResponseEntity<ApiResponse<List<ICompanyDiscountPolicy>>> getCompanyDiscountPolicies(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID companyId
+    ) {
+        try {
+            return ResponseEntity.ok(new ApiResponse<>(companyService.getCompanyDiscountPolicies(token, companyId), null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
+        } catch (CompanyNotFoundException ex) {
+            return notFound(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     @Operation(summary = "List companies related to the logged in member")
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<List<CompanyDTO>>> getMyCompanies(
