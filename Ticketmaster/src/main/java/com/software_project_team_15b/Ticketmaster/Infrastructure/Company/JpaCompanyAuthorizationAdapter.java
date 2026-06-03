@@ -17,6 +17,7 @@ import java.util.UUID;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * DB-backed implementation of {@link ICompanyAuthorizationPort}.
@@ -40,6 +41,7 @@ public class JpaCompanyAuthorizationAdapter implements ICompanyAuthorizationPort
     }
 
     @Override
+    @Transactional(readOnly = true)
     public void require(UUID companyId, UUID callerId, EventAction action) {
         if (companyId == null || callerId == null || action == null) {
             throw new PolicyViolationException("companyId, callerId and action are required");

@@ -4,7 +4,6 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepositor
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -52,13 +51,9 @@ public class JpaMemberRepositoryAdapter implements IMemberRepository {
     }
 
     @Override
+    @org.springframework.transaction.annotation.Transactional
     public boolean deleteById(UUID userId) {
-        try {
-            springDataRepository.deleteById(userId);
-            return true;
-        } catch (EmptyResultDataAccessException e) {
-            return false;
-        }
+        return springDataRepository.deleteByIdReturningCount(userId) > 0;
     }
 
     @Override
