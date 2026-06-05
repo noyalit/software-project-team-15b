@@ -7,6 +7,7 @@ import jakarta.persistence.*;
 
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
 
@@ -52,10 +53,6 @@ public class OrderHistory {
     
     @Column(name = "is_cancelled", nullable = false, updatable = true)
     private boolean isCancelled = false;
-
-    @Version
-    @Column(name = "version", nullable = false)
-    private Long version;
 
     protected OrderHistory() {
     }
@@ -112,30 +109,28 @@ public class OrderHistory {
         if (activeOrder == null) {
             throw new IllegalArgumentException("ActiveOrder cannot be null");
         }
-        if (paymentTransactionId == null) {
-            throw new IllegalArgumentException("Payment transaction ID cannot be null");
-        }
-        if (totalPrice == null) {
-            throw new IllegalArgumentException("Total price cannot be null");
-        }
-        if (basePricePerTicket == null) {
-            throw new IllegalArgumentException("Base price per ticket cannot be null");
-        }
         if (issuedTicketIds == null || issuedTicketIds.isEmpty()) {
             throw new IllegalArgumentException("Issued ticket IDs cannot be null or empty");
         }
 
-        Set<Ticket> tickets = activeOrder.getOrderSeats().stream()
-                .map(seatId -> {
-                    String externalTicketId = issuedTicketIds.get(seatId);
+        Set<Ticket> tickets = new HashSet<>();
+        for (Entry<UUID, String> entry : issuedTicketIds.entrySet()) {
+            UUID seatId = entry.getKey();
+            String externalTicketId = entry.getValue();
+            tickets.add(new Ticket(externalTicketId, seatId, basePricePerTicket));
+        }
+        if (tickets.size() != issuedTicketIds.size()) {
+            throw new IllegalArgumentException("Issued ticket IDs contain duplicate external ticket IDs");
+        }
 
-                    if (externalTicketId == null || externalTicketId.isBlank()) {
-                        throw new IllegalArgumentException("Missing external ticket ID for seat " + seatId);
-                    }
-
-                    return new Ticket(externalTicketId, seatId, basePricePerTicket);
-                })
-                .collect(java.util.stream.Collectors.toSet());
+        Set<UUID> activeOrderSeatIds = new HashSet<>(activeOrder.getOrderSeats());
+        Set<UUID> ticketSeatIds = new HashSet<>();
+        for (Ticket ticket : tickets) {
+            ticketSeatIds.add(ticket.getSeatId());
+        }
+        if (!activeOrderSeatIds.equals(ticketSeatIds)) {
+            throw new IllegalArgumentException("Active order seat IDs must match issued ticket seat IDs");
+        }
 
         return new OrderHistory(
                 activeOrder.getOrderId(),
@@ -150,7 +145,6 @@ public class OrderHistory {
 
     private static void validateTickets(Set<Ticket> tickets) {
         Set<UUID> seatIds = new HashSet<>();
-        Set<String> externalTicketIds = new HashSet<>();
 
         for (Ticket ticket : tickets) {
             if (ticket == null) {
@@ -159,10 +153,6 @@ public class OrderHistory {
 
             if (!seatIds.add(ticket.getSeatId())) {
                 throw new IllegalArgumentException("Tickets set cannot contain duplicate seat IDs");
-            }
-
-            if (!externalTicketIds.add(ticket.getExternalTicketId())) {
-                throw new IllegalArgumentException("Tickets set cannot contain duplicate external ticket IDs");
             }
         }
     }
@@ -197,10 +187,6 @@ public class OrderHistory {
 
     public boolean isCancelled() {
         return isCancelled;
-    }
-
-    public Long getVersion() {
-        return version;
     }
 
     public void cancel() {

@@ -123,8 +123,18 @@ class PurchasingDomainServiceTest {
         activeOrder.addSeats(Set.of(seatId1));
         activeOrder.startCheckout(LocalDateTime.now().plusMinutes(10));
 
+        Integer paymentTransactionId = 12345;
+        Map<UUID, String> issuedTicketIds = Map.of(
+                seatId1, "TICKET-1"
+        );
+
         assertThrows(IllegalArgumentException.class, () ->
-                domainService.finalizeCheckout(activeOrder, null)
+                domainService.finalizeCheckout(
+                        activeOrder,
+                        paymentTransactionId,
+                        null,
+                        issuedTicketIds
+                )
         );
     }
 
@@ -456,10 +466,18 @@ class PurchasingDomainServiceTest {
         order.startCheckout(LocalDateTime.now().plusMinutes(10));
 
         PriceBreakdown pricing = priceBreakdown("100.00");
+        Integer paymentTransactionId = 12345;
+        Map<UUID, String> issuedTicketIds = Map.of(
+                seatId1, "TICKET-1"
+        );
 
-        ActiveOrder result = domainService.finalizeCheckout(order, pricing);
+        domainService.finalizeCheckout(
+                order,
+                paymentTransactionId,
+                pricing,
+                issuedTicketIds
+        );
 
-        assertSame(order, result);
         assertEquals(ActiveOrderStatus.COMPLETED, order.getStatus());
 
         verify(activeOrderRepository).save(order);

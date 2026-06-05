@@ -2,6 +2,10 @@ package com.software_project_team_15b.Ticketmaster.black.e2e;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
@@ -11,6 +15,8 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Hol
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidManagerPermissionsException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
+import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
+import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.RemoveOrAddSeatsFromActiveOrderCommand;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
@@ -35,6 +41,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /**
  * E2E tests for:
@@ -54,17 +61,25 @@ class EventOrderFlowE2ETest {
     @Autowired UserService userService;
     @Autowired CompanyService companyService;
 
+    @MockitoBean
+    IPaymentAPI paymentGateway;
+
+    @MockitoBean
+    ITicketSupplyAPI ticketProvider;
+
     private static final AtomicInteger CTR = new AtomicInteger(0);
 
     private UUID companyId;
     private UUID founderId;
     private String founderToken;
-    private UUID unauthorizedId;       // plain member, no company role
-    private UUID mgrWrongPermId;       // pre-registered member; appointed as wrong-perm manager per-event
+    private UUID unauthorizedId;
+    private UUID mgrWrongPermId;
     private String mgrWrongPermToken;
 
     @BeforeEach
     void setupActors() {
+        mockExternalPaymentAndTicketApis();
+
         int n = CTR.incrementAndGet();
         String sfx = n + "_" + System.nanoTime();
 
@@ -77,7 +92,6 @@ class EventOrderFlowE2ETest {
         userService.changeRoleToFounder(founderToken, companyId);
         userService.approveAppointment(founderToken);
 
-        // Manager candidate: per-event appointment happens lazily in each test that needs it.
         Actor mWp = registerAndLogin("ord_mgr_wp_" + sfx);
         mgrWrongPermId = mWp.id();
         mgrWrongPermToken = mWp.token();
@@ -328,7 +342,7 @@ UUID orderId = purchasing.createActiveOrder(token, p.eventId(), p.areaId());
         purchasing.addSeatsToExistingOrder(token, new RemoveOrAddSeatsFromActiveOrderCommand(
                 orderId, Set.copyOf(p.seatIds())));
         purchasing.startCheckoutForMember(token, orderId);
-        purchasing.completeCheckoutForMember(token, orderId, null);
+        purchasing.completeCheckoutForMember(token, orderId, null, validPaymentDetails());
 
         assertThat(events.getEventAvailability(p.eventId()).status()).isEqualTo(EventAvailability.SOLD_OUT);
     }
@@ -355,7 +369,7 @@ UUID orderId = purchasing.createActiveOrder(token, p.eventId(), p.areaId());
         purchasing.addSeatsToExistingOrder(token, new RemoveOrAddSeatsFromActiveOrderCommand(
                 orderId, Set.of(seatIds.get(0))));
         purchasing.startCheckoutForMember(token, orderId);
-        purchasing.completeCheckoutForMember(token, orderId, "HALF");
+        purchasing.completeCheckoutForMember(token, orderId, null, validPaymentDetails());
 
         assertThat(events.getEventAvailability(eventId).status()).isEqualTo(EventAvailability.SOLD_OUT);
     }
@@ -449,11 +463,11 @@ UUID orderId = purchasing.createActiveOrder(token, p.eventId(), p.areaId());
         PublishedSeating p = publishedSeatingEvent(2);
         String token = registerAndLoginBuyer();
 
-UUID orderId = purchasing.createActiveOrder(token, p.eventId(), p.areaId());
+        UUID orderId = purchasing.createActiveOrder(token, p.eventId(), p.areaId());
         purchasing.addSeatsToExistingOrder(token, new RemoveOrAddSeatsFromActiveOrderCommand(
                 orderId, Set.of(p.seatIds().get(0))));
 
-        assertThatThrownBy(() -> purchasing.completeCheckoutForMember(token, orderId, null))
+        assertThatThrownBy(() -> purchasing.completeCheckoutForMember(token, orderId, null, validPaymentDetails()))
                 .isInstanceOf(Exception.class);
     }
 
@@ -508,6 +522,30 @@ UUID orderId = purchasing.createActiveOrder(token, p.eventId(), p.areaId());
         userService.appointManager(memberId, founderToken, companyId, eventId, perms);
         userService.changeRoleToManager(memberToken, eventId);
         userService.approveAppointment(memberToken);
+    }
+
+    private void mockExternalPaymentAndTicketApis() {
+        when(paymentGateway.chargePayment(any(MoneyDTO.class), any(PaymentDetailsDTO.class)))
+                .thenReturn(12345);
+
+        when(ticketProvider.issueTickets(
+                any(UUID.class),
+                any(UUID.class),
+                any(UUID.class),
+                anySet()
+        )).thenAnswer(invocation -> {
+                Set<UUID> seatIds = invocation.getArgument(3);
+
+                return seatIds.stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                seatId -> seatId,
+                                seatId -> "TICKET-" + seatId
+                        ));
+        });
+    }
+
+    private PaymentDetailsDTO validPaymentDetails() {
+        return mock(PaymentDetailsDTO.class);
     }
 
     private record Actor(UUID id, String token) {}

@@ -3,9 +3,11 @@ package com.software_project_team_15b.Ticketmaster.black.Application.ActiveOrder
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
-import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
+import com.software_project_team_15b.Ticketmaster.DTO.CheckoutCompletedDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.PaymentDetailsDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutStartedDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
@@ -32,6 +34,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -220,10 +223,9 @@ class CheckoutBlackTest {
         LocalDate birthDate = LocalDate.of(2000, 1, 1);
 
         PriceBreakdown price = priceBreakdown("100.00");
-        Money total = money("100.00");
 
-        Response<Boolean> successfulPayment = successfulResponse();
-        Response<Boolean> successfulTicketIssue = successfulResponse();
+        int successfulPaymentTx = 123;
+        Map<UUID, String> successfulTicketIssue = Map.of(seatId1, "TICKET-1");
 
         ConfirmationReceipt receipt = mock(ConfirmationReceipt.class);
         when(receipt.areaId()).thenReturn(areaId);
@@ -237,21 +239,30 @@ class CheckoutBlackTest {
         when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
                 .thenReturn(price);
 
-        when(paymentGateway.chargePayment(token, total))
-                .thenReturn(successfulPayment);
+        PaymentDetailsDTO paymentDetails = mock(PaymentDetailsDTO.class);
 
-        when(ticketProvider.issueTickets(eventId, areaId, Set.of(seatId1)))
+        when(paymentGateway.chargePayment(any(), any()))
+                .thenReturn(successfulPaymentTx);
+
+        when(ticketProvider.issueTickets(userId, eventId, areaId, Set.of(seatId1)))
                 .thenReturn(successfulTicketIssue);
-
-        when(purchasingDomainService.finalizeCheckout(order, price))
-                .thenReturn(order);
 
         when(eventDomainService.confirm(eventId, orderId))
                 .thenReturn(receipt);
 
-        assertDoesNotThrow(() ->
-                service.completeCheckoutForGuest(token, orderId, birthDate, null)
-        );
+        CheckoutCompletedDTO result = assertDoesNotThrow(() ->
+                service.completeCheckoutForGuest(token, orderId, birthDate, null, paymentDetails));
+
+        assertEquals(orderId, result.orderId());
+        assertEquals(eventId, result.eventId());
+        assertEquals(areaId, result.areaId());
+        assertEquals(1, result.ticketCount());
+        assertEquals(new BigDecimal("100.00"), result.totalPrice().amount());
+        assertEquals("ILS", result.totalPrice().currency());
+
+        verify(paymentGateway).chargePayment(new MoneyDTO(new BigDecimal("100.00"), "ILS"), paymentDetails);
+        verify(ticketProvider).issueTickets(userId, eventId, areaId, Set.of(seatId1));
+        verify(purchasingDomainService).finalizeCheckout(order, successfulPaymentTx, price, successfulTicketIssue);
     }
 
     @Test
@@ -260,11 +271,10 @@ class CheckoutBlackTest {
         LocalDate birthDate = LocalDate.of(2000, 1, 1);
 
         PriceBreakdown price = priceBreakdown("100.00");
-        Money total = money("100.00");
-
-        Response<Boolean> failedPayment = failedResponse("card declined");
 
         mockValidGuestOperation();
+
+        PaymentDetailsDTO paymentDetails = mock(PaymentDetailsDTO.class);
 
         when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
                 .thenReturn(order);
@@ -272,11 +282,11 @@ class CheckoutBlackTest {
         when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
                 .thenReturn(price);
 
-        when(paymentGateway.chargePayment(token, total))
-                .thenReturn(failedPayment);
+        when(paymentGateway.chargePayment(any(), any()))
+                .thenThrow(new FailedPaymentException("card declined"));
 
         FailedPaymentException exception = assertThrows(FailedPaymentException.class, () ->
-                service.completeCheckoutForGuest(token, orderId, birthDate, null)
+                service.completeCheckoutForGuest(token, orderId, birthDate, null, paymentDetails)
         );
 
         assertTrue(exception.getMessage().contains("card declined"));
@@ -288,12 +298,10 @@ class CheckoutBlackTest {
         LocalDate birthDate = LocalDate.of(2000, 1, 1);
 
         PriceBreakdown price = priceBreakdown("100.00");
-        Money total = money("100.00");
-
-        Response<Boolean> successfulPayment = successfulResponse();
-        Response<Boolean> failedTicketIssue = failedResponse("issue failed");
 
         mockValidGuestOperation();
+
+        PaymentDetailsDTO paymentDetails = mock(PaymentDetailsDTO.class);
 
         when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
                 .thenReturn(order);
@@ -301,14 +309,14 @@ class CheckoutBlackTest {
         when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
                 .thenReturn(price);
 
-        when(paymentGateway.chargePayment(token, total))
-                .thenReturn(successfulPayment);
+        when(paymentGateway.chargePayment(any(), any()))
+                .thenReturn(456);
 
-        when(ticketProvider.issueTickets(eventId, areaId, Set.of(seatId1)))
-                .thenReturn(failedTicketIssue);
+        when(ticketProvider.issueTickets(userId, eventId, areaId, Set.of(seatId1)))
+                .thenThrow(new FailedToIssueTicketsException("issue failed"));
 
         FailedToIssueTicketsException exception = assertThrows(FailedToIssueTicketsException.class, () ->
-                service.completeCheckoutForGuest(token, orderId, birthDate, null)
+                service.completeCheckoutForGuest(token, orderId, birthDate, null, paymentDetails)
         );
 
         assertTrue(exception.getMessage().contains("issue failed"));
@@ -349,18 +357,4 @@ class CheckoutBlackTest {
         return new PriceBreakdown(basePrice, subtotal, discount, totalPrice);
     }
 
-    @SuppressWarnings("unchecked")
-    private Response<Boolean> successfulResponse() {
-        Response<Boolean> response = mock(Response.class);
-        when(response.isSuccessful()).thenReturn(true);
-        return response;
-    }
-
-    @SuppressWarnings("unchecked")
-    private Response<Boolean> failedResponse(String errorMessage) {
-        Response<Boolean> response = mock(Response.class);
-        when(response.isSuccessful()).thenReturn(false);
-        when(response.getErrorMessage()).thenReturn(errorMessage);
-        return response;
-    }
 }
