@@ -229,7 +229,7 @@ public class PurchasingDomainService {
         return expiresAt;
     }
 
-    public ActiveOrder finalizeCheckout(ActiveOrder activeOrder, PriceBreakdown pricing) {
+    public ActiveOrder finalizeCheckout(ActiveOrder activeOrder, Integer paymentTransactionId, PriceBreakdown pricing, Map<UUID, String> issuedTicketIds) {
         requireActiveOrder(activeOrder);
         if (pricing == null) {
             throw new IllegalArgumentException("Pricing cannot be null");
@@ -238,7 +238,7 @@ public class PurchasingDomainService {
         activeOrder.complete();
         activeOrderRepository.save(activeOrder);
 
-        OrderHistory orderHistory = OrderHistory.fromActiveOrder(activeOrder, pricing.total(), pricing.basePrice());
+        OrderHistory orderHistory = OrderHistory.fromActiveOrder(activeOrder, paymentTransactionId, pricing.total(), pricing.basePrice(), issuedTicketIds);
         orderHistoryRepository.save(orderHistory);
         return activeOrder;
     }

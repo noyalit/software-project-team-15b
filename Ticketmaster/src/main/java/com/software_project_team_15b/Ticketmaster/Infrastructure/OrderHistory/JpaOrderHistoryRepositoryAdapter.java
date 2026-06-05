@@ -73,4 +73,12 @@ public class JpaOrderHistoryRepositoryAdapter implements IOrderHistoryRepository
             return List.of();
         return jpaRepo.findByEventIdInAndIsCancelledFalse(eventIds);
     }
+
+    @Override
+    public Optional<OrderHistory> findByIdForUpdate(UUID orderId) {
+        if (orderId == null)
+            throw new IllegalArgumentException("orderId cannot be null");
+        return jpaRepo.findByIdForUpdate(orderId);
+    }
+    
 }

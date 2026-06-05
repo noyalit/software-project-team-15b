@@ -80,6 +80,7 @@ public class InMemoryOrderHistoryRepository implements IOrderHistoryRepository {
                 src.getUserId(),
                 src.getEventId(),
                 src.getAreaId(),
+                src.getPaymentTransactionId(),
                 src.getTotalPrice(),
                 src.getTickets()
         );
@@ -137,5 +138,12 @@ public class InMemoryOrderHistoryRepository implements IOrderHistoryRepository {
         return storage.values().stream()
                 .filter(o -> eventIds.contains(o.getEventId()) && !o.isCancelled())
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public Optional<OrderHistory> findByIdForUpdate(UUID orderId) {
+        if (orderId == null)
+            throw new IllegalArgumentException("orderId cannot be null");
+        return findById(orderId);
     }
 }

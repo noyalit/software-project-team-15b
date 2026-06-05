@@ -23,7 +23,6 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITick
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
-import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.OrderHistoryDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.TicketDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
@@ -37,6 +36,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermissio
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
+import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.Ticket;
 
 @Service
 public class OrderHistoryService implements EventSubscriber{
@@ -91,49 +91,66 @@ public class OrderHistoryService implements EventSubscriber{
             if (event == null) {
                 throw new IllegalArgumentException("Event ID cannot be null");
             }
-            var orderHistories = orderHistoryRepository.findByEventIdAndIsCancelledFalse(event);
+
+            List<OrderHistory> orderHistories =
+                    orderHistoryRepository.findByEventIdAndIsCancelledFalse(event);
+
             if (orderHistories.isEmpty()) {
                 AUDIT.info("op=notifyEventIsCancelled eventId={} result=no_active_orders", event);
                 return;
             }
 
+            int cancelledCount = 0;
+
             for (OrderHistory orderHistory : orderHistories) {
                 UUID orderId = orderHistory.getOrderId();
 
-                OrderHistory cancelled = transactionTemplate.execute(status -> {
-                    var currentOpt = orderHistoryRepository.findById(orderId);
-                    OrderHistory current = currentOpt.orElse(orderHistory);
+                Boolean cancelled = transactionTemplate.execute(status -> {
+                    OrderHistory current = orderHistoryRepository.findByIdForUpdate(orderId)
+                            .orElse(orderHistory);
+
                     if (current.isCancelled()) {
                         AUDIT.info("op=cancelOrderHistory orderId={} result=already_cancelled", orderId);
-                        return null;
+                        return false;
                     }
+
+                    refundPaymentForOrder(current);
+                    cancelExternalTicketsForOrder(current);
+
                     current.cancel();
-                    OrderHistory saved = orderHistoryRepository.save(current);
-                    return saved;
+                    orderHistoryRepository.save(current);
+
+                    AUDIT.info(
+                            "op=cancelOrderHistory orderId={} transactionId={} tickets={} result=ok",
+                            current.getOrderId(),
+                            current.getPaymentTransactionId(),
+                            current.getTickets().size()
+                    );
+
+                    return true;
                 });
 
-                if (cancelled != null) {
-                    try {
-                        paymentGateway.refundPayment(cancelled.getUserId(), cancelled.getTotalPrice());
-                        Set<UUID> seatIds = cancelled.getTickets().stream()
-                                .map(ticket -> ticket.getSeatId())
-                                .collect(Collectors.toSet());
-                        ticketProvider.cancelTickets(cancelled.getEventId(), cancelled.getAreaId(), seatIds);
-                        AUDIT.info("op=cancelOrderHistory orderId={} result=ok", cancelled.getOrderId());
-                    } catch (RuntimeException e) {
-                        AUDIT.warn("op=cancelOrderHistory orderId={} result=external_error reason={}", cancelled.getOrderId(), e.getMessage(), e);
-                        throw e;
-                    }
+                if (Boolean.TRUE.equals(cancelled)) {
+                    cancelledCount++;
                 }
             }
 
-            AUDIT.info("op=notifyEventIsCancelled eventId={} cancelledOrders={}", event, orderHistories.size());
+            AUDIT.info(
+                    "op=notifyEventIsCancelled eventId={} cancelledOrders={}",
+                    event,
+                    cancelledCount
+            );
+
         } catch (RuntimeException e) {
-            AUDIT.warn("op=notifyEventIsCancelled eventId={} result=error reason={}", event, e.getMessage(), e);
+            AUDIT.warn(
+                    "op=notifyEventIsCancelled eventId={} result=error reason={}",
+                    event,
+                    e.getMessage(),
+                    e
+            );
             throw e;
         }
     }
-
 
     @Transactional(readOnly = true)
     public List<OrderHistoryDTO> getOrderHistoryByUserId(String token) {
@@ -148,7 +165,7 @@ public class OrderHistoryService implements EventSubscriber{
                 throw new IllegalArgumentException("User must be a member to view order history");
             }
             List<OrderHistory> histories = orderHistoryRepository.findByUserId(userId);
-            List<OrderHistoryDTO> dtos = histories.stream().map(this::toOrderHistoryDTO).collect(Collectors.toList());
+            List<OrderHistoryDTO> dtos = histories.stream().map(OrderHistoryDTO::from).collect(Collectors.toList());
             AUDIT.info("op=getOrderHistoryByUserId callerId={} orders={}", userId, dtos.size());
             return Collections.unmodifiableList(dtos);
         } catch (RuntimeException e) {
@@ -172,7 +189,7 @@ public class OrderHistoryService implements EventSubscriber{
             }
 
             List<OrderHistoryDTO> result = orderHistoryRepository.findAll().stream()
-                    .map(this::toOrderHistoryDTO)
+                    .map(OrderHistoryDTO::from)
                     .collect(Collectors.toList());
             AUDIT.info("op=getGlobalOrderHistoryAll callerId={} orders={}", callerId, result.size());
             return Collections.unmodifiableList(result);
@@ -200,7 +217,7 @@ public class OrderHistoryService implements EventSubscriber{
             }
 
             List<OrderHistoryDTO> result = orderHistoryRepository.findByUserId(userId).stream()
-                    .map(this::toOrderHistoryDTO)
+                    .map(OrderHistoryDTO::from)
                     .collect(Collectors.toList());
             AUDIT.info("op=getGlobalOrderHistoryByUser callerId={} userId={} orders={}", callerId, userId, result.size());
             return Collections.unmodifiableList(result);
@@ -228,7 +245,7 @@ public class OrderHistoryService implements EventSubscriber{
             }
 
             List<OrderHistoryDTO> result = orderHistoryRepository.findByEventId(eventId).stream()
-                    .map(this::toOrderHistoryDTO)
+                    .map(OrderHistoryDTO::from)
                     .collect(Collectors.toList());
             AUDIT.info("op=getGlobalOrderHistoryByEvent callerId={} eventId={} orders={}", callerId, eventId, result.size());
             return Collections.unmodifiableList(result);
@@ -264,7 +281,7 @@ public class OrderHistoryService implements EventSubscriber{
 
             List<UUID> eventIds = events.stream().map(Event::eventId).toList();
             List<OrderHistoryDTO> result = orderHistoryRepository.findByEventIdIn(eventIds).stream()
-                    .map(this::toOrderHistoryDTO)
+                    .map(OrderHistoryDTO::from)
                     .collect(Collectors.toList());
             AUDIT.info("op=getGlobalOrderHistoryByCompany callerId={} companyId={} orders={}", callerId, companyId, result.size());
             return Collections.unmodifiableList(result);
@@ -302,7 +319,7 @@ public class OrderHistoryService implements EventSubscriber{
                 .filter(order -> !order.isCancelled())
                 .forEach(order -> {
                     List<TicketDTO> ticketDTOs = order.getTickets().stream()
-                            .map(t -> new TicketDTO(t.getSeatId(), t.getBasePrice()))
+                            .map(TicketDTO::from)
                             .collect(Collectors.toList());
                     soldTicketsByEvent.computeIfAbsent(order.getEventId(), ignored -> new ArrayList<>()).addAll(ticketDTOs);
                 });
@@ -369,7 +386,7 @@ public class OrderHistoryService implements EventSubscriber{
             List<OrderHistory> activeOrders = orderHistoryRepository.findByEventIdInAndIsCancelledFalse(eventIds);
             int ticketsSold = activeOrders.stream().mapToInt(order -> order.getTickets().size()).sum();
             Money totalRevenue = calculateTotalRevenue(activeOrders);
-            List<OrderHistoryDTO> orderDTOs = activeOrders.stream().map(this::toOrderHistoryDTO).collect(Collectors.toList());
+            List<OrderHistoryDTO> orderDTOs = activeOrders.stream().map(OrderHistoryDTO::from).collect(Collectors.toList());
             Map<String, Object> report = new LinkedHashMap<>();
             report.put("ticketsSold", ticketsSold);
             report.put("totalRevenue", totalRevenue);
@@ -434,7 +451,7 @@ public class OrderHistoryService implements EventSubscriber{
             }
 
             List<OrderHistoryDTO> result = orderHistoryRepository.findByEventIdIn(visibleEventIds).stream()
-                    .map(this::toOrderHistoryDTO)
+                    .map(OrderHistoryDTO::from)
                     .collect(Collectors.toList());
 
             AUDIT.info("op=getOrderHistoryForCompany callerId={} companyId={} orders={}", callerId, companyId, result.size());
@@ -490,7 +507,7 @@ public class OrderHistoryService implements EventSubscriber{
                 UUID key = keyExtractor.apply(order);
                 if (key == null) continue;
                 result.computeIfAbsent(key, ignored -> new ArrayList<>())
-                    .add(toOrderHistoryDTO(order));
+                    .add(OrderHistoryDTO.from(order));
             }
 
             result.replaceAll((k, histories) -> List.copyOf(histories));
@@ -513,29 +530,12 @@ public class OrderHistoryService implements EventSubscriber{
         }
     }
 
-    
-
     private Money calculateTotalRevenue(List<OrderHistory> orders) {
         if (orders.isEmpty()) {
             return Money.zero("USD");
         }
         Money seed = orders.get(0).getTotalPrice();
         return orders.stream().map(OrderHistory::getTotalPrice).reduce(Money.zero(seed.currency()), Money::add);
-    }
-
-    private OrderHistoryDTO toOrderHistoryDTO(OrderHistory order) {
-        List<TicketDTO> tickets = order.getTickets().stream()
-                .map(t -> new TicketDTO(t.getSeatId(), t.getBasePrice()))
-                .collect(Collectors.toList());
-        return new OrderHistoryDTO(
-                order.getOrderId(),
-                order.getUserId(),
-                order.getEventId(),
-                order.getAreaId(),
-                MoneyDTO.from(order.getTotalPrice()),
-                tickets,
-                order.isCancelled()
-        );
     }
     
     private Set<UUID> getEventIdsManagedBy(List<UUID> memberIds, UUID companyId) {
@@ -574,8 +574,36 @@ public class OrderHistoryService implements EventSubscriber{
             .anyMatch(manager -> manager.hasPermission(requiredPermission));
 
         return (isPermittedManager || isFounderOrOwner(callerId, companyId));
-        }
+    }
 
-    
+    private void refundPaymentForOrder(OrderHistory orderHistory) {
+        Integer transactionId = orderHistory.getPaymentTransactionId();
+
+        paymentGateway.refundPayment(transactionId);
+
+        AUDIT.info(
+                "op=refundPayment order={} user={} event={} transactionId={} result=ok",
+                orderHistory.getOrderId(),
+                orderHistory.getUserId(),
+                orderHistory.getEventId(),
+                transactionId
+        );
+    }
+
+    private void cancelExternalTicketsForOrder(OrderHistory orderHistory) {
+        for (Ticket ticket : orderHistory.getTickets()) {
+            String externalTicketId = ticket.getExternalTicketId();
+
+            ticketProvider.cancelTicket(externalTicketId);
+
+            AUDIT.info(
+                    "op=cancelTicket order={} user={} event={} ticketId={} result=ok",
+                    orderHistory.getOrderId(),
+                    orderHistory.getUserId(),
+                    orderHistory.getEventId(),
+                    externalTicketId
+            );
+        }
+    }
     
 }

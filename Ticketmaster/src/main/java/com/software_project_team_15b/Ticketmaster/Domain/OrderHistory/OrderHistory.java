@@ -6,6 +6,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import jakarta.persistence.*;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -25,6 +26,9 @@ public class OrderHistory {
 
     @Column(name = "area_id", nullable = false, updatable = false)
     private UUID areaId;
+
+    @Column(name = "payment_transaction_id", nullable = false, updatable = false)
+    private Integer paymentTransactionId;
 
     @Embedded
     @AttributeOverrides({
@@ -61,6 +65,7 @@ public class OrderHistory {
             UUID userId,
             UUID eventId,
             UUID areaId,
+            Integer paymentTransactionId,
             Money totalPrice,
             Set<Ticket> tickets
     ) {
@@ -76,6 +81,9 @@ public class OrderHistory {
         if (areaId == null) {
             throw new IllegalArgumentException("Area ID cannot be null");
         }
+        if (paymentTransactionId == null) {
+            throw new IllegalArgumentException("Payment transaction ID cannot be null");
+        }
         if (totalPrice == null) {
             throw new IllegalArgumentException("Total price cannot be null");
         }
@@ -89,36 +97,60 @@ public class OrderHistory {
         this.userId = userId;
         this.eventId = eventId;
         this.areaId = areaId;
+        this.paymentTransactionId = paymentTransactionId;
         this.totalPrice = new Money(totalPrice.amount(), totalPrice.currency());
         this.tickets = new HashSet<>(tickets);
     }
 
     public static OrderHistory fromActiveOrder(
             ActiveOrder activeOrder,
+            Integer paymentTransactionId,
             Money totalPrice,
-            Money basePricePerTicket
+            Money basePricePerTicket,
+            Map<UUID, String> issuedTicketIds
     ) {
         if (activeOrder == null) {
             throw new IllegalArgumentException("ActiveOrder cannot be null");
         }
+        if (paymentTransactionId == null) {
+            throw new IllegalArgumentException("Payment transaction ID cannot be null");
+        }
+        if (totalPrice == null) {
+            throw new IllegalArgumentException("Total price cannot be null");
+        }
         if (basePricePerTicket == null) {
             throw new IllegalArgumentException("Base price per ticket cannot be null");
         }
+        if (issuedTicketIds == null || issuedTicketIds.isEmpty()) {
+            throw new IllegalArgumentException("Issued ticket IDs cannot be null or empty");
+        }
+
+        Set<Ticket> tickets = activeOrder.getOrderSeats().stream()
+                .map(seatId -> {
+                    String externalTicketId = issuedTicketIds.get(seatId);
+
+                    if (externalTicketId == null || externalTicketId.isBlank()) {
+                        throw new IllegalArgumentException("Missing external ticket ID for seat " + seatId);
+                    }
+
+                    return new Ticket(externalTicketId, seatId, basePricePerTicket);
+                })
+                .collect(java.util.stream.Collectors.toSet());
 
         return new OrderHistory(
                 activeOrder.getOrderId(),
                 activeOrder.getUserId(),
                 activeOrder.getEventId(),
                 activeOrder.getAreaId(),
+                paymentTransactionId,
                 totalPrice,
-                activeOrder.getOrderSeats().stream()
-                        .map(seatId -> new Ticket(seatId, basePricePerTicket))
-                        .collect(java.util.stream.Collectors.toSet())
+                tickets
         );
     }
 
     private static void validateTickets(Set<Ticket> tickets) {
         Set<UUID> seatIds = new HashSet<>();
+        Set<String> externalTicketIds = new HashSet<>();
 
         for (Ticket ticket : tickets) {
             if (ticket == null) {
@@ -127,6 +159,10 @@ public class OrderHistory {
 
             if (!seatIds.add(ticket.getSeatId())) {
                 throw new IllegalArgumentException("Tickets set cannot contain duplicate seat IDs");
+            }
+
+            if (!externalTicketIds.add(ticket.getExternalTicketId())) {
+                throw new IllegalArgumentException("Tickets set cannot contain duplicate external ticket IDs");
             }
         }
     }
@@ -145,6 +181,10 @@ public class OrderHistory {
 
     public UUID getAreaId() {
         return areaId;
+    }
+
+    public Integer getPaymentTransactionId() {
+        return paymentTransactionId;
     }
 
     public Money getTotalPrice() {
