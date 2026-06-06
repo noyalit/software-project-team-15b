@@ -335,6 +335,10 @@ public class PurchasingController {
             @RequestBody CompleteMemberCheckoutRequest request
     ) {
         try {
+            if (request.paymentDetails() == null) {
+                throw new IllegalArgumentException("Payment details cannot be null");
+            }
+            
             String couponCode = request == null ? null : request.couponCode();
 
             CheckoutCompletedDTO result =
@@ -372,7 +376,7 @@ public class PurchasingController {
             @RequestBody CompleteGuestCheckoutRequest request
     ) {
         try {
-            if (request == null || request.paymentDetails() == null) {
+            if (request.paymentDetails() == null) {
                 throw new IllegalArgumentException("Payment details are required");
             }
 

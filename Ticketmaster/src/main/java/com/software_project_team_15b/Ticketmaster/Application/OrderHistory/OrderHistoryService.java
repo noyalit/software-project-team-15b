@@ -101,44 +101,88 @@ public class OrderHistoryService implements EventSubscriber{
             }
 
             int cancelledCount = 0;
+            int compensationFailedCount = 0;
 
             for (OrderHistory orderHistory : orderHistories) {
                 UUID orderId = orderHistory.getOrderId();
 
-                Boolean cancelled = transactionTemplate.execute(status -> {
+                OrderHistory cancelledOrder = transactionTemplate.execute(status -> {
                     OrderHistory current = orderHistoryRepository.findByIdForUpdate(orderId)
                             .orElse(orderHistory);
 
                     if (current.isCancelled()) {
                         AUDIT.info("op=cancelOrderHistory orderId={} result=already_cancelled", orderId);
-                        return false;
+                        return null;
                     }
-
-                    refundPaymentForOrder(current);
-                    cancelExternalTicketsForOrder(current);
 
                     current.cancel();
                     orderHistoryRepository.save(current);
 
                     AUDIT.info(
-                            "op=cancelOrderHistory orderId={} transactionId={} tickets={} result=ok",
+                            "op=cancelOrderHistory orderId={} transactionId={} tickets={} result=db_cancelled",
                             current.getOrderId(),
                             current.getPaymentTransactionId(),
                             current.getTickets().size()
                     );
 
-                    return true;
+                    return current;
                 });
 
-                if (Boolean.TRUE.equals(cancelled)) {
-                    cancelledCount++;
+                if (cancelledOrder == null) {
+                    continue;
                 }
+
+                boolean compensationSucceeded = true;
+
+                try {
+                    refundPaymentForOrder(cancelledOrder);
+                } catch (RuntimeException refundError) {
+                    compensationSucceeded = false;
+
+                    AUDIT.warn(
+                            "op=refundPayment order={} transactionId={} result=failed reason={}",
+                            cancelledOrder.getOrderId(),
+                            cancelledOrder.getPaymentTransactionId(),
+                            refundError.getMessage(),
+                            refundError
+                    );
+                }
+
+                try {
+                    cancelExternalTicketsForOrder(cancelledOrder);
+                } catch (RuntimeException ticketCancelError) {
+                    compensationSucceeded = false;
+
+                    AUDIT.warn(
+                            "op=cancelExternalTickets order={} transactionId={} tickets={} result=failed reason={}",
+                            cancelledOrder.getOrderId(),
+                            cancelledOrder.getPaymentTransactionId(),
+                            cancelledOrder.getTickets().size(),
+                            ticketCancelError.getMessage(),
+                            ticketCancelError
+                    );
+                }
+
+                cancelledCount++;
+
+                if (!compensationSucceeded) {
+                    compensationFailedCount++;
+                }
+
+                AUDIT.info(
+                        "op=cancelOrderHistory orderId={} transactionId={} tickets={} result={}",
+                        cancelledOrder.getOrderId(),
+                        cancelledOrder.getPaymentTransactionId(),
+                        cancelledOrder.getTickets().size(),
+                        compensationSucceeded ? "external_compensation_done" : "external_compensation_failed"
+                );
             }
 
             AUDIT.info(
-                    "op=notifyEventIsCancelled eventId={} cancelledOrders={}",
+                    "op=notifyEventIsCancelled eventId={} cancelledOrders={} compensationFailures={}",
                     event,
-                    cancelledCount
+                    cancelledCount,
+                    compensationFailedCount
             );
 
         } catch (RuntimeException e) {
