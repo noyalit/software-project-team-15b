@@ -1,0 +1,29 @@
+# Default initial-state file, bundled on the classpath at classpath:initial-state.txt.
+#
+# Seeding is OPT-IN via INIT_RUN (default false in the root .env file).
+#   Docker:  docker compose down -v && INIT_RUN=true docker compose up --build
+#   Local:   INIT_RUN=true mvnw spring-boot:run
+# Plain restarts (INIT_RUN=false) skip it, so the app never re-seeds on restart.
+#
+# Override the file location with the INIT_STATE_FILE env var, e.g.
+#   INIT_STATE_FILE=file:/path/to/other.txt
+#
+# NOTE: initialization is abort-on-failure. Against a persistent database (the
+# Docker postgres volume) re-seeding requires a fresh DB first — run
+# `docker compose down -v` before enabling INIT_RUN again.
+#
+# See initial-state.example.txt for the full operation reference.
+
+guest-registration(moshe, Moshe123!, 1990-01-15);
+guest-registration(rina, Rina4567!, 1985-05-20);
+
+login(rina, Rina4567!);
+login(moshe, Moshe123!);
+
+open-production-company(rina, "Rina Productions");
+
+create-event(rina, "Rina Productions", SummerShow, "The Band", CONCERT, 2026-09-01T20:00:00Z, "Tel Aviv Arena");
+add-standing-area(rina, SummerShow, "General Admission", 150.00, USD, 500);
+publish-event(rina, SummerShow);
+
+appoint-manager(rina, SummerShow, moshe, MANAGE_EVENTS|HANDLE_INQUIRIES);
