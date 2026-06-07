@@ -36,8 +36,6 @@ class CheckoutNotificationsWhiteTest extends PurchasingServiceWhiteTestBase {
                 when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
 
                 PriceBreakdown priceBreakdown = priceBreakdown("100.00");
-                int transactionId = 12345;
-                Map<UUID, String> issuedTicketIds = Map.of(seatId1, "TICKET-1");
 
                 when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
                                 .thenReturn(priceBreakdown);
@@ -62,8 +60,8 @@ class CheckoutNotificationsWhiteTest extends PurchasingServiceWhiteTestBase {
 
                 when(eventDomainService.getAreaName(eventId, areaId)).thenReturn("area");
 
-                when(ticketProvider.issueSeatingTickets(userId, eventId, "area", seatTickets))
-                                .thenReturn(issuedTicketIds);
+                when(ticketProvider.issueSeatingTicket(userId, eventId, "area", seatTickets))
+                                .thenReturn(issuedTicketId);
 
                 ConfirmationReceipt receipt = mock(ConfirmationReceipt.class);
                 when(receipt.areaId()).thenReturn(areaId);
@@ -88,14 +86,15 @@ class CheckoutNotificationsWhiteTest extends PurchasingServiceWhiteTestBase {
                 verify(paymentGateway).chargePayment(any(MoneyDTO.class), eq(paymentDetails));
                 verify(eventDomainService).isStandingArea(eventId, areaId);
                 verify(eventDomainService).areaSeats(eventId, areaId);
-                verify(ticketProvider).issueSeatingTickets(userId, eventId, "area", seatTickets);
-                verify(ticketProvider, never()).issueStandingTickets(any(), any(), any(), anySet());
+                verify(ticketProvider).issueSeatingTicket(userId, eventId, "area", seatTickets);
+                verify(ticketProvider, never()).issueStandingTicket(any(), any(), any(), anySet());
 
                 verify(purchasingDomainService).finalizeCheckout(
                                 order,
                                 transactionId,
-                                priceBreakdown,
-                                issuedTicketIds);
+                                issuedTicketId,
+                                priceBreakdown
+                                );
 
                 verify(notifier).notifyUser(eq(userId),
                                 argThat(notification -> notification.getType() == NotificationType.PURCHASE_SUCCESS));
@@ -114,8 +113,6 @@ class CheckoutNotificationsWhiteTest extends PurchasingServiceWhiteTestBase {
                 when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
 
                 PriceBreakdown priceBreakdown = priceBreakdown("100.00");
-                int transactionId = 12345;
-                Map<UUID, String> issuedTicketIds = Map.of(seatId1, "TICKET-1");
 
                 when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
                                 .thenReturn(priceBreakdown);
@@ -140,8 +137,8 @@ class CheckoutNotificationsWhiteTest extends PurchasingServiceWhiteTestBase {
 
                 when(eventDomainService.getAreaName(eventId, areaId)).thenReturn("area");
 
-                when(ticketProvider.issueSeatingTickets(userId, eventId, "area", seatTickets))
-                                .thenReturn(issuedTicketIds);
+                when(ticketProvider.issueSeatingTicket(userId, eventId, "area", seatTickets))
+                                .thenReturn(issuedTicketId);
 
                 ConfirmationReceipt receipt = mock(ConfirmationReceipt.class);
                 when(receipt.areaId()).thenReturn(areaId);
@@ -169,14 +166,14 @@ class CheckoutNotificationsWhiteTest extends PurchasingServiceWhiteTestBase {
                 verify(paymentGateway).chargePayment(any(MoneyDTO.class), eq(paymentDetails));
                 verify(eventDomainService).isStandingArea(eventId, areaId);
                 verify(eventDomainService).areaSeats(eventId, areaId);
-                verify(ticketProvider).issueSeatingTickets(userId, eventId, "area", seatTickets);
-                verify(ticketProvider, never()).issueStandingTickets(any(), any(), any(), anySet());
+                verify(ticketProvider).issueSeatingTicket(userId, eventId, "area", seatTickets);
+                verify(ticketProvider, never()).issueStandingTicket(any(), any(), any(), anySet());
 
                 verify(purchasingDomainService).finalizeCheckout(
                                 order,
                                 transactionId,
-                                priceBreakdown,
-                                issuedTicketIds);
+                                issuedTicketId,
+                                priceBreakdown);
 
                 verify(notifier).notifyUser(eq(userId),
                                 argThat(notification -> notification.getType() == NotificationType.PURCHASE_SUCCESS));

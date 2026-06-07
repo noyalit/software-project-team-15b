@@ -191,7 +191,6 @@ class ConcurrentSalesReportGenerationTest {
 
         for (int i = 0; i < ticketCount; i++) {
             tickets.add(new Ticket(
-                    "TICKET-" + UUID.randomUUID(),
                     UUID.randomUUID(),
                     basePrice
             ));
@@ -201,6 +200,7 @@ class ConcurrentSalesReportGenerationTest {
         Money totalPrice = Money.of(total.toPlainString(), "USD");
 
         Integer paymentTransactionId = Math.abs(UUID.randomUUID().hashCode());
+        String issuedTicketId = "TICKET-" + UUID.randomUUID();
 
         return new OrderHistory(
                 UUID.randomUUID(),
@@ -208,6 +208,7 @@ class ConcurrentSalesReportGenerationTest {
                 eventId,
                 UUID.randomUUID(),
                 paymentTransactionId,
+                issuedTicketId,
                 totalPrice,
                 tickets
         );

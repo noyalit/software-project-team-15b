@@ -104,8 +104,6 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
 
                 PriceBreakdown priceBreakdown = priceBreakdown("100.00");
                 PaymentDetailsDTO paymentDetails = mock(PaymentDetailsDTO.class);
-                int transactionId = 12345;
-                Map<UUID, String> issuedTicketIds = Map.of(seatId1, "TICKET-1");
 
                 when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, "coupon"))
                                 .thenReturn(priceBreakdown);
@@ -113,7 +111,7 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
                 when(paymentGateway.chargePayment(any(MoneyDTO.class), eq(paymentDetails)))
                                 .thenReturn(transactionId);
                 
-                mockStandingTicketIssuance(issuedTicketIds);
+                mockStandingTicketIssuance(issuedTicketId);
 
                 ConfirmationReceipt receipt = mock(ConfirmationReceipt.class);
                 when(receipt.areaId()).thenReturn(areaId);
@@ -129,13 +127,13 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
                 verify(eventDomainService).getPrice(eventId, areaId, 1, userId, birthDate, "coupon");
                 verify(paymentGateway).chargePayment(any(MoneyDTO.class), eq(paymentDetails));
                 verify(eventDomainService).isStandingArea(eventId, areaId);
-                verify(ticketProvider).issueStandingTickets(userId, eventId, "area", Set.of(seatId1));
-                verify(ticketProvider, never()).issueSeatingTickets(any(), any(), any(), anyList());
+                verify(ticketProvider).issueStandingTicket(userId, eventId, "area", Set.of(seatId1));
+                verify(ticketProvider, never()).issueSeatingTicket(any(), any(), any(), anyList());
                 verify(purchasingDomainService).finalizeCheckout(
                                 order,
                                 transactionId,
-                                priceBreakdown,
-                                issuedTicketIds);
+                                issuedTicketId,
+                                priceBreakdown);
                 verify(eventDomainService).confirm(eventId, orderId);
         }
 
@@ -420,8 +418,6 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
                                 .thenReturn(order);
 
                 PriceBreakdown priceBreakdown = priceBreakdown("100.00");
-                int transactionId = 12345;
-                Map<UUID, String> issuedTicketIds = Map.of(seatId1, "TICKET-1");
 
                 when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
                                 .thenReturn(priceBreakdown);
@@ -429,7 +425,7 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
                 when(paymentGateway.chargePayment(any(MoneyDTO.class), eq(paymentDetails)))
                                 .thenReturn(transactionId);
 
-                mockStandingTicketIssuance(issuedTicketIds);
+                mockStandingTicketIssuance(issuedTicketId);
 
                 ConfirmationReceipt receipt = mock(ConfirmationReceipt.class);
                 when(receipt.areaId()).thenReturn(areaId);
@@ -447,14 +443,14 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
 
                 verify(paymentGateway).chargePayment(any(MoneyDTO.class), eq(paymentDetails));
                 verify(eventDomainService).isStandingArea(eventId, areaId);
-                verify(ticketProvider).issueStandingTickets(userId, eventId, "area", Set.of(seatId1));
-                verify(ticketProvider, never()).issueSeatingTickets(any(), any(), any(), anyList());
+                verify(ticketProvider).issueStandingTicket(userId, eventId, "area", Set.of(seatId1));
+                verify(ticketProvider, never()).issueSeatingTicket(any(), any(), any(), anyList());
 
                 verify(purchasingDomainService).finalizeCheckout(
                                 order,
                                 transactionId,
-                                priceBreakdown,
-                                issuedTicketIds);
+                                issuedTicketId,
+                                priceBreakdown);
 
                 verify(eventDomainService).confirm(eventId, orderId);
         }
@@ -500,7 +496,6 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
                                 .thenReturn(order);
 
                 PriceBreakdown priceBreakdown = priceBreakdown("100.00");
-                int transactionId = 12345;
 
                 when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
                                 .thenReturn(priceBreakdown);
@@ -515,8 +510,8 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
                                 birthDate, null, paymentDetails));
 
                 verify(eventDomainService).isStandingArea(eventId, areaId);
-                verify(ticketProvider).issueStandingTickets(userId, eventId, "area", Set.of(seatId1));
-                verify(ticketProvider, never()).issueSeatingTickets(any(), any(), any(), anyList());
+                verify(ticketProvider).issueStandingTicket(userId, eventId, "area", Set.of(seatId1));
+                verify(ticketProvider, never()).issueSeatingTicket(any(), any(), any(), anyList());
 
                 verify(paymentGateway).refundPayment(transactionId);
                 verify(purchasingDomainService, never()).finalizeCheckout(any(), any(), any(), any());
@@ -535,8 +530,6 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
                                 .thenReturn(order);
 
                 PriceBreakdown priceBreakdown = priceBreakdown("100.00");
-                int transactionId = 12345;
-                Map<UUID, String> issuedTicketIds = Map.of(seatId1, "TICKET-1");
 
                 when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
                                 .thenReturn(priceBreakdown);
@@ -544,17 +537,17 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
                 when(paymentGateway.chargePayment(any(MoneyDTO.class), eq(paymentDetails)))
                                 .thenReturn(transactionId);
 
-                mockStandingTicketIssuance(issuedTicketIds);
+                mockStandingTicketIssuance(issuedTicketId);
 
                 doThrow(new RuntimeException("finalize failed"))
                                 .when(purchasingDomainService)
-                                .finalizeCheckout(order, transactionId, priceBreakdown, issuedTicketIds);
+                                .finalizeCheckout(order, transactionId, issuedTicketId, priceBreakdown);
 
                 assertThrows(RuntimeException.class, () -> service.completeCheckoutForGuest(token, orderId, birthDate,
                                 null, paymentDetails));
 
-                verify(ticketProvider).issueStandingTickets(userId, eventId, "area", Set.of(seatId1));
-                verify(ticketProvider, never()).issueSeatingTickets(any(), any(), any(), anyList());
+                verify(ticketProvider).issueStandingTicket(userId, eventId, "area", Set.of(seatId1));
+                verify(ticketProvider, never()).issueSeatingTicket(any(), any(), any(), anyList());
 
                 verify(paymentGateway).refundPayment(transactionId);
                 verify(ticketProvider).cancelTicket("TICKET-1");
@@ -573,8 +566,6 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
                                 .thenReturn(order);
 
                 PriceBreakdown priceBreakdown = priceBreakdown("100.00");
-                int transactionId = 12345;
-                Map<UUID, String> issuedTicketIds = Map.of(seatId1, "TICKET-1");
 
                 when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
                                 .thenReturn(priceBreakdown);
@@ -582,13 +573,14 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
                 when(paymentGateway.chargePayment(any(MoneyDTO.class), eq(paymentDetails)))
                                 .thenReturn(transactionId);
 
-                mockStandingTicketIssuance(issuedTicketIds);
+                mockStandingTicketIssuance(issuedTicketId);
 
                 when(purchasingDomainService.finalizeCheckout(
                                 order,
                                 transactionId,
-                                priceBreakdown,
-                                issuedTicketIds)).thenReturn(order);
+                                issuedTicketId,
+                                priceBreakdown
+                                )).thenReturn(order);
 
                 when(eventDomainService.confirm(eventId, orderId))
                                 .thenThrow(new RuntimeException("confirm failed"));
@@ -596,8 +588,8 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
                 assertThrows(RuntimeException.class, () -> service.completeCheckoutForGuest(token, orderId, birthDate,
                                 null, paymentDetails));
 
-                verify(ticketProvider).issueStandingTickets(userId, eventId, "area", Set.of(seatId1));
-                verify(ticketProvider, never()).issueSeatingTickets(any(), any(), any(), anyList());
+                verify(ticketProvider).issueStandingTicket(userId, eventId, "area", Set.of(seatId1));
+                verify(ticketProvider, never()).issueSeatingTicket(any(), any(), any(), anyList());
 
                 verify(paymentGateway).refundPayment(transactionId);
                 verify(ticketProvider).cancelTicket("TICKET-1");
@@ -634,13 +626,13 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
                 verify(purchasingDomainService, never()).finalizeCheckout(any(), any(), any(), any());
         }
 
-        private void mockStandingTicketIssuance(Map<UUID, String> issuedTicketIds) {
+        private void mockStandingTicketIssuance(String issuedTicketId) {
                 when(eventDomainService.isStandingArea(eventId, areaId))
                                 .thenReturn(true);
                 when(eventDomainService.getAreaName(eventId, areaId)).thenReturn("area");
 
-                when(ticketProvider.issueStandingTickets(userId, eventId, "area", Set.of(seatId1)))
-                                .thenReturn(issuedTicketIds);
+                when(ticketProvider.issueStandingTicket(userId, eventId, "area", Set.of(seatId1)))
+                                .thenReturn(issuedTicketId);
         }
 
         private void mockStandingTicketIssuanceFailure(RuntimeException exception) {
@@ -649,11 +641,11 @@ class CheckoutWhiteTest extends PurchasingServiceWhiteTestBase {
                 when(eventDomainService.getAreaName(eventId, areaId)).thenReturn("area");
                 doThrow(exception)
                                 .when(ticketProvider)
-                                .issueStandingTickets(userId, eventId, "area", Set.of(seatId1));
+                                .issueStandingTicket(userId, eventId, "area", Set.of(seatId1));
         }
 
         private void verifyNoTicketIssuance() {
-                verify(ticketProvider, never()).issueStandingTickets(any(), any(), any(), anySet());
-                verify(ticketProvider, never()).issueSeatingTickets(any(), any(), any(), anyList());
+                verify(ticketProvider, never()).issueStandingTicket(any(), any(), any(), anySet());
+                verify(ticketProvider, never()).issueSeatingTicket(any(), any(), any(), anyList());
         }
 }

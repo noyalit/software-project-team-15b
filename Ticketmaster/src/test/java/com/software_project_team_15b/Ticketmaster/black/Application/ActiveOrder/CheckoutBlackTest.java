@@ -226,7 +226,7 @@ class CheckoutBlackTest {
                 PriceBreakdown price = priceBreakdown("100.00");
 
                 int successfulPaymentTx = 123;
-                Map<UUID, String> successfulTicketIssue = Map.of(seatId1, "TICKET-1");
+                String successfulTicketIssue = "TICKET-1";
 
                 ConfirmationReceipt receipt = mock(ConfirmationReceipt.class);
                 when(receipt.areaId()).thenReturn(areaId);
@@ -251,7 +251,7 @@ class CheckoutBlackTest {
                 when(eventDomainService.getAreaName(eventId, areaId))
                                 .thenReturn("Area 1");
 
-                when(ticketProvider.issueStandingTickets(userId, eventId, "Area 1", Set.of(seatId1)))
+                when(ticketProvider.issueStandingTicket(userId, eventId, "Area 1", Set.of(seatId1)))
                                 .thenReturn(successfulTicketIssue);
 
                 when(eventDomainService.confirm(eventId, orderId))
@@ -269,10 +269,9 @@ class CheckoutBlackTest {
 
                 verify(paymentGateway).chargePayment(new MoneyDTO(new BigDecimal("100.00"), "ILS"), paymentDetails);
                 verify(eventDomainService).isStandingArea(eventId, areaId);
-                verify(ticketProvider).issueStandingTickets(userId, eventId, "Area 1", Set.of(seatId1));
-                verify(ticketProvider, never()).issueSeatingTickets(any(), any(), any(), anyList());
-                verify(purchasingDomainService).finalizeCheckout(order, successfulPaymentTx, price,
-                                successfulTicketIssue);
+                verify(ticketProvider).issueStandingTicket(userId, eventId, "Area 1", Set.of(seatId1));
+                verify(ticketProvider, never()).issueSeatingTicket(any(), any(), any(), anyList());
+                verify(purchasingDomainService).finalizeCheckout(order, successfulPaymentTx, successfulTicketIssue, price);                               
         }
 
         @Test
@@ -283,7 +282,7 @@ class CheckoutBlackTest {
         PriceBreakdown price = priceBreakdown("100.00");
 
         int successfulPaymentTx = 123;
-        Map<UUID, String> successfulTicketIssue = Map.of(seatId1, "TICKET-1");
+        String successfulTicketIssue = "TICKET-1";
 
         ConfirmationReceipt receipt = mock(ConfirmationReceipt.class);
         when(receipt.areaId()).thenReturn(areaId);
@@ -315,7 +314,7 @@ class CheckoutBlackTest {
         when(eventDomainService.getAreaName(eventId, areaId))
                 .thenReturn("Area 1");
 
-        when(ticketProvider.issueSeatingTickets(userId, eventId, "Area 1", seatTickets))
+        when(ticketProvider.issueSeatingTicket(userId, eventId, "Area 1", seatTickets))
                 .thenReturn(successfulTicketIssue);
 
         when(eventDomainService.confirm(eventId, orderId))
@@ -332,9 +331,9 @@ class CheckoutBlackTest {
         assertEquals("ILS", result.totalPrice().currency());
 
         verify(paymentGateway).chargePayment(new MoneyDTO(new BigDecimal("100.00"), "ILS"), paymentDetails);
-        verify(ticketProvider).issueSeatingTickets(userId, eventId, "Area 1", seatTickets);
-        verify(ticketProvider, never()).issueStandingTickets(any(), any(), any(), anySet());
-        verify(purchasingDomainService).finalizeCheckout(order, successfulPaymentTx, price, successfulTicketIssue);
+        verify(ticketProvider).issueSeatingTicket(userId, eventId, "Area 1", seatTickets);
+        verify(ticketProvider, never()).issueStandingTicket(any(), any(), any(), anySet());
+        verify(purchasingDomainService).finalizeCheckout(order, successfulPaymentTx, successfulTicketIssue, price);
         }
 
         @Test
@@ -370,7 +369,7 @@ class CheckoutBlackTest {
         when(eventDomainService.getAreaName(eventId, areaId))
                 .thenReturn("Area 1");
 
-        when(ticketProvider.issueSeatingTickets(userId, eventId, "Area 1", seatTickets))
+        when(ticketProvider.issueSeatingTicket(userId, eventId, "Area 1", seatTickets))
                 .thenThrow(new FailedToIssueTicketsException("issue failed"));
 
         FailedToIssueTicketsException exception = assertThrows(FailedToIssueTicketsException.class, () ->
@@ -380,8 +379,8 @@ class CheckoutBlackTest {
         assertTrue(exception.getMessage().contains("issue failed"));
 
         verify(paymentGateway).refundPayment(456);
-        verify(ticketProvider).issueSeatingTickets(userId, eventId, "Area 1", seatTickets);
-        verify(ticketProvider, never()).issueStandingTickets(any(), any(), any(), anySet());
+        verify(ticketProvider).issueSeatingTicket(userId, eventId, "Area 1", seatTickets);
+        verify(ticketProvider, never()).issueStandingTicket(any(), any(), any(), anySet());
         verify(purchasingDomainService, never()).finalizeCheckout(any(), anyInt(), any(), any());
         verify(eventDomainService, never()).confirm(any(), any());
         }
@@ -438,7 +437,7 @@ class CheckoutBlackTest {
                 when(eventDomainService.getAreaName(eventId, areaId))
                                 .thenReturn("Area 1");
 
-                when(ticketProvider.issueStandingTickets(userId, eventId, "Area 1", Set.of(seatId1)))
+                when(ticketProvider.issueStandingTicket(userId, eventId, "Area 1", Set.of(seatId1)))
                                 .thenThrow(new FailedToIssueTicketsException("issue failed"));
 
                 FailedToIssueTicketsException exception = assertThrows(FailedToIssueTicketsException.class,
@@ -448,8 +447,8 @@ class CheckoutBlackTest {
                 assertTrue(exception.getMessage().contains("issue failed"));
 
                 verify(paymentGateway).refundPayment(456);
-                verify(ticketProvider).issueStandingTickets(userId, eventId, "Area 1", Set.of(seatId1));
-                verify(ticketProvider, never()).issueSeatingTickets(any(), any(), any(), anyList());
+                verify(ticketProvider).issueStandingTicket(userId, eventId, "Area 1", Set.of(seatId1));
+                verify(ticketProvider, never()).issueSeatingTicket(any(), any(), any(), anyList());
                 verify(purchasingDomainService, never()).finalizeCheckout(any(), anyInt(), any(), any());
                 verify(eventDomainService, never()).confirm(any(), any());
         }

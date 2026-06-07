@@ -9,7 +9,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -27,8 +26,7 @@ public class OrderHistoryTest {
 
     private Integer paymentTransactionId;
 
-    private String externalTicketId1;
-    private String externalTicketId2;
+    private String externalTicketId;
 
     private Money basePricePerTicket;
     private Money differentPrice;
@@ -46,8 +44,7 @@ public class OrderHistoryTest {
 
         paymentTransactionId = 12345;
 
-        externalTicketId1 = "TICKET-1";
-        externalTicketId2 = "TICKET-2";
+        externalTicketId = "TICKET-" + UUID.randomUUID();
 
         basePricePerTicket = Money.of("100.00", "ILS");
         differentPrice = Money.of("150.00", "ILS");
@@ -62,9 +59,9 @@ public class OrderHistoryTest {
         OrderHistory orderHistory = OrderHistory.fromActiveOrder(
                 activeOrder,
                 paymentTransactionId,
+                externalTicketId,
                 totalPrice,
-                basePricePerTicket,
-                issuedTicketIds()
+                basePricePerTicket
         );
 
         assertEquals(orderId, orderHistory.getOrderId());
@@ -75,41 +72,18 @@ public class OrderHistoryTest {
         assertEquals(totalPrice, orderHistory.getTotalPrice());
 
         Set<Ticket> expectedTickets = Set.of(
-                new Ticket(externalTicketId1, seatId1, basePricePerTicket),
-                new Ticket(externalTicketId2, seatId2, basePricePerTicket)
+                new Ticket(seatId1, basePricePerTicket),
+                new Ticket(seatId2, basePricePerTicket)
         );
 
         assertEquals(expectedTickets, orderHistory.getTickets());
     }
 
     @Test
-    void fromActiveOrderShouldCreateTicketsWithExternalTicketIds() {
-        ActiveOrder activeOrder = new ActiveOrder(orderId, userId, eventId, areaId);
-        activeOrder.addSeats(Set.of(seatId1, seatId2));
-
-        OrderHistory orderHistory = OrderHistory.fromActiveOrder(
-                activeOrder,
-                paymentTransactionId,
-                totalPrice,
-                basePricePerTicket,
-                issuedTicketIds()
-        );
-
-        Map<UUID, String> actualSeatToExternalTicketId = orderHistory.getTickets().stream()
-                .collect(Collectors.toMap(
-                        Ticket::getSeatId,
-                        Ticket::getExternalTicketId
-                ));
-
-        assertEquals(externalTicketId1, actualSeatToExternalTicketId.get(seatId1));
-        assertEquals(externalTicketId2, actualSeatToExternalTicketId.get(seatId2));
-    }
-
-    @Test
     void constructorShouldInitializeFieldsCorrectly() {
         Set<Ticket> tickets = Set.of(
-                new Ticket(externalTicketId1, seatId1, basePricePerTicket),
-                new Ticket(externalTicketId2, seatId2, differentPrice)
+                new Ticket(seatId1, basePricePerTicket),
+                new Ticket(seatId2, differentPrice)
         );
 
         OrderHistory orderHistory = new OrderHistory(
@@ -118,6 +92,7 @@ public class OrderHistoryTest {
                 eventId,
                 areaId,
                 paymentTransactionId,
+                externalTicketId,
                 totalPrice,
                 tickets
         );
@@ -127,6 +102,7 @@ public class OrderHistoryTest {
         assertEquals(eventId, orderHistory.getEventId());
         assertEquals(areaId, orderHistory.getAreaId());
         assertEquals(paymentTransactionId, orderHistory.getPaymentTransactionId());
+        assertEquals(externalTicketId, orderHistory.getTicketIdentifier());
         assertEquals(totalPrice, orderHistory.getTotalPrice());
         assertEquals(tickets, orderHistory.getTickets());
     }
@@ -164,17 +140,18 @@ public class OrderHistoryTest {
                 eventId,
                 areaId,
                 paymentTransactionId,
+                externalTicketId,
                 totalPrice,
                 Set.of(
-                        new Ticket(externalTicketId1, seatId1, basePricePerTicket),
-                        new Ticket(externalTicketId2, seatId2, differentPrice)
+                        new Ticket(seatId1, basePricePerTicket),
+                        new Ticket(seatId2, differentPrice)
                 )
         );
 
         Set<Ticket> returnedTickets = orderHistory.getTickets();
 
         assertThrows(UnsupportedOperationException.class, () ->
-                returnedTickets.add(new Ticket("TICKET-3", UUID.randomUUID(), basePricePerTicket))
+                returnedTickets.add(new Ticket(UUID.randomUUID(), basePricePerTicket))
         );
     }
 
@@ -186,10 +163,11 @@ public class OrderHistoryTest {
                 eventId,
                 areaId,
                 paymentTransactionId,
+                externalTicketId,
                 totalPrice,
                 Set.of(
-                        new Ticket(externalTicketId1, seatId1, basePricePerTicket),
-                        new Ticket(externalTicketId2, seatId2, differentPrice)
+                        new Ticket(seatId1, basePricePerTicket),
+                        new Ticket(seatId2, differentPrice)
                 )
         );
 
@@ -230,7 +208,7 @@ public class OrderHistoryTest {
     @Test
     void constructorShouldCopyTicketsSet() {
         Set<Ticket> originalTickets = new HashSet<>();
-        originalTickets.add(new Ticket(externalTicketId1, seatId1, basePricePerTicket));
+        originalTickets.add(new Ticket(seatId1, basePricePerTicket));
 
         OrderHistory orderHistory = new OrderHistory(
                 orderId,
@@ -238,6 +216,7 @@ public class OrderHistoryTest {
                 eventId,
                 areaId,
                 paymentTransactionId,
+                externalTicketId,
                 totalPrice,
                 originalTickets
         );
@@ -245,7 +224,7 @@ public class OrderHistoryTest {
         originalTickets.clear();
 
         assertEquals(
-                Set.of(new Ticket(externalTicketId1, seatId1, basePricePerTicket)),
+                Set.of(new Ticket(seatId1, basePricePerTicket)),
                 orderHistory.getTickets()
         );
     }
@@ -259,8 +238,9 @@ public class OrderHistoryTest {
                         eventId,
                         areaId,
                         paymentTransactionId,
+                        externalTicketId,
                         totalPrice,
-                        Set.of(new Ticket(externalTicketId1, seatId1, basePricePerTicket))
+                        Set.of(new Ticket(seatId1, basePricePerTicket))
                 )
         );
     }
@@ -274,8 +254,9 @@ public class OrderHistoryTest {
                         eventId,
                         areaId,
                         paymentTransactionId,
+                        externalTicketId,
                         totalPrice,
-                        Set.of(new Ticket(externalTicketId1, seatId1, basePricePerTicket))
+                        Set.of(new Ticket(seatId1, basePricePerTicket))
                 )
         );
     }
@@ -289,8 +270,9 @@ public class OrderHistoryTest {
                         null,
                         areaId,
                         paymentTransactionId,
+                        externalTicketId,
                         totalPrice,
-                        Set.of(new Ticket(externalTicketId1, seatId1, basePricePerTicket))
+                        Set.of(new Ticket(seatId1, basePricePerTicket))
                 )
         );
     }
@@ -304,8 +286,9 @@ public class OrderHistoryTest {
                         eventId,
                         null,
                         paymentTransactionId,
+                        externalTicketId,
                         totalPrice,
-                        Set.of(new Ticket(externalTicketId1, seatId1, basePricePerTicket))
+                        Set.of(new Ticket(seatId1, basePricePerTicket))
                 )
         );
     }
@@ -319,8 +302,25 @@ public class OrderHistoryTest {
                         eventId,
                         areaId,
                         null,
+                        externalTicketId,
                         totalPrice,
-                        Set.of(new Ticket(externalTicketId1, seatId1, basePricePerTicket))
+                        Set.of(new Ticket(seatId1, basePricePerTicket))
+                )
+        );
+    }
+
+       @Test
+    void constructorShouldThrowWhenTicketIdentifierIsNull() {
+        assertThrows(IllegalArgumentException.class, () ->
+                new OrderHistory(
+                        orderId,
+                        userId,
+                        eventId,
+                        areaId,
+                        paymentTransactionId,
+                        null,
+                        totalPrice,
+                        Set.of(new Ticket(seatId1, basePricePerTicket))
                 )
         );
     }
@@ -334,8 +334,9 @@ public class OrderHistoryTest {
                         eventId,
                         areaId,
                         paymentTransactionId,
+                        externalTicketId,
                         null,
-                        Set.of(new Ticket(externalTicketId1, seatId1, basePricePerTicket))
+                        Set.of(new Ticket(seatId1, basePricePerTicket))
                 )
         );
     }
@@ -349,6 +350,7 @@ public class OrderHistoryTest {
                         eventId,
                         areaId,
                         paymentTransactionId,
+                        externalTicketId,
                         totalPrice,
                         null
                 )
@@ -364,6 +366,7 @@ public class OrderHistoryTest {
                         eventId,
                         areaId,
                         paymentTransactionId,
+                        externalTicketId,
                         totalPrice,
                         Set.of()
                 )
@@ -379,8 +382,25 @@ public class OrderHistoryTest {
                         eventId,
                         areaId,
                         0,
+                        externalTicketId,
                         totalPrice,
-                        Set.of(new Ticket(externalTicketId1, seatId1, basePricePerTicket))
+                        Set.of(new Ticket(seatId1, basePricePerTicket))
+                )
+        );
+    }
+
+        @Test
+    void constructorShouldThrowWhenTicketIdentifierIsEmpty() {
+        assertThrows(IllegalArgumentException.class, () ->
+                new OrderHistory(
+                        orderId,
+                        userId,
+                        eventId,
+                        areaId,
+                        0,
+                        "",
+                        totalPrice,
+                        Set.of(new Ticket(seatId1, basePricePerTicket))
                 )
         );
     }
@@ -388,7 +408,7 @@ public class OrderHistoryTest {
     @Test
     void constructorShouldThrowWhenTicketsContainNull() {
         Set<Ticket> tickets = new HashSet<>();
-        tickets.add(new Ticket(externalTicketId1, seatId1, basePricePerTicket));
+        tickets.add(new Ticket(seatId1, basePricePerTicket));
         tickets.add(null);
 
         assertThrows(IllegalArgumentException.class, () ->
@@ -398,6 +418,7 @@ public class OrderHistoryTest {
                         eventId,
                         areaId,
                         paymentTransactionId,
+                        externalTicketId,
                         totalPrice,
                         tickets
                 )
@@ -407,8 +428,8 @@ public class OrderHistoryTest {
     @Test
     void constructorShouldThrowWhenTicketsHaveSameSeatId() {
         Set<Ticket> tickets = new HashSet<>();
-        tickets.add(new Ticket(externalTicketId1, seatId1, basePricePerTicket));
-        tickets.add(new Ticket(externalTicketId2, seatId1, differentPrice));
+        tickets.add(new Ticket(seatId1, basePricePerTicket));
+        tickets.add(new Ticket(seatId1, differentPrice));
 
         assertThrows(IllegalArgumentException.class, () ->
                 new OrderHistory(
@@ -417,6 +438,7 @@ public class OrderHistoryTest {
                         eventId,
                         areaId,
                         paymentTransactionId,
+                        externalTicketId,
                         totalPrice,
                         tickets
                 )
@@ -429,9 +451,9 @@ public class OrderHistoryTest {
                 OrderHistory.fromActiveOrder(
                         null,
                         paymentTransactionId,
+                        externalTicketId,
                         totalPrice,
-                        basePricePerTicket,
-                        issuedTicketIds()
+                        basePricePerTicket
                 )
         );
     }
@@ -445,9 +467,9 @@ public class OrderHistoryTest {
                 OrderHistory.fromActiveOrder(
                         activeOrder,
                         null,
+                        externalTicketId,
                         totalPrice,
-                        basePricePerTicket,
-                        Map.of(seatId1, externalTicketId1)
+                        basePricePerTicket
                 )
         );
     }
@@ -461,9 +483,9 @@ public class OrderHistoryTest {
                 OrderHistory.fromActiveOrder(
                         activeOrder,
                         paymentTransactionId,
+                        externalTicketId,
                         null,
-                        basePricePerTicket,
-                        Map.of(seatId1, externalTicketId1)
+                        basePricePerTicket
                 )
         );
     }
@@ -477,41 +499,9 @@ public class OrderHistoryTest {
                 OrderHistory.fromActiveOrder(
                         activeOrder,
                         paymentTransactionId,
+                        externalTicketId,
                         totalPrice,
-                        null,
-                        Map.of(seatId1, externalTicketId1)
-                )
-        );
-    }
-
-    @Test
-    void fromActiveOrderShouldThrowWhenIssuedTicketIdsAreNull() {
-        ActiveOrder activeOrder = new ActiveOrder(orderId, userId, eventId, areaId);
-        activeOrder.addSeats(Set.of(seatId1));
-
-        assertThrows(IllegalArgumentException.class, () ->
-                OrderHistory.fromActiveOrder(
-                        activeOrder,
-                        paymentTransactionId,
-                        totalPrice,
-                        basePricePerTicket,
                         null
-                )
-        );
-    }
-
-    @Test
-    void fromActiveOrderShouldThrowWhenIssuedTicketIdsAreEmpty() {
-        ActiveOrder activeOrder = new ActiveOrder(orderId, userId, eventId, areaId);
-        activeOrder.addSeats(Set.of(seatId1));
-
-        assertThrows(IllegalArgumentException.class, () ->
-                OrderHistory.fromActiveOrder(
-                        activeOrder,
-                        paymentTransactionId,
-                        totalPrice,
-                        basePricePerTicket,
-                        Map.of()
                 )
         );
     }
@@ -524,62 +514,9 @@ public class OrderHistoryTest {
                 OrderHistory.fromActiveOrder(
                         activeOrder,
                         paymentTransactionId,
+                        externalTicketId,
                         totalPrice,
-                        basePricePerTicket,
-                        issuedTicketIds()
-                )
-        );
-    }
-
-    @Test
-    void fromActiveOrderShouldThrowWhenIssuedTicketIdIsMissingForSeat() {
-        ActiveOrder activeOrder = new ActiveOrder(orderId, userId, eventId, areaId);
-        activeOrder.addSeats(Set.of(seatId1));
-
-        assertThrows(IllegalArgumentException.class, () ->
-                OrderHistory.fromActiveOrder(
-                        activeOrder,
-                        paymentTransactionId,
-                        totalPrice,
-                        basePricePerTicket,
-                        Map.of(seatId2, externalTicketId2)
-                )
-        );
-    }
-
-    @Test
-    void fromActiveOrderShouldThrowWhenIssuedTicketIdIsBlank() {
-        ActiveOrder activeOrder = new ActiveOrder(orderId, userId, eventId, areaId);
-        activeOrder.addSeats(Set.of(seatId1));
-
-        assertThrows(IllegalArgumentException.class, () ->
-                OrderHistory.fromActiveOrder(
-                        activeOrder,
-                        paymentTransactionId,
-                        totalPrice,
-                        basePricePerTicket,
-                        Map.of(seatId1, "   ")
-                )
-        );
-    }
-
-    @Test
-    void fromActiveOrderShouldThrowWhenIssuedTicketIdsCreateDuplicateExternalTicketIds() {
-        ActiveOrder activeOrder = new ActiveOrder(orderId, userId, eventId, areaId);
-        activeOrder.addSeats(Set.of(seatId1, seatId2));
-
-        Map<UUID, String> duplicateExternalTicketIds = Map.of(
-                seatId1, externalTicketId1,
-                seatId2, externalTicketId1
-        );
-
-        assertThrows(IllegalArgumentException.class, () ->
-                OrderHistory.fromActiveOrder(
-                        activeOrder,
-                        paymentTransactionId,
-                        totalPrice,
-                        basePricePerTicket,
-                        duplicateExternalTicketIds
+                        basePricePerTicket
                 )
         );
     }
@@ -591,15 +528,10 @@ public class OrderHistoryTest {
                 eventId,
                 areaId,
                 paymentTransactionId,
+                externalTicketId,
                 totalPrice,
-                Set.of(new Ticket(externalTicketId1, seatId1, basePricePerTicket))
+                Set.of(new Ticket(seatId1, basePricePerTicket))
         );
     }
 
-    private Map<UUID, String> issuedTicketIds() {
-        return Map.of(
-                seatId1, externalTicketId1,
-                seatId2, externalTicketId2
-        );
-    }
 }

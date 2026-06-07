@@ -513,7 +513,7 @@ public class PurchasingService {
         PriceBreakdown priceBreakdown = null;
 
         Integer transactionId = null;
-        Map<UUID, String> issuedTicketIds = Map.of();
+        String issuedTicketId = null;
 
         boolean paymentSucceeded = false;
         boolean ticketsIssued = false;
@@ -529,24 +529,24 @@ public class PurchasingService {
             transactionId = pay(activeOrder, priceBreakdown.total(), paymentDetails);
             paymentSucceeded = true;
 
-            issuedTicketIds = issueTickets(activeOrder);
+            issuedTicketId = issueTickets(activeOrder);
             ticketsIssued = true;
 
-            purchasingDomainService.finalizeCheckout(activeOrder, transactionId, priceBreakdown, issuedTicketIds);
+            purchasingDomainService.finalizeCheckout(activeOrder, transactionId, issuedTicketId,priceBreakdown);
             finalizeDone = true;
 
             ConfirmationReceipt receipt = confirmCheckout(activeOrder);
             confirmed = true;
 
             AUDIT.info(
-                    "op=completeCheckout order={} user={} event={} area={} qty={} transactionId={} tickets={} result=ok",
+                    "op=completeCheckout order={} user={} event={} area={} qty={} transactionId={} ticketId={} result=ok",
                     activeOrder.getOrderId(),
                     userId,
                     activeOrder.getEventId(),
                     receipt.areaId(),
                     receipt.quantity(),
                     transactionId,
-                    issuedTicketIds.size()
+                    issuedTicketId
             );
 
             sendNotificationsAfterSuccessfulCheckout(activeOrder, receipt, priceBreakdown);
@@ -563,7 +563,7 @@ public class PurchasingService {
             compensateCheckoutFailure(
                     activeOrder,
                     transactionId,
-                    issuedTicketIds,
+                    issuedTicketId,
                     paymentSucceeded,
                     ticketsIssued,
                     finalizeDone,
@@ -644,7 +644,7 @@ public class PurchasingService {
     private void compensateCheckoutFailure(
             ActiveOrder activeOrder,
             Integer transactionId,
-            Map<UUID, String> issuedTicketIds,
+            String issuedTicketId,
             boolean paymentSucceeded,
             boolean ticketsIssued,
             boolean finalizeDone,
@@ -677,28 +677,26 @@ public class PurchasingService {
             }
         }
 
-        if (ticketsIssued && issuedTicketIds != null) {
-            for (String ticketId : issuedTicketIds.values()) {
-                try {
-                    ticketProvider.cancelTicket(ticketId);
-                } catch (RuntimeException cancelTicketError) {
-                    AUDIT.warn(
+        if (ticketsIssued && issuedTicketId != null) {
+            try {
+                ticketProvider.cancelTicket(issuedTicketId);
+            } catch (RuntimeException cancelTicketError) {
+                AUDIT.warn(
                             "op=cancelTicket order={} user={} event={} ticketId={} result=failed reason={}",
                             activeOrder.getOrderId(),
                             activeOrder.getUserId(),
                             activeOrder.getEventId(),
-                            ticketId,
+                            issuedTicketId,
                             cancelTicketError.getMessage()
                     );
                 }
-            }
 
             AUDIT.info(
-                    "op=revokeTickets order={} user={} event={} tickets={} result=ok",
+                    "op=revokeTickets order={} user={} event={} ticketId={} result=ok",
                     activeOrder.getOrderId(),
                     activeOrder.getUserId(),
                     activeOrder.getEventId(),
-                    issuedTicketIds.size()
+                    issuedTicketId
             );
         }
 
@@ -717,6 +715,7 @@ public class PurchasingService {
                     activeOrder.getEventId()
             );
         }
+    
     }
 
     private UUID requireValidUser(String token) {
@@ -737,7 +736,7 @@ public class PurchasingService {
         }
     }
 
-    private Map<UUID, String> issueTickets(ActiveOrder activeOrder) {
+    private String issueTickets(ActiveOrder activeOrder) {
         if (activeOrder == null) {
             throw new IllegalArgumentException("Active order cannot be null");
         }
@@ -745,7 +744,7 @@ public class PurchasingService {
         String areaName = eventDomainService.getAreaName(activeOrder.getEventId(), activeOrder.getAreaId());
 
         if (eventDomainService.isStandingArea(activeOrder.getEventId(), activeOrder.getAreaId())) {
-            return ticketProvider.issueStandingTickets(
+            return ticketProvider.issueStandingTicket(
                     activeOrder.getUserId(),
                     activeOrder.getEventId(),
                     areaName,
@@ -762,7 +761,7 @@ public class PurchasingService {
                         .map(SeatTicketRequestDTO::fromSeatView)
                         .collect(Collectors.toList());
 
-        return ticketProvider.issueSeatingTickets(
+        return ticketProvider.issueSeatingTicket(
                 activeOrder.getUserId(),
                 activeOrder.getEventId(),
                 areaName,

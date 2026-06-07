@@ -36,7 +36,6 @@ import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermissio
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.IOrderHistoryRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory;
-import com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.Ticket;
 
 @Service
 public class OrderHistoryService implements EventSubscriber{
@@ -635,19 +634,15 @@ public class OrderHistoryService implements EventSubscriber{
     }
 
     private void cancelExternalTicketsForOrder(OrderHistory orderHistory) {
-        for (Ticket ticket : orderHistory.getTickets()) {
-            String externalTicketId = ticket.getExternalTicketId();
+        ticketProvider.cancelTicket(orderHistory.getTicketIdentifier());
 
-            ticketProvider.cancelTicket(externalTicketId);
-
-            AUDIT.info(
-                    "op=cancelTicket order={} user={} event={} ticketId={} result=ok",
-                    orderHistory.getOrderId(),
-                    orderHistory.getUserId(),
-                    orderHistory.getEventId(),
-                    externalTicketId
-            );
-        }
+        AUDIT.info(
+                "op=cancelTicket order={} user={} event={} ticketId={} result=ok",
+                orderHistory.getOrderId(),
+                orderHistory.getUserId(),
+                orderHistory.getEventId(),
+                orderHistory.getTicketIdentifier()
+        );
     }
     
 }

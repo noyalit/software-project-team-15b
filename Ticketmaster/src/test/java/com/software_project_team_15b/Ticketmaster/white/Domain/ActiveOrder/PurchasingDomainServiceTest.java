@@ -124,16 +124,13 @@ class PurchasingDomainServiceTest {
         activeOrder.startCheckout(LocalDateTime.now().plusMinutes(10));
 
         Integer paymentTransactionId = 12345;
-        Map<UUID, String> issuedTicketIds = Map.of(
-                seatId1, "TICKET-1"
-        );
 
         assertThrows(IllegalArgumentException.class, () ->
                 domainService.finalizeCheckout(
                         activeOrder,
                         paymentTransactionId,
-                        null,
-                        issuedTicketIds
+                        "ID",
+                        null
                 )
         );
     }
@@ -467,15 +464,13 @@ class PurchasingDomainServiceTest {
 
         PriceBreakdown pricing = priceBreakdown("100.00");
         Integer paymentTransactionId = 12345;
-        Map<UUID, String> issuedTicketIds = Map.of(
-                seatId1, "TICKET-1"
-        );
+        String issuedTicketId = "TICKET-" + UUID.randomUUID();
 
         domainService.finalizeCheckout(
                 order,
                 paymentTransactionId,
-                pricing,
-                issuedTicketIds
+                issuedTicketId,
+                pricing
         );
 
         assertEquals(ActiveOrderStatus.COMPLETED, order.getStatus());

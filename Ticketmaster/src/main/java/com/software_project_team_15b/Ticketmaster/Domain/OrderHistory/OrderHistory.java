@@ -6,8 +6,6 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import jakarta.persistence.*;
 
 import java.util.HashSet;
-import java.util.Map;
-import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
 
@@ -28,8 +26,11 @@ public class OrderHistory {
     @Column(name = "area_id", nullable = false, updatable = false)
     private UUID areaId;
 
-    @Column(name = "payment_transaction_id", nullable = false, updatable = false)
+    @Column(name = "payment_transaction_id", nullable = false, updatable = false, unique = true)
     private Integer paymentTransactionId;
+
+    @Column(name = "ticket_identifier", nullable = false, updatable = false, unique = true)
+    private String ticketIdentifier;
 
     @Embedded
     @AttributeOverrides({
@@ -63,6 +64,7 @@ public class OrderHistory {
             UUID eventId,
             UUID areaId,
             Integer paymentTransactionId,
+            String ticketIdentifier,
             Money totalPrice,
             Set<Ticket> tickets
     ) {
@@ -81,6 +83,9 @@ public class OrderHistory {
         if (paymentTransactionId == null || paymentTransactionId <= 0) {
             throw new IllegalArgumentException("Payment transaction ID cannot be null or non-positive");
         }
+        if (ticketIdentifier == null || ticketIdentifier.trim().isEmpty()) {
+            throw new IllegalArgumentException("Ticket identifier cannot be null or empty");
+        }
         if (totalPrice == null) {
             throw new IllegalArgumentException("Total price cannot be null");
         }
@@ -95,6 +100,7 @@ public class OrderHistory {
         this.eventId = eventId;
         this.areaId = areaId;
         this.paymentTransactionId = paymentTransactionId;
+        this.ticketIdentifier = ticketIdentifier;
         this.totalPrice = new Money(totalPrice.amount(), totalPrice.currency());
         this.tickets = new HashSet<>(tickets);
     }
@@ -102,34 +108,12 @@ public class OrderHistory {
     public static OrderHistory fromActiveOrder(
             ActiveOrder activeOrder,
             Integer paymentTransactionId,
+            String ticketIdentifier,
             Money totalPrice,
-            Money basePricePerTicket,
-            Map<UUID, String> issuedTicketIds
+            Money basePricePerTicket
     ) {
         if (activeOrder == null) {
             throw new IllegalArgumentException("ActiveOrder cannot be null");
-        }
-        if (issuedTicketIds == null || issuedTicketIds.isEmpty()) {
-            throw new IllegalArgumentException("Issued ticket IDs cannot be null or empty");
-        }
-
-        Set<Ticket> tickets = new HashSet<>();
-        for (Entry<UUID, String> entry : issuedTicketIds.entrySet()) {
-            UUID seatId = entry.getKey();
-            String externalTicketId = entry.getValue();
-            tickets.add(new Ticket(externalTicketId, seatId, basePricePerTicket));
-        }
-        if (tickets.size() != issuedTicketIds.size()) {
-            throw new IllegalArgumentException("Issued ticket IDs contain duplicate external ticket IDs");
-        }
-
-        Set<UUID> activeOrderSeatIds = new HashSet<>(activeOrder.getOrderSeats());
-        Set<UUID> ticketSeatIds = new HashSet<>();
-        for (Ticket ticket : tickets) {
-            ticketSeatIds.add(ticket.getSeatId());
-        }
-        if (!activeOrderSeatIds.equals(ticketSeatIds)) {
-            throw new IllegalArgumentException("Active order seat IDs must match issued ticket seat IDs");
         }
 
         return new OrderHistory(
@@ -138,8 +122,11 @@ public class OrderHistory {
                 activeOrder.getEventId(),
                 activeOrder.getAreaId(),
                 paymentTransactionId,
+                ticketIdentifier,
                 totalPrice,
-                tickets
+                activeOrder.getOrderSeats().stream()
+                        .map(seatId -> new Ticket(seatId, basePricePerTicket))
+                        .collect(java.util.stream.Collectors.toSet())
         );
     }
 
@@ -175,6 +162,10 @@ public class OrderHistory {
 
     public Integer getPaymentTransactionId() {
         return paymentTransactionId;
+    }
+
+    public String getTicketIdentifier() {
+        return ticketIdentifier;
     }
 
     public Money getTotalPrice() {

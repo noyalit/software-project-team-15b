@@ -554,9 +554,7 @@ class OrderHistoryTestIT {
 
         verify(paymentGateway).refundPayment(order.getPaymentTransactionId());
 
-        for (Ticket ticket : order.getTickets()) {
-            verify(ticketProvider).cancelTicket(ticket.getExternalTicketId());
-        }
+        verify(ticketProvider).cancelTicket(order.getTicketIdentifier());
     }
 
     @Test
@@ -833,7 +831,6 @@ class OrderHistoryTestIT {
 
         for (int i = 0; i < ticketCount; i++) {
             tickets.add(new Ticket(
-                    "TICKET-" + UUID.randomUUID(),
                     UUID.randomUUID(),
                     basePrice
             ));
@@ -844,12 +841,15 @@ class OrderHistoryTestIT {
 
         Integer paymentTransactionId = Math.abs(UUID.randomUUID().hashCode());
 
+        String ticketIdentifier = "TICKET-" + UUID.randomUUID();
+
         return new OrderHistory(
                 UUID.randomUUID(),
                 userId,
                 eventId,
                 UUID.randomUUID(),
                 paymentTransactionId,
+                ticketIdentifier,
                 totalPrice,
                 tickets
         );

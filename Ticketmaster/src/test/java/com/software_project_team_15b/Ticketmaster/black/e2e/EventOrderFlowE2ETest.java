@@ -544,7 +544,7 @@ class EventOrderFlowE2ETest {
                 when(paymentGateway.chargePayment(any(MoneyDTO.class), any(PaymentDetailsDTO.class)))
                                 .thenReturn(12345);
 
-                when(ticketProvider.issueStandingTickets(
+                when(ticketProvider.issueStandingTicket(
                                 any(UUID.class),
                                 any(UUID.class),
                                 any(String.class),
@@ -557,7 +557,7 @@ class EventOrderFlowE2ETest {
                                                                         internalId -> "TICKET-" + internalId));
                                 });
 
-                when(ticketProvider.issueSeatingTickets(
+                when(ticketProvider.issueSeatingTicket(
                                 any(UUID.class),
                                 any(UUID.class),
                                 any(String.class),

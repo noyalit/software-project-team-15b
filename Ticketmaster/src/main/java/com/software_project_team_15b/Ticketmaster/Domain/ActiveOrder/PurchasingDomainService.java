@@ -229,8 +229,14 @@ public class PurchasingDomainService {
         return expiresAt;
     }
 
-    public ActiveOrder finalizeCheckout(ActiveOrder activeOrder, Integer paymentTransactionId, PriceBreakdown pricing, Map<UUID, String> issuedTicketIds) {
+    public ActiveOrder finalizeCheckout(ActiveOrder activeOrder, Integer paymentTransactionId, String ticketIdentifier, PriceBreakdown pricing) {
         requireActiveOrder(activeOrder);
+        if (paymentTransactionId == null || paymentTransactionId <= 0) {
+            throw new IllegalArgumentException("Payment transaction ID cannot be null or non-positive");
+        }
+        if (ticketIdentifier == null || ticketIdentifier.trim().isEmpty()) {
+            throw new IllegalArgumentException("Ticket identifier cannot be null or empty");
+        }
         if (pricing == null) {
             throw new IllegalArgumentException("Pricing cannot be null");
         }
@@ -238,7 +244,7 @@ public class PurchasingDomainService {
         activeOrder.complete();
         activeOrderRepository.save(activeOrder);
 
-        OrderHistory orderHistory = OrderHistory.fromActiveOrder(activeOrder, paymentTransactionId, pricing.total(), pricing.basePrice(), issuedTicketIds);
+        OrderHistory orderHistory = OrderHistory.fromActiveOrder(activeOrder, paymentTransactionId, ticketIdentifier, pricing.total(), pricing.basePrice());
         orderHistoryRepository.save(orderHistory);
         return activeOrder;
     }
