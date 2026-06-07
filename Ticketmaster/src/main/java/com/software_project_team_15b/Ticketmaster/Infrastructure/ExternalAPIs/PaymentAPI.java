@@ -4,6 +4,8 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaym
 import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.PaymentDetailsDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedPaymentException;
+
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -12,6 +14,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Component
+@ConditionalOnProperty(
+        name = "app.external.mode",
+        havingValue = "real"
+)
 public class PaymentAPI implements IPaymentAPI {
 
     private static final String BASE_URL = "https://damp-lynna-wsep-1984852e.koyeb.app/";
@@ -62,7 +68,7 @@ public class PaymentAPI implements IPaymentAPI {
             throw new FailedPaymentException("External payment system rejected the payment");
         }
 
-        if (transactionId <= 0) {
+        if (! (10000 <= transactionId && transactionId <= 100000)) {
             throw new FailedPaymentException(
                     "Payment API returned invalid transaction id: " + transactionId
             );
@@ -73,8 +79,8 @@ public class PaymentAPI implements IPaymentAPI {
 
     @Override
     public void refundPayment(int transactionId) {
-        if (transactionId <= 0) {
-            throw new IllegalArgumentException("transactionId must be positive");
+        if (! (10000 <= transactionId && transactionId <= 100000)) {
+            throw new IllegalArgumentException("transactionId must be within valid range");
         }
 
         Map<String, String> body = Map.of(
