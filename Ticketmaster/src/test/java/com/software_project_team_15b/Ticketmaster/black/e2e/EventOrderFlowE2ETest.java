@@ -542,33 +542,29 @@ class EventOrderFlowE2ETest {
 
         private void mockExternalPaymentAndTicketApis() {
                 when(paymentGateway.chargePayment(any(MoneyDTO.class), any(PaymentDetailsDTO.class)))
-                                .thenReturn(12345);
+                        .thenReturn(12345);
 
                 when(ticketProvider.issueStandingTicket(
-                                any(UUID.class),
-                                any(UUID.class),
-                                any(String.class),
-                                anySet())).thenAnswer(invocation -> {
-                                        Set<UUID> internalStandingTicketIds = invocation.getArgument(3);
+                        any(UUID.class),
+                        any(UUID.class),
+                        any(String.class),
+                        anySet()
+                )).thenAnswer(invocation -> {
+                        Set<UUID> internalStandingTicketIds = invocation.getArgument(3);
 
-                                        return internalStandingTicketIds.stream()
-                                                        .collect(java.util.stream.Collectors.toMap(
-                                                                        internalId -> internalId,
-                                                                        internalId -> "TICKET-" + internalId));
-                                });
+                        return "TICKET-STANDING-" + internalStandingTicketIds.size();
+                });
 
                 when(ticketProvider.issueSeatingTicket(
-                                any(UUID.class),
-                                any(UUID.class),
-                                any(String.class),
-                                anyList())).thenAnswer(invocation -> {
-                                        List<SeatTicketRequestDTO> seats = invocation.getArgument(3);
+                        any(UUID.class),
+                        any(UUID.class),
+                        any(String.class),
+                        anyList()
+                )).thenAnswer(invocation -> {
+                        List<SeatTicketRequestDTO> seats = invocation.getArgument(3);
 
-                                        return seats.stream()
-                                                        .collect(java.util.stream.Collectors.toMap(
-                                                                        SeatTicketRequestDTO::internalSeatId,
-                                                                        seat -> "TICKET-" + seat.internalSeatId()));
-                                });
+                        return "TICKET-SEATING-" + seats.size();
+                });
         }
 
         private PaymentDetailsDTO validPaymentDetails() {
