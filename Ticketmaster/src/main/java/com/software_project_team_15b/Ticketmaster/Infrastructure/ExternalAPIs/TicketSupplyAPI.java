@@ -205,12 +205,12 @@ public class TicketSupplyAPI implements ITicketSupplyAPI {
                 throw new IllegalArgumentException("internalSeatId cannot be null");
             }
 
-            if (seat.row() < 0) {
-                throw new IllegalArgumentException("row must be non-negative");
+            if (seat.row() <= 0) {
+                throw new IllegalArgumentException("row must be positive");
             }
 
-            if (seat.seat() < 0) {
-                throw new IllegalArgumentException("seat must be non-negative");
+            if (seat.seat() <= 0) {
+                throw new IllegalArgumentException("seat must be positive");
             }
         }
     }
