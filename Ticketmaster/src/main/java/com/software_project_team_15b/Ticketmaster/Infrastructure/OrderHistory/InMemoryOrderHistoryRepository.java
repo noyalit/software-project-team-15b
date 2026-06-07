@@ -67,6 +67,7 @@ public class InMemoryOrderHistoryRepository implements IOrderHistoryRepository {
                 src.getEventId(),
                 src.getAreaId(),
                 src.getPaymentTransactionId(),
+                src.getTicketIdentifier(),
                 src.getTotalPrice(),
                 src.getTickets()
         );

@@ -76,6 +76,8 @@ abstract class PurchasingServiceWhiteTestBase {
     protected UUID orderId;
     protected UUID seatId1;
     protected UUID seatId2;
+    protected String issuedTicketId;
+    protected Integer transactionId;
 
     @BeforeEach
     void setUpBase() {
@@ -99,6 +101,8 @@ abstract class PurchasingServiceWhiteTestBase {
         orderId = UUID.randomUUID();
         seatId1 = UUID.randomUUID();
         seatId2 = UUID.randomUUID();
+        issuedTicketId = "TICKET-1";
+        transactionId = 12345;
     }
 
     protected void mockValidUser() {

@@ -93,10 +93,8 @@ public class NotifyEventIsCancelledConcurrencyTests {
         verify(paymentGateway, times(1))
                 .refundPayment(order.getPaymentTransactionId());
 
-        for (Ticket ticket : order.getTickets()) {
-            verify(ticketProvider, times(1))
-                    .cancelTicket(ticket.getExternalTicketId());
-        }
+        verify(ticketProvider, times(1))
+                .cancelTicket(order.getTicketIdentifier());
     }
 
     @Test
@@ -149,15 +147,11 @@ public class NotifyEventIsCancelledConcurrencyTests {
         verify(paymentGateway, times(1))
                 .refundPayment(order2.getPaymentTransactionId());
 
-        for (Ticket ticket : order1.getTickets()) {
-            verify(ticketProvider, times(1))
-                    .cancelTicket(ticket.getExternalTicketId());
-        }
+        verify(ticketProvider, times(1))
+                .cancelTicket(order1.getTicketIdentifier());
 
-        for (Ticket ticket : order2.getTickets()) {
-            verify(ticketProvider, times(1))
-                    .cancelTicket(ticket.getExternalTicketId());
-        }
+        verify(ticketProvider, times(1))
+                .cancelTicket(order2.getTicketIdentifier());
     }
 
     private OrderHistory createOrder(UUID userId, UUID eventId, int ticketCount, String price) {
@@ -167,7 +161,6 @@ public class NotifyEventIsCancelledConcurrencyTests {
 
         for (int i = 0; i < ticketCount; i++) {
             tickets.add(new Ticket(
-                    "TICKET-" + UUID.randomUUID(),
                     UUID.randomUUID(),
                     basePrice
             ));
@@ -177,6 +170,7 @@ public class NotifyEventIsCancelledConcurrencyTests {
         Money totalPrice = Money.of(total.toPlainString(), "USD");
 
         Integer paymentTransactionId = Math.abs(UUID.randomUUID().hashCode());
+        String issuedTicketId = "TICKET-" + UUID.randomUUID();
 
         return new OrderHistory(
                 UUID.randomUUID(),
@@ -184,6 +178,7 @@ public class NotifyEventIsCancelledConcurrencyTests {
                 eventId,
                 UUID.randomUUID(),
                 paymentTransactionId,
+                issuedTicketId,
                 totalPrice,
                 tickets
         );

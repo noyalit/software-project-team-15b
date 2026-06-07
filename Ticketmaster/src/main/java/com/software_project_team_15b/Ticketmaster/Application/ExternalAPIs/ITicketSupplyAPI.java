@@ -3,7 +3,6 @@ package com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs;
 import com.software_project_team_15b.Ticketmaster.DTO.SeatTicketRequestDTO;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -47,14 +46,12 @@ public interface ITicketSupplyAPI {
      *                                  reserved in our system.
      *                                  The number of ids determines the quantity
      *                                  sent to the external ticket system.
-     * @return a map from each internal standing ticket/seat id to the external ticket id.
-     *         The external ticket id must be stored because it is required
-     *         for cancelling the ticket later.
+     * @return a string containing the external ticket id for the issued tickets.
      * @throws IllegalArgumentException if one of the arguments is invalid.
      * @throws com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedToIssueTicketsException
      *         if the external ticket system fails to issue the tickets.
      */
-    Map<UUID, String> issueStandingTickets(
+    String issueStandingTicket(
             UUID customerId,
             UUID eventId,
             String areaName,
@@ -83,14 +80,12 @@ public interface ITicketSupplyAPI {
      * @param seats the assigned seats to issue tickets for.
      *              Each item should include the internal seat id and the row/seat
      *              identifiers required by the external ticket system.
-     * @return a map from each internal seat id to the external ticket id.
-     *         The external ticket id must be stored because it is required
-     *         for cancelling the ticket later.
+     * @return a string containing the external ticket id for the issued tickets.
      * @throws IllegalArgumentException if one of the arguments is invalid.
      * @throws com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedToIssueTicketsException
      *         if the external ticket system fails to issue the tickets.
      */
-    Map<UUID, String> issueSeatingTickets(
+    String issueSeatingTicket(
             UUID customerId,
             UUID eventId,
             String areaName,
@@ -98,7 +93,7 @@ public interface ITicketSupplyAPI {
     );
 
     /**
-     * Cancels a previously issued ticket.
+     * Cancels a previously issued tickets.
      *
      * The external ticket system cancels by ticket id, not by user id,
      * event id, area id, row, seat, or internal seat id.
