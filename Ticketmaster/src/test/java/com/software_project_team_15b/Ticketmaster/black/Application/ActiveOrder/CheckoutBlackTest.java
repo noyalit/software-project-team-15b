@@ -5,7 +5,9 @@ import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaym
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutCompletedDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.PaymentDetailsDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.SeatTicketRequestDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutStartedDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO.SeatView;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
@@ -37,188 +39,241 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class CheckoutBlackTest {
 
-    @Mock
-    private PurchasingDomainService purchasingDomainService;
+        @Mock
+        private PurchasingDomainService purchasingDomainService;
 
-    @Mock
-    private IMemberRepository memberRepository;
+        @Mock
+        private IMemberRepository memberRepository;
 
-    @Mock
-    private UserDomainService userDomainService;
+        @Mock
+        private UserDomainService userDomainService;
 
-    @Mock
-    private IEventDomainService eventDomainService;
+        @Mock
+        private IEventDomainService eventDomainService;
 
-    @Mock
-    private IQueueDomainService queueDomainService;
+        @Mock
+        private IQueueDomainService queueDomainService;
 
-    @Mock
-    private ILotteryDomainService lotteryDomainService;
+        @Mock
+        private ILotteryDomainService lotteryDomainService;
 
-    @Mock
-    private IPaymentAPI paymentGateway;
+        @Mock
+        private IPaymentAPI paymentGateway;
 
-    @Mock
-    private ITicketSupplyAPI ticketProvider;
+        @Mock
+        private ITicketSupplyAPI ticketProvider;
 
-    @Mock
-    private IAuth auth;
+        @Mock
+        private IAuth auth;
 
-    @Mock
-    private INotifier notifier;
+        @Mock
+        private INotifier notifier;
 
-    private PurchasingService service;
+        private PurchasingService service;
 
-    private String token;
-    private UUID userId;
-    private UUID eventId;
-    private UUID areaId;
-    private UUID orderId;
-    private UUID seatId1;
+        private String token;
+        private UUID userId;
+        private UUID eventId;
+        private UUID areaId;
+        private UUID orderId;
+        private UUID seatId1;
 
-    @BeforeEach
-    void setUp() {
-        service = new PurchasingService(
-                purchasingDomainService,
-                memberRepository,
-                userDomainService,
-                eventDomainService,
-                queueDomainService,
-                lotteryDomainService,
-                paymentGateway,
-                ticketProvider,
-                auth,
-                notifier
-        );
+        @BeforeEach
+        void setUp() {
+                service = new PurchasingService(
+                                purchasingDomainService,
+                                memberRepository,
+                                userDomainService,
+                                eventDomainService,
+                                queueDomainService,
+                                lotteryDomainService,
+                                paymentGateway,
+                                ticketProvider,
+                                auth,
+                                notifier);
 
-        token = "valid-token";
-        userId = UUID.randomUUID();
-        eventId = UUID.randomUUID();
-        areaId = UUID.randomUUID();
-        orderId = UUID.randomUUID();
-        seatId1 = UUID.randomUUID();
-    }
+                token = "valid-token";
+                userId = UUID.randomUUID();
+                eventId = UUID.randomUUID();
+                areaId = UUID.randomUUID();
+                orderId = UUID.randomUUID();
+                seatId1 = UUID.randomUUID();
+        }
 
-    @Test
-    void startCheckoutShouldSucceedWhenOrderIsValidSeatsAreAvailableAndPolicyPasses() {
-        ActiveOrder order = activeOrderWithSeats(seatId1);
-        LocalDate birthDate = LocalDate.of(2000, 1, 1);
-        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(10);
+        @Test
+        void startCheckoutShouldSucceedWhenOrderIsValidSeatsAreAvailableAndPolicyPasses() {
+                ActiveOrder order = activeOrderWithSeats(seatId1);
+                LocalDate birthDate = LocalDate.of(2000, 1, 1);
+                LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(10);
 
-        Map<Boolean, Set<UUID>> availability = Map.of(
-                true, Set.of(seatId1),
-                false, Set.of()
-        );
+                Map<Boolean, Set<UUID>> availability = Map.of(
+                                true, Set.of(seatId1),
+                                false, Set.of());
 
-        PurchaseRequest purchaseRequest = mock(PurchaseRequest.class);
-        HoldReceipt holdReceipt = mock(HoldReceipt.class);
+                PurchaseRequest purchaseRequest = mock(PurchaseRequest.class);
+                HoldReceipt holdReceipt = mock(HoldReceipt.class);
 
-        mockValidGuestOperation();
-        mockPurchaseAccess(true);
+                mockValidGuestOperation();
+                mockPurchaseAccess(true);
 
-        when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
-                .thenReturn(order);
+                when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
+                                .thenReturn(order);
 
-        when(eventDomainService.getSeatsAvailability(eventId, areaId, Set.of(seatId1)))
-                .thenReturn(availability);
+                when(eventDomainService.getSeatsAvailability(eventId, areaId, Set.of(seatId1)))
+                                .thenReturn(availability);
 
-        when(purchasingDomainService.syncOrderSeatsAvailability(order, availability))
-                .thenReturn(false);
+                when(purchasingDomainService.syncOrderSeatsAvailability(order, availability))
+                                .thenReturn(false);
 
-        when(purchasingDomainService.buildPurchaseRequest(order, birthDate))
-                .thenReturn(purchaseRequest);
+                when(purchasingDomainService.buildPurchaseRequest(order, birthDate))
+                                .thenReturn(purchaseRequest);
 
-        when(eventDomainService.holdSeats(eventId, areaId, java.util.List.of(seatId1), orderId))
-                .thenReturn(holdReceipt);
+                when(eventDomainService.holdSeats(eventId, areaId, java.util.List.of(seatId1), orderId))
+                                .thenReturn(holdReceipt);
 
-        when(purchasingDomainService.startCheckout(order))
-                .thenReturn(expiresAt);
+                when(purchasingDomainService.startCheckout(order))
+                                .thenReturn(expiresAt);
 
-        CheckoutStartedDTO result = service.startCheckoutForGuest(token, orderId, birthDate);
+                CheckoutStartedDTO result = service.startCheckoutForGuest(token, orderId, birthDate);
 
-        assertEquals(orderId, result.orderId());
-        assertEquals(eventId, result.eventId());
-        assertEquals(areaId, result.areaId());
-        assertEquals(expiresAt, result.expiresAt());
-    }
+                assertEquals(orderId, result.orderId());
+                assertEquals(eventId, result.eventId());
+                assertEquals(areaId, result.areaId());
+                assertEquals(expiresAt, result.expiresAt());
+        }
 
-    @Test
-    void startCheckoutShouldFailWhenSeatsBecameUnavailable() {
-        ActiveOrder order = activeOrderWithSeats(seatId1);
-        LocalDate birthDate = LocalDate.of(2000, 1, 1);
+        @Test
+        void startCheckoutShouldFailWhenSeatsBecameUnavailable() {
+                ActiveOrder order = activeOrderWithSeats(seatId1);
+                LocalDate birthDate = LocalDate.of(2000, 1, 1);
 
-        Map<Boolean, Set<UUID>> availability = Map.of(
-                true, Set.of(),
-                false, Set.of(seatId1)
-        );
+                Map<Boolean, Set<UUID>> availability = Map.of(
+                                true, Set.of(),
+                                false, Set.of(seatId1));
 
-        mockValidGuestOperation();
-        mockPurchaseAccess(true);
+                mockValidGuestOperation();
+                mockPurchaseAccess(true);
 
-        when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
-                .thenReturn(order);
+                when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
+                                .thenReturn(order);
 
-        when(eventDomainService.getSeatsAvailability(eventId, areaId, Set.of(seatId1)))
-                .thenReturn(availability);
+                when(eventDomainService.getSeatsAvailability(eventId, areaId, Set.of(seatId1)))
+                                .thenReturn(availability);
 
-        when(purchasingDomainService.syncOrderSeatsAvailability(order, availability))
-                .thenReturn(true);
+                when(purchasingDomainService.syncOrderSeatsAvailability(order, availability))
+                                .thenReturn(true);
 
-        assertThrows(OrderSeatsUnavailableException.class, () ->
-                service.startCheckoutForGuest(token, orderId, birthDate)
-        );
-    }
+                assertThrows(OrderSeatsUnavailableException.class,
+                                () -> service.startCheckoutForGuest(token, orderId, birthDate));
+        }
 
-    @Test
-    void startCheckoutShouldFailWhenPurchasePolicyIsViolated() {
-        ActiveOrder order = activeOrderWithSeats(seatId1);
-        LocalDate birthDate = LocalDate.of(2000, 1, 1);
+        @Test
+        void startCheckoutShouldFailWhenPurchasePolicyIsViolated() {
+                ActiveOrder order = activeOrderWithSeats(seatId1);
+                LocalDate birthDate = LocalDate.of(2000, 1, 1);
 
-        Map<Boolean, Set<UUID>> availability = Map.of(
-                true, Set.of(seatId1),
-                false, Set.of()
-        );
+                Map<Boolean, Set<UUID>> availability = Map.of(
+                                true, Set.of(seatId1),
+                                false, Set.of());
 
-        PurchaseRequest purchaseRequest = mock(PurchaseRequest.class);
+                PurchaseRequest purchaseRequest = mock(PurchaseRequest.class);
 
-        mockValidGuestOperation();
-        mockPurchaseAccess(true);
+                mockValidGuestOperation();
+                mockPurchaseAccess(true);
 
-        when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
-                .thenReturn(order);
+                when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
+                                .thenReturn(order);
 
-        when(eventDomainService.getSeatsAvailability(eventId, areaId, Set.of(seatId1)))
-                .thenReturn(availability);
+                when(eventDomainService.getSeatsAvailability(eventId, areaId, Set.of(seatId1)))
+                                .thenReturn(availability);
 
-        when(purchasingDomainService.syncOrderSeatsAvailability(order, availability))
-                .thenReturn(false);
+                when(purchasingDomainService.syncOrderSeatsAvailability(order, availability))
+                                .thenReturn(false);
 
-        when(purchasingDomainService.buildPurchaseRequest(order, birthDate))
-                .thenReturn(purchaseRequest);
+                when(purchasingDomainService.buildPurchaseRequest(order, birthDate))
+                                .thenReturn(purchaseRequest);
 
-        doThrow(new PolicyViolationException("policy violated"))
-                .when(eventDomainService)
-                .validatePurchaseEligibility(eventId, purchaseRequest);
+                doThrow(new PolicyViolationException("policy violated"))
+                                .when(eventDomainService)
+                                .validatePurchaseEligibility(eventId, purchaseRequest);
 
-        PolicyViolationException exception = assertThrows(PolicyViolationException.class, () ->
-                service.startCheckoutForGuest(token, orderId, birthDate)
-        );
+                PolicyViolationException exception = assertThrows(PolicyViolationException.class,
+                                () -> service.startCheckoutForGuest(token, orderId, birthDate));
 
-        assertTrue(exception.getMessage().contains("policy violated"));
-    }
+                assertTrue(exception.getMessage().contains("policy violated"));
+        }
 
-    @Test
-    void completeCheckoutShouldSucceedWhenPaymentTicketsFinalizeAndConfirmSucceed() {
+        @Test
+        void completeCheckoutShouldSucceedWhenPaymentStandingTicketsFinalizeAndConfirmSucceed() {
+                ActiveOrder order = activeOrderWithSeats(seatId1);
+                LocalDate birthDate = LocalDate.of(2000, 1, 1);
+
+                PriceBreakdown price = priceBreakdown("100.00");
+
+                int successfulPaymentTx = 123;
+                Map<UUID, String> successfulTicketIssue = Map.of(seatId1, "TICKET-1");
+
+                ConfirmationReceipt receipt = mock(ConfirmationReceipt.class);
+                when(receipt.areaId()).thenReturn(areaId);
+                when(receipt.quantity()).thenReturn(1);
+
+                mockValidGuestOperation();
+
+                when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
+                                .thenReturn(order);
+
+                when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
+                                .thenReturn(price);
+
+                PaymentDetailsDTO paymentDetails = mock(PaymentDetailsDTO.class);
+
+                when(paymentGateway.chargePayment(any(), any()))
+                                .thenReturn(successfulPaymentTx);
+
+                when(eventDomainService.isStandingArea(eventId, areaId))
+                                .thenReturn(true);
+
+                when(ticketProvider.issueStandingTickets(userId, eventId, areaId, Set.of(seatId1)))
+                                .thenReturn(successfulTicketIssue);
+
+                when(eventDomainService.confirm(eventId, orderId))
+                                .thenReturn(receipt);
+
+                CheckoutCompletedDTO result = assertDoesNotThrow(() -> service.completeCheckoutForGuest(token, orderId,
+                                birthDate, null, paymentDetails));
+
+                assertEquals(orderId, result.orderId());
+                assertEquals(eventId, result.eventId());
+                assertEquals(areaId, result.areaId());
+                assertEquals(1, result.ticketCount());
+                assertEquals(new BigDecimal("100.00"), result.totalPrice().amount());
+                assertEquals("ILS", result.totalPrice().currency());
+
+                verify(paymentGateway).chargePayment(new MoneyDTO(new BigDecimal("100.00"), "ILS"), paymentDetails);
+                verify(eventDomainService).isStandingArea(eventId, areaId);
+                verify(ticketProvider).issueStandingTickets(userId, eventId, areaId, Set.of(seatId1));
+                verify(ticketProvider, never()).issueSeatingTickets(any(), any(), any(), anyList());
+                verify(purchasingDomainService).finalizeCheckout(order, successfulPaymentTx, price,
+                                successfulTicketIssue);
+        }
+
+        @Test
+        void completeCheckoutShouldSucceedWhenPaymentSeatingTicketsFinalizeAndConfirmSucceed() {
         ActiveOrder order = activeOrderWithSeats(seatId1);
         LocalDate birthDate = LocalDate.of(2000, 1, 1);
 
@@ -244,7 +299,17 @@ class CheckoutBlackTest {
         when(paymentGateway.chargePayment(any(), any()))
                 .thenReturn(successfulPaymentTx);
 
-        when(ticketProvider.issueTickets(userId, eventId, areaId, Set.of(seatId1)))
+        when(eventDomainService.isStandingArea(eventId, areaId))
+                .thenReturn(false);
+
+        SeatTicketRequestDTO seatTicket = new SeatTicketRequestDTO(seatId1, 4, 12);
+        List<SeatTicketRequestDTO> seatTickets = List.of(seatTicket);
+        List<SeatView> availableSeats = List.of(new SeatView(seatId1, "4", "12", "AVAILABLE"));
+
+        when(eventDomainService.areaSeats(eventId, areaId))
+                .thenReturn(availableSeats);
+
+        when(ticketProvider.issueSeatingTickets(userId, eventId, areaId, seatTickets))
                 .thenReturn(successfulTicketIssue);
 
         when(eventDomainService.confirm(eventId, orderId))
@@ -261,39 +326,15 @@ class CheckoutBlackTest {
         assertEquals("ILS", result.totalPrice().currency());
 
         verify(paymentGateway).chargePayment(new MoneyDTO(new BigDecimal("100.00"), "ILS"), paymentDetails);
-        verify(ticketProvider).issueTickets(userId, eventId, areaId, Set.of(seatId1));
+        verify(eventDomainService).isStandingArea(eventId, areaId);
+        verify(eventDomainService).areaSeats(eventId, areaId);
+        verify(ticketProvider).issueSeatingTickets(userId, eventId, areaId, seatTickets);
+        verify(ticketProvider, never()).issueStandingTickets(any(), any(), any(), anySet());
         verify(purchasingDomainService).finalizeCheckout(order, successfulPaymentTx, price, successfulTicketIssue);
-    }
+        }
 
-    @Test
-    void completeCheckoutShouldFailWhenPaymentIsRejected() {
-        ActiveOrder order = activeOrderWithSeats(seatId1);
-        LocalDate birthDate = LocalDate.of(2000, 1, 1);
-
-        PriceBreakdown price = priceBreakdown("100.00");
-
-        mockValidGuestOperation();
-
-        PaymentDetailsDTO paymentDetails = mock(PaymentDetailsDTO.class);
-
-        when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
-                .thenReturn(order);
-
-        when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
-                .thenReturn(price);
-
-        when(paymentGateway.chargePayment(any(), any()))
-                .thenThrow(new FailedPaymentException("card declined"));
-
-        FailedPaymentException exception = assertThrows(FailedPaymentException.class, () ->
-                service.completeCheckoutForGuest(token, orderId, birthDate, null, paymentDetails)
-        );
-
-        assertTrue(exception.getMessage().contains("card declined"));
-    }
-
-    @Test
-    void completeCheckoutShouldFailWhenTicketIssuanceFails() {
+        @Test
+        void completeCheckoutShouldFailWhenSeatingTicketIssuanceFails() {
         ActiveOrder order = activeOrderWithSeats(seatId1);
         LocalDate birthDate = LocalDate.of(2000, 1, 1);
 
@@ -312,7 +353,17 @@ class CheckoutBlackTest {
         when(paymentGateway.chargePayment(any(), any()))
                 .thenReturn(456);
 
-        when(ticketProvider.issueTickets(userId, eventId, areaId, Set.of(seatId1)))
+        when(eventDomainService.isStandingArea(eventId, areaId))
+                .thenReturn(false);
+
+        SeatTicketRequestDTO seatTicket = new SeatTicketRequestDTO(seatId1, 4, 12);
+        List<SeatTicketRequestDTO> seatTickets = List.of(seatTicket);
+        List<SeatView> availableSeats = List.of(new SeatView(seatId1, "4", "12", "AVAILABLE"));
+
+        when(eventDomainService.areaSeats(eventId, areaId))
+                .thenReturn(availableSeats);
+
+        when(ticketProvider.issueSeatingTickets(userId, eventId, areaId, seatTickets))
                 .thenThrow(new FailedToIssueTicketsException("issue failed"));
 
         FailedToIssueTicketsException exception = assertThrows(FailedToIssueTicketsException.class, () ->
@@ -320,41 +371,114 @@ class CheckoutBlackTest {
         );
 
         assertTrue(exception.getMessage().contains("issue failed"));
-    }
 
-    private void mockValidGuestOperation() {
-        when(auth.isTokenValid(token)).thenReturn(true);
-        when(auth.extractUserId(token)).thenReturn(userId);
-        when(auth.isGuest(token)).thenReturn(true);
-    }
+        verify(paymentGateway).refundPayment(456);
+        verify(eventDomainService).isStandingArea(eventId, areaId);
+        verify(eventDomainService).areaSeats(eventId, areaId);
+        verify(ticketProvider).issueSeatingTickets(userId, eventId, areaId, seatTickets);
+        verify(ticketProvider, never()).issueStandingTickets(any(), any(), any(), anySet());
+        verify(purchasingDomainService, never()).finalizeCheckout(any(), anyInt(), any(), any());
+        verify(eventDomainService, never()).confirm(any(), any());
+        }
 
-    private void mockPurchaseAccess(boolean hasQueueAccess) {
-        LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
+        @Test
+        void completeCheckoutShouldFailWhenPaymentIsRejected() {
+                ActiveOrder order = activeOrderWithSeats(seatId1);
+                LocalDate birthDate = LocalDate.of(2000, 1, 1);
 
-        when(lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId))
-                .thenReturn(eligibility);
+                PriceBreakdown price = priceBreakdown("100.00");
 
-        when(queueDomainService.hasAccess(token, eventId))
-                .thenReturn(hasQueueAccess);
-    }
+                mockValidGuestOperation();
 
-    private ActiveOrder activeOrderWithSeats(UUID... seats) {
-        ActiveOrder order = new ActiveOrder(orderId, userId, eventId, areaId);
-        order.addSeats(Set.of(seats));
-        return order;
-    }
+                PaymentDetailsDTO paymentDetails = mock(PaymentDetailsDTO.class);
 
-    private Money money(String amount) {
-        return Money.of(amount, "ILS");
-    }
+                when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
+                                .thenReturn(order);
 
-    private PriceBreakdown priceBreakdown(String total) {
-        Money basePrice = money(total);
-        Money subtotal = money(total);
-        Money discount = money("0.00");
-        Money totalPrice = money(total);
+                when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
+                                .thenReturn(price);
 
-        return new PriceBreakdown(basePrice, subtotal, discount, totalPrice);
-    }
+                when(paymentGateway.chargePayment(any(), any()))
+                                .thenThrow(new FailedPaymentException("card declined"));
+
+                FailedPaymentException exception = assertThrows(FailedPaymentException.class, () -> service
+                                .completeCheckoutForGuest(token, orderId, birthDate, null, paymentDetails));
+
+                assertTrue(exception.getMessage().contains("card declined"));
+        }
+
+        @Test
+        void completeCheckoutShouldFailWhenStandingTicketIssuanceFails() {
+                ActiveOrder order = activeOrderWithSeats(seatId1);
+                LocalDate birthDate = LocalDate.of(2000, 1, 1);
+
+                PriceBreakdown price = priceBreakdown("100.00");
+
+                mockValidGuestOperation();
+
+                PaymentDetailsDTO paymentDetails = mock(PaymentDetailsDTO.class);
+
+                when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
+                                .thenReturn(order);
+
+                when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
+                                .thenReturn(price);
+
+                when(paymentGateway.chargePayment(any(), any()))
+                                .thenReturn(456);
+
+                when(eventDomainService.isStandingArea(eventId, areaId))
+                                .thenReturn(true);
+
+                when(ticketProvider.issueStandingTickets(userId, eventId, areaId, Set.of(seatId1)))
+                                .thenThrow(new FailedToIssueTicketsException("issue failed"));
+
+                FailedToIssueTicketsException exception = assertThrows(FailedToIssueTicketsException.class,
+                                () -> service.completeCheckoutForGuest(token, orderId, birthDate, null,
+                                                paymentDetails));
+
+                assertTrue(exception.getMessage().contains("issue failed"));
+
+                verify(paymentGateway).refundPayment(456);
+                verify(ticketProvider).issueStandingTickets(userId, eventId, areaId, Set.of(seatId1));
+                verify(ticketProvider, never()).issueSeatingTickets(any(), any(), any(), anyList());
+                verify(purchasingDomainService, never()).finalizeCheckout(any(), anyInt(), any(), any());
+                verify(eventDomainService, never()).confirm(any(), any());
+        }
+
+        private void mockValidGuestOperation() {
+                when(auth.isTokenValid(token)).thenReturn(true);
+                when(auth.extractUserId(token)).thenReturn(userId);
+                when(auth.isGuest(token)).thenReturn(true);
+        }
+
+        private void mockPurchaseAccess(boolean hasQueueAccess) {
+                LotteryEligibilityDTO eligibility = mock(LotteryEligibilityDTO.class);
+
+                when(lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId))
+                                .thenReturn(eligibility);
+
+                when(queueDomainService.hasAccess(token, eventId))
+                                .thenReturn(hasQueueAccess);
+        }
+
+        private ActiveOrder activeOrderWithSeats(UUID... seats) {
+                ActiveOrder order = new ActiveOrder(orderId, userId, eventId, areaId);
+                order.addSeats(Set.of(seats));
+                return order;
+        }
+
+        private Money money(String amount) {
+                return Money.of(amount, "ILS");
+        }
+
+        private PriceBreakdown priceBreakdown(String total) {
+                Money basePrice = money(total);
+                Money subtotal = money(total);
+                Money discount = money("0.00");
+                Money totalPrice = money(total);
+
+                return new PriceBreakdown(basePrice, subtotal, discount, totalPrice);
+        }
 
 }

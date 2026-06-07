@@ -369,6 +369,21 @@ public class OrderHistoryTest {
                 )
         );
     }
+    
+    @Test
+    void constructorShouldThrowWhenPaymentTransactionIdIsNonPositive() {
+        assertThrows(IllegalArgumentException.class, () ->
+                new OrderHistory(
+                        orderId,
+                        userId,
+                        eventId,
+                        areaId,
+                        0,
+                        totalPrice,
+                        Set.of(new Ticket(externalTicketId1, seatId1, basePricePerTicket))
+                )
+        );
+    }
 
     @Test
     void constructorShouldThrowWhenTicketsContainNull() {

@@ -4,7 +4,6 @@ import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
-import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
@@ -271,20 +270,5 @@ abstract class PurchasingServiceWhiteTestBase {
                 .validateOrderIsInCheckout(order);
 
         return order;
-    }
-
-    @SuppressWarnings("unchecked")
-    protected Response<Boolean> successfulResponse() {
-        Response<Boolean> response = mock(Response.class);
-        when(response.isSuccessful()).thenReturn(true);
-        return response;
-    }
-
-    @SuppressWarnings("unchecked")
-    protected Response<Boolean> failedResponse(String errorMessage) {
-        Response<Boolean> response = mock(Response.class);
-        when(response.isSuccessful()).thenReturn(false);
-        when(response.getErrorMessage()).thenReturn(errorMessage);
-        return response;
     }
 }

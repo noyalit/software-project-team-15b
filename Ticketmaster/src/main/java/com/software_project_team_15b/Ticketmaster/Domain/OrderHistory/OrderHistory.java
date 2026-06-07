@@ -78,8 +78,8 @@ public class OrderHistory {
         if (areaId == null) {
             throw new IllegalArgumentException("Area ID cannot be null");
         }
-        if (paymentTransactionId == null) {
-            throw new IllegalArgumentException("Payment transaction ID cannot be null");
+        if (paymentTransactionId == null || paymentTransactionId <= 0) {
+            throw new IllegalArgumentException("Payment transaction ID cannot be null or non-positive");
         }
         if (totalPrice == null) {
             throw new IllegalArgumentException("Total price cannot be null");
