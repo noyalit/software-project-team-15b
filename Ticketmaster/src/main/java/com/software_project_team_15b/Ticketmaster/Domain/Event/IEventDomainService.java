@@ -56,6 +56,8 @@ public interface IEventDomainService {
 
     void requireStandingArea(UUID eventId, UUID areaId);
 
+    boolean isStandingArea(UUID eventId, UUID areaId);
+
     Set<UUID> selectAvailableStandingSeats(UUID eventId, UUID areaId, Set<UUID> excludedSeatIds, int quantity);
 
     EventAvailability getEventAvailability(UUID eventId);

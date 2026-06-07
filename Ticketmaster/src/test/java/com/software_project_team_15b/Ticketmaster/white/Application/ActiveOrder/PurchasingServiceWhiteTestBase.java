@@ -271,5 +271,4 @@ abstract class PurchasingServiceWhiteTestBase {
 
         return order;
     }
-
 }

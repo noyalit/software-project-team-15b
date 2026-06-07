@@ -18,10 +18,9 @@ public class FakePaymentAPI implements IPaymentAPI {
     @Override
     public int chargePayment(MoneyDTO amount, PaymentDetailsDTO paymentDetails) {
         if (amount == null || paymentDetails == null) {
-            return -1;
+            throw new IllegalArgumentException("Amount and payment details are required");
         }
-
-        return 123; // fake transaction id
+        return 123;
     }
 
     @Override
@@ -29,7 +28,6 @@ public class FakePaymentAPI implements IPaymentAPI {
         if (transactionId < 0) {
             throw new IllegalArgumentException("Invalid transaction id");
         }
-
         // do nothing, just simulate a successful refund
     }
 }

@@ -8,6 +8,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.HashSet;
 
 import org.slf4j.Logger;
@@ -35,6 +36,7 @@ import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.SeatTicketRequestDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
@@ -740,11 +742,29 @@ public class PurchasingService {
             throw new IllegalArgumentException("Active order cannot be null");
         }
 
-        return ticketProvider.issueTickets(
+        if (eventDomainService.isStandingArea(activeOrder.getEventId(), activeOrder.getAreaId())) {
+            return ticketProvider.issueStandingTickets(
+                    activeOrder.getUserId(),
+                    activeOrder.getEventId(),
+                    activeOrder.getAreaId(),
+                    activeOrder.getOrderSeats()
+            );
+        }
+
+        Set<UUID> orderedSeatIds = activeOrder.getOrderSeats();
+
+        List<SeatTicketRequestDTO> seatTickets =
+                eventDomainService.areaSeats(activeOrder.getEventId(), activeOrder.getAreaId())
+                        .stream()
+                        .filter(seatView -> orderedSeatIds.contains(seatView.seatId()))
+                        .map(SeatTicketRequestDTO::fromSeatView)
+                        .collect(Collectors.toList());
+
+        return ticketProvider.issueSeatingTickets(
                 activeOrder.getUserId(),
                 activeOrder.getEventId(),
                 activeOrder.getAreaId(),
-                activeOrder.getOrderSeats()
+                seatTickets
         );
     }
 

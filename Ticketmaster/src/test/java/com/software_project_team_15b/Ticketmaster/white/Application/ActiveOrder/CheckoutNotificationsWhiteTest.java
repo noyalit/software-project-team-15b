@@ -4,6 +4,7 @@ import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.PaymentDetailsDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.SeatTicketRequestDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.OrderSeatsUnavailableException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
@@ -24,178 +25,205 @@ import static org.mockito.Mockito.*;
 
 class CheckoutNotificationsWhiteTest extends PurchasingServiceWhiteTestBase {
 
-    @Test
-    void completeCheckoutShouldSendPurchaseSuccessNotificationWhenEventIsNotSoldOut() {
-        mockValidGuest();
+        @Test
+        void completeCheckoutShouldSendPurchaseSuccessNotificationWhenEventIsNotSoldOut() {
+                mockValidGuest();
 
-        ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
-        LocalDate birthDate = LocalDate.of(2000, 1, 1);
-        PaymentDetailsDTO paymentDetails = mock(PaymentDetailsDTO.class);
+                ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
+                LocalDate birthDate = LocalDate.of(2000, 1, 1);
+                PaymentDetailsDTO paymentDetails = mock(PaymentDetailsDTO.class);
 
-        when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
+                when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
 
-        PriceBreakdown priceBreakdown = priceBreakdown("100.00");
-        int transactionId = 12345;
-        Map<UUID, String> issuedTicketIds = Map.of(seatId1, "TICKET-1");
+                PriceBreakdown priceBreakdown = priceBreakdown("100.00");
+                int transactionId = 12345;
+                Map<UUID, String> issuedTicketIds = Map.of(seatId1, "TICKET-1");
 
-        when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
-                .thenReturn(priceBreakdown);
+                when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
+                                .thenReturn(priceBreakdown);
 
-        when(paymentGateway.chargePayment(any(MoneyDTO.class), eq(paymentDetails)))
-                .thenReturn(transactionId);
+                when(paymentGateway.chargePayment(any(MoneyDTO.class), eq(paymentDetails)))
+                                .thenReturn(transactionId);
 
-        when(ticketProvider.issueTickets(userId, eventId, areaId, Set.of(seatId1)))
-                .thenReturn(issuedTicketIds);
+                when(eventDomainService.isStandingArea(eventId, areaId))
+                                .thenReturn(false);
 
-        ConfirmationReceipt receipt = mock(ConfirmationReceipt.class);
-        when(receipt.areaId()).thenReturn(areaId);
-        when(receipt.quantity()).thenReturn(1);
-        when(eventDomainService.confirm(eventId, orderId)).thenReturn(receipt);
+                EventDTO.SeatView seatView = new EventDTO.SeatView(
+                                seatId1,
+                                "A",
+                                "1",
+                                "AVAILABLE");
 
-        EventDTO.AreaView area = new EventDTO.AreaView(
-                areaId,
-                "area",
-                moneyDTO("100.00"),
-                "SEATING",
-                5,
-                List.of()
-        );
+                SeatTicketRequestDTO seatTicket = SeatTicketRequestDTO.fromSeatView(seatView);
+                List<SeatTicketRequestDTO> seatTickets = List.of(seatTicket);
 
-        EventDTO event = mock(EventDTO.class);
-        when(event.areas()).thenReturn(List.of(area));
-        when(event.name()).thenReturn("Concert");
-        when(eventDomainService.getEvent(eventId)).thenReturn(event);
+                when(eventDomainService.areaSeats(eventId, areaId))
+                                .thenReturn(List.of(seatView));
 
-        service.completeCheckoutForGuest(token, orderId, birthDate, null, paymentDetails);
+                when(ticketProvider.issueSeatingTickets(userId, eventId, areaId, seatTickets))
+                                .thenReturn(issuedTicketIds);
 
-        verify(paymentGateway).chargePayment(any(MoneyDTO.class), eq(paymentDetails));
-        verify(ticketProvider).issueTickets(userId, eventId, areaId, Set.of(seatId1));
-        verify(purchasingDomainService).finalizeCheckout(
-                order,
-                transactionId,
-                priceBreakdown,
-                issuedTicketIds
-        );
+                ConfirmationReceipt receipt = mock(ConfirmationReceipt.class);
+                when(receipt.areaId()).thenReturn(areaId);
+                when(receipt.quantity()).thenReturn(1);
+                when(eventDomainService.confirm(eventId, orderId)).thenReturn(receipt);
 
-        verify(notifier).notifyUser(eq(userId), argThat(notification ->
-                notification.getType() == NotificationType.PURCHASE_SUCCESS
-        ));
-        verify(notifier, never()).notifyEventManagers(any(), any());
-    }
+                EventDTO.AreaView area = new EventDTO.AreaView(
+                                areaId,
+                                "area",
+                                moneyDTO("100.00"),
+                                "SEATING",
+                                5,
+                                List.of(seatView));
 
-    @Test
-    void completeCheckoutShouldSendSoldOutNotificationWhenEventCapacityReachesZero() {
-        mockValidGuest();
+                EventDTO event = mock(EventDTO.class);
+                when(event.areas()).thenReturn(List.of(area));
+                when(event.name()).thenReturn("Concert");
+                when(eventDomainService.getEvent(eventId)).thenReturn(event);
 
-        ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
-        LocalDate birthDate = LocalDate.of(2000, 1, 1);
-        PaymentDetailsDTO paymentDetails = mock(PaymentDetailsDTO.class);
-        UUID managerId = UUID.randomUUID();
+                service.completeCheckoutForGuest(token, orderId, birthDate, null, paymentDetails);
 
-        when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
+                verify(paymentGateway).chargePayment(any(MoneyDTO.class), eq(paymentDetails));
+                verify(eventDomainService).isStandingArea(eventId, areaId);
+                verify(eventDomainService).areaSeats(eventId, areaId);
+                verify(ticketProvider).issueSeatingTickets(userId, eventId, areaId, seatTickets);
+                verify(ticketProvider, never()).issueStandingTickets(any(), any(), any(), anySet());
 
-        PriceBreakdown priceBreakdown = priceBreakdown("100.00");
-        int transactionId = 12345;
-        Map<UUID, String> issuedTicketIds = Map.of(seatId1, "TICKET-1");
+                verify(purchasingDomainService).finalizeCheckout(
+                                order,
+                                transactionId,
+                                priceBreakdown,
+                                issuedTicketIds);
 
-        when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
-                .thenReturn(priceBreakdown);
+                verify(notifier).notifyUser(eq(userId),
+                                argThat(notification -> notification.getType() == NotificationType.PURCHASE_SUCCESS));
+                verify(notifier, never()).notifyEventManagers(any(), any());
+        }
 
-        when(paymentGateway.chargePayment(any(MoneyDTO.class), eq(paymentDetails)))
-                .thenReturn(transactionId);
+        @Test
+        void completeCheckoutShouldSendSoldOutNotificationWhenEventCapacityReachesZero() {
+                mockValidGuest();
 
-        when(ticketProvider.issueTickets(userId, eventId, areaId, Set.of(seatId1)))
-                .thenReturn(issuedTicketIds);
+                ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
+                LocalDate birthDate = LocalDate.of(2000, 1, 1);
+                PaymentDetailsDTO paymentDetails = mock(PaymentDetailsDTO.class);
+                UUID managerId = UUID.randomUUID();
 
-        ConfirmationReceipt receipt = mock(ConfirmationReceipt.class);
-        when(receipt.areaId()).thenReturn(areaId);
-        when(receipt.quantity()).thenReturn(1);
-        when(eventDomainService.confirm(eventId, orderId)).thenReturn(receipt);
+                when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
 
-        EventDTO.AreaView soldOutArea = new EventDTO.AreaView(
-                areaId,
-                "area",
-                moneyDTO("100.00"),
-                "SEATING",
-                0,
-                List.of()
-        );
+                PriceBreakdown priceBreakdown = priceBreakdown("100.00");
+                int transactionId = 12345;
+                Map<UUID, String> issuedTicketIds = Map.of(seatId1, "TICKET-1");
 
-        EventDTO event = mock(EventDTO.class);
-        when(event.areas()).thenReturn(List.of(soldOutArea));
-        when(event.name()).thenReturn("Concert");
-        when(eventDomainService.getEvent(eventId)).thenReturn(event);
+                when(eventDomainService.getPrice(eventId, areaId, 1, userId, birthDate, null))
+                                .thenReturn(priceBreakdown);
 
-        when(userDomainService.getApprovedEventManagerUserIds(eventId))
-                .thenReturn(Set.of(managerId));
+                when(paymentGateway.chargePayment(any(MoneyDTO.class), eq(paymentDetails)))
+                                .thenReturn(transactionId);
 
-        service.completeCheckoutForGuest(token, orderId, birthDate, null, paymentDetails);
+                when(eventDomainService.isStandingArea(eventId, areaId))
+                                .thenReturn(false);
 
-        verify(paymentGateway).chargePayment(any(MoneyDTO.class), eq(paymentDetails));
-        verify(ticketProvider).issueTickets(userId, eventId, areaId, Set.of(seatId1));
-        verify(purchasingDomainService).finalizeCheckout(
-                order,
-                transactionId,
-                priceBreakdown,
-                issuedTicketIds
-        );
+                EventDTO.SeatView seatView = new EventDTO.SeatView(
+                                seatId1,
+                                "A",
+                                "1",
+                                "AVAILABLE");
 
-        verify(notifier).notifyUser(eq(userId), argThat(notification ->
-                notification.getType() == NotificationType.PURCHASE_SUCCESS
-        ));
-        verify(notifier).notifyEventManagers(eq(eventId), any(NotificationDTO.class));
-        verify(notifier).notifyUser(eq(managerId), argThat(notification ->
-                notification.getType() == NotificationType.EVENT_SOLD_OUT
-        ));
-    }
+                SeatTicketRequestDTO seatTicket = SeatTicketRequestDTO.fromSeatView(seatView);
+                List<SeatTicketRequestDTO> seatTickets = List.of(seatTicket);
 
-    @Test
-    void getActiveOrderShouldReturnViewForOrderInCheckoutWithAllSeatsAvailable() {
-        mockValidUser();
+                when(eventDomainService.areaSeats(eventId, areaId))
+                                .thenReturn(List.of(seatView));
 
-        ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
-        when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
-        mockPurchaseAccessAllowed();
+                when(ticketProvider.issueSeatingTickets(userId, eventId, areaId, seatTickets))
+                                .thenReturn(issuedTicketIds);
 
-        Map<Boolean, Set<UUID>> seatsAvailability = Map.of(
-                true, Set.of(seatId1),
-                false, Set.of()
-        );
+                ConfirmationReceipt receipt = mock(ConfirmationReceipt.class);
+                when(receipt.areaId()).thenReturn(areaId);
+                when(receipt.quantity()).thenReturn(1);
+                when(eventDomainService.confirm(eventId, orderId)).thenReturn(receipt);
 
-        when(eventDomainService.getSeatsAvailability(eventId, areaId, order.getOrderSeats()))
-                .thenReturn(seatsAvailability);
+                EventDTO.AreaView soldOutArea = new EventDTO.AreaView(
+                                areaId,
+                                "area",
+                                moneyDTO("100.00"),
+                                "SEATING",
+                                0,
+                                List.of(seatView));
 
-        mockEventDTOWithCurrentArea();
+                EventDTO event = mock(EventDTO.class);
+                when(event.areas()).thenReturn(List.of(soldOutArea));
+                when(event.name()).thenReturn("Concert");
+                when(eventDomainService.getEvent(eventId)).thenReturn(event);
 
-        when(eventDomainService.getPrice(eq(eventId), eq(areaId), eq(1), eq(userId), isNull(), isNull()))
-                .thenReturn(priceBreakdown("0.00"));
+                when(userDomainService.getApprovedEventManagerUserIds(eventId))
+                                .thenReturn(Set.of(managerId));
 
-        service.getActiveOrder(token, orderId);
+                service.completeCheckoutForGuest(token, orderId, birthDate, null, paymentDetails);
 
-        verify(eventDomainService).getSeatsAvailability(eventId, areaId, order.getOrderSeats());
-        verify(purchasingDomainService, never()).syncOrderSeatsAvailability(any(), any());
-    }
+                verify(paymentGateway).chargePayment(any(MoneyDTO.class), eq(paymentDetails));
+                verify(eventDomainService).isStandingArea(eventId, areaId);
+                verify(eventDomainService).areaSeats(eventId, areaId);
+                verify(ticketProvider).issueSeatingTickets(userId, eventId, areaId, seatTickets);
+                verify(ticketProvider, never()).issueStandingTickets(any(), any(), any(), anySet());
 
-    @Test
-    void getActiveOrderShouldThrowWhenOrderIsInCheckoutAndSeatsBecameUnavailable() {
-        mockValidUser();
+                verify(purchasingDomainService).finalizeCheckout(
+                                order,
+                                transactionId,
+                                priceBreakdown,
+                                issuedTicketIds);
 
-        ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
-        when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
-        mockPurchaseAccessAllowed();
+                verify(notifier).notifyUser(eq(userId),
+                                argThat(notification -> notification.getType() == NotificationType.PURCHASE_SUCCESS));
+                verify(notifier).notifyEventManagers(eq(eventId), any(NotificationDTO.class));
+                verify(notifier).notifyUser(eq(managerId),
+                                argThat(notification -> notification.getType() == NotificationType.EVENT_SOLD_OUT));
+        }
 
-        Map<Boolean, Set<UUID>> seatsAvailability = Map.of(
-                true, Set.of(),
-                false, Set.of(seatId1)
-        );
+        @Test
+        void getActiveOrderShouldReturnViewForOrderInCheckoutWithAllSeatsAvailable() {
+                mockValidUser();
 
-        when(eventDomainService.getSeatsAvailability(eventId, areaId, order.getOrderSeats()))
-                .thenReturn(seatsAvailability);
+                ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
+                when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
+                mockPurchaseAccessAllowed();
 
-        assertThrows(OrderSeatsUnavailableException.class, () ->
-                service.getActiveOrder(token, orderId)
-        );
+                Map<Boolean, Set<UUID>> seatsAvailability = Map.of(
+                                true, Set.of(seatId1),
+                                false, Set.of());
 
-        verify(purchasingDomainService, never()).syncOrderSeatsAvailability(any(), any());
-    }
+                when(eventDomainService.getSeatsAvailability(eventId, areaId, order.getOrderSeats()))
+                                .thenReturn(seatsAvailability);
+
+                mockEventDTOWithCurrentArea();
+
+                when(eventDomainService.getPrice(eq(eventId), eq(areaId), eq(1), eq(userId), isNull(), isNull()))
+                                .thenReturn(priceBreakdown("0.00"));
+
+                service.getActiveOrder(token, orderId);
+
+                verify(eventDomainService).getSeatsAvailability(eventId, areaId, order.getOrderSeats());
+                verify(purchasingDomainService, never()).syncOrderSeatsAvailability(any(), any());
+        }
+
+        @Test
+        void getActiveOrderShouldThrowWhenOrderIsInCheckoutAndSeatsBecameUnavailable() {
+                mockValidUser();
+
+                ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
+                when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
+                mockPurchaseAccessAllowed();
+
+                Map<Boolean, Set<UUID>> seatsAvailability = Map.of(
+                                true, Set.of(),
+                                false, Set.of(seatId1));
+
+                when(eventDomainService.getSeatsAvailability(eventId, areaId, order.getOrderSeats()))
+                                .thenReturn(seatsAvailability);
+
+                assertThrows(OrderSeatsUnavailableException.class, () -> service.getActiveOrder(token, orderId));
+
+                verify(purchasingDomainService, never()).syncOrderSeatsAvailability(any(), any());
+        }
 }

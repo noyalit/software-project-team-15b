@@ -298,6 +298,15 @@ public class EventDomainServiceImpl implements IEventDomainService {
 
     @Override
     @Transactional(readOnly = true)
+    public boolean isStandingArea(UUID eventId, UUID areaId) {
+        Objects.requireNonNull(areaId, "areaId");
+        Event event = requireEvent(eventId);
+        EventArea area = requireArea(event, areaId);
+        return area instanceof StandingEventArea;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Set<UUID> selectAvailableStandingSeats(UUID eventId, UUID areaId, Set<UUID> excludedSeatIds, int quantity) {
         requireStandingArea(eventId, areaId);
         Objects.requireNonNull(excludedSeatIds, "excludedSeatIds");
