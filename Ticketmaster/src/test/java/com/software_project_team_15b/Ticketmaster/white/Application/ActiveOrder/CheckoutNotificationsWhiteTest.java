@@ -60,7 +60,9 @@ class CheckoutNotificationsWhiteTest extends PurchasingServiceWhiteTestBase {
                 when(eventDomainService.areaSeats(eventId, areaId))
                                 .thenReturn(List.of(seatView));
 
-                when(ticketProvider.issueSeatingTickets(userId, eventId, areaId, seatTickets))
+                when(eventDomainService.getAreaName(eventId, areaId)).thenReturn("area");
+
+                when(ticketProvider.issueSeatingTickets(userId, eventId, "area", seatTickets))
                                 .thenReturn(issuedTicketIds);
 
                 ConfirmationReceipt receipt = mock(ConfirmationReceipt.class);
@@ -86,7 +88,7 @@ class CheckoutNotificationsWhiteTest extends PurchasingServiceWhiteTestBase {
                 verify(paymentGateway).chargePayment(any(MoneyDTO.class), eq(paymentDetails));
                 verify(eventDomainService).isStandingArea(eventId, areaId);
                 verify(eventDomainService).areaSeats(eventId, areaId);
-                verify(ticketProvider).issueSeatingTickets(userId, eventId, areaId, seatTickets);
+                verify(ticketProvider).issueSeatingTickets(userId, eventId, "area", seatTickets);
                 verify(ticketProvider, never()).issueStandingTickets(any(), any(), any(), anySet());
 
                 verify(purchasingDomainService).finalizeCheckout(
@@ -136,7 +138,9 @@ class CheckoutNotificationsWhiteTest extends PurchasingServiceWhiteTestBase {
                 when(eventDomainService.areaSeats(eventId, areaId))
                                 .thenReturn(List.of(seatView));
 
-                when(ticketProvider.issueSeatingTickets(userId, eventId, areaId, seatTickets))
+                when(eventDomainService.getAreaName(eventId, areaId)).thenReturn("area");
+
+                when(ticketProvider.issueSeatingTickets(userId, eventId, "area", seatTickets))
                                 .thenReturn(issuedTicketIds);
 
                 ConfirmationReceipt receipt = mock(ConfirmationReceipt.class);
@@ -165,7 +169,7 @@ class CheckoutNotificationsWhiteTest extends PurchasingServiceWhiteTestBase {
                 verify(paymentGateway).chargePayment(any(MoneyDTO.class), eq(paymentDetails));
                 verify(eventDomainService).isStandingArea(eventId, areaId);
                 verify(eventDomainService).areaSeats(eventId, areaId);
-                verify(ticketProvider).issueSeatingTickets(userId, eventId, areaId, seatTickets);
+                verify(ticketProvider).issueSeatingTickets(userId, eventId, "area", seatTickets);
                 verify(ticketProvider, never()).issueStandingTickets(any(), any(), any(), anySet());
 
                 verify(purchasingDomainService).finalizeCheckout(

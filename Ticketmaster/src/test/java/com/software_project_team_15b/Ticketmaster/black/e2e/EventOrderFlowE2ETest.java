@@ -547,7 +547,7 @@ class EventOrderFlowE2ETest {
                 when(ticketProvider.issueStandingTickets(
                                 any(UUID.class),
                                 any(UUID.class),
-                                any(UUID.class),
+                                any(String.class),
                                 anySet())).thenAnswer(invocation -> {
                                         Set<UUID> internalStandingTicketIds = invocation.getArgument(3);
 
@@ -560,7 +560,7 @@ class EventOrderFlowE2ETest {
                 when(ticketProvider.issueSeatingTickets(
                                 any(UUID.class),
                                 any(UUID.class),
-                                any(UUID.class),
+                                any(String.class),
                                 anyList())).thenAnswer(invocation -> {
                                         List<SeatTicketRequestDTO> seats = invocation.getArgument(3);
 

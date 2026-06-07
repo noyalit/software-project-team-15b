@@ -248,7 +248,10 @@ class CheckoutBlackTest {
                 when(eventDomainService.isStandingArea(eventId, areaId))
                                 .thenReturn(true);
 
-                when(ticketProvider.issueStandingTickets(userId, eventId, areaId, Set.of(seatId1)))
+                when(eventDomainService.getAreaName(eventId, areaId))
+                                .thenReturn("Area 1");
+
+                when(ticketProvider.issueStandingTickets(userId, eventId, "Area 1", Set.of(seatId1)))
                                 .thenReturn(successfulTicketIssue);
 
                 when(eventDomainService.confirm(eventId, orderId))
@@ -266,7 +269,7 @@ class CheckoutBlackTest {
 
                 verify(paymentGateway).chargePayment(new MoneyDTO(new BigDecimal("100.00"), "ILS"), paymentDetails);
                 verify(eventDomainService).isStandingArea(eventId, areaId);
-                verify(ticketProvider).issueStandingTickets(userId, eventId, areaId, Set.of(seatId1));
+                verify(ticketProvider).issueStandingTickets(userId, eventId, "Area 1", Set.of(seatId1));
                 verify(ticketProvider, never()).issueSeatingTickets(any(), any(), any(), anyList());
                 verify(purchasingDomainService).finalizeCheckout(order, successfulPaymentTx, price,
                                 successfulTicketIssue);
@@ -309,7 +312,10 @@ class CheckoutBlackTest {
         when(eventDomainService.areaSeats(eventId, areaId))
                 .thenReturn(availableSeats);
 
-        when(ticketProvider.issueSeatingTickets(userId, eventId, areaId, seatTickets))
+        when(eventDomainService.getAreaName(eventId, areaId))
+                .thenReturn("Area 1");
+
+        when(ticketProvider.issueSeatingTickets(userId, eventId, "Area 1", seatTickets))
                 .thenReturn(successfulTicketIssue);
 
         when(eventDomainService.confirm(eventId, orderId))
@@ -326,9 +332,7 @@ class CheckoutBlackTest {
         assertEquals("ILS", result.totalPrice().currency());
 
         verify(paymentGateway).chargePayment(new MoneyDTO(new BigDecimal("100.00"), "ILS"), paymentDetails);
-        verify(eventDomainService).isStandingArea(eventId, areaId);
-        verify(eventDomainService).areaSeats(eventId, areaId);
-        verify(ticketProvider).issueSeatingTickets(userId, eventId, areaId, seatTickets);
+        verify(ticketProvider).issueSeatingTickets(userId, eventId, "Area 1", seatTickets);
         verify(ticketProvider, never()).issueStandingTickets(any(), any(), any(), anySet());
         verify(purchasingDomainService).finalizeCheckout(order, successfulPaymentTx, price, successfulTicketIssue);
         }
@@ -363,7 +367,10 @@ class CheckoutBlackTest {
         when(eventDomainService.areaSeats(eventId, areaId))
                 .thenReturn(availableSeats);
 
-        when(ticketProvider.issueSeatingTickets(userId, eventId, areaId, seatTickets))
+        when(eventDomainService.getAreaName(eventId, areaId))
+                .thenReturn("Area 1");
+
+        when(ticketProvider.issueSeatingTickets(userId, eventId, "Area 1", seatTickets))
                 .thenThrow(new FailedToIssueTicketsException("issue failed"));
 
         FailedToIssueTicketsException exception = assertThrows(FailedToIssueTicketsException.class, () ->
@@ -373,9 +380,7 @@ class CheckoutBlackTest {
         assertTrue(exception.getMessage().contains("issue failed"));
 
         verify(paymentGateway).refundPayment(456);
-        verify(eventDomainService).isStandingArea(eventId, areaId);
-        verify(eventDomainService).areaSeats(eventId, areaId);
-        verify(ticketProvider).issueSeatingTickets(userId, eventId, areaId, seatTickets);
+        verify(ticketProvider).issueSeatingTickets(userId, eventId, "Area 1", seatTickets);
         verify(ticketProvider, never()).issueStandingTickets(any(), any(), any(), anySet());
         verify(purchasingDomainService, never()).finalizeCheckout(any(), anyInt(), any(), any());
         verify(eventDomainService, never()).confirm(any(), any());
@@ -430,7 +435,10 @@ class CheckoutBlackTest {
                 when(eventDomainService.isStandingArea(eventId, areaId))
                                 .thenReturn(true);
 
-                when(ticketProvider.issueStandingTickets(userId, eventId, areaId, Set.of(seatId1)))
+                when(eventDomainService.getAreaName(eventId, areaId))
+                                .thenReturn("Area 1");
+
+                when(ticketProvider.issueStandingTickets(userId, eventId, "Area 1", Set.of(seatId1)))
                                 .thenThrow(new FailedToIssueTicketsException("issue failed"));
 
                 FailedToIssueTicketsException exception = assertThrows(FailedToIssueTicketsException.class,
@@ -440,7 +448,7 @@ class CheckoutBlackTest {
                 assertTrue(exception.getMessage().contains("issue failed"));
 
                 verify(paymentGateway).refundPayment(456);
-                verify(ticketProvider).issueStandingTickets(userId, eventId, areaId, Set.of(seatId1));
+                verify(ticketProvider).issueStandingTickets(userId, eventId, "Area 1", Set.of(seatId1));
                 verify(ticketProvider, never()).issueSeatingTickets(any(), any(), any(), anyList());
                 verify(purchasingDomainService, never()).finalizeCheckout(any(), anyInt(), any(), any());
                 verify(eventDomainService, never()).confirm(any(), any());
