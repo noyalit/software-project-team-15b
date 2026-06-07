@@ -29,7 +29,10 @@ public class Manager extends Role {
     @Column(name = "permission", nullable = false)
     private Set<ManagerPermission> permissions = new HashSet<>();
 
-    @Column(name = "event_id", nullable = false)
+    // Single-table inheritance: this column is shared with Founder/Owner rows,
+    // which have no event, so it must be nullable at the DB level. A Manager's
+    // event id is still required and enforced in code (see appointManager).
+    @Column(name = "event_id", nullable = true)
     private UUID eventId;
 
     protected Manager() {

@@ -2,15 +2,15 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ticketmaster
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-ticketmaster}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d ticketmaster"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ticketmaster}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -18,14 +18,24 @@ services:
   backend:
     build: ./Ticketmaster
     environment:
+      # Pinned for the Docker stack: it always runs the db profile against the
+      # 'postgres' service. (The .env SPRING_PROFILES_ACTIVE / POSTGRES_HOST govern
+      # local runs, where the topology differs.)
       SPRING_PROFILES_ACTIVE: docker
       POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: ticketmaster
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      # Sourced from the root .env (with sensible fallbacks).
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_DB: ${POSTGRES_DB:-ticketmaster}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      EXTERNAL_MODE: ${EXTERNAL_MODE:-fake}
+      SERVER_PORT: ${SERVER_PORT:-8081}
+      # Initial-state seeding is opt-in. Seed a fresh DB with:
+      #   docker compose down -v && INIT_RUN=true docker compose up --build
+      INIT_RUN: ${INIT_RUN:-false}
+      INIT_STATE_FILE: ${INIT_STATE_FILE:-classpath:initial-state.txt}
     ports:
-      - "8081:8081"
+      - "${BACKEND_PORT:-8081}:${SERVER_PORT:-8081}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,9 +43,9 @@ services:
   ui:
     build: ./ticketmaster-ui
     environment:
-      VITE_API_PROXY_TARGET: http://backend:8081
+      VITE_API_PROXY_TARGET: ${VITE_API_PROXY_TARGET:-http://backend:8081}
     ports:
-      - "5173:5173"
+      - "${UI_PORT:-5173}:5173"
     volumes:
       - ./ticketmaster-ui/src:/app/src
       - ./ticketmaster-ui/index.html:/app/index.html
