@@ -209,8 +209,9 @@ public class PurchasingServiceWhiteTest {
 
                 when(eventDomainService.isStandingArea(eventId, areaId))
                                 .thenReturn(true);
-
-                when(ticketProvider.issueStandingTickets(userId, eventId, areaId, Set.of(seatId)))
+                
+                when(eventDomainService.getAreaName(eventId, areaId)).thenReturn("area");
+                when(ticketProvider.issueStandingTickets(userId, eventId, "area", Set.of(seatId)))
                                 .thenReturn(issuedTicketIds);
 
                 Object result = callPrivate("issueTickets", new Class[] { ActiveOrder.class }, activeOrder);
@@ -218,7 +219,7 @@ public class PurchasingServiceWhiteTest {
                 assertEquals(issuedTicketIds, result);
 
                 verify(eventDomainService).isStandingArea(eventId, areaId);
-                verify(ticketProvider).issueStandingTickets(userId, eventId, areaId, Set.of(seatId));
+                verify(ticketProvider).issueStandingTickets(userId, eventId, "area", Set.of(seatId));
                 verify(ticketProvider, never()).issueSeatingTickets(any(), any(), any(), anyList());
         }
 

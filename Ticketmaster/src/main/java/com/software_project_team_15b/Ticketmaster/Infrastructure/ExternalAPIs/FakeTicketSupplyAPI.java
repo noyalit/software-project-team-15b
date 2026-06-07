@@ -21,9 +21,9 @@ import java.util.stream.Collectors;
 public class FakeTicketSupplyAPI implements ITicketSupplyAPI {
 
     @Override
-    public Map<UUID, String> issueStandingTickets(UUID customerId, UUID eventId, UUID areaId,
+    public Map<UUID, String> issueStandingTickets(UUID customerId, UUID eventId, String areaName,
             Set<UUID> internalStandingTicketIds) {
-        if (customerId == null || eventId == null || areaId == null || internalStandingTicketIds == null) {
+        if (customerId == null || eventId == null || areaName == null || internalStandingTicketIds == null) {
             throw new IllegalArgumentException("All parameters are required");
         }
         // Simulate issuing tickets by generating random ticket IDs
@@ -35,9 +35,9 @@ public class FakeTicketSupplyAPI implements ITicketSupplyAPI {
     }
 
     @Override
-    public Map<UUID, String> issueSeatingTickets(UUID customerId, UUID eventId, UUID areaId,
+    public Map<UUID, String> issueSeatingTickets(UUID customerId, UUID eventId, String areaName,
             List<SeatTicketRequestDTO> seats) {
-        if (customerId == null || eventId == null || areaId == null || seats == null) {
+        if (customerId == null || eventId == null || areaName == null || seats == null) {
             throw new IllegalArgumentException("All parameters are required");
         }
         // Simulate issuing tickets by generating random ticket IDs

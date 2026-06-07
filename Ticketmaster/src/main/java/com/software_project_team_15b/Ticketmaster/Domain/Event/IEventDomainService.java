@@ -45,6 +45,8 @@ public interface IEventDomainService {
 
     EventDTO getEvent(UUID eventId);
 
+    String getAreaName(UUID eventId, UUID areaId);
+
     // Collect distinct user IDs of non-cancelled orders for an event
     java.util.List<java.util.UUID> collectAttendeeUserIds(UUID eventId);
 

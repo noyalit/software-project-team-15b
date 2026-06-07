@@ -742,11 +742,13 @@ public class PurchasingService {
             throw new IllegalArgumentException("Active order cannot be null");
         }
 
+        String areaName = eventDomainService.getAreaName(activeOrder.getEventId(), activeOrder.getAreaId());
+
         if (eventDomainService.isStandingArea(activeOrder.getEventId(), activeOrder.getAreaId())) {
             return ticketProvider.issueStandingTickets(
                     activeOrder.getUserId(),
                     activeOrder.getEventId(),
-                    activeOrder.getAreaId(),
+                    areaName,
                     activeOrder.getOrderSeats()
             );
         }
@@ -763,7 +765,7 @@ public class PurchasingService {
         return ticketProvider.issueSeatingTickets(
                 activeOrder.getUserId(),
                 activeOrder.getEventId(),
-                activeOrder.getAreaId(),
+                areaName,
                 seatTickets
         );
     }

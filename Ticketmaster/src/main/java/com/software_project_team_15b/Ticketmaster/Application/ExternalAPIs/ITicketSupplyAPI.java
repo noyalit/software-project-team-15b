@@ -41,8 +41,8 @@ public interface ITicketSupplyAPI {
      *
      * @param customerId the id of the customer/user buying the tickets.
      * @param eventId the id of the event.
-     * @param areaId the id of the area/zone in the event.
-     *               This value is sent to the external system as the "zone" parameter.
+     * @param areaName the name of the area/zone in the event.
+     *                 This value is sent to the external system as the "zone" parameter.
      * @param internalStandingTicketIds the internal ids of the standing tickets/seats
      *                                  reserved in our system.
      *                                  The number of ids determines the quantity
@@ -57,7 +57,7 @@ public interface ITicketSupplyAPI {
     Map<UUID, String> issueStandingTickets(
             UUID customerId,
             UUID eventId,
-            UUID areaId,
+            String areaName,
             Set<UUID> internalStandingTicketIds
     );
 
@@ -78,8 +78,8 @@ public interface ITicketSupplyAPI {
      *
      * @param customerId the id of the customer/user buying the tickets.
      * @param eventId the id of the event.
-     * @param areaId the id of the area/zone in the event.
-     *               This value is sent to the external system as the "zone" parameter.
+     * @param areaName the name of the area/zone in the event.
+     *                 This value is sent to the external system as the "zone" parameter.
      * @param seats the assigned seats to issue tickets for.
      *              Each item should include the internal seat id and the row/seat
      *              identifiers required by the external ticket system.
@@ -93,7 +93,7 @@ public interface ITicketSupplyAPI {
     Map<UUID, String> issueSeatingTickets(
             UUID customerId,
             UUID eventId,
-            UUID areaId,
+            String areaName,
             List<SeatTicketRequestDTO> seats
     );
 
