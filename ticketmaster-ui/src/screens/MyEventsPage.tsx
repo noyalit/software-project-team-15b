@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { http } from '../api/http';
 import { getApiErrorMessage } from '../api/errors';
@@ -75,6 +75,8 @@ export default function MyEventsPage() {
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
 
   const [newlyCreatedEventId, setNewlyCreatedEventId] = useState<string | null>(null);
+
+  const step2Ref = useRef<HTMLDivElement | null>(null);
 
   const [name, setName] = useState('');
   const [artist, setArtist] = useState('');
@@ -629,6 +631,14 @@ export default function MyEventsPage() {
     ? (eventsQuery.data ?? []).find((e) => e.eventId === newlyCreatedEventId) ?? null
     : null;
 
+  useEffect(() => {
+    if (!newlyCreatedEventId) return;
+    const id = window.setTimeout(() => {
+      step2Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [newlyCreatedEventId]);
+
   return (
     <div className="space-y-4">
       {!canManageEvents && (
@@ -702,7 +712,7 @@ export default function MyEventsPage() {
       )}
 
       {selectedCompanyId && newlyCreatedEventId && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div ref={step2Ref} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Step 2: Create event map</h2>
