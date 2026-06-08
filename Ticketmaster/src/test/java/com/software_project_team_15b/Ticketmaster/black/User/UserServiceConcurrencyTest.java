@@ -193,6 +193,10 @@ class UserServiceConcurrencyTest {
         @Override
         public void deleteById(UUID adminId) {
         }
+
+        @Override
+        public void deleteAll() {
+        }
     }
 
     private static final class InMemoryAuth implements IAuth {
