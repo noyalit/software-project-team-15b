@@ -468,24 +468,6 @@ export default function MyEventsPage() {
       setSeatsPerRow('');
       setSuccessMessage('Area added successfully.');
       await qc.invalidateQueries({ queryKey: ['company-events', selectedCompanyId] });
-
-      if (newlyCreatedEventId && areaEventId === newlyCreatedEventId) {
-        const refreshed = await qc.fetchQuery({
-          queryKey: ['company-events', selectedCompanyId],
-          queryFn: async () => {
-            const res = await http.get<ApiResponse<EventDTO[]>>(
-              `/api/companies/${selectedCompanyId}/events`
-            );
-            if (res.data.error) throw new Error(res.data.error);
-            return res.data.data ?? [];
-          },
-        });
-        const ev = refreshed.find((e) => e.eventId === newlyCreatedEventId);
-        if (ev) {
-          setNewlyCreatedEventId(null);
-          publishMutation.mutate(ev);
-        }
-      }
     },
   });
 
