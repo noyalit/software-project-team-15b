@@ -26,33 +26,47 @@ public class SystemAdminInitializer {
             IPasswordEncoder passwordEncoder
     ) {
         return args -> {
-            // 1. Determine target username (Config file wins, fallback to default)
-            String username = hasText(configuredUsername)
-                    ? configuredUsername.trim()
-                    : DEFAULT_ADMIN_USERNAME;
+            boolean hasConfiguredUsername = hasText(configuredUsername);
+            boolean hasConfiguredPassword = hasText(configuredPassword);
 
-            // 2. Determine target password (Config file wins, fallback to default)
-            String rawPassword = hasText(configuredPassword)
-                    ? configuredPassword
+            // 1. Enforce that if a tester tries to provide custom configuration, 
+            // they must provide both components.
+            if (hasConfiguredUsername != hasConfiguredPassword) {
+                throw new IllegalStateException(
+                        "System admin configuration must include both username and password"
+                );
+            }
+
+            // 2. Resolve exactly who the single source of truth admin should be right now
+            String targetUsername = hasConfiguredUsername 
+                    ? configuredUsername.trim() 
+                    : DEFAULT_ADMIN_USERNAME;
+                    
+            String targetPassword = hasConfiguredPassword 
+                    ? configuredPassword 
                     : DEFAULT_ADMIN_PASSWORD;
 
-            // 3. Clear everything to enforce "EXACTLY 1 System Admin at any given moment"
-            // This safely handles testers changing the configuration or database overrides.
+            // 3. Unconditionally wipe the repository. 
+            // This instantly removes old stale tester credentials, clears multiple 
+            // injected admin rows, and prevents state lockouts between system restarts.
             systemAdminRepository.deleteAll();
 
-            // 4. Save the single, valid admin specified by the config/fallback
+            // 4. Save the current authorized system administrator
             SystemAdmin admin = new SystemAdmin(
-                    username,
-                    passwordEncoder.encode(rawPassword)
+                    targetUsername,
+                    passwordEncoder.encode(targetPassword)
             );
             systemAdminRepository.save(admin);
 
-            // 5. Hard guard verification to ensure the database layer didn't duplicate entries
-            if (systemAdminRepository.findAll().size() != 1) {
-                throw new IllegalStateException("System failed to initialize exactly one SystemAdmin");
+            // 5. Final guard verification to ensure the system initialized correctly
+            int finalCount = systemAdminRepository.findAll().size();
+            if (finalCount != 1) {
+                throw new IllegalStateException(
+                        "System failed to initialize exactly one SystemAdmin"
+                );
             }
             
-            System.out.println("System Admin securely initialized. Username: " + username);
+            System.out.println("System Admin securely initialized. Active profile: [" + targetUsername + "]");
         };
     }
 
