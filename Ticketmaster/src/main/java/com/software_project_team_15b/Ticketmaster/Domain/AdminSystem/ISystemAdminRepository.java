@@ -15,4 +15,6 @@ public interface ISystemAdminRepository {
     List<SystemAdmin> findAll();
 
     void deleteById(UUID adminId);
+
+    void deleteAll();
 }

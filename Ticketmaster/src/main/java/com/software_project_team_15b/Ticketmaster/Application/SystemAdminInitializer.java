@@ -1,7 +1,5 @@
 package com.software_project_team_15b.Ticketmaster.Application;
 
-import java.util.List;
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
@@ -28,51 +26,33 @@ public class SystemAdminInitializer {
             IPasswordEncoder passwordEncoder
     ) {
         return args -> {
+            // 1. Determine target username (Config file wins, fallback to default)
             String username = hasText(configuredUsername)
                     ? configuredUsername.trim()
                     : DEFAULT_ADMIN_USERNAME;
 
+            // 2. Determine target password (Config file wins, fallback to default)
             String rawPassword = hasText(configuredPassword)
                     ? configuredPassword
                     : DEFAULT_ADMIN_PASSWORD;
 
-            if (hasText(configuredUsername) != hasText(configuredPassword)) {
-                throw new IllegalStateException(
-                        "System admin configuration must include both username and password"
-                );
-            }
+            // 3. Clear everything to enforce "EXACTLY 1 System Admin at any given moment"
+            // This safely handles testers changing the configuration or database overrides.
+            systemAdminRepository.deleteAll();
 
-            List<SystemAdmin> existingAdmins = systemAdminRepository.findAll();
-
-            if (existingAdmins.size() > 1) {
-                throw new IllegalStateException(
-                        "System must contain exactly one SystemAdmin, but found: " + existingAdmins.size()
-                );
-            }
-
-            if (existingAdmins.size() == 1) {
-                SystemAdmin existing = existingAdmins.get(0);
-
-                if (hasText(configuredUsername)
-                        && !existing.getUsername().equals(username)) {
-                    throw new IllegalStateException(
-                            "Configured SystemAdmin does not match existing SystemAdmin"
-                    );
-                }
-
-                return;
-            }
-
+            // 4. Save the single, valid admin specified by the config/fallback
             SystemAdmin admin = new SystemAdmin(
                     username,
                     passwordEncoder.encode(rawPassword)
             );
-
             systemAdminRepository.save(admin);
 
+            // 5. Hard guard verification to ensure the database layer didn't duplicate entries
             if (systemAdminRepository.findAll().size() != 1) {
                 throw new IllegalStateException("System failed to initialize exactly one SystemAdmin");
             }
+            
+            System.out.println("System Admin securely initialized. Username: " + username);
         };
     }
 
