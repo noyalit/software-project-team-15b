@@ -829,7 +829,7 @@ export default function MyEventsPage() {
               disabled={publishMutation.isPending || !(newlyCreatedEvent?.areas?.length)}
               className="mt-3 w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
             >
-              {publishMutation.isPending ? 'Publishing...' : 'Publish event'}
+              {publishMutation.isPending ? 'Creating and publishing...' : 'Create and publish event'}
             </button>
           </div>
         </div>
@@ -1737,7 +1737,7 @@ export default function MyEventsPage() {
                           disabled={publishMutation.isPending}
                           className="mt-3 w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
                         >
-                          {publishMutation.isPending ? 'Publishing...' : 'Publish event'}
+                          {publishMutation.isPending ? 'Creating and publishing...' : 'Create and publish event'}
                         </button>
                       )}
                     </div>
