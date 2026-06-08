@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useNotificationsStore } from './notificationsStore';
@@ -23,6 +23,9 @@ export default function NotificationsBell() {
   const [open, setOpen] = useState(false);
   const notifications = useNotificationsStore((s) => s.notifications);
   const markAllRead = useNotificationsStore((s) => s.markAllRead);
+  const autoOpenToken = useNotificationsStore((s) => s.autoOpenToken);
+  const lastConsumedAutoOpenToken = useNotificationsStore((s) => s.lastConsumedAutoOpenToken);
+  const consumeAutoOpen = useNotificationsStore((s) => s.consumeAutoOpen);
   const { token } = useAuthStore();
 
   const unread = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
@@ -64,6 +67,13 @@ export default function NotificationsBell() {
   const displayText = (text: string) => {
     return text.replace(uuidRegex, (m) => companyNameMap[m.toLowerCase()] ?? m);
   };
+
+  useEffect(() => {
+    if (!autoOpenToken) return;
+    if (autoOpenToken === lastConsumedAutoOpenToken) return;
+    setOpen(true);
+    consumeAutoOpen(autoOpenToken);
+  }, [autoOpenToken, lastConsumedAutoOpenToken, consumeAutoOpen]);
 
   return (
     <div className="relative">
