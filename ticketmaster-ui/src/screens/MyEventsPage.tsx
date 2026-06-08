@@ -74,6 +74,8 @@ export default function MyEventsPage() {
 
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
 
+  const [newlyCreatedEventId, setNewlyCreatedEventId] = useState<string | null>(null);
+
   const [name, setName] = useState('');
   const [artist, setArtist] = useState('');
   const [category, setCategory] = useState('');
@@ -343,13 +345,21 @@ export default function MyEventsPage() {
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data;
     },
-    onSuccess: async () => {
+    onSuccess: async (eventId) => {
       setName('');
       setArtist('');
       setCategory('');
       setStartsAt('');
       setLocation('');
-      setSuccessMessage('Event created successfully.');
+      setSuccessMessage('Event created. Continue below to define the event map, then publish.');
+      setNewlyCreatedEventId(eventId ?? null);
+      if (eventId) {
+        setOpenEventDetailsId(eventId);
+        setPolicyEventId(eventId);
+        setAreaEventId(eventId);
+        setEditingAreaId(null);
+        setEditingEventId(null);
+      }
       await qc.invalidateQueries({ queryKey: ['company-events', selectedCompanyId] });
     },
   });
@@ -458,6 +468,24 @@ export default function MyEventsPage() {
       setSeatsPerRow('');
       setSuccessMessage('Area added successfully.');
       await qc.invalidateQueries({ queryKey: ['company-events', selectedCompanyId] });
+
+      if (newlyCreatedEventId && areaEventId === newlyCreatedEventId) {
+        const refreshed = await qc.fetchQuery({
+          queryKey: ['company-events', selectedCompanyId],
+          queryFn: async () => {
+            const res = await http.get<ApiResponse<EventDTO[]>>(
+              `/api/companies/${selectedCompanyId}/events`
+            );
+            if (res.data.error) throw new Error(res.data.error);
+            return res.data.data ?? [];
+          },
+        });
+        const ev = refreshed.find((e) => e.eventId === newlyCreatedEventId);
+        if (ev) {
+          setNewlyCreatedEventId(null);
+          publishMutation.mutate(ev);
+        }
+      }
     },
   });
 
@@ -615,6 +643,10 @@ export default function MyEventsPage() {
 
   const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
 
+  const newlyCreatedEvent = newlyCreatedEventId
+    ? (eventsQuery.data ?? []).find((e) => e.eventId === newlyCreatedEventId) ?? null
+    : null;
+
   return (
     <div className="space-y-4">
       {!canManageEvents && (
@@ -645,6 +677,7 @@ export default function MyEventsPage() {
             setSuccessMessage(null);
             setEditingEventId(null);
             setAreaEventId(null);
+            setNewlyCreatedEventId(null);
           }}
           className="mt-3 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
         >
@@ -683,6 +716,130 @@ export default function MyEventsPage() {
           >
             {createEventMutation.isPending ? 'Creating...' : 'Create event'}
           </button>
+        </div>
+      )}
+
+      {selectedCompanyId && newlyCreatedEventId && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Step 2: Create event map</h2>
+              <div className="mt-1 text-sm text-slate-600">
+                Add at least one area to the event map. When ready, publish.
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setNewlyCreatedEventId(null);
+                setAreaEventId(null);
+                setEditingAreaId(null);
+              }}
+              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+            >
+              Exit
+            </button>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+            <div className="font-semibold text-slate-900">Add area</div>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <input
+                value={areaName}
+                onChange={(e) => setAreaName(e.target.value)}
+                placeholder="Area name"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+              />
+
+              <select
+                value={areaType}
+                onChange={(e) => setAreaType(e.target.value as AreaType)}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              >
+                <option value="SEATING">Seating</option>
+                <option value="STANDING">Standing</option>
+              </select>
+
+              <input
+                value={areaPrice}
+                onChange={(e) => setAreaPrice(e.target.value)}
+                placeholder="Base price"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+              />
+
+              <input
+                value={areaCurrency}
+                onChange={(e) => setAreaCurrency(e.target.value)}
+                placeholder="Currency"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+              />
+
+              {areaType === 'SEATING' ? (
+                <>
+                  <input
+                    value={seatRows}
+                    onChange={(e) => setSeatRows(e.target.value)}
+                    placeholder="Rows"
+                    className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  />
+                  <input
+                    value={seatsPerRow}
+                    onChange={(e) => setSeatsPerRow(e.target.value)}
+                    placeholder="Seats per row"
+                    className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </>
+              ) : (
+                <input
+                  value={standingCapacity}
+                  onChange={(e) => setStandingCapacity(e.target.value)}
+                  placeholder="Standing capacity"
+                  className="rounded-md border border-slate-200 px-3 py-2 text-sm md:col-span-2"
+                />
+              )}
+            </div>
+
+            <button
+              onClick={() => {
+                setAreaEventId(newlyCreatedEventId);
+                addAreaMutation.mutate();
+              }}
+              disabled={addAreaMutation.isPending}
+              className="mt-3 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {addAreaMutation.isPending ? 'Adding...' : 'Add area'}
+            </button>
+
+            {newlyCreatedEvent?.areas?.length ? (
+              <div className="mt-4">
+                <div className="text-sm font-semibold text-slate-900">Current areas</div>
+                <div className="mt-2 grid gap-2">
+                  {newlyCreatedEvent.areas.map((a) => (
+                    <div key={a.areaId} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                      <div className="font-semibold text-slate-900">{a.name}</div>
+                      <div className="text-slate-600">
+                        {a.type} | {a.basePrice?.amount} {a.basePrice?.currency}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 text-sm text-slate-600">No areas yet. Add your first area to enable publishing.</div>
+            )}
+
+            <button
+              onClick={() => {
+                if (!newlyCreatedEvent) return;
+                setNewlyCreatedEventId(null);
+                publishMutation.mutate(newlyCreatedEvent);
+              }}
+              disabled={publishMutation.isPending || !(newlyCreatedEvent?.areas?.length)}
+              className="mt-3 w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {publishMutation.isPending ? 'Publishing...' : 'Publish event'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -747,13 +904,7 @@ export default function MyEventsPage() {
                             {canEditMap ? 'Manage map' : 'View map'}
                           </button>
                         {event.status === 'DRAFT' && (
-                          <button
-                            onClick={() => publishMutation.mutate(event)}
-                            disabled={publishMutation.isPending}
-                            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                          >
-                            Publish
-                          </button>
+                          <></>
                         )}
 
                           <button
@@ -1584,6 +1735,19 @@ export default function MyEventsPage() {
                       >
                         {addAreaMutation.isPending ? 'Adding...' : 'Add area'}
                       </button>
+
+                      {event.status === 'DRAFT' && areas.length > 0 && (
+                        <button
+                          onClick={() => {
+                            setNewlyCreatedEventId(null);
+                            publishMutation.mutate(event);
+                          }}
+                          disabled={publishMutation.isPending}
+                          className="mt-3 w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                        >
+                          {publishMutation.isPending ? 'Publishing...' : 'Publish event'}
+                        </button>
+                      )}
                     </div>
                   )}
 
