@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useNotificationsStore } from './notificationsStore';
+import { http } from '../api/http';
+import type { ApiResponse, CompanyDTO } from '../api/types';
+import { useAuthStore } from './authStore';
 
 function formatTime(iso: string) {
   const d = new Date(iso);
@@ -8,13 +12,58 @@ function formatTime(iso: string) {
   return d.toLocaleString();
 }
 
+const uuidRegex = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+
+function extractUuids(text: string) {
+  const m = text.match(uuidRegex);
+  return m ? Array.from(new Set(m.map((x) => x.toLowerCase()))) : [];
+}
+
 export default function NotificationsBell() {
   const [open, setOpen] = useState(false);
   const notifications = useNotificationsStore((s) => s.notifications);
   const markAllRead = useNotificationsStore((s) => s.markAllRead);
+  const { token } = useAuthStore();
 
   const unread = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
   const top = notifications.slice(0, 5);
+
+  const companyIdsInTop = useMemo(() => {
+    const ids = new Set<string>();
+    for (const n of top) {
+      if (n.type !== 'PERMISSION_CHANGED' && n.type !== 'COMPANY_CLOSED' && n.type !== 'COMPANY_SUSPENDED') {
+        continue;
+      }
+      for (const id of extractUuids(`${n.title} ${n.message}`)) ids.add(id);
+    }
+    return Array.from(ids);
+  }, [top]);
+
+  const companyNamesQuery = useQuery({
+    queryKey: ['company-names', companyIdsInTop],
+    queryFn: async () => {
+      const pairs = await Promise.all(
+        companyIdsInTop.map(async (id) => {
+          try {
+            const res = await http.get<ApiResponse<CompanyDTO>>(`/api/companies/${id}`);
+            if (res.data.error || !res.data.data) return [id, null] as const;
+            return [id, res.data.data.name] as const;
+          } catch {
+            return [id, null] as const;
+          }
+        })
+      );
+      return Object.fromEntries(pairs.filter(([, name]) => Boolean(name))) as Record<string, string>;
+    },
+    enabled: Boolean(token) && companyIdsInTop.length > 0,
+    staleTime: 5 * 60_000,
+  });
+
+  const companyNameMap = companyNamesQuery.data ?? {};
+
+  const displayText = (text: string) => {
+    return text.replace(uuidRegex, (m) => companyNameMap[m.toLowerCase()] ?? m);
+  };
 
   return (
     <div className="relative">
@@ -53,10 +102,10 @@ export default function NotificationsBell() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-slate-900">
-                        {n.title}
+                        {displayText(n.title)}
                         {!n.read && <span className="ml-2 text-xs font-bold text-rose-600">NEW</span>}
                       </div>
-                      <div className="mt-1 text-sm text-slate-700">{n.message}</div>
+                      <div className="mt-1 text-sm text-slate-700">{displayText(n.message)}</div>
                       <div className="mt-2 text-xs text-slate-500">{formatTime(n.createdAt)}</div>
                     </div>
                   </div>
