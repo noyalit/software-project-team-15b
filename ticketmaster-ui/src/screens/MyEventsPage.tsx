@@ -696,7 +696,7 @@ export default function MyEventsPage() {
             disabled={createEventMutation.isPending}
             className="mt-4 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
           >
-            {createEventMutation.isPending ? 'Creating...' : 'Create event'}
+            {createEventMutation.isPending ? 'Moving...' : 'Move to map creation'}
           </button>
         </div>
       )}
