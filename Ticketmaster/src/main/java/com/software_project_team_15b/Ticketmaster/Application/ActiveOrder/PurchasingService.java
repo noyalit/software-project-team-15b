@@ -680,6 +680,13 @@ public class PurchasingService {
         if (ticketsIssued && issuedTicketId != null) {
             try {
                 ticketProvider.cancelTicket(issuedTicketId);
+                AUDIT.info(
+                    "op=revokeTickets order={} user={} event={} ticketId={} result=ok",
+                    activeOrder.getOrderId(),
+                    activeOrder.getUserId(),
+                    activeOrder.getEventId(),
+                    issuedTicketId
+                );
             } catch (RuntimeException cancelTicketError) {
                 AUDIT.warn(
                             "op=cancelTicket order={} user={} event={} ticketId={} result=failed reason={}",
@@ -690,16 +697,7 @@ public class PurchasingService {
                             cancelTicketError.getMessage()
                     );
                 }
-
-            AUDIT.info(
-                    "op=revokeTickets order={} user={} event={} ticketId={} result=ok",
-                    activeOrder.getOrderId(),
-                    activeOrder.getUserId(),
-                    activeOrder.getEventId(),
-                    issuedTicketId
-            );
         }
-
         boolean shouldReleaseHold = finalizeDone;
         shouldReleaseHold &= paymentSucceeded;
         shouldReleaseHold &= ticketsIssued;

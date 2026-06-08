@@ -397,7 +397,7 @@ public class OrderHistoryTest {
                         userId,
                         eventId,
                         areaId,
-                        0,
+                        10000,
                         "",
                         totalPrice,
                         Set.of(new Ticket(seatId1, basePricePerTicket))
