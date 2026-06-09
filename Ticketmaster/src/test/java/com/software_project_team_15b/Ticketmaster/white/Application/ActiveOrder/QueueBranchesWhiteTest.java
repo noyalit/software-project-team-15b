@@ -1,7 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.white.Application.ActiveOrder;
 
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.RemoveOrAddSeatsFromActiveOrderCommand;
-import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
@@ -68,7 +67,6 @@ class QueueBranchesWhiteTest extends PurchasingServiceWhiteTestBase {
         when(eventDomainService.getEventAvailability(eventId)).thenReturn(EventAvailability.AVAILABLE);
         when(eventDomainService.getAreaAvailability(eventId, areaId)).thenReturn(true);
 
-        LotteryEligibilityDTO eligibility = mockLotteryEligibilityDTO();
         when(queueDomainService.hasAccess(token, eventId)).thenReturn(true);
         when(purchasingDomainService.createActiveOrder(userId, eventId, areaId)).thenReturn(orderId);
 
@@ -82,7 +80,6 @@ class QueueBranchesWhiteTest extends PurchasingServiceWhiteTestBase {
         ActiveOrder order = activeOrder();
         when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
 
-        LotteryEligibilityDTO eligibility = mockLotteryEligibilityDTO();
         when(queueDomainService.hasAccess(token, eventId)).thenReturn(false);
 
         doThrow(new TimeExpiredException("no access"))
@@ -109,7 +106,6 @@ class QueueBranchesWhiteTest extends PurchasingServiceWhiteTestBase {
         ActiveOrder order = activeOrder();
         when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
 
-        LotteryEligibilityDTO eligibility = mockLotteryEligibilityDTO();
         when(queueDomainService.hasAccess(token, eventId)).thenReturn(false);
 
         doThrow(new TimeExpiredException("no access"))

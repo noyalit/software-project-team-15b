@@ -1,10 +1,8 @@
 package com.software_project_team_15b.Ticketmaster.Infrastructure.ExternalAPIs;
 
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
-import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
-
-import java.util.UUID;
+import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.PaymentDetailsDTO;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -18,29 +16,18 @@ import org.springframework.stereotype.Component;
 public class FakePaymentAPI implements IPaymentAPI {
 
     @Override
-    public Response<Boolean> chargePayment(String token, Money amount) {
-        if (token == null || token.isBlank() || amount == null) {
-            return new Response<>("token and amount are required");
+    public int chargePayment(MoneyDTO amount, PaymentDetailsDTO paymentDetails) {
+        if (amount == null || paymentDetails == null) {
+            throw new IllegalArgumentException("Amount and payment details are required");
         }
-
-        return new Response<>(true);
+        return 123;
     }
 
     @Override
-    public Response<Boolean> refundPayment(String token, Money amount) {
-        if (token == null || token.isBlank() || amount == null) {
-            return new Response<>("token and amount are required");
+    public void refundPayment(int transactionId) {
+        if (transactionId < 0) {
+            throw new IllegalArgumentException("Invalid transaction id");
         }
-
-        return new Response<>(true);
-    }
-
-    @Override
-    public Response<Boolean> refundPayment(UUID userId, Money amount) {
-        if (userId == null || amount == null) {
-            return new Response<>("userId and amount are required");
-        }
-
-        return new Response<>(true);
+        // do nothing, just simulate a successful refund
     }
 }

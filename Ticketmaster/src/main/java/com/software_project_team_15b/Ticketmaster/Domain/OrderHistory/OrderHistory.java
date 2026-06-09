@@ -26,6 +26,12 @@ public class OrderHistory {
     @Column(name = "area_id", nullable = false, updatable = false)
     private UUID areaId;
 
+    @Column(name = "payment_transaction_id", nullable = false, updatable = false, unique = true)
+    private Integer paymentTransactionId;
+
+    @Column(name = "ticket_identifier", nullable = false, updatable = false, unique = true)
+    private String ticketIdentifier;
+
     @Embedded
     @AttributeOverrides({
             @AttributeOverride(
@@ -49,10 +55,6 @@ public class OrderHistory {
     @Column(name = "is_cancelled", nullable = false, updatable = true)
     private boolean isCancelled = false;
 
-    @Version
-    @Column(name = "version", nullable = false)
-    private Long version;
-
     protected OrderHistory() {
     }
 
@@ -61,6 +63,8 @@ public class OrderHistory {
             UUID userId,
             UUID eventId,
             UUID areaId,
+            Integer paymentTransactionId,
+            String ticketIdentifier,
             Money totalPrice,
             Set<Ticket> tickets
     ) {
@@ -76,6 +80,12 @@ public class OrderHistory {
         if (areaId == null) {
             throw new IllegalArgumentException("Area ID cannot be null");
         }
+        if (paymentTransactionId == null || paymentTransactionId <= 0) {
+            throw new IllegalArgumentException("Payment transaction ID cannot be null or non-positive");
+        }
+        if (ticketIdentifier == null || ticketIdentifier.trim().isEmpty()) {
+            throw new IllegalArgumentException("Ticket identifier cannot be null or empty");
+        }
         if (totalPrice == null) {
             throw new IllegalArgumentException("Total price cannot be null");
         }
@@ -89,20 +99,21 @@ public class OrderHistory {
         this.userId = userId;
         this.eventId = eventId;
         this.areaId = areaId;
+        this.paymentTransactionId = paymentTransactionId;
+        this.ticketIdentifier = ticketIdentifier;
         this.totalPrice = new Money(totalPrice.amount(), totalPrice.currency());
         this.tickets = new HashSet<>(tickets);
     }
 
     public static OrderHistory fromActiveOrder(
             ActiveOrder activeOrder,
+            Integer paymentTransactionId,
+            String ticketIdentifier,
             Money totalPrice,
             Money basePricePerTicket
     ) {
         if (activeOrder == null) {
             throw new IllegalArgumentException("ActiveOrder cannot be null");
-        }
-        if (basePricePerTicket == null) {
-            throw new IllegalArgumentException("Base price per ticket cannot be null");
         }
 
         return new OrderHistory(
@@ -110,6 +121,8 @@ public class OrderHistory {
                 activeOrder.getUserId(),
                 activeOrder.getEventId(),
                 activeOrder.getAreaId(),
+                paymentTransactionId,
+                ticketIdentifier,
                 totalPrice,
                 activeOrder.getOrderSeats().stream()
                         .map(seatId -> new Ticket(seatId, basePricePerTicket))
@@ -147,6 +160,14 @@ public class OrderHistory {
         return areaId;
     }
 
+    public Integer getPaymentTransactionId() {
+        return paymentTransactionId;
+    }
+
+    public String getTicketIdentifier() {
+        return ticketIdentifier;
+    }
+
     public Money getTotalPrice() {
         return new Money(totalPrice.amount(), totalPrice.currency());
     }
@@ -157,10 +178,6 @@ public class OrderHistory {
 
     public boolean isCancelled() {
         return isCancelled;
-    }
-
-    public Long getVersion() {
-        return version;
     }
 
     public void cancel() {
