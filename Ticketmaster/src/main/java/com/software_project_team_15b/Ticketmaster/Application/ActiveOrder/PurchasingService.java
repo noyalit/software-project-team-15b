@@ -310,14 +310,16 @@ public class PurchasingService {
         }
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public ActiveOrderDTO getActiveOrder(String token, UUID orderId) {
         try {
             requireOrderId(orderId);
             UUID userId = requireValidUser(token);
-            ActiveOrder activeOrder = purchasingDomainService.getOwnedOrderForView(userId, orderId);
+            ActiveOrder activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
             ensureOrderIsActive(activeOrder);
             requireAccessForPurchase(token, userId, activeOrder.getEventId());
+
+            syncOrderSeatsAvailability(activeOrder);
 
             ActiveOrderDTO view = buildActiveOrderView(activeOrder);
 
@@ -997,22 +999,20 @@ public class PurchasingService {
             );
         } catch (TimeExpiredException e) {
             if (!queueAccess) {
+                String suffix = " Please join the queue and wait until admitted.";
                 try {
                     QueueAccessDTO view = queueDomainService.getQueueAccessView(token, eventId);
-                    if (view.status() == com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.WAITING) {
+                    if (view != null && view.status() == com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.WAITING) {
                         Integer position = view.position();
-                        throw new TimeExpiredException(
-                                e.getMessage() + ". Queue is currently active for this event. You are in line" +
-                                        (position != null ? " (position: " + (position + 1) + ")" : "") +
-                                        ". Please wait until you are admitted."
-                        );
+                        if (position != null) {
+                            suffix = " Please join the queue and wait until admitted (position: " + (position + 1) + ").";
+                        }
                     }
                 } catch (RuntimeException ignored) {
-                    // fall through to default message below
+                    // Keep the generic message.
                 }
-                throw new TimeExpiredException(
-                        e.getMessage() + ". Queue is currently active for this event. Please join the queue and wait until admitted."
-                );
+
+                throw new TimeExpiredException(e.getMessage() + "." + suffix);
             }
             throw e;
         }
