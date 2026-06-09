@@ -146,6 +146,12 @@ export default function CheckoutPage() {
   };
 
   const [couponCode, setCouponCode] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardMonth, setCardMonth] = useState('');
+  const [cardYear, setCardYear] = useState('');
+  const [cardHolder, setCardHolder] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
+  const [cardHolderId, setCardHolderId] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -375,25 +381,60 @@ export default function CheckoutPage() {
     mutationFn: async () => {
       if (!activeOrderId) throw new Error('No active order found');
 
+      const isInCheckout = Boolean(activeOrderQuery.data?.expiresAt);
+      if (!isInCheckout) {
+        if (userType === 'member') {
+          const res = await http.post<ApiResponse<unknown>>(
+            `/api/active-orders/${activeOrderId}/checkout/member/start`
+          );
+          if (res.data.error) throw new Error(res.data.error);
+        } else {
+          const guestBirthDate = localStorage.getItem('guestBirthDate') ?? '';
+          if (!guestBirthDate) throw new Error('Please enter birth date for guest checkout.');
+          const res = await http.post<ApiResponse<unknown>>(
+            `/api/active-orders/${activeOrderId}/checkout/guest/start`,
+            { birthDate: guestBirthDate }
+          );
+          if (res.data.error) throw new Error(res.data.error);
+        }
+
+        await qc.invalidateQueries({ queryKey: ['active-order', activeOrderId, token] });
+      }
+
+      if (!cardNumber.trim()) throw new Error('Please enter card number.');
+      if (!cardMonth.trim()) throw new Error('Please enter card month.');
+      if (!cardYear.trim()) throw new Error('Please enter card year.');
+      if (!cardHolder.trim()) throw new Error('Please enter card holder name.');
+      if (!cardCvv.trim()) throw new Error('Please enter CVV.');
+      if (!cardHolderId.trim()) throw new Error('Please enter card holder ID.');
+
+      const paymentDetails = {
+        cardNumber: cardNumber.trim(),
+        month: cardMonth.trim(),
+        year: cardYear.trim(),
+        holder: cardHolder.trim(),
+        cvv: cardCvv.trim(),
+        id: cardHolderId.trim(),
+      };
+
       if (userType === 'member') {
         const res = await http.post<ApiResponse<CheckoutCompletedDTO>>(
           `/api/active-orders/${activeOrderId}/checkout/member/complete`,
           {
             couponCode: couponCode.trim() || null,
+            paymentDetails,
           }
         );
         if (res.data.error) throw new Error(res.data.error);
         return res.data.data;
       }
 
-      const guestBirthDate = localStorage.getItem('guestBirthDate') ?? '';
-      if (!guestBirthDate) throw new Error('Please enter birth date for guest checkout.');
-
       const res = await http.post<ApiResponse<CheckoutCompletedDTO>>(
         `/api/active-orders/${activeOrderId}/checkout/guest/complete`,
         {
-          birthDate: guestBirthDate,
+          birthDate: localStorage.getItem('guestBirthDate') ?? '',
           couponCode: couponCode.trim() || null,
+          paymentDetails,
         }
       );
       if (res.data.error) throw new Error(res.data.error);
@@ -461,6 +502,77 @@ export default function CheckoutPage() {
             <div className="mt-1 font-mono text-sm text-slate-900">
               {activeOrderQuery.data.orderId}
             </div>
+
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-900">Payment details</div>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="block md:col-span-2">
+                <div className="text-xs font-medium text-slate-600">Card number</div>
+                <input
+                  value={cardNumber}
+                  onChange={(e) => setCardNumber(e.target.value)}
+                  placeholder="1234123412341234"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+              </label>
+
+              <label className="block">
+                <div className="text-xs font-medium text-slate-600">Month</div>
+                <input
+                  value={cardMonth}
+                  onChange={(e) => setCardMonth(e.target.value)}
+                  placeholder="MM"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+              </label>
+
+              <label className="block">
+                <div className="text-xs font-medium text-slate-600">Year</div>
+                <input
+                  value={cardYear}
+                  onChange={(e) => setCardYear(e.target.value)}
+                  placeholder="YYYY"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+              </label>
+
+              <label className="block md:col-span-2">
+                <div className="text-xs font-medium text-slate-600">Card holder</div>
+                <input
+                  value={cardHolder}
+                  onChange={(e) => setCardHolder(e.target.value)}
+                  placeholder="Full name"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+              </label>
+
+              <label className="block">
+                <div className="text-xs font-medium text-slate-600">CVV</div>
+                <input
+                  value={cardCvv}
+                  onChange={(e) => setCardCvv(e.target.value)}
+                  placeholder="123"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+              </label>
+
+              <label className="block">
+                <div className="text-xs font-medium text-slate-600">ID</div>
+                <input
+                  value={cardHolderId}
+                  onChange={(e) => setCardHolderId(e.target.value)}
+                  placeholder="ID number"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-900">Order summary</div>
 
             <div className="mt-4 text-sm text-slate-600">Selected seats</div>
             <div className="mt-1 grid gap-1">
