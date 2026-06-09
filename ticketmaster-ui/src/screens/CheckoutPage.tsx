@@ -814,17 +814,22 @@ export default function CheckoutPage() {
             </div>
 
             <button
+              type="button"
               onClick={() => {
                 if (completeCheckoutMutation.isPending) return;
-                setSuccessMessage(null);
-                completeCheckoutMutation.mutate();
+                setSuccessMessage('Processing purchase…');
+                completeCheckoutMutation.mutate(undefined, {
+                  onError: () => {
+                    setSuccessMessage(null);
+                  },
+                });
               }}
               disabled={
                 completeCheckoutMutation.isPending || !activeOrderQuery.data
               }
               className="mt-4 inline-flex rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
             >
-              Complete purchase
+              {completeCheckoutMutation.isPending ? 'Completing…' : 'Complete purchase'}
             </button>
           </div>
         </div>
