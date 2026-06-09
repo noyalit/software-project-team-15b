@@ -214,6 +214,15 @@ export default function CheckoutPage() {
           throw new Error('This active order has expired. Please start a new order.');
         }
 
+        if (status === 404) {
+          sessionStorage.removeItem('activeOrderId');
+          localStorage.removeItem('activeOrderId');
+          if (!orderId) {
+            navigate('/events', { replace: true });
+          }
+          throw new Error('Active order was not found. Please start a new order.');
+        }
+
         if (status === 409) {
           throw new Error('Order is being updated. Please wait a moment…');
         }
@@ -394,6 +403,11 @@ export default function CheckoutPage() {
           break;
         } catch (e) {
           const err = e as AxiosError<ApiResponse<unknown>>;
+          if (err.response?.status === 404) {
+            sessionStorage.removeItem('activeOrderId');
+            localStorage.removeItem('activeOrderId');
+            throw new Error('Active order was not found. Please start a new order.');
+          }
           if (err.response?.status === 409) {
             await sleep(Math.min(400 * (attempt + 1), 1200));
             continue;
