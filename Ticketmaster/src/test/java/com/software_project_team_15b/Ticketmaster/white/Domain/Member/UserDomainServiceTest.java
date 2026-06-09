@@ -7,7 +7,6 @@ import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -1278,7 +1277,6 @@ class UserDomainServiceTest {
     void isLegalEventManager_succeeds_whenCallerIsFounder() {
         UUID userId = UUID.randomUUID();
         UUID companyId = UUID.randomUUID();
-        UUID eventId = UUID.randomUUID();
         Founder founder = new Founder(null, companyId);
         Member member = memberWithId(userId, founder);
         when(memberRepository.findById(userId)).thenReturn(Optional.of(member));
@@ -1491,7 +1489,6 @@ class UserDomainServiceTest {
     @Test
     void getManagerPermissions_throws_whenRoleNotFound() {
         UUID companyId = UUID.randomUUID();
-        UUID eventId = UUID.randomUUID();
 
         MapMemberRepository repo = new MapMemberRepository();
         UUID ownerId = UUID.randomUUID();

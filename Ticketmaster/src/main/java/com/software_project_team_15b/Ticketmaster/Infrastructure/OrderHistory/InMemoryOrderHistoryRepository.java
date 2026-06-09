@@ -24,43 +24,29 @@ public class InMemoryOrderHistoryRepository implements IOrderHistoryRepository {
 
     @Override
     public OrderHistory save(OrderHistory orderHistory) {
-        if (orderHistory == null)
+        if (orderHistory == null) {
             throw new IllegalArgumentException("orderHistory cannot be null");
-        UUID id = orderHistory.getOrderId();
+        }
 
-        // Ensure we either hold the lock or acquire it now. If another thread holds the
-        // lock, fail fast so callers can retry or handle contention.
+        UUID id = orderHistory.getOrderId();
         ReentrantLock lock = locks.computeIfAbsent(id, key -> new ReentrantLock());
-        boolean acquiredHere = false;
+
         if (!lock.isHeldByCurrentThread()) {
-            // Block until the lock is available so saves serialize and the thread
-            // that acquires the lock can determine whether it performed the cancel.
             lock.lock();
-            acquiredHere = true;
         }
 
         try {
-            // If the stored entity is already cancelled, do nothing and return null
-            // to indicate we did not perform the cancel.
-            OrderHistory existing = storage.get(id);
-            if (existing != null && existing.isCancelled() && orderHistory.isCancelled()) {
-                return null;
-            }
-            storage.put(id, orderHistory);
+            storage.put(id, copyOf(orderHistory));
+            return orderHistory;
         } finally {
-            // If we acquired the lock here, release it immediately.
-            if (acquiredHere) {
-                try {
-                    lock.unlock();
-                } catch (IllegalMonitorStateException ignored) {
-                }
-                if (!lock.isLocked() && !lock.hasQueuedThreads()) {
-                    locks.remove(id, lock);
-                }
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+
+            if (!lock.isLocked() && !lock.hasQueuedThreads()) {
+                locks.remove(id, lock);
             }
         }
-
-        return orderHistory;
     }
 
     @Override
@@ -80,6 +66,8 @@ public class InMemoryOrderHistoryRepository implements IOrderHistoryRepository {
                 src.getUserId(),
                 src.getEventId(),
                 src.getAreaId(),
+                src.getPaymentTransactionId(),
+                src.getTicketIdentifier(),
                 src.getTotalPrice(),
                 src.getTickets()
         );
@@ -137,5 +125,41 @@ public class InMemoryOrderHistoryRepository implements IOrderHistoryRepository {
         return storage.values().stream()
                 .filter(o -> eventIds.contains(o.getEventId()) && !o.isCancelled())
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public Optional<OrderHistory> findByIdForUpdate(UUID orderId) {
+        if (orderId == null) {
+            throw new IllegalArgumentException("orderId cannot be null");
+        }
+
+        ReentrantLock lock = locks.computeIfAbsent(orderId, key -> new ReentrantLock());
+        lock.lock();
+
+        OrderHistory stored = storage.get(orderId);
+
+        if (stored == null) {
+            lock.unlock();
+
+            if (!lock.isLocked() && !lock.hasQueuedThreads()) {
+                locks.remove(orderId, lock);
+            }
+
+            return Optional.empty();
+        }
+
+        if (stored.isCancelled()) {
+            OrderHistory copy = copyOf(stored);
+
+            lock.unlock();
+
+            if (!lock.isLocked() && !lock.hasQueuedThreads()) {
+                locks.remove(orderId, lock);
+            }
+
+            return Optional.of(copy);
+        }
+
+        return Optional.of(copyOf(stored));
     }
 }

@@ -45,6 +45,8 @@ public interface IEventDomainService {
 
     EventDTO getEvent(UUID eventId);
 
+    String getAreaName(UUID eventId, UUID areaId);
+
     // Collect distinct user IDs of non-cancelled orders for an event
     java.util.List<java.util.UUID> collectAttendeeUserIds(UUID eventId);
 
@@ -55,6 +57,8 @@ public interface IEventDomainService {
     List<EventDTO.SeatView> areaSeats(UUID eventId, UUID areaId);
 
     void requireStandingArea(UUID eventId, UUID areaId);
+
+    boolean isStandingArea(UUID eventId, UUID areaId);
 
     Set<UUID> selectAvailableStandingSeats(UUID eventId, UUID areaId, Set<UUID> excludedSeatIds, int quantity);
 

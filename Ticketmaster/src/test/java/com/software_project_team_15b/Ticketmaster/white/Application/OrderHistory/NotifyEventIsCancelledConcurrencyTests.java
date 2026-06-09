@@ -1,10 +1,10 @@
 package com.software_project_team_15b.Ticketmaster.white.Application.OrderHistory;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -32,128 +32,155 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 @SpringBootTest
 public class NotifyEventIsCancelledConcurrencyTests {
 
-        @Autowired
-        OrderHistoryService service;
+    @Autowired
+    OrderHistoryService service;
 
-        @Autowired
-        IOrderHistoryRepository orderHistoryRepository;
+    @Autowired
+    IOrderHistoryRepository orderHistoryRepository;
 
-        @MockitoBean
-        IPaymentAPI paymentGateway;
+    @MockitoBean
+    IPaymentAPI paymentGateway;
 
-        @MockitoBean
-        ITicketSupplyAPI ticketProvider;
+    @MockitoBean
+    ITicketSupplyAPI ticketProvider;
 
-        private UUID userId;
+    private UUID userId;
 
-        @BeforeEach
-        void setUp() {
-                userId = UUID.randomUUID();
+    @BeforeEach
+    void setUp() {
+        userId = UUID.randomUUID();
+    }
+
+    @Test
+    void notifyEventIsCancelled_concurrentCalls_onlyCancelsOnce() throws Exception {
+        UUID eventId = UUID.randomUUID();
+
+        OrderHistory order = createOrder(userId, eventId, 2, "15.00");
+
+        orderHistoryRepository.save(order);
+
+        int threadCount = 2;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+
+        CountDownLatch ready = new CountDownLatch(threadCount);
+        CountDownLatch start = new CountDownLatch(1);
+
+        List<Future<?>> futures = new ArrayList<>();
+
+        for (int i = 0; i < threadCount; i++) {
+            futures.add(executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                service.notifyEventIsCancelled(eventId);
+                return null;
+            }));
         }
 
-        @Test
-        void notifyEventIsCancelled_concurrentCalls_onlyCancelsOnce() throws Exception {
+        ready.await();
+        start.countDown();
 
-                UUID eventId = UUID.randomUUID();
-
-                OrderHistory order = createOrder(userId, eventId, 2, "15.00");
-
-                orderHistoryRepository.save(order);
-
-                int threadCount = 2;
-
-                ExecutorService executor = Executors.newFixedThreadPool(threadCount);
-
-                CountDownLatch ready = new CountDownLatch(threadCount);
-                CountDownLatch start = new CountDownLatch(1);
-
-                List<Future<?>> futures = new ArrayList<>();
-
-                for (int i = 0; i < threadCount; i++) {
-                        futures.add(executor.submit(() -> {
-                                ready.countDown();
-                                start.await();
-                                service.notifyEventIsCancelled(eventId);
-                                return null;
-                        }));
-                }
-
-                ready.await();
-                start.countDown();
-
-                for (Future<?> future : futures) {
-                        future.get();
-                }
-
-                executor.shutdown();
-
-                OrderHistory updated = orderHistoryRepository.findById(order.getOrderId()).orElseThrow();
-
-                assertThat(updated.isCancelled()).isTrue();
-
-                verify(paymentGateway, org.mockito.Mockito.times(1)).refundPayment(order.getUserId(), order.getTotalPrice());
-
-                verify(ticketProvider, org.mockito.Mockito.times(1))
-                                .cancelTickets(eq(eventId), eq(order.getAreaId()), any(Set.class));
+        for (Future<?> future : futures) {
+            future.get();
         }
 
-        @Test
-        void notifyEventIsCancelled_concurrentCalls_withMultipleOrders_refundsEachOrderOnce() throws Exception {
+        executor.shutdown();
 
-                UUID eventId = UUID.randomUUID();
+        OrderHistory updated =
+                orderHistoryRepository.findById(order.getOrderId()).orElseThrow();
 
-                OrderHistory order1 = createOrder(userId, eventId, 2, "15.00");
-                OrderHistory order2 = createOrder(UUID.randomUUID(), eventId, 1, "10.00");
+        assertThat(updated.isCancelled()).isTrue();
 
-                orderHistoryRepository.save(order1);
-                orderHistoryRepository.save(order2);
+        verify(paymentGateway, times(1))
+                .refundPayment(order.getPaymentTransactionId());
 
-                int threadCount = 3;
-                ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        verify(ticketProvider, times(1))
+                .cancelTicket(order.getTicketIdentifier());
+    }
 
-                CountDownLatch ready = new CountDownLatch(threadCount);
-                CountDownLatch start = new CountDownLatch(1);
+    @Test
+    void notifyEventIsCancelled_concurrentCalls_withMultipleOrders_refundsEachOrderOnce() throws Exception {
+        UUID eventId = UUID.randomUUID();
 
-                List<Future<?>> futures = new ArrayList<>();
+        OrderHistory order1 = createOrder(userId, eventId, 2, "15.00");
+        OrderHistory order2 = createOrder(UUID.randomUUID(), eventId, 1, "10.00");
 
-                for (int i = 0; i < threadCount; i++) {
-                        futures.add(executor.submit(() -> {
-                                ready.countDown();
-                                start.await();
-                                service.notifyEventIsCancelled(eventId);
-                                return null;
-                        }));
-                }
+        orderHistoryRepository.save(order1);
+        orderHistoryRepository.save(order2);
 
-                ready.await();
-                start.countDown();
+        int threadCount = 3;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
 
-                for (Future<?> future : futures) {
-                        future.get();
-                }
+        CountDownLatch ready = new CountDownLatch(threadCount);
+        CountDownLatch start = new CountDownLatch(1);
 
-                executor.shutdown();
+        List<Future<?>> futures = new ArrayList<>();
 
-                OrderHistory updated1 = orderHistoryRepository.findById(order1.getOrderId()).orElseThrow();
-                OrderHistory updated2 = orderHistoryRepository.findById(order2.getOrderId()).orElseThrow();
-
-                assertThat(updated1.isCancelled()).isTrue();
-                assertThat(updated2.isCancelled()).isTrue();
-
-                verify(paymentGateway, org.mockito.Mockito.times(1)).refundPayment(order1.getUserId(), order1.getTotalPrice());
-                verify(paymentGateway, org.mockito.Mockito.times(1)).refundPayment(order2.getUserId(), order2.getTotalPrice());
+        for (int i = 0; i < threadCount; i++) {
+            futures.add(executor.submit(() -> {
+                ready.countDown();
+                start.await();
+                service.notifyEventIsCancelled(eventId);
+                return null;
+            }));
         }
 
-        // helper
-        private OrderHistory createOrder(UUID userId, UUID eventId, int ticketCount, String price) {
-                Money basePrice = Money.of(price, "USD");
-                Set<Ticket> tickets = new HashSet<>();
-                for (int i = 0; i < ticketCount; i++) {
-                        tickets.add(new Ticket(UUID.randomUUID(), basePrice));
-                }
-                java.math.BigDecimal total = basePrice.amount().multiply(java.math.BigDecimal.valueOf(ticketCount));
-                Money totalPrice = Money.of(total.toPlainString(), "USD");
-                return new OrderHistory(UUID.randomUUID(), userId, eventId, UUID.randomUUID(), totalPrice, tickets);
+        ready.await();
+        start.countDown();
+
+        for (Future<?> future : futures) {
+            future.get();
         }
 
+        executor.shutdown();
+
+        OrderHistory updated1 =
+                orderHistoryRepository.findById(order1.getOrderId()).orElseThrow();
+        OrderHistory updated2 =
+                orderHistoryRepository.findById(order2.getOrderId()).orElseThrow();
+
+        assertThat(updated1.isCancelled()).isTrue();
+        assertThat(updated2.isCancelled()).isTrue();
+
+        verify(paymentGateway, times(1))
+                .refundPayment(order1.getPaymentTransactionId());
+
+        verify(paymentGateway, times(1))
+                .refundPayment(order2.getPaymentTransactionId());
+
+        verify(ticketProvider, times(1))
+                .cancelTicket(order1.getTicketIdentifier());
+
+        verify(ticketProvider, times(1))
+                .cancelTicket(order2.getTicketIdentifier());
+    }
+
+    private OrderHistory createOrder(UUID userId, UUID eventId, int ticketCount, String price) {
+        Money basePrice = Money.of(price, "USD");
+
+        Set<Ticket> tickets = new HashSet<>();
+
+        for (int i = 0; i < ticketCount; i++) {
+            tickets.add(new Ticket(
+                    UUID.randomUUID(),
+                    basePrice
+            ));
+        }
+
+        BigDecimal total = basePrice.amount().multiply(BigDecimal.valueOf(ticketCount));
+        Money totalPrice = Money.of(total.toPlainString(), "USD");
+
+        Integer paymentTransactionId = Math.abs(UUID.randomUUID().hashCode());
+        String issuedTicketId = "TICKET-" + UUID.randomUUID();
+
+        return new OrderHistory(
+                UUID.randomUUID(),
+                userId,
+                eventId,
+                UUID.randomUUID(),
+                paymentTransactionId,
+                issuedTicketId,
+                totalPrice,
+                tickets
+        );
+    }
 }

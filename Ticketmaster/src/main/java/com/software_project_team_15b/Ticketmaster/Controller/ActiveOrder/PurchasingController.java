@@ -7,6 +7,7 @@ import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
 import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutCompletedDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutStartedDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.PaymentDetailsDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedPaymentException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedToIssueTicketsException;
@@ -331,13 +332,22 @@ public class PurchasingController {
     public ResponseEntity<ApiResponse<CheckoutCompletedDTO>> completeCheckoutForMember(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
             @PathVariable UUID orderId,
-            @RequestBody(required = false) CompleteMemberCheckoutRequest request
+            @RequestBody CompleteMemberCheckoutRequest request
     ) {
         try {
+            if (request.paymentDetails() == null) {
+                throw new IllegalArgumentException("Payment details cannot be null");
+            }
+            
             String couponCode = request == null ? null : request.couponCode();
 
             CheckoutCompletedDTO result =
-                    purchasingService.completeCheckoutForMember(token, orderId, couponCode);
+                    purchasingService.completeCheckoutForMember(
+                            token,
+                            orderId,
+                            couponCode,
+                            request.paymentDetails()
+                    );
 
             return ResponseEntity.ok(new ApiResponse<>(result, null));
 
@@ -366,11 +376,16 @@ public class PurchasingController {
             @RequestBody CompleteGuestCheckoutRequest request
     ) {
         try {
+            if (request.paymentDetails() == null) {
+                throw new IllegalArgumentException("Payment details are required");
+            }
+
             CheckoutCompletedDTO result = purchasingService.completeCheckoutForGuest(
                     token,
                     orderId,
                     request.birthDate(),
-                    request.couponCode()
+                    request.couponCode(),
+                    request.paymentDetails()
             );
 
             return ResponseEntity.ok(new ApiResponse<>(result, null));
@@ -414,13 +429,15 @@ public class PurchasingController {
     }
 
     public record CompleteMemberCheckoutRequest(
-            String couponCode
+            String couponCode,
+            PaymentDetailsDTO paymentDetails
     ) {
     }
 
     public record CompleteGuestCheckoutRequest(
             LocalDate birthDate,
-            String couponCode
+            String couponCode,
+            PaymentDetailsDTO paymentDetails
     ) {
     }
 

@@ -4,7 +4,6 @@ import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
-import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
@@ -77,6 +76,8 @@ abstract class PurchasingServiceWhiteTestBase {
     protected UUID orderId;
     protected UUID seatId1;
     protected UUID seatId2;
+    protected String issuedTicketId;
+    protected Integer transactionId;
 
     @BeforeEach
     void setUpBase() {
@@ -100,6 +101,8 @@ abstract class PurchasingServiceWhiteTestBase {
         orderId = UUID.randomUUID();
         seatId1 = UUID.randomUUID();
         seatId2 = UUID.randomUUID();
+        issuedTicketId = "TICKET-1";
+        transactionId = 12345;
     }
 
     protected void mockValidUser() {
@@ -271,20 +274,5 @@ abstract class PurchasingServiceWhiteTestBase {
                 .validateOrderIsInCheckout(order);
 
         return order;
-    }
-
-    @SuppressWarnings("unchecked")
-    protected Response<Boolean> successfulResponse() {
-        Response<Boolean> response = mock(Response.class);
-        when(response.isSuccessful()).thenReturn(true);
-        return response;
-    }
-
-    @SuppressWarnings("unchecked")
-    protected Response<Boolean> failedResponse(String errorMessage) {
-        Response<Boolean> response = mock(Response.class);
-        when(response.isSuccessful()).thenReturn(false);
-        when(response.getErrorMessage()).thenReturn(errorMessage);
-        return response;
     }
 }

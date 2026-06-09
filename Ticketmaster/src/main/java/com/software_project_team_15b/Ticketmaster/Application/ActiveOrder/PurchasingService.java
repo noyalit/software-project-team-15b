@@ -8,6 +8,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.HashSet;
 
 import org.slf4j.Logger;
@@ -22,11 +23,11 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Hol
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
-import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.Response;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.PaymentDetailsDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationType;
 import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.CheckoutCompletedDTO;
@@ -35,6 +36,7 @@ import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MoneyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.SeatTicketRequestDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrder;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.ActiveOrderStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.PurchasingDomainService;
@@ -436,20 +438,38 @@ public class PurchasingService {
             FailedPaymentException.class,
             FailedToIssueTicketsException.class
     })
-    public CheckoutCompletedDTO completeCheckoutForMember(String token, UUID orderId, String couponCode) {
+    public CheckoutCompletedDTO completeCheckoutForMember(
+            String token,
+            UUID orderId,
+            String couponCode,
+            PaymentDetailsDTO paymentDetails
+    ) {
         try {
             requireOrderId(orderId);
         } catch (RuntimeException e) {
-            AUDIT.warn("op=completeCheckoutForMember order={} result=rejected reason={}", orderId, e.getMessage());
+            AUDIT.warn(
+                    "op=completeCheckoutForMember order={} result=rejected reason={}",
+                    orderId,
+                    e.getMessage()
+            );
             throw e;
         }
+
         UUID userId = requireValidUser(token);
+
         if (!auth.isMember(token)) {
             throw new IllegalStateException("Only members can use this method");
         }
+
         LocalDate birthDate = getUserBirthDate(userId);
 
-        return completeCheckoutForUser(token, userId, orderId, birthDate, couponCode);
+        return completeCheckoutForUser(
+                userId,
+                orderId,
+                birthDate,
+                couponCode,
+                paymentDetails
+        );
     }
 
     @Transactional(noRollbackFor = {
@@ -457,19 +477,43 @@ public class PurchasingService {
             FailedPaymentException.class,
             FailedToIssueTicketsException.class
     })
-    public CheckoutCompletedDTO completeCheckoutForGuest(String token, UUID orderId, LocalDate birthDate, String couponCode) {
+    public CheckoutCompletedDTO completeCheckoutForGuest(
+            String token,
+            UUID orderId,
+            LocalDate birthDate,
+            String couponCode,
+            PaymentDetailsDTO paymentDetails
+    ) {
         requireOrderId(orderId);
         requireBirthDate(birthDate);
+
         UUID userId = requireValidUser(token);
+
         if (!auth.isGuest(token)) {
             throw new IllegalStateException("Only guests can use this method");
         }
-        return completeCheckoutForUser(token, userId, orderId, birthDate, couponCode);
+
+        return completeCheckoutForUser(
+                userId,
+                orderId,
+                birthDate,
+                couponCode,
+                paymentDetails
+        );
     }
 
-    private CheckoutCompletedDTO completeCheckoutForUser(String token, UUID userId, UUID orderId, LocalDate birthDate, String couponCode) {
+    private CheckoutCompletedDTO completeCheckoutForUser(
+            UUID userId,
+            UUID orderId,
+            LocalDate birthDate,
+            String couponCode,
+            PaymentDetailsDTO paymentDetails
+    ) {
         ActiveOrder activeOrder = null;
         PriceBreakdown priceBreakdown = null;
+
+        Integer transactionId = null;
+        String issuedTicketId = null;
 
         boolean paymentSucceeded = false;
         boolean ticketsIssued = false;
@@ -479,27 +523,30 @@ public class PurchasingService {
         try {
             activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
             ensureOrderIsInCheckout(activeOrder);
+
             priceBreakdown = getPriceBreakdown(activeOrder, couponCode, birthDate);
 
-            pay(activeOrder, token, priceBreakdown.total());
+            transactionId = pay(activeOrder, priceBreakdown.total(), paymentDetails);
             paymentSucceeded = true;
 
-            issueTickets(activeOrder);
+            issuedTicketId = issueTickets(activeOrder);
             ticketsIssued = true;
 
-            purchasingDomainService.finalizeCheckout(activeOrder, priceBreakdown);
+            purchasingDomainService.finalizeCheckout(activeOrder, transactionId, issuedTicketId,priceBreakdown);
             finalizeDone = true;
 
             ConfirmationReceipt receipt = confirmCheckout(activeOrder);
             confirmed = true;
 
             AUDIT.info(
-                    "op=completeCheckout order={} user={} event={} area={} qty={} result=ok",
+                    "op=completeCheckout order={} user={} event={} area={} qty={} transactionId={} ticketId={} result=ok",
                     activeOrder.getOrderId(),
                     userId,
                     activeOrder.getEventId(),
                     receipt.areaId(),
-                    receipt.quantity()
+                    receipt.quantity(),
+                    transactionId,
+                    issuedTicketId
             );
 
             sendNotificationsAfterSuccessfulCheckout(activeOrder, receipt, priceBreakdown);
@@ -511,12 +558,12 @@ public class PurchasingService {
                     receipt.quantity(),
                     MoneyDTO.from(priceBreakdown.total())
             );
-            
+
         } catch (RuntimeException e) {
             compensateCheckoutFailure(
-                    token,
                     activeOrder,
-                    priceBreakdown,
+                    transactionId,
+                    issuedTicketId,
                     paymentSucceeded,
                     ticketsIssued,
                     finalizeDone,
@@ -528,6 +575,7 @@ public class PurchasingService {
                     orderId,
                     e.getMessage()
             );
+
             throw e;
         }
     }
@@ -594,38 +642,78 @@ public class PurchasingService {
     }
 
     private void compensateCheckoutFailure(
-            String token,
             ActiveOrder activeOrder,
-            PriceBreakdown priceBreakdown,
+            Integer transactionId,
+            String issuedTicketId,
             boolean paymentSucceeded,
             boolean ticketsIssued,
             boolean finalizeDone,
-            boolean confirmed) {
+            boolean confirmed
+    ) {
         if (activeOrder == null) {
             return;
         }
 
-        if (paymentSucceeded) {
-            paymentGateway.refundPayment(token, priceBreakdown.total());
-            AUDIT.info("op=refundPayment order={} user={} event={} result=ok",
-                    activeOrder.getOrderId(), activeOrder.getUserId(), activeOrder.getEventId());
+        if (paymentSucceeded && transactionId != null) {
+            try {
+                paymentGateway.refundPayment(transactionId);
+
+                AUDIT.info(
+                        "op=refundPayment order={} user={} event={} transactionId={} result=ok",
+                        activeOrder.getOrderId(),
+                        activeOrder.getUserId(),
+                        activeOrder.getEventId(),
+                        transactionId
+                );
+            } catch (RuntimeException refundError) {
+                AUDIT.warn(
+                        "op=refundPayment order={} user={} event={} transactionId={} result=failed reason={}",
+                        activeOrder.getOrderId(),
+                        activeOrder.getUserId(),
+                        activeOrder.getEventId(),
+                        transactionId,
+                        refundError.getMessage()
+                );
+            }
         }
 
-        if (ticketsIssued) {
-            ticketProvider.cancelTickets(activeOrder.getEventId(), activeOrder.getAreaId(), activeOrder.getOrderSeats());
-            AUDIT.info("op=revokeTickets order={} user={} event={} result=ok",
-                    activeOrder.getOrderId(), activeOrder.getUserId(), activeOrder.getEventId());
+        if (ticketsIssued && issuedTicketId != null) {
+            try {
+                ticketProvider.cancelTicket(issuedTicketId);
+                AUDIT.info(
+                    "op=revokeTickets order={} user={} event={} ticketId={} result=ok",
+                    activeOrder.getOrderId(),
+                    activeOrder.getUserId(),
+                    activeOrder.getEventId(),
+                    issuedTicketId
+                );
+            } catch (RuntimeException cancelTicketError) {
+                AUDIT.warn(
+                            "op=cancelTicket order={} user={} event={} ticketId={} result=failed reason={}",
+                            activeOrder.getOrderId(),
+                            activeOrder.getUserId(),
+                            activeOrder.getEventId(),
+                            issuedTicketId,
+                            cancelTicketError.getMessage()
+                    );
+                }
         }
-
         boolean shouldReleaseHold = finalizeDone;
         shouldReleaseHold &= paymentSucceeded;
         shouldReleaseHold &= ticketsIssued;
         shouldReleaseHold &= !confirmed;
+
         if (shouldReleaseHold) {
             releaseHold(activeOrder);
-            AUDIT.info("op=releaseSeats order={} user={} event={} result=ok",
-                    activeOrder.getOrderId(), activeOrder.getUserId(), activeOrder.getEventId());
+
+            AUDIT.info(
+                    "op=releaseSeats order={} user={} event={} result=ok",
+                    activeOrder.getOrderId(),
+                    activeOrder.getUserId(),
+                    activeOrder.getEventId()
+            );
         }
+    
     }
 
     private UUID requireValidUser(String token) {
@@ -646,30 +734,62 @@ public class PurchasingService {
         }
     }
 
-    private void issueTickets(ActiveOrder activeOrder) {
+    private String issueTickets(ActiveOrder activeOrder) {
         if (activeOrder == null) {
             throw new IllegalArgumentException("Active order cannot be null");
         }
 
-        Response<Boolean> allIssued = ticketProvider.issueTickets(
-                activeOrder.getEventId(),
-                activeOrder.getAreaId(),
-                activeOrder.getOrderSeats()
-        );
-        if (!allIssued.isSuccessful()) {
-            throw new FailedToIssueTicketsException("Failed to issue all tickets: " + allIssued.getErrorMessage());
+        String areaName = eventDomainService.getAreaName(activeOrder.getEventId(), activeOrder.getAreaId());
+
+        if (eventDomainService.isStandingArea(activeOrder.getEventId(), activeOrder.getAreaId())) {
+            return ticketProvider.issueStandingTicket(
+                    activeOrder.getUserId(),
+                    activeOrder.getEventId(),
+                    areaName,
+                    activeOrder.getOrderSeats()
+            );
         }
+
+        Set<UUID> orderedSeatIds = activeOrder.getOrderSeats();
+
+        List<SeatTicketRequestDTO> seatTickets =
+                eventDomainService.areaSeats(activeOrder.getEventId(), activeOrder.getAreaId())
+                        .stream()
+                        .filter(seatView -> orderedSeatIds.contains(seatView.seatId()))
+                        .map(SeatTicketRequestDTO::fromSeatView)
+                        .collect(Collectors.toList());
+
+        return ticketProvider.issueSeatingTicket(
+                activeOrder.getUserId(),
+                activeOrder.getEventId(),
+                areaName,
+                seatTickets
+        );
     }
 
-    private void pay(ActiveOrder activeOrder, String token, Money amount) {
+    private int pay(
+            ActiveOrder activeOrder,
+            Money amount,
+            PaymentDetailsDTO paymentDetails
+    ) {
         if (activeOrder == null) {
             throw new IllegalArgumentException("Active order cannot be null");
         }
 
-        Response<Boolean> payment = paymentGateway.chargePayment(token, amount);
-        if (!payment.isSuccessful()) {
-            throw new FailedPaymentException("Payment failed: " + payment.getErrorMessage());
+        if (amount == null) {
+            throw new IllegalArgumentException("Amount cannot be null");
         }
+
+        if (paymentDetails == null) {
+            throw new IllegalArgumentException("Payment details cannot be null");
+        }
+
+        int transactionId = paymentGateway.chargePayment(
+                MoneyDTO.from(amount),
+                paymentDetails
+        );
+
+        return transactionId;
     }
 
     private ActiveOrderDTO buildActiveOrderView(ActiveOrder activeOrder) {

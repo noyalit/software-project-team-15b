@@ -253,6 +253,14 @@ public class EventDomainServiceImpl implements IEventDomainService {
 
     @Override
     @Transactional(readOnly = true)
+    public String getAreaName(UUID eventId, UUID areaId) {
+        Event event = requireEvent(eventId);
+        EventArea area = requireArea(event, areaId);
+        return area.name();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<UUID> collectAttendeeUserIds(UUID eventId) {
         Objects.requireNonNull(eventId, "eventId");
         return orderHistoryRepository.findByEventIdAndIsCancelledFalse(eventId).stream()
@@ -294,6 +302,15 @@ public class EventDomainServiceImpl implements IEventDomainService {
         if (!(area instanceof StandingEventArea)) {
             throw new InvalidEventStateException("area is not a standing area: " + areaId);
         }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isStandingArea(UUID eventId, UUID areaId) {
+        Objects.requireNonNull(areaId, "areaId");
+        Event event = requireEvent(eventId);
+        EventArea area = requireArea(event, areaId);
+        return area instanceof StandingEventArea;
     }
 
     @Override
