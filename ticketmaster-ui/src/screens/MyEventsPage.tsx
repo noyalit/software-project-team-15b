@@ -51,6 +51,9 @@ export default function MyEventsPage() {
     if (t === 'MAX_TICKETS_PER_ORDER' || anyP?.max != null) {
       return `Max tickets per order: ${anyP?.max}`;
     }
+    if (t === 'MIN_TICKETS_PER_ORDER' || anyP?.min != null) {
+      return `Min tickets per order: ${anyP?.min}`;
+    }
     if (t === 'AGE_RESTRICTION' || anyP?.minAge != null) {
       return `Age restriction: ${anyP?.minAge}+`;
     }
@@ -127,8 +130,11 @@ export default function MyEventsPage() {
 
   const [showSavedPolicies, setShowSavedPolicies] = useState(false);
 
-  const [newPurchaseType, setNewPurchaseType] = useState<'MAX_TICKETS_PER_ORDER' | 'AGE_RESTRICTION' | 'NO_LONELY_SEAT'>('MAX_TICKETS_PER_ORDER');
+  const [newPurchaseType, setNewPurchaseType] = useState<
+    'MAX_TICKETS_PER_ORDER' | 'MIN_TICKETS_PER_ORDER' | 'AGE_RESTRICTION' | 'NO_LONELY_SEAT'
+  >('MAX_TICKETS_PER_ORDER');
   const [newMaxTickets, setNewMaxTickets] = useState('4');
+  const [newMinTickets, setNewMinTickets] = useState('1');
   const [newMinAge, setNewMinAge] = useState('18');
 
   const [newDiscountType, setNewDiscountType] = useState<'COUPON' | 'EARLY_BIRD'>('COUPON');
@@ -1206,6 +1212,7 @@ export default function MyEventsPage() {
                               className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                             >
                               <option value="MAX_TICKETS_PER_ORDER">Max tickets per order</option>
+                              <option value="MIN_TICKETS_PER_ORDER">Min tickets per order</option>
                               <option value="AGE_RESTRICTION">Age restriction</option>
                               <option value="NO_LONELY_SEAT">No lonely seat</option>
                             </select>
@@ -1215,6 +1222,15 @@ export default function MyEventsPage() {
                                 value={newMaxTickets}
                                 onChange={(e) => setNewMaxTickets(e.target.value)}
                                 placeholder="Max"
+                                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                              />
+                            )}
+
+                            {newPurchaseType === 'MIN_TICKETS_PER_ORDER' && (
+                              <input
+                                value={newMinTickets}
+                                onChange={(e) => setNewMinTickets(e.target.value)}
+                                placeholder="Min"
                                 className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                               />
                             )}
@@ -1237,6 +1253,14 @@ export default function MyEventsPage() {
                                   if (!Number.isFinite(max) || max < 1) return;
                                   setPurchasePoliciesDirty(true);
                                   setPurchasePoliciesDraft([...base, { type: 'MAX_TICKETS_PER_ORDER', max }]);
+                                  return;
+                                }
+
+                                if (newPurchaseType === 'MIN_TICKETS_PER_ORDER') {
+                                  const min = Number(newMinTickets);
+                                  if (!Number.isFinite(min) || min < 1) return;
+                                  setPurchasePoliciesDirty(true);
+                                  setPurchasePoliciesDraft([...base, { type: 'MIN_TICKETS_PER_ORDER', min }]);
                                   return;
                                 }
 
@@ -1271,6 +1295,14 @@ export default function MyEventsPage() {
                                     policies = [{ type: 'MAX_TICKETS_PER_ORDER', max }];
                                   } else {
                                     setPolicyErrorMessage('Please enter a valid max tickets value.');
+                                    return;
+                                  }
+                                } else if (newPurchaseType === 'MIN_TICKETS_PER_ORDER') {
+                                  const min = Number(newMinTickets);
+                                  if (Number.isFinite(min) && min >= 1) {
+                                    policies = [{ type: 'MIN_TICKETS_PER_ORDER', min }];
+                                  } else {
+                                    setPolicyErrorMessage('Please enter a valid min tickets value.');
                                     return;
                                   }
                                 } else if (newPurchaseType === 'AGE_RESTRICTION') {
