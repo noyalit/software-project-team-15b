@@ -110,6 +110,16 @@ public class PurchasingDomainService {
         return activeOrder;
     }
 
+    public ActiveOrder getOwnedOrderForView(UUID userId, UUID orderId) {
+        if (orderId == null) {
+            throw new IllegalArgumentException("Order ID cannot be null");
+        }
+        ActiveOrder activeOrder = activeOrderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Active order not found: " + orderId));
+        requireOrderOwnership(activeOrder, userId);
+        return activeOrder;
+    }
+
     public ActiveOrder getOwnedActiveOrderForUpdate(UUID userId, UUID orderId) {
         ActiveOrder activeOrder = getOwnedOrderForUpdate(userId, orderId);
         validateOrderIsActive(activeOrder);

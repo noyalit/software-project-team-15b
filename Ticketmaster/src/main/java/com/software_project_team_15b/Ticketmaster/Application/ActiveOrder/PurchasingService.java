@@ -310,15 +310,14 @@ public class PurchasingService {
         }
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public ActiveOrderDTO getActiveOrder(String token, UUID orderId) {
         try {
             requireOrderId(orderId);
             UUID userId = requireValidUser(token);
-            ActiveOrder activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
+            ActiveOrder activeOrder = purchasingDomainService.getOwnedOrderForView(userId, orderId);
             ensureOrderIsActive(activeOrder);
             requireAccessForPurchase(token, userId, activeOrder.getEventId());
-            syncOrderSeatsAvailability(activeOrder);
 
             ActiveOrderDTO view = buildActiveOrderView(activeOrder);
 
