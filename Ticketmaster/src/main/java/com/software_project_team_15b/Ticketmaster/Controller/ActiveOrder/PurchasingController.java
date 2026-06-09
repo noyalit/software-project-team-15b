@@ -256,6 +256,11 @@ public class PurchasingController {
         } catch (UnactiveOrderException ex) {
             return conflict(ex);
         } catch (IllegalArgumentException ex) {
+            final String msg = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
+            if (msg.contains("not found")) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(new ApiResponse<>(null, ex.getMessage()));
+            }
             return badRequest(ex);
         } catch (IllegalStateException ex) {
             return conflict(ex);
