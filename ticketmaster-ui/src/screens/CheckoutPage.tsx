@@ -34,6 +34,10 @@ type CheckoutCompletedDTO = {
   orderId?: string;
 };
 
+async function sleep(ms: number) {
+  return new Promise((r) => window.setTimeout(r, ms));
+}
+
 export default function CheckoutPage() {
   const { orderId } = useParams();
   const navigate = useNavigate();
@@ -381,24 +385,44 @@ export default function CheckoutPage() {
     mutationFn: async () => {
       if (!activeOrderId) throw new Error('No active order found');
 
-      const isInCheckout = Boolean(activeOrderQuery.data?.expiresAt);
-      if (!isInCheckout) {
-        if (userType === 'member') {
-          const res = await http.post<ApiResponse<unknown>>(
-            `/api/active-orders/${activeOrderId}/checkout/member/start`
-          );
+      let orderView: ActiveOrderDTO | null = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          const res = await http.get<ApiResponse<ActiveOrderDTO>>(`/api/active-orders/${activeOrderId}`);
           if (res.data.error) throw new Error(res.data.error);
-        } else {
-          const guestBirthDate = localStorage.getItem('guestBirthDate') ?? '';
-          if (!guestBirthDate) throw new Error('Please enter birth date for guest checkout.');
-          const res = await http.post<ApiResponse<unknown>>(
-            `/api/active-orders/${activeOrderId}/checkout/guest/start`,
-            { birthDate: guestBirthDate }
-          );
-          if (res.data.error) throw new Error(res.data.error);
+          orderView = res.data.data;
+          break;
+        } catch (e) {
+          const err = e as AxiosError<ApiResponse<unknown>>;
+          if (err.response?.status === 409) {
+            await sleep(Math.min(400 * (attempt + 1), 1200));
+            continue;
+          }
+          throw e;
         }
+      }
 
-        await qc.invalidateQueries({ queryKey: ['active-order', activeOrderId, token] });
+      const isInCheckout = Boolean(orderView?.expiresAt);
+      if (!isInCheckout) {
+        try {
+          if (userType === 'member') {
+            const res = await http.post<ApiResponse<unknown>>(
+              `/api/active-orders/${activeOrderId}/checkout/member/start`
+            );
+            if (res.data.error) throw new Error(res.data.error);
+          } else {
+            const guestBirthDate = localStorage.getItem('guestBirthDate') ?? '';
+            if (!guestBirthDate) throw new Error('Please enter birth date for guest checkout.');
+            const res = await http.post<ApiResponse<unknown>>(
+              `/api/active-orders/${activeOrderId}/checkout/guest/start`,
+              { birthDate: guestBirthDate }
+            );
+            if (res.data.error) throw new Error(res.data.error);
+          }
+        } catch (e) {
+          const err = e as AxiosError<ApiResponse<unknown>>;
+          if (err.response?.status !== 409) throw e;
+        }
       }
 
       if (!cardNumber.trim()) throw new Error('Please enter card number.');
