@@ -156,6 +156,7 @@ export default function CheckoutPage() {
   const [cardHolder, setCardHolder] = useState('');
   const [cardCvv, setCardCvv] = useState('');
   const [cardHolderId, setCardHolderId] = useState('');
+  const [paymentErrors, setPaymentErrors] = useState<Record<string, string>>({});
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -394,6 +395,70 @@ export default function CheckoutPage() {
     mutationFn: async () => {
       if (!activeOrderId) throw new Error('No active order found');
 
+      const nextPaymentErrors: Record<string, string> = {};
+      const cardNumberDigits = cardNumber.replace(/\s+/g, '');
+      if (!cardNumberDigits) {
+        nextPaymentErrors.cardNumber = 'Please enter your card number.';
+      } else if (!/^\d{13,19}$/.test(cardNumberDigits)) {
+        nextPaymentErrors.cardNumber = 'Card number must contain 13-19 digits.';
+      }
+
+      const monthStr = cardMonth.trim();
+      const month = monthStr ? Number(monthStr) : NaN;
+      if (!monthStr) {
+        nextPaymentErrors.cardMonth = 'Please enter the card expiry month.';
+      } else if (!Number.isInteger(month) || month < 1 || month > 12) {
+        nextPaymentErrors.cardMonth = 'Month must be a number between 1 and 12.';
+      }
+
+      const yearStr = cardYear.trim();
+      const normalizedYear = yearStr.length === 2 ? `20${yearStr}` : yearStr;
+      const year = normalizedYear ? Number(normalizedYear) : NaN;
+      if (!yearStr) {
+        nextPaymentErrors.cardYear = 'Please enter the card expiry year.';
+      } else if (!/^\d{2}$/.test(yearStr) && !/^\d{4}$/.test(yearStr)) {
+        nextPaymentErrors.cardYear = 'Year must be 2 digits (YY) or 4 digits (YYYY).';
+      } else if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+        nextPaymentErrors.cardYear = 'Please enter a valid year.';
+      }
+
+      const holder = cardHolder.trim();
+      if (!holder) {
+        nextPaymentErrors.cardHolder = 'Please enter the card holder name.';
+      } else if (holder.length < 2) {
+        nextPaymentErrors.cardHolder = 'Card holder name is too short.';
+      }
+
+      const cvv = cardCvv.trim();
+      if (!cvv) {
+        nextPaymentErrors.cardCvv = 'Please enter the CVV/CVC code.';
+      } else if (!/^\d{3,4}$/.test(cvv)) {
+        nextPaymentErrors.cardCvv = 'CVV must be 3-4 digits.';
+      }
+
+      const id = cardHolderId.trim();
+      if (!id) {
+        nextPaymentErrors.cardHolderId = 'Please enter the ID of the card holder.';
+      } else if (!/^\d{5,20}$/.test(id)) {
+        nextPaymentErrors.cardHolderId = 'ID must contain only digits.';
+      }
+
+      if (!nextPaymentErrors.cardMonth && !nextPaymentErrors.cardYear) {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+        if (Number.isFinite(month) && Number.isFinite(year)) {
+          if (year < currentYear || (year === currentYear && month < currentMonth)) {
+            nextPaymentErrors.cardYear = 'This card appears to be expired.';
+          }
+        }
+      }
+
+      setPaymentErrors(nextPaymentErrors);
+      if (Object.keys(nextPaymentErrors).length > 0) {
+        throw new Error('Please fix the payment details highlighted above.');
+      }
+
       let orderView: ActiveOrderDTO | null = null;
       for (let attempt = 0; attempt < 5; attempt++) {
         try {
@@ -439,20 +504,13 @@ export default function CheckoutPage() {
         }
       }
 
-      if (!cardNumber.trim()) throw new Error('Please enter card number.');
-      if (!cardMonth.trim()) throw new Error('Please enter card month.');
-      if (!cardYear.trim()) throw new Error('Please enter card year.');
-      if (!cardHolder.trim()) throw new Error('Please enter card holder name.');
-      if (!cardCvv.trim()) throw new Error('Please enter CVV.');
-      if (!cardHolderId.trim()) throw new Error('Please enter card holder ID.');
-
       const paymentDetails = {
-        cardNumber: cardNumber.trim(),
-        month: cardMonth.trim(),
-        year: cardYear.trim(),
-        holder: cardHolder.trim(),
-        cvv: cardCvv.trim(),
-        id: cardHolderId.trim(),
+        cardNumber: cardNumberDigits,
+        month: monthStr,
+        year: normalizedYear,
+        holder,
+        cvv,
+        id,
       };
 
       if (userType === 'member') {
@@ -546,65 +604,131 @@ export default function CheckoutPage() {
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-sm font-semibold text-slate-900">Payment details</div>
 
+            {Object.keys(paymentErrors).length > 0 && (
+              <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                Please review the payment details below and fix the highlighted fields.
+              </div>
+            )}
+
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               <label className="block md:col-span-2">
                 <div className="text-xs font-medium text-slate-600">Card number</div>
                 <input
                   value={cardNumber}
-                  onChange={(e) => setCardNumber(e.target.value)}
+                  onChange={(e) => {
+                    setCardNumber(e.target.value);
+                    setPaymentErrors((prev) => {
+                      if (!prev.cardNumber) return prev;
+                      const { cardNumber, ...rest } = prev;
+                      return rest;
+                    });
+                  }}
                   placeholder="1234123412341234"
                   className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                 />
+                {paymentErrors.cardNumber && (
+                  <div className="mt-1 text-xs text-rose-700">{paymentErrors.cardNumber}</div>
+                )}
               </label>
 
               <label className="block">
                 <div className="text-xs font-medium text-slate-600">Month</div>
                 <input
                   value={cardMonth}
-                  onChange={(e) => setCardMonth(e.target.value)}
+                  onChange={(e) => {
+                    setCardMonth(e.target.value);
+                    setPaymentErrors((prev) => {
+                      if (!prev.cardMonth) return prev;
+                      const { cardMonth, ...rest } = prev;
+                      return rest;
+                    });
+                  }}
                   placeholder="MM"
                   className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                 />
+                {paymentErrors.cardMonth && (
+                  <div className="mt-1 text-xs text-rose-700">{paymentErrors.cardMonth}</div>
+                )}
               </label>
 
               <label className="block">
                 <div className="text-xs font-medium text-slate-600">Year</div>
                 <input
                   value={cardYear}
-                  onChange={(e) => setCardYear(e.target.value)}
+                  onChange={(e) => {
+                    setCardYear(e.target.value);
+                    setPaymentErrors((prev) => {
+                      if (!prev.cardYear) return prev;
+                      const { cardYear, ...rest } = prev;
+                      return rest;
+                    });
+                  }}
                   placeholder="YYYY"
                   className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                 />
+                {paymentErrors.cardYear && (
+                  <div className="mt-1 text-xs text-rose-700">{paymentErrors.cardYear}</div>
+                )}
               </label>
 
               <label className="block md:col-span-2">
                 <div className="text-xs font-medium text-slate-600">Card holder</div>
                 <input
                   value={cardHolder}
-                  onChange={(e) => setCardHolder(e.target.value)}
+                  onChange={(e) => {
+                    setCardHolder(e.target.value);
+                    setPaymentErrors((prev) => {
+                      if (!prev.cardHolder) return prev;
+                      const { cardHolder, ...rest } = prev;
+                      return rest;
+                    });
+                  }}
                   placeholder="Full name"
                   className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                 />
+                {paymentErrors.cardHolder && (
+                  <div className="mt-1 text-xs text-rose-700">{paymentErrors.cardHolder}</div>
+                )}
               </label>
 
               <label className="block">
                 <div className="text-xs font-medium text-slate-600">CVV</div>
                 <input
                   value={cardCvv}
-                  onChange={(e) => setCardCvv(e.target.value)}
+                  onChange={(e) => {
+                    setCardCvv(e.target.value);
+                    setPaymentErrors((prev) => {
+                      if (!prev.cardCvv) return prev;
+                      const { cardCvv, ...rest } = prev;
+                      return rest;
+                    });
+                  }}
                   placeholder="123"
                   className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                 />
+                {paymentErrors.cardCvv && (
+                  <div className="mt-1 text-xs text-rose-700">{paymentErrors.cardCvv}</div>
+                )}
               </label>
 
               <label className="block">
                 <div className="text-xs font-medium text-slate-600">ID</div>
                 <input
                   value={cardHolderId}
-                  onChange={(e) => setCardHolderId(e.target.value)}
+                  onChange={(e) => {
+                    setCardHolderId(e.target.value);
+                    setPaymentErrors((prev) => {
+                      if (!prev.cardHolderId) return prev;
+                      const { cardHolderId, ...rest } = prev;
+                      return rest;
+                    });
+                  }}
                   placeholder="ID number"
                   className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                 />
+                {paymentErrors.cardHolderId && (
+                  <div className="mt-1 text-xs text-rose-700">{paymentErrors.cardHolderId}</div>
+                )}
               </label>
             </div>
           </div>
