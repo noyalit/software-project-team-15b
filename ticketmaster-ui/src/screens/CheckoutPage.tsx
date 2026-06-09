@@ -820,11 +820,7 @@ export default function CheckoutPage() {
                 completeCheckoutMutation.mutate();
               }}
               disabled={
-                completeCheckoutMutation.isPending ||
-                (activeOrderQuery.isError &&
-                  !getApiErrorMessage(activeOrderQuery.error)
-                    .toLowerCase()
-                    .includes('order is being updated'))
+                completeCheckoutMutation.isPending || !activeOrderQuery.data
               }
               className="mt-4 inline-flex rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
             >
