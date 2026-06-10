@@ -51,7 +51,7 @@ public class SystemAdminInitializer {
                 : DEFAULT_ADMIN_USERNAME;
                 
         String targetPassword = hasConfiguredPassword 
-                ? configuredPassword 
+                ? configuredPassword.trim() 
                 : DEFAULT_ADMIN_PASSWORD;
 
         // 3. Unconditionally wipe the repository atomically.
