@@ -11,10 +11,10 @@ function formatTime(iso: string) {
   return d.toLocaleString();
 }
 
-const uuidRegex = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+const uuidRegex = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
 
 function extractUuids(text: string) {
-  const m = text.match(uuidRegex);
+  const m = text.match(new RegExp(uuidRegex.source, 'gi'));
   return m ? Array.from(new Set(m.map((x) => x.toLowerCase()))) : [];
 }
 
@@ -59,7 +59,7 @@ export default function NotificationsPage() {
   const companyNameMap = companyNamesQuery.data ?? {};
 
   const displayText = (text: string) => {
-    return text.replace(uuidRegex, (m) => companyNameMap[m.toLowerCase()] ?? m);
+    return text.replace(new RegExp(uuidRegex.source, 'gi'), (m) => companyNameMap[m.toLowerCase()] ?? m);
   };
 
   return (
