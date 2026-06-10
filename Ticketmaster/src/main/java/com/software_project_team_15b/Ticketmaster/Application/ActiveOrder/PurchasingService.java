@@ -565,7 +565,6 @@ public class PurchasingService {
                     activeOrder,
                     transactionId,
                     issuedTicketId,
-                    paymentSucceeded,
                     ticketsIssued,
                     finalizeDone,
                     confirmed
@@ -646,7 +645,6 @@ public class PurchasingService {
             ActiveOrder activeOrder,
             Integer transactionId,
             String issuedTicketId,
-            boolean paymentSucceeded,
             boolean ticketsIssued,
             boolean finalizeDone,
             boolean confirmed
@@ -655,7 +653,7 @@ public class PurchasingService {
             return;
         }
 
-        if (paymentSucceeded && transactionId != null) {
+        if (transactionId != null) {
             try {
                 paymentGateway.refundPayment(transactionId);
 
@@ -700,7 +698,6 @@ public class PurchasingService {
                 }
         }
         boolean shouldReleaseHold = finalizeDone;
-        shouldReleaseHold &= paymentSucceeded;
         shouldReleaseHold &= ticketsIssued;
         shouldReleaseHold &= !confirmed;
 
