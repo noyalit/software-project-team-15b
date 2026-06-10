@@ -743,12 +743,22 @@ public class PurchasingService {
         String areaName = eventDomainService.getAreaName(activeOrder.getEventId(), activeOrder.getAreaId());
 
         if (eventDomainService.isStandingArea(activeOrder.getEventId(), activeOrder.getAreaId())) {
-            return ticketProvider.issueStandingTicket(
-                    activeOrder.getUserId(),
-                    activeOrder.getEventId(),
-                    areaName,
-                    activeOrder.getOrderSeats()
-            );
+            try {
+                return ticketProvider.issueStandingTicket(
+                        activeOrder.getUserId(),
+                        activeOrder.getEventId(),
+                        areaName,
+                        activeOrder.getOrderSeats()
+                );
+            } catch (RuntimeException ex) {
+                if (ex instanceof FailedToIssueTicketsException) {
+                    throw ex;
+                }
+                throw new FailedToIssueTicketsException(
+                        "Failed to issue tickets" + (ex.getMessage() != null ? ": " + ex.getMessage() : ""),
+                        ex
+                );
+            }
         }
 
         Set<UUID> orderedSeatIds = activeOrder.getOrderSeats();
@@ -760,12 +770,22 @@ public class PurchasingService {
                         .map(SeatTicketRequestDTO::fromSeatView)
                         .collect(Collectors.toList());
 
-        return ticketProvider.issueSeatingTicket(
-                activeOrder.getUserId(),
-                activeOrder.getEventId(),
-                areaName,
-                seatTickets
-        );
+        try {
+            return ticketProvider.issueSeatingTicket(
+                    activeOrder.getUserId(),
+                    activeOrder.getEventId(),
+                    areaName,
+                    seatTickets
+            );
+        } catch (RuntimeException ex) {
+            if (ex instanceof FailedToIssueTicketsException) {
+                throw ex;
+            }
+            throw new FailedToIssueTicketsException(
+                    "Failed to issue tickets" + (ex.getMessage() != null ? ": " + ex.getMessage() : ""),
+                    ex
+            );
+        }
     }
 
     private int pay(
