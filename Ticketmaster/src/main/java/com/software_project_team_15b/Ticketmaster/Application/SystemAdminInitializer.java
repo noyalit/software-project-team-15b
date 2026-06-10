@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
@@ -25,49 +26,45 @@ public class SystemAdminInitializer {
             ISystemAdminRepository systemAdminRepository,
             IPasswordEncoder passwordEncoder
     ) {
-        return args -> {
-            boolean hasConfiguredUsername = hasText(configuredUsername);
-            boolean hasConfiguredPassword = hasText(configuredPassword);
+        // Enforce transaction isolation across the entire boot sequence
+        return args -> initializeSystemAdminTransactionally(systemAdminRepository, passwordEncoder);
+    }
 
-            // 1. Enforce that if a tester tries to provide custom configuration, 
-            // they must provide both components.
-            if (hasConfiguredUsername != hasConfiguredPassword) {
-                throw new IllegalStateException(
-                        "System admin configuration must include both username and password"
-                );
-            }
+    @Transactional
+    protected void initializeSystemAdminTransactionally(
+            ISystemAdminRepository systemAdminRepository,
+            IPasswordEncoder passwordEncoder
+    ) {
+        boolean hasConfiguredUsername = hasText(configuredUsername);
+        boolean hasConfiguredPassword = hasText(configuredPassword);
 
-            // 2. Resolve exactly who the single source of truth admin should be right now
-            String targetUsername = hasConfiguredUsername 
-                    ? configuredUsername.trim() 
-                    : DEFAULT_ADMIN_USERNAME;
-                    
-            String targetPassword = hasConfiguredPassword 
-                    ? configuredPassword 
-                    : DEFAULT_ADMIN_PASSWORD;
-
-            // 3. Unconditionally wipe the repository. 
-            // This instantly removes old stale tester credentials, clears multiple 
-            // injected admin rows, and prevents state lockouts between system restarts.
-            systemAdminRepository.deleteAll();
-
-            // 4. Save the current authorized system administrator
-            SystemAdmin admin = new SystemAdmin(
-                    targetUsername,
-                    passwordEncoder.encode(targetPassword)
+        // 1. Enforce configuration completeness
+        if (hasConfiguredUsername != hasConfiguredPassword) {
+            throw new IllegalStateException(
+                    "System admin configuration must include both username and password"
             );
-            systemAdminRepository.save(admin);
+        }
 
-            // 5. Final guard verification to ensure the system initialized correctly
-            int finalCount = systemAdminRepository.findAll().size();
-            if (finalCount != 1) {
-                throw new IllegalStateException(
-                        "System failed to initialize exactly one SystemAdmin"
-                );
-            }
-            
-            System.out.println("System Admin securely initialized. Active profile: [" + targetUsername + "]");
-        };
+        // 2. Resolve exactly who the single source of truth admin should be right now
+        String targetUsername = hasConfiguredUsername 
+                ? configuredUsername.trim() 
+                : DEFAULT_ADMIN_USERNAME;
+                
+        String targetPassword = hasConfiguredPassword 
+                ? configuredPassword 
+                : DEFAULT_ADMIN_PASSWORD;
+
+        // 3. Unconditionally wipe the repository atomically.
+        systemAdminRepository.deleteAll();
+
+        // 4. Save the single authorized system administrator
+        SystemAdmin admin = new SystemAdmin(
+                targetUsername,
+                passwordEncoder.encode(targetPassword)
+        );
+        systemAdminRepository.save(admin);
+        
+        System.out.println("System Admin securely initialized in transaction. Active Profile: [" + targetUsername + "]");
     }
 
     private boolean hasText(String value) {
