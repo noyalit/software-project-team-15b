@@ -714,6 +714,18 @@ public class PurchasingService {
     
     }
 
+    private void compensateCheckoutFailure(
+            ActiveOrder activeOrder,
+            Integer transactionId,
+            String issuedTicketId,
+            boolean paymentSucceeded,
+            boolean ticketsIssued,
+            boolean finalizeDone,
+            boolean confirmed
+    ) {
+        compensateCheckoutFailure(activeOrder, transactionId, issuedTicketId, ticketsIssued, finalizeDone, confirmed);
+    }
+
     private UUID requireValidUser(String token) {
         requireToken(token);
         if (!auth.isTokenValid(token)) {
