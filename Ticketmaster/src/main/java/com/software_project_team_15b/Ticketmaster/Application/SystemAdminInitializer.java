@@ -4,7 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
@@ -24,47 +24,38 @@ public class SystemAdminInitializer {
     @Bean
     public ApplicationRunner ensureExactlyOneSystemAdmin(
             ISystemAdminRepository systemAdminRepository,
-            IPasswordEncoder passwordEncoder
+            IPasswordEncoder passwordEncoder,
+            TransactionTemplate transactionTemplate
     ) {
-        // Enforce transaction isolation across the entire boot sequence
-        return args -> initializeSystemAdminTransactionally(systemAdminRepository, passwordEncoder);
-    }
+        return args -> transactionTemplate.executeWithoutResult(status -> {
+            boolean hasConfiguredUsername = hasText(configuredUsername);
+            boolean hasConfiguredPassword = hasText(configuredPassword);
 
-    @Transactional
-    protected void initializeSystemAdminTransactionally(
-            ISystemAdminRepository systemAdminRepository,
-            IPasswordEncoder passwordEncoder
-    ) {
-        boolean hasConfiguredUsername = hasText(configuredUsername);
-        boolean hasConfiguredPassword = hasText(configuredPassword);
+            if (hasConfiguredUsername != hasConfiguredPassword) {
+                throw new IllegalStateException(
+                        "System admin configuration must include both username and password"
+                );
+            }
 
-        // 1. Enforce configuration completeness
-        if (hasConfiguredUsername != hasConfiguredPassword) {
-            throw new IllegalStateException(
-                    "System admin configuration must include both username and password"
+            String username = hasConfiguredUsername
+                    ? configuredUsername.trim()
+                    : DEFAULT_ADMIN_USERNAME;
+
+            String password = hasConfiguredPassword
+                    ? configuredPassword.trim()
+                    : DEFAULT_ADMIN_PASSWORD;
+
+            systemAdminRepository.deleteAll();
+
+            SystemAdmin admin = new SystemAdmin(
+                    username,
+                    passwordEncoder.encode(password)
             );
-        }
 
-        // 2. Resolve exactly who the single source of truth admin should be right now
-        String targetUsername = hasConfiguredUsername 
-                ? configuredUsername.trim() 
-                : DEFAULT_ADMIN_USERNAME;
-                
-        String targetPassword = hasConfiguredPassword 
-                ? configuredPassword.trim() 
-                : DEFAULT_ADMIN_PASSWORD;
+            systemAdminRepository.save(admin);
 
-        // 3. Unconditionally wipe the repository atomically.
-        systemAdminRepository.deleteAll();
-
-        // 4. Save the single authorized system administrator
-        SystemAdmin admin = new SystemAdmin(
-                targetUsername,
-                passwordEncoder.encode(targetPassword)
-        );
-        systemAdminRepository.save(admin);
-        
-        System.out.println("System Admin securely initialized in transaction. Active Profile: [" + targetUsername + "]");
+            System.out.println("System Admin initialized. Active username: [" + username + "]");
+        });
     }
 
     private boolean hasText(String value) {
