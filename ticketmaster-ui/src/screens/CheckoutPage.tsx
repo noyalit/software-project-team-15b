@@ -474,6 +474,13 @@ export default function CheckoutPage() {
             throw new Error('Active order was not found. Please start a new order.');
           }
           if (err.response?.status === 409) {
+            if (attempt === 4) {
+              const serverError = err.response?.data && typeof err.response.data === 'object' ? (err.response.data as any).error : null;
+              if (typeof serverError === 'string' && serverError.trim()) {
+                throw new Error(serverError);
+              }
+              throw e;
+            }
             await sleep(Math.min(400 * (attempt + 1), 1200));
             continue;
           }
@@ -481,9 +488,7 @@ export default function CheckoutPage() {
         }
       }
 
-      if (!orderView) {
-        throw new Error('Checkout is temporarily unavailable. Please try again in a moment.');
-      }
+      if (!orderView) throw new Error('Checkout is temporarily unavailable. Please try again in a moment.');
 
       const isInCheckout = Boolean(orderView?.expiresAt);
       if (!isInCheckout) {
