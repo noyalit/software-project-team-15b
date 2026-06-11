@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.RemoveOrAddSeatsFromActiveOrderCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.ActiveOrderNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
@@ -315,7 +316,16 @@ public class PurchasingService {
         try {
             requireOrderId(orderId);
             UUID userId = requireValidUser(token);
-            ActiveOrder activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
+            ActiveOrder activeOrder;
+            try {
+                activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
+            } catch (IllegalArgumentException ex) {
+                String msg = ex.getMessage();
+                if (msg != null && msg.startsWith("Active order not found")) {
+                    throw new ActiveOrderNotFoundException(msg);
+                }
+                throw ex;
+            }
             ensureOrderIsActive(activeOrder);
             requireAccessForPurchase(token, userId, activeOrder.getEventId());
 

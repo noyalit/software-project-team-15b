@@ -2,6 +2,7 @@ package com.software_project_team_15b.Ticketmaster.Controller.ActiveOrder;
 
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.RemoveOrAddSeatsFromActiveOrderCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.ActiveOrderNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.PurchasingService;
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
 import com.software_project_team_15b.Ticketmaster.DTO.ActiveOrderDTO;
@@ -255,12 +256,10 @@ public class PurchasingController {
             return conflict(ex);
         } catch (UnactiveOrderException ex) {
             return conflict(ex);
+        } catch (ActiveOrderNotFoundException ex) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ApiResponse<>(null, ex.getMessage()));
         } catch (IllegalArgumentException ex) {
-            final String msg = ex.getMessage() == null ? "" : ex.getMessage().toLowerCase();
-            if (msg.contains("not found")) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(new ApiResponse<>(null, ex.getMessage()));
-            }
             return badRequest(ex);
         } catch (IllegalStateException ex) {
             return conflict(ex);
