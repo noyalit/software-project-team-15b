@@ -60,6 +60,9 @@ export default function EventDetailsPage() {
     if (t === 'MAX_TICKETS_PER_ORDER' || anyP?.max != null) {
       return `Max tickets per order: ${anyP?.max}`;
     }
+    if (t === 'MIN_TICKETS_PER_ORDER' || anyP?.min != null) {
+      return `Min tickets per order: ${anyP?.min}`;
+    }
     if (t === 'AGE_RESTRICTION' || anyP?.minAge != null) {
       return `Age restriction: ${anyP?.minAge}+`;
     }

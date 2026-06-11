@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.software_project_team_15b.Ticketmaster.Application.ActiveOrder.Commands.RemoveOrAddSeatsFromActiveOrderCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.HoldCommand;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.ActiveOrderNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.IPaymentAPI;
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
@@ -46,6 +47,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.EventDomainServiceImpl;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
@@ -315,9 +317,19 @@ public class PurchasingService {
         try {
             requireOrderId(orderId);
             UUID userId = requireValidUser(token);
-            ActiveOrder activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
+            ActiveOrder activeOrder;
+            try {
+                activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
+            } catch (IllegalArgumentException ex) {
+                String msg = ex.getMessage();
+                if (msg != null && msg.startsWith("Active order not found")) {
+                    throw new ActiveOrderNotFoundException(msg);
+                }
+                throw ex;
+            }
             ensureOrderIsActive(activeOrder);
             requireAccessForPurchase(token, userId, activeOrder.getEventId());
+
             syncOrderSeatsAvailability(activeOrder);
 
             ActiveOrderDTO view = buildActiveOrderView(activeOrder);
@@ -564,7 +576,6 @@ public class PurchasingService {
                     activeOrder,
                     transactionId,
                     issuedTicketId,
-                    paymentSucceeded,
                     ticketsIssued,
                     finalizeDone,
                     confirmed
@@ -645,6 +656,25 @@ public class PurchasingService {
             ActiveOrder activeOrder,
             Integer transactionId,
             String issuedTicketId,
+            boolean ticketsIssued,
+            boolean finalizeDone,
+            boolean confirmed
+    ) {
+        compensateCheckoutFailure(
+                activeOrder,
+                transactionId,
+                issuedTicketId,
+                transactionId != null,
+                ticketsIssued,
+                finalizeDone,
+                confirmed
+        );
+    }
+
+    private void compensateCheckoutFailure(
+            ActiveOrder activeOrder,
+            Integer transactionId,
+            String issuedTicketId,
             boolean paymentSucceeded,
             boolean ticketsIssued,
             boolean finalizeDone,
@@ -681,23 +711,24 @@ public class PurchasingService {
             try {
                 ticketProvider.cancelTicket(issuedTicketId);
                 AUDIT.info(
-                    "op=revokeTickets order={} user={} event={} ticketId={} result=ok",
-                    activeOrder.getOrderId(),
-                    activeOrder.getUserId(),
-                    activeOrder.getEventId(),
-                    issuedTicketId
+                        "op=revokeTickets order={} user={} event={} ticketId={} result=ok",
+                        activeOrder.getOrderId(),
+                        activeOrder.getUserId(),
+                        activeOrder.getEventId(),
+                        issuedTicketId
                 );
             } catch (RuntimeException cancelTicketError) {
                 AUDIT.warn(
-                            "op=cancelTicket order={} user={} event={} ticketId={} result=failed reason={}",
-                            activeOrder.getOrderId(),
-                            activeOrder.getUserId(),
-                            activeOrder.getEventId(),
-                            issuedTicketId,
-                            cancelTicketError.getMessage()
-                    );
-                }
+                        "op=cancelTicket order={} user={} event={} ticketId={} result=failed reason={}",
+                        activeOrder.getOrderId(),
+                        activeOrder.getUserId(),
+                        activeOrder.getEventId(),
+                        issuedTicketId,
+                        cancelTicketError.getMessage()
+                );
+            }
         }
+
         boolean shouldReleaseHold = finalizeDone;
         shouldReleaseHold &= paymentSucceeded;
         shouldReleaseHold &= ticketsIssued;
@@ -713,7 +744,6 @@ public class PurchasingService {
                     activeOrder.getEventId()
             );
         }
-    
     }
 
     private UUID requireValidUser(String token) {
@@ -742,12 +772,22 @@ public class PurchasingService {
         String areaName = eventDomainService.getAreaName(activeOrder.getEventId(), activeOrder.getAreaId());
 
         if (eventDomainService.isStandingArea(activeOrder.getEventId(), activeOrder.getAreaId())) {
-            return ticketProvider.issueStandingTicket(
-                    activeOrder.getUserId(),
-                    activeOrder.getEventId(),
-                    areaName,
-                    activeOrder.getOrderSeats()
-            );
+            try {
+                return ticketProvider.issueStandingTicket(
+                        activeOrder.getUserId(),
+                        activeOrder.getEventId(),
+                        areaName,
+                        activeOrder.getOrderSeats()
+                );
+            } catch (RuntimeException ex) {
+                if (ex instanceof FailedToIssueTicketsException) {
+                    throw ex;
+                }
+                throw new FailedToIssueTicketsException(
+                        "Failed to issue tickets" + (ex.getMessage() != null ? ": " + ex.getMessage() : ""),
+                        ex
+                );
+            }
         }
 
         Set<UUID> orderedSeatIds = activeOrder.getOrderSeats();
@@ -759,12 +799,22 @@ public class PurchasingService {
                         .map(SeatTicketRequestDTO::fromSeatView)
                         .collect(Collectors.toList());
 
-        return ticketProvider.issueSeatingTicket(
-                activeOrder.getUserId(),
-                activeOrder.getEventId(),
-                areaName,
-                seatTickets
-        );
+        try {
+            return ticketProvider.issueSeatingTicket(
+                    activeOrder.getUserId(),
+                    activeOrder.getEventId(),
+                    areaName,
+                    seatTickets
+            );
+        } catch (RuntimeException ex) {
+            if (ex instanceof FailedToIssueTicketsException) {
+                throw ex;
+            }
+            throw new FailedToIssueTicketsException(
+                    "Failed to issue tickets" + (ex.getMessage() != null ? ": " + ex.getMessage() : ""),
+                    ex
+            );
+        }
     }
 
     private int pay(
@@ -964,7 +1014,20 @@ public class PurchasingService {
                     );
             Set<UUID> unavailableSeats = seatsAvailability.getOrDefault(false, Set.of());
             if (!unavailableSeats.isEmpty()) {
-                throw new OrderSeatsUnavailableException("Some seats in the order are no longer available");
+                if (eventDomainService instanceof EventDomainServiceImpl impl) {
+                    Map<Boolean, Set<UUID>> checkoutAwareAvailability =
+                            impl.getSeatsAvailability(
+                                    activeOrder.getEventId(),
+                                    activeOrder.getAreaId(),
+                                    activeOrder.getOrderSeats(),
+                                    activeOrder.getOrderId()
+                            );
+                    unavailableSeats = checkoutAwareAvailability.getOrDefault(false, Set.of());
+                }
+
+                if (!unavailableSeats.isEmpty()) {
+                    throw new OrderSeatsUnavailableException("Some seats in the order are no longer available");
+                }
             }
             return false;
         }
@@ -998,22 +1061,20 @@ public class PurchasingService {
             );
         } catch (TimeExpiredException e) {
             if (!queueAccess) {
+                String suffix = ". Please join the queue and wait until admitted.";
                 try {
                     QueueAccessDTO view = queueDomainService.getQueueAccessView(token, eventId);
-                    if (view.status() == com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.WAITING) {
+                    if (view != null && view.status() == com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.WAITING) {
                         Integer position = view.position();
-                        throw new TimeExpiredException(
-                                e.getMessage() + ". Queue is currently active for this event. You are in line" +
-                                        (position != null ? " (position: " + (position + 1) + ")" : "") +
-                                        ". Please wait until you are admitted."
-                        );
+                        if (position != null) {
+                            suffix = ". Please join the queue and wait until admitted (position: " + (position + 1) + ").";
+                        }
                     }
                 } catch (RuntimeException ignored) {
-                    // fall through to default message below
+                    // Keep the generic message.
                 }
-                throw new TimeExpiredException(
-                        e.getMessage() + ". Queue is currently active for this event. Please join the queue and wait until admitted."
-                );
+
+                throw new TimeExpiredException(e.getMessage() + suffix);
             }
             throw e;
         }
