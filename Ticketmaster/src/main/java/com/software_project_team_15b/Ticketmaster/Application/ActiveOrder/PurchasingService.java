@@ -649,11 +649,31 @@ public class PurchasingService {
             boolean finalizeDone,
             boolean confirmed
     ) {
+        compensateCheckoutFailure(
+                activeOrder,
+                transactionId,
+                issuedTicketId,
+                transactionId != null,
+                ticketsIssued,
+                finalizeDone,
+                confirmed
+        );
+    }
+
+    private void compensateCheckoutFailure(
+            ActiveOrder activeOrder,
+            Integer transactionId,
+            String issuedTicketId,
+            boolean paymentSucceeded,
+            boolean ticketsIssued,
+            boolean finalizeDone,
+            boolean confirmed
+    ) {
         if (activeOrder == null) {
             return;
         }
 
-        if (transactionId != null) {
+        if (paymentSucceeded && transactionId != null) {
             try {
                 paymentGateway.refundPayment(transactionId);
 
@@ -680,24 +700,26 @@ public class PurchasingService {
             try {
                 ticketProvider.cancelTicket(issuedTicketId);
                 AUDIT.info(
-                    "op=revokeTickets order={} user={} event={} ticketId={} result=ok",
-                    activeOrder.getOrderId(),
-                    activeOrder.getUserId(),
-                    activeOrder.getEventId(),
-                    issuedTicketId
+                        "op=revokeTickets order={} user={} event={} ticketId={} result=ok",
+                        activeOrder.getOrderId(),
+                        activeOrder.getUserId(),
+                        activeOrder.getEventId(),
+                        issuedTicketId
                 );
             } catch (RuntimeException cancelTicketError) {
                 AUDIT.warn(
-                            "op=cancelTicket order={} user={} event={} ticketId={} result=failed reason={}",
-                            activeOrder.getOrderId(),
-                            activeOrder.getUserId(),
-                            activeOrder.getEventId(),
-                            issuedTicketId,
-                            cancelTicketError.getMessage()
-                    );
-                }
+                        "op=cancelTicket order={} user={} event={} ticketId={} result=failed reason={}",
+                        activeOrder.getOrderId(),
+                        activeOrder.getUserId(),
+                        activeOrder.getEventId(),
+                        issuedTicketId,
+                        cancelTicketError.getMessage()
+                );
+            }
         }
+
         boolean shouldReleaseHold = finalizeDone;
+        shouldReleaseHold &= paymentSucceeded;
         shouldReleaseHold &= ticketsIssued;
         shouldReleaseHold &= !confirmed;
 
@@ -711,19 +733,6 @@ public class PurchasingService {
                     activeOrder.getEventId()
             );
         }
-    
-    }
-
-    private void compensateCheckoutFailure(
-            ActiveOrder activeOrder,
-            Integer transactionId,
-            String issuedTicketId,
-            boolean paymentSucceeded,
-            boolean ticketsIssued,
-            boolean finalizeDone,
-            boolean confirmed
-    ) {
-        compensateCheckoutFailure(activeOrder, transactionId, issuedTicketId, ticketsIssued, finalizeDone, confirmed);
     }
 
     private UUID requireValidUser(String token) {
