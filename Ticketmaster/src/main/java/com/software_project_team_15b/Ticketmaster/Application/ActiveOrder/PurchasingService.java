@@ -47,6 +47,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.TimeExpiredException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.ConfirmationReceipt;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.HoldReceipt;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.EventDomainServiceImpl;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
@@ -1013,7 +1014,20 @@ public class PurchasingService {
                     );
             Set<UUID> unavailableSeats = seatsAvailability.getOrDefault(false, Set.of());
             if (!unavailableSeats.isEmpty()) {
-                throw new OrderSeatsUnavailableException("Some seats in the order are no longer available");
+                if (eventDomainService instanceof EventDomainServiceImpl impl) {
+                    Map<Boolean, Set<UUID>> checkoutAwareAvailability =
+                            impl.getSeatsAvailability(
+                                    activeOrder.getEventId(),
+                                    activeOrder.getAreaId(),
+                                    activeOrder.getOrderSeats(),
+                                    activeOrder.getOrderId()
+                            );
+                    unavailableSeats = checkoutAwareAvailability.getOrDefault(false, Set.of());
+                }
+
+                if (!unavailableSeats.isEmpty()) {
+                    throw new OrderSeatsUnavailableException("Some seats in the order are no longer available");
+                }
             }
             return false;
         }
