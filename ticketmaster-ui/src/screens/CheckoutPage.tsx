@@ -481,6 +481,10 @@ export default function CheckoutPage() {
         }
       }
 
+      if (!orderView) {
+        throw new Error('Checkout is temporarily unavailable. Please try again in a moment.');
+      }
+
       const isInCheckout = Boolean(orderView?.expiresAt);
       if (!isInCheckout) {
         try {
