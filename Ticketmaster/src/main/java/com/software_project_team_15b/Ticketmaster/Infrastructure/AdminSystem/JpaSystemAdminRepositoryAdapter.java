@@ -1,13 +1,14 @@
 package com.software_project_team_15b.Ticketmaster.Infrastructure.AdminSystem;
 
-import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
-import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Repository;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Repository;
+
+import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
+import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 
 @Repository
 @ConditionalOnProperty(name = "app.storage.mode", havingValue = "db")
@@ -42,5 +43,10 @@ public class JpaSystemAdminRepositoryAdapter implements ISystemAdminRepository {
     @Override
     public void deleteById(UUID adminId) {
         springDataRepository.deleteById(adminId);
+    }
+
+    @Override
+    public void deleteAll() {
+        springDataRepository.deleteAll();
     }
 }

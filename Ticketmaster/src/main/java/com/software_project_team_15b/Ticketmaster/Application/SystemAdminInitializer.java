@@ -1,8 +1,10 @@
 package com.software_project_team_15b.Ticketmaster.Application;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
@@ -10,25 +12,53 @@ import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin
 @Configuration
 public class SystemAdminInitializer {
 
+    private static final String DEFAULT_ADMIN_USERNAME = "admin";
+    private static final String DEFAULT_ADMIN_PASSWORD = "Admin123";
+
+    @Value("${ticketmaster.system-admin.username:}")
+    private String configuredUsername;
+
+    @Value("${ticketmaster.system-admin.password:}")
+    private String configuredPassword;
+
     @Bean
-    public ApplicationRunner createDefaultSystemAdmin(
+    public ApplicationRunner ensureExactlyOneSystemAdmin(
             ISystemAdminRepository systemAdminRepository,
-            IPasswordEncoder passwordEncoder
+            IPasswordEncoder passwordEncoder,
+            TransactionTemplate transactionTemplate
     ) {
-        return args -> {
+        return args -> transactionTemplate.executeWithoutResult(status -> {
+            boolean hasConfiguredUsername = hasText(configuredUsername);
+            boolean hasConfiguredPassword = hasText(configuredPassword);
 
-            String username = "admin";
-
-            if (systemAdminRepository.findByUsername(username).isPresent()) {
-                return;
+            if (hasConfiguredUsername != hasConfiguredPassword) {
+                throw new IllegalStateException(
+                        "System admin configuration must include both username and password"
+                );
             }
+
+            String username = hasConfiguredUsername
+                    ? configuredUsername.trim()
+                    : DEFAULT_ADMIN_USERNAME;
+
+            String password = hasConfiguredPassword
+                    ? configuredPassword.trim()
+                    : DEFAULT_ADMIN_PASSWORD;
+
+            systemAdminRepository.deleteAll();
 
             SystemAdmin admin = new SystemAdmin(
                     username,
-                    passwordEncoder.encode("Admin123")
+                    passwordEncoder.encode(password)
             );
 
             systemAdminRepository.save(admin);
-        };
+
+            System.out.println("System Admin initialized. Active username: [" + username + "]");
+        });
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }
