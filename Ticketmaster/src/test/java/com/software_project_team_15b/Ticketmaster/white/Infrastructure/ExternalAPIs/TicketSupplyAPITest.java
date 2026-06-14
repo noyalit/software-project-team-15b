@@ -1,6 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.white.Infrastructure.ExternalAPIs;
 
 import com.software_project_team_15b.Ticketmaster.DTO.SeatTicketRequestDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedToCancelTicketsException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedToIssueTicketsException;
 import com.software_project_team_15b.Ticketmaster.Infrastructure.ExternalAPIs.ExternalApiHttpClient;
 import com.software_project_team_15b.Ticketmaster.Infrastructure.ExternalAPIs.TicketSupplyAPI;
@@ -238,7 +239,7 @@ class TicketSupplyAPITest {
         when(httpClient.postForm(anyMap()))
                 .thenReturn("-1");
 
-        assertThrows(FailedToIssueTicketsException.class, () ->
+        assertThrows(FailedToCancelTicketsException.class, () ->
                 api.cancelTicket("TIX-123")
         );
     }
@@ -250,7 +251,7 @@ class TicketSupplyAPITest {
         when(httpClient.postForm(anyMap()))
                 .thenReturn("not-a-number");
 
-        assertThrows(FailedToIssueTicketsException.class, () ->
+        assertThrows(FailedToCancelTicketsException.class, () ->
                 api.cancelTicket("TIX-123")
         );
     }

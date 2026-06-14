@@ -2,6 +2,7 @@ package com.software_project_team_15b.Ticketmaster.Infrastructure.ExternalAPIs;
 
 import com.software_project_team_15b.Ticketmaster.Application.ExternalAPIs.ITicketSupplyAPI;
 import com.software_project_team_15b.Ticketmaster.DTO.SeatTicketRequestDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedToCancelTicketsException;
 import com.software_project_team_15b.Ticketmaster.Domain.ActiveOrder.exceptions.FailedToIssueTicketsException;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -115,13 +116,13 @@ public class TicketSupplyAPI implements ITicketSupplyAPI {
         try {
             result = Integer.parseInt(response);
         } catch (NumberFormatException e) {
-            throw new FailedToIssueTicketsException(
+            throw new FailedToCancelTicketsException(
                     "Ticket API returned invalid cancel response: " + response
             );
         }
 
         if (result != 1) {
-            throw new FailedToIssueTicketsException(
+            throw new FailedToCancelTicketsException(
                     "External ticket system failed to cancel ticket " + ticketId
             );
         }
