@@ -8,6 +8,7 @@ import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 
 import org.junit.jupiter.api.AfterEach;
@@ -45,6 +46,7 @@ class LotteryServiceWhiteTest {
     @Mock private UserDomainService userDomainService;
     @Mock private IAuth auth;
     @Mock private MemberDTO memberDTO;
+    @Mock private INotifier notifier;
     @InjectMocks private LotteryService service;
 
     private static final UUID EVENT_ID   = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -55,7 +57,7 @@ class LotteryServiceWhiteTest {
 
     @AfterEach
     void verifyNoUnexpectedInteractions() {
-        verifyNoMoreInteractions(lotteryDomainService, userDomainService, auth);
+        verifyNoMoreInteractions(lotteryDomainService, userDomainService, auth, notifier);
     }
 
     // =========================================================================
@@ -114,6 +116,7 @@ class LotteryServiceWhiteTest {
         verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).runEventLottery(EVENT_ID, 2, EXPIRY);
+        verify(notifier).notifyUser(eq(USER_A), any());
     }
 
     @Test
@@ -602,6 +605,7 @@ class LotteryServiceWhiteTest {
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).runEventLottery(EVENT_ID, 1, EXPIRY);
         verify(userDomainService).resolveMemberById(USER_A);
+        verify(notifier).notifyUser(eq(USER_A), any());
     }
 
     @Test
@@ -620,6 +624,7 @@ class LotteryServiceWhiteTest {
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).runEventLottery(EVENT_ID, 1, EXPIRY);
         verify(userDomainService).resolveMemberById(USER_A);
+        verify(notifier).notifyUser(eq(USER_A), any());
     }
 
     // =========================================================================

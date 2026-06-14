@@ -10,6 +10,7 @@ import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +42,7 @@ class LotteryServiceBlackTest {
     @Mock private ILotteryDomainService lotteryDomainService;
     @Mock private UserDomainService userDomainService;
     @Mock private IAuth auth;
+    @Mock private INotifier notifier;
     @InjectMocks private LotteryService service;
 
     private static final UUID EVENT_ID   = UUID.fromString("00000000-0000-0000-0000-000000000001");

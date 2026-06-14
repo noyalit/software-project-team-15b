@@ -1,22 +1,26 @@
 package com.software_project_team_15b.Ticketmaster.Application.Lottery;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
-
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
-import java.time.LocalDateTime;
-import java.util.Objects;
-import java.util.Set;
-import java.util.UUID;
+import com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationType;
 
 /**
  * Application-layer facade over the lottery domain.
@@ -34,11 +38,32 @@ public class LotteryService {
     private final ILotteryDomainService lotteryDomainService;
     private final UserDomainService userDomainService;
     private final IAuth auth;
-
-    public LotteryService(ILotteryDomainService lotteryDomainService, UserDomainService userDomainService,  IAuth auth) {
+    private final INotifier notifier;
+    public LotteryService(ILotteryDomainService lotteryDomainService, UserDomainService userDomainService,  IAuth auth, INotifier notifier) {
         this.lotteryDomainService = Objects.requireNonNull(lotteryDomainService);
         this.userDomainService = Objects.requireNonNull(userDomainService);
         this.auth = Objects.requireNonNull(auth);
+        this.notifier = Objects.requireNonNull(notifier);
+    }
+
+    /**
+     * Backwards-compatible constructor used by tests that don't supply a notifier.
+     * Delegates to the primary constructor with a no-op notifier implementation.
+     */
+    public LotteryService(ILotteryDomainService lotteryDomainService, UserDomainService userDomainService,  IAuth auth) {
+        this(lotteryDomainService, userDomainService, auth, new INotifier() {
+            @Override
+            public void notifyUser(UUID userId, NotificationDTO notification) {}
+
+            @Override
+            public void notifyCompanyManagers(UUID companyId, NotificationDTO notification) {}
+
+            @Override
+            public void notifyEventManagers(UUID eventId, NotificationDTO notification) {}
+
+            @Override
+            public void notifyEventAttendees(UUID eventId, NotificationDTO notification) {}
+        });
     }
 
     /**
@@ -148,6 +173,23 @@ public class LotteryService {
             requireEventPermissions(userId, companyId, eventId);
             Set<UUID> drawn = lotteryDomainService.runEventLottery(eventId, count, expirationTime);
             AUDIT.info("op=runEventLottery eventId={} count={} winnersDrawn={} result=ok", eventId, count, drawn.size());
+
+            // Notify each winner about their win (best-effort; swallow notifier failures)
+            try {
+                for (UUID winner : drawn) {
+                    String title = "You won the lottery";
+                    String message = "You won the lottery for event " + eventId + ". Access expires at " + expirationTime.toString();
+                    NotificationDTO dto = new NotificationDTO(NotificationType.LOTTERY_WON, title, message, Instant.now());
+                    try {
+                        notifier.notifyUser(winner, dto);
+                    } catch (RuntimeException e) {
+                        AUDIT.warn("op=notifyLotteryWinner userId={} eventId={} result=error reason={}", winner, eventId, e.getMessage());
+                    }
+                }
+            } catch (RuntimeException e) {
+                AUDIT.warn("op=notifyLotteryWinners eventId={} result=error reason={}", eventId, e.getMessage());
+            }
+
             return drawn;
         } catch (RuntimeException e) {
             AUDIT.warn("op=runEventLottery eventId={} count={} result=error error={}", eventId, count, e.getMessage());
