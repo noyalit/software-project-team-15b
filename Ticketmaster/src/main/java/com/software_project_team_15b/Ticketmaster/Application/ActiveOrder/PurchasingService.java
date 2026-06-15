@@ -319,7 +319,7 @@ public class PurchasingService {
             UUID userId = requireValidUser(token);
             ActiveOrder activeOrder;
             try {
-                activeOrder = purchasingDomainService.getOwnedOrderForUpdate(userId, orderId);
+                activeOrder = purchasingDomainService.getOwnedOrderForView(userId, orderId);
             } catch (IllegalArgumentException ex) {
                 String msg = ex.getMessage();
                 if (msg != null && msg.startsWith("Active order not found")) {
