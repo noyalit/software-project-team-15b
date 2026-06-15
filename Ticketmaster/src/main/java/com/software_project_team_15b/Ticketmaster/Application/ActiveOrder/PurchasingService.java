@@ -1061,20 +1061,24 @@ public class PurchasingService {
             );
         } catch (TimeExpiredException e) {
             if (!queueAccess) {
-                String suffix = ". Please join the queue and wait until admitted.";
                 try {
                     QueueAccessDTO view = queueDomainService.getQueueAccessView(token, eventId);
                     if (view != null && view.status() == com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus.WAITING) {
+                        String suffix = ". Please join the queue and wait until admitted.";
                         Integer position = view.position();
                         if (position != null) {
                             suffix = ". Please join the queue and wait until admitted (position: " + (position + 1) + ").";
                         }
+                        throw new TimeExpiredException(e.getMessage() + suffix);
+                    }
+                    if (view == null) {
+                        String suffix = ". Please join the queue and wait until admitted.";
+                        throw new TimeExpiredException(e.getMessage() + suffix);
                     }
                 } catch (RuntimeException ignored) {
-                    // Keep the generic message.
+                    String suffix = ". Please join the queue and wait until admitted.";
+                    throw new TimeExpiredException(e.getMessage() + suffix);
                 }
-
-                throw new TimeExpiredException(e.getMessage() + suffix);
             }
             throw e;
         }
