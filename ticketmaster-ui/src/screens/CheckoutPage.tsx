@@ -44,6 +44,10 @@ export default function CheckoutPage() {
   const qc = useQueryClient();
   const { token, userType, clearAuth } = useAuthStore();
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [orderId]);
+
   const isCouponPolicy = (p: DiscountPolicyDTO) => {
     const anyP = p as any;
     const t = (anyP?.type ?? anyP?.policyType ?? anyP?.kind) as string | undefined;
