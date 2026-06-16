@@ -1071,13 +1071,14 @@ public class PurchasingService {
                         }
                         throw new TimeExpiredException(e.getMessage() + suffix);
                     }
-                    if (view == null) {
-                        String suffix = ". Please join the queue and wait until admitted.";
-                        throw new TimeExpiredException(e.getMessage() + suffix);
-                    }
-                } catch (RuntimeException ignored) {
-                    String suffix = ". Please join the queue and wait until admitted.";
-                    throw new TimeExpiredException(e.getMessage() + suffix);
+                } catch (RuntimeException ex) {
+                    AUDIT.warn(
+                            "op=requireAccessForPurchase event={} user={} result=failed_to_fetch_queue_view reason={} ",
+                            eventId,
+                            userId,
+                            ex.getMessage()
+                    );
+                    throw ex;
                 }
             }
             throw e;
