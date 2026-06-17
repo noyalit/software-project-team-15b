@@ -295,6 +295,8 @@ class LotteryServiceWhiteTest {
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
         when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(true);
+        when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(false);
+        when(userDomainService.isActiveCompanyManager(USER_A, COMPANY_ID)).thenReturn(false);
 
         service.createEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID);
 
@@ -312,6 +314,7 @@ class LotteryServiceWhiteTest {
         when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveCompanyManager(USER_A, COMPANY_ID)).thenReturn(false);
         when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(false);
         when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(true);
 
@@ -320,6 +323,7 @@ class LotteryServiceWhiteTest {
         verify(auth).isTokenValid(TOKEN_A);
         verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(userDomainService).isActiveCompanyManager(USER_A, COMPANY_ID);
         verify(userDomainService).isActiveOwner(USER_A, COMPANY_ID);
         verify(userDomainService).isActiveFounder(USER_A, COMPANY_ID);
         verify(lotteryDomainService).createEventLottery(EVENT_ID);
@@ -330,6 +334,7 @@ class LotteryServiceWhiteTest {
         when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveCompanyManager(USER_A, COMPANY_ID)).thenReturn(false);
         when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(false);
         when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(false);
 
@@ -339,6 +344,7 @@ class LotteryServiceWhiteTest {
         verify(auth).isTokenValid(TOKEN_A);
         verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(userDomainService).isActiveCompanyManager(USER_A, COMPANY_ID);
         verify(userDomainService).isActiveOwner(USER_A, COMPANY_ID);
         verify(userDomainService).isActiveFounder(USER_A, COMPANY_ID);
     }
@@ -400,6 +406,7 @@ class LotteryServiceWhiteTest {
         when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveCompanyManager(USER_A, COMPANY_ID)).thenReturn(false);
         when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(false);
         when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(false);
 
@@ -409,6 +416,7 @@ class LotteryServiceWhiteTest {
         verify(auth).isTokenValid(TOKEN_A);
         verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(userDomainService).isActiveCompanyManager(USER_A, COMPANY_ID);
         verify(userDomainService).isActiveOwner(USER_A, COMPANY_ID);
         verify(userDomainService).isActiveFounder(USER_A, COMPANY_ID);
     }
@@ -501,6 +509,7 @@ class LotteryServiceWhiteTest {
         when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveCompanyManager(USER_A, COMPANY_ID)).thenReturn(false);
         when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(false);
         when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(false);
 
@@ -510,6 +519,7 @@ class LotteryServiceWhiteTest {
         verify(auth).isTokenValid(TOKEN_A);
         verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(userDomainService).isActiveCompanyManager(USER_A, COMPANY_ID);
         verify(userDomainService).isActiveOwner(USER_A, COMPANY_ID);
         verify(userDomainService).isActiveFounder(USER_A, COMPANY_ID);
     }
@@ -551,6 +561,7 @@ class LotteryServiceWhiteTest {
         when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(false);
+        when(userDomainService.isActiveCompanyManager(USER_A, COMPANY_ID)).thenReturn(false);
         when(userDomainService.isActiveOwner(USER_A, COMPANY_ID)).thenReturn(false);
         when(userDomainService.isActiveFounder(USER_A, COMPANY_ID)).thenReturn(false);
 
@@ -560,6 +571,7 @@ class LotteryServiceWhiteTest {
         verify(auth).isTokenValid(TOKEN_A);
         verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(userDomainService).isActiveCompanyManager(USER_A, COMPANY_ID);
         verify(userDomainService).isActiveOwner(USER_A, COMPANY_ID);
         verify(userDomainService).isActiveFounder(USER_A, COMPANY_ID);
     }
