@@ -217,6 +217,41 @@ export default function EventDetailsPage() {
     }
   };
 
+  const applyCouponMutation = useMutation({
+    mutationFn: async () => {
+      const code = couponCode.trim();
+      if (!code) throw new Error('Please enter a coupon code.');
+
+      const areaId = selectedAreaId ?? activeOrderQuery.data?.areaId ?? null;
+      if (!areaId) throw new Error('Please select an area first.');
+
+      const orderAreaType = eventQuery.data?.areas?.find((a) => a.areaId === areaId)?.type;
+      const isStanding = orderAreaType === 'STANDING';
+
+      const existingSeatIds = (activeOrderQuery.data?.seatIds ?? []).map(String);
+      const combinedSeatIds = Array.from(new Set([...existingSeatIds, ...selectedSeatIds]));
+      const existingCount =
+        (activeOrderQuery.data?.seats?.length ?? 0) || (activeOrderQuery.data?.seatIds?.length ?? 0);
+
+      const quantity = isStanding
+        ? existingCount + standingQuantity
+        : combinedSeatIds.length;
+
+      if (!quantity || quantity < 1) {
+        throw new Error('Please select seats or quantity first.');
+      }
+
+      await validateEligibility({
+        areaId,
+        quantity,
+        seatIds: isStanding ? [] : combinedSeatIds,
+      });
+    },
+    onSuccess: () => {
+      setSuccessMessage('Coupon applied.');
+    },
+  });
+
   const myActiveOrdersQuery = useQuery({
     queryKey: ['active-orders', 'my', token],
     queryFn: async () => {
@@ -1078,13 +1113,27 @@ export default function EventDetailsPage() {
           {hasActiveCoupon && (
             <label className="mt-4 block">
               <div className="text-sm font-medium text-slate-700">Coupon code</div>
-              <input
-                type="text"
-                value={couponCode}
-                onChange={(e) => setCouponCode(e.target.value)}
-                placeholder="Enter coupon code"
-                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-              />
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  type="text"
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value)}
+                  placeholder="Enter coupon code"
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (applyCouponMutation.isPending) return;
+                    setSuccessMessage(null);
+                    applyCouponMutation.mutate();
+                  }}
+                  disabled={applyCouponMutation.isPending || !couponCode.trim()}
+                  className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  {applyCouponMutation.isPending ? 'Applying…' : 'Apply'}
+                </button>
+              </div>
             </label>
           )}
 
