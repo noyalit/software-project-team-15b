@@ -1,9 +1,9 @@
 package com.software_project_team_15b.Ticketmaster.Application;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Set;
 import java.util.UUID;
-import java.time.LocalDateTime;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,13 +12,12 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.Application.events.TempTokenAcceptedFromQueueEvent;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyRoleTreeDTO;
-import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
-
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.SystemAdmin;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
@@ -341,6 +340,36 @@ public class UserService {
         }
     }
 
+    public MemberDTO changeRoleToCompanyManager(String token, UUID companyId) {
+        try {
+            UUID userId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.changeRoleToCompanyManager(userId, companyId);
+            AUDIT.info(
+                    "op=switch-role userId={} role=CompanyManager companyId={}",
+                    userId,
+                    companyId
+            );
+            notifier.notifyUser(userId,
+                    new NotificationDTO(
+                            NotificationType.PERMISSION_CHANGED,
+                            "Switched to Company Manager Role for Company " + companyId,
+                            "You have been switched to the company manager role for company " + companyId + ". Your permissions have been updated.",
+                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+                    )
+            );
+
+            return userDomainService.toDTO(saved);
+
+        } catch (RuntimeException e) {
+            AUDIT.warn(
+                    "op=switch-role role=CompanyManager companyId={} result=rejected reason={}",
+                    companyId,
+                    e.getMessage()
+            );
+            throw e;
+        }
+    }
+
 
     public MemberDTO changeRoleToOwner(String token, UUID companyId) {
         try {
@@ -415,6 +444,31 @@ public class UserService {
         } catch (RuntimeException e) {
             AUDIT.warn("op=appoint-manager memberId={} companyId={} eventId={} result=rejected reason={}",
                     memberId, companyId, eventId, e.getMessage());
+            throw e;
+        }
+    }
+
+    public MemberDTO appointCompanyManager(UUID memberId, String token, UUID companyId, Set<ManagerPermission> permissions) {
+        try {
+            UUID ownerId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.appointCompanyManager(memberId, ownerId, companyId, permissions);
+            AUDIT.info(
+                    "op=appoint-company-manager appointerId={} memberId={} companyId={} permissions={}",
+                    ownerId, memberId, companyId, permissions);
+            notifier.notifyUser(memberId,
+                    new NotificationDTO(
+                            NotificationType.PERMISSION_CHANGED,
+                            "Appointed as Company Manager",
+                            "You have been appointed as company manager for company " + companyId + ".",
+                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+                    )
+            );
+
+            return userDomainService.toDTO(saved);
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=appoint-company-manager memberId={} companyId={} result=rejected reason={}",
+                    memberId, companyId, e.getMessage());
             throw e;
         }
     }
@@ -495,6 +549,30 @@ public class UserService {
         }
     }
 
+    public MemberDTO removeCompanyManagerAppointment(String token, UUID memberToRemoveId, UUID companyId) {
+        try {
+            UUID removerOwnerId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.removeCompanyManagerAppointment(removerOwnerId, memberToRemoveId, companyId);
+            AUDIT.info("op=remove-company-manager-appointment removerOwnerId={} memberId={} companyId={}",
+                    removerOwnerId, memberToRemoveId, companyId);
+
+            notifier.notifyUser(memberToRemoveId,
+                    new NotificationDTO(
+                            NotificationType.PERMISSION_CHANGED,
+                            "Removed from Company Manager Role",
+                            "You have been removed from the company manager role for company " + companyId + ".",
+                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+                    )
+            );
+            return userDomainService.toDTO(saved);
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=remove-company-manager-appointment memberId={} companyId={} result=rejected reason={}",
+                    memberToRemoveId, companyId, e.getMessage());
+            throw e;
+        }
+    }
+
      public MemberDTO ownerResign(String token, UUID companyId) {
         try {
             UUID ownerId = getAuthenticatedMemberId(token);
@@ -543,6 +621,31 @@ public class UserService {
         }
     }
 
+    public MemberDTO changeCompanyManagerPermissions(String token, UUID companyManagerId, UUID companyId, Set<ManagerPermission> newPermissions) {
+        try {
+            UUID ownerId = getAuthenticatedMemberId(token);
+            Member saved = userDomainService.changeCompanyManagerPermissions(ownerId, companyManagerId, companyId, newPermissions);
+            AUDIT.info("op=change-company-manager-permissions ownerId={} companyManagerId={} companyId={} newPermissions={}",
+                    ownerId, companyManagerId, companyId, newPermissions);
+
+            notifier.notifyUser(companyManagerId,
+                    new NotificationDTO(
+                            NotificationType.PERMISSION_CHANGED,
+                            "Company Manager Permissions Changed",
+                            "Your company manager permissions for company " + companyId + " have been changed to: " + newPermissions,
+                            LocalDateTime.now().toInstant(java.time.ZoneOffset.UTC)
+                    )
+            );
+
+            return userDomainService.toDTO(saved);
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=change-company-manager-permissions companyManagerId={} companyId={} result=rejected reason={}",
+                    companyManagerId, companyId, e.getMessage());
+            throw e;
+        }
+    }
+
      public Set<ManagerPermission> getManagerPermissions(String token, UUID managerId, UUID eventId) {
         try {
             UUID requesterId = getAuthenticatedMemberId(token);
@@ -553,6 +656,22 @@ public class UserService {
         } catch (RuntimeException e) {
             AUDIT.warn("op=get-manager-permissions managerId={} eventId={} result=rejected reason={}",
                     managerId, eventId, e.getMessage());
+            throw e;
+        }
+    }
+
+    public Set<ManagerPermission> getCompanyManagerPermissions(String token, UUID companyManagerId, UUID companyId) {
+        try {
+            UUID requesterId = getAuthenticatedMemberId(token);
+            Set<ManagerPermission> permissions = userDomainService.getCompanyManagerPermissions(requesterId, companyManagerId, companyId);
+            AUDIT.info("op=get-company-manager-permissions requesterId={} companyManagerId={} companyId={}",
+                    requesterId, companyManagerId, companyId);
+
+            return permissions;
+
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=get-company-manager-permissions companyManagerId={} companyId={} result=rejected reason={}",
+                    companyManagerId, companyId, e.getMessage());
             throw e;
         }
     }
