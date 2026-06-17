@@ -49,16 +49,18 @@ export default function CheckoutPage() {
   }, [orderId]);
 
   const isCouponPolicy = (p: DiscountPolicyDTO) => {
-    const anyP = p as any;
+    const raw = p as any;
+    const anyP = raw?.policy && typeof raw.policy === 'object' ? raw.policy : raw;
     const t = (anyP?.type ?? anyP?.policyType ?? anyP?.kind) as string | undefined;
     return t === 'COUPON' || typeof anyP?.code === 'string';
   };
 
   const couponPolicyExpiresAtMs = (p: DiscountPolicyDTO) => {
-    const anyP = p as any;
-    const raw = anyP?.expiresAt;
-    if (typeof raw !== 'string' || !raw) return null;
-    const ms = new Date(raw).getTime();
+    const raw = p as any;
+    const anyP = raw?.policy && typeof raw.policy === 'object' ? raw.policy : raw;
+    const expiresAt = anyP?.expiresAt;
+    if (typeof expiresAt !== 'string' || !expiresAt) return null;
+    const ms = new Date(expiresAt).getTime();
     return Number.isFinite(ms) ? ms : null;
   };
 
@@ -109,32 +111,39 @@ export default function CheckoutPage() {
 
   const describeCompanyDiscountPolicy = (p: any): string => {
     if (!p || typeof p !== 'object') return 'Unknown policy';
-    const cls = String(p['@class'] ?? '');
+    const raw = p;
+    const anyP = raw?.policy && typeof raw.policy === 'object' ? raw.policy : raw;
+    const cls = String(anyP['@class'] ?? '');
 
-    if (p.percent != null && cls.includes('SimpleDiscountPolicy')) {
-      return `Simple discount (${p.percent}%)`;
+    if (typeof anyP.code === 'string' && anyP.code) {
+      const pct = anyP.percentage ?? anyP.percent;
+      return `Coupon ${anyP.code}${pct != null ? ` (${pct}%)` : ''}`;
     }
 
-    if (p.percent != null && cls.includes('ConditionalDiscountPolicy')) {
-      const cond = p.condition;
+    if (anyP.percent != null && cls.includes('SimpleDiscountPolicy')) {
+      return `Simple discount (${anyP.percent}%)`;
+    }
+
+    if (anyP.percent != null && cls.includes('ConditionalDiscountPolicy')) {
+      const cond = anyP.condition;
       if (cond && typeof cond === 'object') {
         const condCls = String(cond['@class'] ?? '');
         if (cond.max != null && condCls.includes('MaxTicketsCondition')) {
-          return `Conditional discount (${p.percent}%) when quantity <= ${cond.max}`;
+          return `Conditional discount (${anyP.percent}%) when quantity <= ${cond.max}`;
         }
         if (cond.min != null && condCls.includes('MinTicketsCondition')) {
-          return `Conditional discount (${p.percent}%) when quantity >= ${cond.min}`;
+          return `Conditional discount (${anyP.percent}%) when quantity >= ${cond.min}`;
         }
         if (condCls.includes('TimeWindowCondition')) {
           const from = cond.from ? new Date(cond.from).toLocaleString() : null;
           const to = cond.to ? new Date(cond.to).toLocaleString() : null;
-          if (from && to) return `Conditional discount (${p.percent}%) between ${from} and ${to}`;
-          if (from) return `Conditional discount (${p.percent}%) from ${from}`;
-          if (to) return `Conditional discount (${p.percent}%) until ${to}`;
-          return `Conditional discount (${p.percent}%)`;
+          if (from && to) return `Conditional discount (${anyP.percent}%) between ${from} and ${to}`;
+          if (from) return `Conditional discount (${anyP.percent}%) from ${from}`;
+          if (to) return `Conditional discount (${anyP.percent}%) until ${to}`;
+          return `Conditional discount (${anyP.percent}%)`;
         }
       }
-      return `Conditional discount (${p.percent}%)`;
+      return `Conditional discount (${anyP.percent}%)`;
     }
 
     if (cls) return cls.split('.').pop() ?? cls;
@@ -312,19 +321,24 @@ export default function CheckoutPage() {
     enabled: Boolean(eventQuery.data?.eventId),
   });
 
-  const hasActiveCoupon = (discountPoliciesQuery.data ?? []).some((p) => {
+  const couponPolicySources = [
+    ...(discountPoliciesQuery.data ?? []),
+    ...(companyDiscountPoliciesQuery.data ?? []),
+  ];
+
+  const hasActiveCoupon = couponPolicySources.some((p) => {
     if (!isCouponPolicy(p)) return false;
     const exp = couponPolicyExpiresAtMs(p);
-    if (exp == null) return false;
+    if (exp == null) return true;
     return exp > nowTick;
   });
 
   const activeCouponCodes = new Set(
-    (discountPoliciesQuery.data ?? [])
+    couponPolicySources
       .filter((p) => {
         if (!isCouponPolicy(p)) return false;
         const exp = couponPolicyExpiresAtMs(p);
-        return exp != null && exp > nowTick;
+        return exp == null || exp > nowTick;
       })
       .map((p) => String((p as any)?.code ?? ''))
       .filter(Boolean)
@@ -334,6 +348,11 @@ export default function CheckoutPage() {
   const shouldShowCouponPolicies = Boolean(enteredCouponCode) && activeCouponCodes.has(enteredCouponCode);
 
   const visibleDiscountPolicies = (discountPoliciesQuery.data ?? []).filter((p) => {
+    if (!isCouponPolicy(p)) return true;
+    return shouldShowCouponPolicies;
+  });
+
+  const visibleCompanyDiscountPolicies = (companyDiscountPoliciesQuery.data ?? []).filter((p) => {
     if (!isCouponPolicy(p)) return true;
     return shouldShowCouponPolicies;
   });
@@ -936,11 +955,11 @@ export default function CheckoutPage() {
                   <div className="mt-1 text-sm text-rose-700">
                     {getApiErrorMessage(companyDiscountPoliciesQuery.error)}
                   </div>
-                ) : (companyDiscountPoliciesQuery.data ?? []).length === 0 ? (
+                ) : visibleCompanyDiscountPolicies.length === 0 ? (
                   <div className="mt-1 text-sm text-slate-600">No company discount policies.</div>
                 ) : (
                   <div className="mt-2 grid gap-1">
-                    {(companyDiscountPoliciesQuery.data ?? []).map((p: any, idx: number) => (
+                    {visibleCompanyDiscountPolicies.map((p: any, idx: number) => (
                       <div key={idx} className="text-sm text-slate-800">
                         {describeCompanyDiscountPolicy(p)}
                       </div>
