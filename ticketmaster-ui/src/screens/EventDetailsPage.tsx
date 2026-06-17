@@ -660,23 +660,6 @@ export default function EventDetailsPage() {
     },
   });
 
-  if (eventQuery.isPending) return <div className="text-slate-600">Loading…</div>;
-
-  if (eventQuery.isError) {
-    return (
-      <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-        {(eventQuery.error as Error).message}
-      </div>
-    );
-  }
-
-  const event = eventQuery.data;
-  const isPastEvent = new Date(event.startsAt).getTime() < Date.now();
-  const areas = event.areas ?? [];
-  const selectedArea = areas.find((area) => area.areaId === selectedAreaId);
-
-  const eligibilityStatus = lotteryEligibilityQuery.data?.status ?? null;
-
   const nowTick = Date.now();
   const couponPolicySources = [
     ...(discountPoliciesQuery.data ?? []),
@@ -694,6 +677,23 @@ export default function EventDetailsPage() {
     if (hasActiveCoupon) return;
     setCouponCode('');
   }, [hasActiveCoupon]);
+
+  if (eventQuery.isPending) return <div className="text-slate-600">Loading…</div>;
+
+  if (eventQuery.isError) {
+    return (
+      <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+        {(eventQuery.error as Error).message}
+      </div>
+    );
+  }
+
+  const event = eventQuery.data;
+  const isPastEvent = new Date(event.startsAt).getTime() < Date.now();
+  const areas = event.areas ?? [];
+  const selectedArea = areas.find((area) => area.areaId === selectedAreaId);
+
+  const eligibilityStatus = lotteryEligibilityQuery.data?.status ?? null;
 
   const actionError =
     requestAccessMutation.error ||
