@@ -1,14 +1,22 @@
 package com.software_project_team_15b.Ticketmaster.white.Application.Event;
 
+import java.util.List;
+import java.util.UUID;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import org.mockito.Mock;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import com.software_project_team_15b.Ticketmaster.Application.Event.EventManagementService;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
@@ -24,13 +32,6 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainServi
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
-import java.util.List;
-import java.util.UUID;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class EventManagementServiceWhiteTest {
@@ -104,7 +105,7 @@ class EventManagementServiceWhiteTest {
         UUID result = service.createEvent(cmd, "t");
 
         assertThat(result).isEqualTo(created);
-        verify(userDomainService).isActiveOwnerOrFounder(companyId, caller);
+        verify(userDomainService).isActiveOwnerOrFounderOrCompanyManager(companyId, caller, ManagerPermission.MANAGE_EVENTS);
     }
 
     // -------------------- createEvent: rejection logs and rethrows --------------------
@@ -117,7 +118,7 @@ class EventManagementServiceWhiteTest {
                 company, "n", "a", null, java.time.Instant.now().plusSeconds(60),
                 "loc", List.of(), List.of());
         doThrow(new UnauthorizedCompanyActionException("nope"))
-                .when(userDomainService).isActiveOwnerOrFounder(company, caller);
+                .when(userDomainService).isActiveOwnerOrFounderOrCompanyManager(company, caller, ManagerPermission.MANAGE_EVENTS);
 
         assertThatThrownBy(() -> service.createEvent(cmd, caller))
                 .isInstanceOf(UnauthorizedCompanyActionException.class);
