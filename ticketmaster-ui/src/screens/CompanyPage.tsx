@@ -58,6 +58,18 @@ export default function CompanyPage() {
   const [windowTo, setWindowTo] = useState('');
   const [discountPolicySuccessMessage, setDiscountPolicySuccessMessage] = useState<string | null>(null);
 
+  const toLocalDateTimeInputValue = (iso: string) => {
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const mm = pad(d.getMonth() + 1);
+    const dd = pad(d.getDate());
+    const hh = pad(d.getHours());
+    const mi = pad(d.getMinutes());
+    return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+  };
+
   const describeCompanyPurchasePolicy = (p: any, depth = 0): string[] => {
     if (!p || typeof p !== 'object') return ['Unknown policy'];
     const cls = String(p['@class'] ?? '');
@@ -318,7 +330,7 @@ export default function CompanyPage() {
     if ((clsShort.includes('CouponDiscountPolicy') || typeof p.code === 'string') && p.code) {
       setDiscountPolicyKind('COUPON');
       setCouponCode(String(p.code));
-      if (p.expiresAt) setCouponExpiresAt(String(p.expiresAt));
+      if (p.expiresAt) setCouponExpiresAt(toLocalDateTimeInputValue(String(p.expiresAt)));
       return;
     }
 
@@ -402,14 +414,14 @@ export default function CompanyPage() {
       if (expiresAt) {
         const ms = new Date(expiresAt).getTime();
         if (!Number.isFinite(ms)) {
-          throw new Error('Expires at must be an ISO timestamp (e.g. 2026-12-31T23:59:59Z)');
+          throw new Error('Expires at must be a valid date/time');
         }
       }
       return {
         '@class': 'com.software_project_team_15b.Ticketmaster.Domain.Event.policy.CouponDiscountPolicy',
         code,
         percentage: percent,
-        expiresAt: expiresAt ? expiresAt : null,
+        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
       };
     }
 
@@ -1114,11 +1126,11 @@ export default function CompanyPage() {
                   />
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-slate-700">Expires at (optional, ISO)</div>
+                  <div className="text-sm font-medium text-slate-700">Expires at (optional)</div>
                   <input
+                    type="datetime-local"
                     value={couponExpiresAt}
                     onChange={(e) => setCouponExpiresAt(e.target.value)}
-                    placeholder="e.g. 2026-12-31T23:59:59Z"
                     className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                   />
                 </div>
