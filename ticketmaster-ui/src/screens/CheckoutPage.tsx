@@ -593,6 +593,16 @@ export default function CheckoutPage() {
   const actionErrorMessage =
     !successMessage && actionError ? getApiErrorMessage(actionError) : null;
 
+  useEffect(() => {
+    if (!actionErrorMessage) return;
+    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+  }, [actionErrorMessage]);
+
+  useEffect(() => {
+    if (Object.keys(paymentErrors).length === 0) return;
+    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+  }, [paymentErrors]);
+
   const formatMoney = (m?: { amount: number | string; currency: string } | null) => {
     if (!m) return '—';
     return `${m.amount} ${m.currency}`;
