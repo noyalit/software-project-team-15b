@@ -63,27 +63,77 @@ public class InitialStateLoader implements ApplicationRunner {
         }
         if (filePath == null || filePath.isBlank()) {
             throw new InitialStateException(
-                    "initial-state is enabled (app.init.state.enabled=true) but no file is configured");
+                    "Initial-state seeding is enabled (app.init.state.enabled=true / INIT_RUN=true) "
+                            + "but no file is configured. Set app.init.state.file (env INIT_STATE_FILE), "
+                            + "e.g. 'classpath:initial-state.txt' or 'file:/path/to/seed.txt'.");
         }
 
-        LOG.info("Loading initial-state file from '{}'", filePath);
-        String content = readFile(filePath.trim());
+        String location = filePath.trim();
+        LOG.info("Initial-state seeding enabled; loading file from '{}'", location);
 
-        List<Statement> statements = parser.parse(content);
-        executor.execute(statements);
+        String content = readFile(location);
+        LOG.debug("Read {} character(s) from '{}'", content.length(), location);
 
-        LOG.info("Initial-state file applied successfully: {} operation(s) executed", statements.size());
+        List<Statement> statements = parsePhase(location, content);
+        LOG.info("Parsed {} statement(s) from '{}'; executing in order…", statements.size(), location);
+
+        executePhase(location, statements);
+        LOG.info("Initial-state file '{}' applied successfully: {} operation(s) executed",
+                location, statements.size());
+    }
+
+    /** Parses the file, logging an actionable error (and aborting startup) on any syntax problem. */
+    private List<Statement> parsePhase(String location, String content) {
+        try {
+            return parser.parse(content);
+        } catch (InitialStateException e) {
+            LOG.error("Initial-state file '{}' was rejected during parsing — fix the syntax problem "
+                    + "below and restart. Startup is aborted.\n  -> {}", location, e.getMessage());
+            throw e;
+        } catch (RuntimeException e) {
+            LOG.error("Unexpected error while parsing initial-state file '{}'. Startup is aborted.",
+                    location, e);
+            throw new InitialStateException(
+                    "Unexpected error while parsing initial-state file '" + location + "': "
+                            + e.getMessage(), e);
+        }
+    }
+
+    /** Executes the statements in order, logging the failing step (and aborting startup) on any error. */
+    private void executePhase(String location, List<Statement> statements) {
+        try {
+            executor.execute(statements);
+        } catch (InitialStateException e) {
+            LOG.error("Initial-state file '{}' failed during execution — the database may be partially "
+                    + "seeded; reset it (e.g. 'docker compose down -v') before retrying. Startup is "
+                    + "aborted.\n  -> {}", location, e.getMessage());
+            throw e;
+        } catch (RuntimeException e) {
+            LOG.error("Unexpected error while executing initial-state file '{}'. Startup is aborted.",
+                    location, e);
+            throw new InitialStateException(
+                    "Unexpected error while executing initial-state file '" + location + "': "
+                            + e.getMessage(), e);
+        }
     }
 
     private String readFile(String location) {
         Resource resource = resourceLoader.getResource(location);
         if (!resource.exists()) {
-            throw new InitialStateException("Initial-state file not found: " + location);
+            throw new InitialStateException(
+                    "Initial-state file not found: '" + location + "'. Check app.init.state.file "
+                            + "(env INIT_STATE_FILE); paths may use a 'classpath:' or 'file:' prefix "
+                            + "(a bare path is treated as a filesystem path).");
         }
         try (InputStream in = resource.getInputStream()) {
-            return StreamUtils.copyToString(in, StandardCharsets.UTF_8);
+            String content = StreamUtils.copyToString(in, StandardCharsets.UTF_8);
+            if (content.isBlank()) {
+                LOG.warn("Initial-state file '{}' is empty; no operations will be executed", location);
+            }
+            return content;
         } catch (IOException e) {
-            throw new InitialStateException("Failed to read initial-state file: " + location, e);
+            throw new InitialStateException(
+                    "Failed to read initial-state file '" + location + "': " + e.getMessage(), e);
         }
     }
 }
