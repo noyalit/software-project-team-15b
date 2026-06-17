@@ -208,6 +208,8 @@ export default function MyEventsPage() {
   activeRole === 'Founder' ||
   ((activeRole === 'Owner' || activeRole === 'Manager') && isApprovedAppointment);
 
+  const canCreateEvents = activeRole === 'Founder' || activeRole === 'Owner';
+
   const deleteLotteryMutation = useMutation({
     mutationFn: async ({ companyId, eventId }: { companyId: string; eventId: string }) => {
       setSuccessMessage(null);
@@ -731,7 +733,9 @@ export default function MyEventsPage() {
           <div>
             <h1 className="text-2xl font-extrabold text-slate-900">My Events</h1>
             <p className="mt-1 text-sm text-slate-600">
-              Select a company, create events, manage areas, and define the event map.
+              {canCreateEvents
+                ? 'Select a company, create events, manage areas, and define the event map.'
+                : 'Select a company and manage the events you were assigned to.'}
             </p>
           </div>
 
@@ -758,7 +762,7 @@ export default function MyEventsPage() {
         </select>
       </div>
 
-      {selectedCompanyId && (
+      {canCreateEvents && selectedCompanyId && (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Create event</h2>
 
@@ -787,7 +791,7 @@ export default function MyEventsPage() {
         </div>
       )}
 
-      {selectedCompanyId && newlyCreatedEventId && (
+      {canCreateEvents && selectedCompanyId && newlyCreatedEventId && (
         <div ref={step2Ref} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
