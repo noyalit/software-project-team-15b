@@ -209,6 +209,24 @@ public class UserController {
         }
     }
 
+    @Operation(summary = "Switch active role to company manager")
+    @PostMapping("/me/roles/company-manager/{companyId}")
+    public ResponseEntity<ApiResponse<MemberDTO>> changeRoleToCompanyManager(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID companyId
+    ) {
+        try {
+            return ResponseEntity.ok(new ApiResponse<>(
+                    userService.changeRoleToCompanyManager(token, companyId),
+                    null
+            ));
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     @Operation(summary = "Switch active role to owner")
     @PostMapping("/me/roles/owner/{companyId}")
     public ResponseEntity<ApiResponse<MemberDTO>> changeRoleToOwner(
@@ -270,6 +288,31 @@ public class UserController {
 
             return ResponseEntity.ok(new ApiResponse<>(result, null));
 
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (IllegalStateException ex) {
+            return conflict(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Appoint company manager")
+    @PostMapping(path = "/roles/company-manager", consumes = "application/json")
+    public ResponseEntity<ApiResponse<MemberDTO>> appointCompanyManager(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @RequestBody AppointCompanyManagerRequest request
+    ) {
+        try {
+            return ResponseEntity.ok(new ApiResponse<>(
+                    userService.appointCompanyManager(
+                            request.memberId(),
+                            token,
+                            request.companyId(),
+                            request.permissions()
+                    ),
+                    null
+            ));
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         } catch (IllegalStateException ex) {
@@ -368,6 +411,28 @@ public class UserController {
         }
     }
 
+    @Operation(summary = "Remove company manager appointment")
+    @PostMapping(path = "/roles/company-manager/remove", consumes = "application/json")
+    public ResponseEntity<ApiResponse<MemberDTO>> removeCompanyManagerAppointment(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @RequestBody RemoveCompanyManagerRequest request
+    ) {
+        try {
+            return ResponseEntity.ok(new ApiResponse<>(
+                    userService.removeCompanyManagerAppointment(
+                            token,
+                            request.memberToRemoveId(),
+                            request.companyId()
+                    ),
+                    null
+            ));
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     @Operation(summary = "Owner resigns")
     @PostMapping("/roles/owner/resign/{companyId}")
     public ResponseEntity<ApiResponse<MemberDTO>> ownerResign(
@@ -407,6 +472,29 @@ public class UserController {
         }
     }
 
+    @Operation(summary = "Change company manager permissions")
+    @PostMapping(path = "/roles/company-manager/permissions", consumes = "application/json")
+    public ResponseEntity<ApiResponse<MemberDTO>> changeCompanyManagerPermissions(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @RequestBody ChangeCompanyManagerPermissionsRequest request
+    ) {
+        try {
+            return ResponseEntity.ok(new ApiResponse<>(
+                    userService.changeCompanyManagerPermissions(
+                            token,
+                            request.companyManagerId(),
+                            request.companyId(),
+                            request.newPermissions()
+                    ),
+                    null
+            ));
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     @Operation(summary = "Get manager permissions")
     @GetMapping("/roles/manager/{managerId}/events/{eventId}/permissions")
     public ResponseEntity<ApiResponse<Set<ManagerPermission>>> getManagerPermissions(
@@ -420,6 +508,25 @@ public class UserController {
                     null
             ));
 
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Get company manager permissions")
+    @GetMapping("/roles/company-manager/{companyManagerId}/companies/{companyId}/permissions")
+    public ResponseEntity<ApiResponse<Set<ManagerPermission>>> getCompanyManagerPermissions(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID companyManagerId,
+            @PathVariable UUID companyId
+    ) {
+        try {
+            return ResponseEntity.ok(new ApiResponse<>(
+                    userService.getCompanyManagerPermissions(token, companyManagerId, companyId),
+                    null
+            ));
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         } catch (Exception ex) {
@@ -567,6 +674,13 @@ public class UserController {
     ) {
     }
 
+    public record AppointCompanyManagerRequest(
+            UUID memberId,
+            UUID companyId,
+            Set<ManagerPermission> permissions
+    ) {
+    }
+
     public record AppointOwnerRequest(
             UUID memberId,
             UUID companyId
@@ -592,9 +706,22 @@ public class UserController {
     ) {
     }
 
+    public record RemoveCompanyManagerRequest(
+            UUID memberToRemoveId,
+            UUID companyId
+    ) {
+    }
+
     public record ChangeManagerPermissionsRequest(
             UUID managerId,
             UUID eventId,
+            Set<ManagerPermission> newPermissions
+    ) {
+    }
+
+    public record ChangeCompanyManagerPermissionsRequest(
+            UUID companyManagerId,
+            UUID companyId,
             Set<ManagerPermission> newPermissions
     ) {
     }
