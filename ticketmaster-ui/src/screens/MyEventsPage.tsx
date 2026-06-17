@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { http } from '../api/http';
 import { getApiErrorMessage } from '../api/errors';
@@ -173,6 +173,34 @@ export default function MyEventsPage() {
   const hasManagerAssignment = Boolean(
     (meQuery.data?.assignedRoles ?? []).some((r) => r.roleName === 'Manager' && r.eventId)
   );
+
+  const managerEventIds = useMemo(() => {
+    const ids = (meQuery.data?.assignedRoles ?? [])
+      .filter((r) => r.roleName === 'Manager' && r.approved === true && Boolean(r.eventId))
+      .map((r) => r.eventId as string);
+    return Array.from(new Set(ids));
+  }, [meQuery.data?.assignedRoles]);
+
+  const managerEventsQuery = useQuery({
+    queryKey: ['manager-events', managerEventIds.join(',')],
+    queryFn: async () => {
+      const events = await Promise.all(
+        managerEventIds.map(async (eventId) => {
+          const res = await http.get<ApiResponse<EventDTO>>(`/api/events/${eventId}`);
+          if (res.data.error) throw new Error(res.data.error);
+          if (!res.data.data) throw new Error('Event not found');
+          return res.data.data;
+        })
+      );
+      return events;
+    },
+    enabled: Boolean(token) && userType === 'member' && managerEventIds.length > 0,
+  });
+
+  const managerCompanyIds = useMemo(() => {
+    const ids = (managerEventsQuery.data ?? []).map((e) => e.companyId);
+    return Array.from(new Set(ids));
+  }, [managerEventsQuery.data]);
   const isApprovedAppointment =
     activeRole === 'Founder' || appointmentApprovedQuery.data === true;
 
@@ -294,6 +322,32 @@ export default function MyEventsPage() {
     enabled: Boolean(token) && userType === 'member',
   });
 
+  const managerCompaniesQuery = useQuery({
+    queryKey: ['manager-companies', managerCompanyIds.join(','), token],
+    queryFn: async () => {
+      const companies = await Promise.all(
+        managerCompanyIds.map(async (companyId) => {
+          try {
+            const res = await http.get<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}`);
+            if (res.data.error) throw new Error(res.data.error);
+            if (!res.data.data) throw new Error('Company not found');
+            return res.data.data;
+          } catch {
+            return { companyId, name: companyId, status: 'ACTIVE' } as CompanyDTO;
+          }
+        })
+      );
+
+      return companies;
+    },
+    enabled: Boolean(token) && userType === 'member' && managerCompanyIds.length > 0,
+  });
+
+  const availableCompanies =
+    (companiesQuery.data?.length ?? 0) > 0
+      ? (companiesQuery.data ?? [])
+      : (managerCompaniesQuery.data ?? []);
+
   const eventsQuery = useQuery({
     queryKey: ['company-events', selectedCompanyId],
     queryFn: async () => {
@@ -303,13 +357,25 @@ export default function MyEventsPage() {
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? [];
     },
-    enabled: Boolean(selectedCompanyId),
+    enabled: Boolean(selectedCompanyId) && !hasManagerAssignment,
   });
+
+  const displayedEvents = hasManagerAssignment
+    ? (managerEventsQuery.data ?? []).filter(
+        (e) => !selectedCompanyId || e.companyId === selectedCompanyId
+      )
+    : (eventsQuery.data ?? []);
+
+  useEffect(() => {
+    if (selectedCompanyId) return;
+    if (availableCompanies.length === 0) return;
+    setSelectedCompanyId(availableCompanies[0].companyId);
+  }, [availableCompanies, selectedCompanyId]);
 
   const lotteryStatusByEventQuery = useQuery({
     queryKey: ['lottery', 'eligibility', 'company-events', selectedCompanyId, token],
     queryFn: async () => {
-      const events = eventsQuery.data ?? [];
+      const events = displayedEvents ?? [];
 
       const statuses = await Promise.all(
         events.map(async (event) => {
@@ -327,7 +393,7 @@ export default function MyEventsPage() {
 
       return Object.fromEntries(statuses) as Record<string, string>;
     },
-    enabled: Boolean(token) && Boolean(eventsQuery.data?.length),
+    enabled: Boolean(token) && Boolean(displayedEvents?.length),
   });
 
   const createEventMutation = useMutation({
@@ -638,7 +704,7 @@ export default function MyEventsPage() {
   const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
 
   const newlyCreatedEvent = newlyCreatedEventId
-    ? (eventsQuery.data ?? []).find((e) => e.eventId === newlyCreatedEventId) ?? null
+    ? (displayedEvents ?? []).find((e) => e.eventId === newlyCreatedEventId) ?? null
     : null;
 
   useEffect(() => {
@@ -684,7 +750,7 @@ export default function MyEventsPage() {
           className="mt-3 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
         >
           <option value="">Select company...</option>
-          {companiesQuery.data?.map((company) => (
+          {availableCompanies.map((company) => (
             <option key={company.companyId} value={company.companyId}>
               {company.name}
             </option>
@@ -850,11 +916,11 @@ export default function MyEventsPage() {
           <h2 className="text-lg font-semibold text-slate-900">Company events</h2>
 
           <div className="mt-4 grid gap-3">
-            {eventsQuery.data?.length === 0 && (
+            {displayedEvents.length === 0 && (
               <div className="text-sm text-slate-600">No events found.</div>
             )}
 
-            {eventsQuery.data?.map((event) => {
+            {displayedEvents.map((event) => {
               const isCancelled = event.status === 'CANCELLED';
               const canEditMap = event.status === 'DRAFT';
               const areas = event.areas ?? [];
