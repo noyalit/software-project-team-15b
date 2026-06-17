@@ -899,7 +899,7 @@ export default function MyEventsPage() {
                             }}
                             className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
                           >
-                            {canEditMap ? 'Manage map' : 'View map'}
+                            {canEditMap ? 'Manage map & policies' : 'View map & policies'}
                           </button>
                         {event.status === 'DRAFT' && (
                           <></>
