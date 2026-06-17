@@ -119,4 +119,21 @@ class InitialStateParserWhiteTest {
                 .isInstanceOf(InitialStateException.class)
                 .hasMessageContaining("operation name");
     }
+
+    @Test
+    void GivenSyntaxError_WhenParsed_ThenMessageReportsLineAndOffendingSnippet() {
+        assertThatThrownBy(() -> parser.parse("login(u1, p1);\nopen-production-company rina;"))
+                .isInstanceOf(InitialStateException.class)
+                .hasMessageContaining("line 2")
+                .hasMessageContaining("open-production-company rina");
+    }
+
+    @Test
+    void GivenLongOffendingStatement_WhenParsed_ThenSnippetIsTruncated() {
+        String longArg = "x".repeat(200);
+
+        assertThatThrownBy(() -> parser.parse("login(" + longArg + ")"))
+                .isInstanceOf(InitialStateException.class)
+                .hasMessageContaining("…");
+    }
 }
