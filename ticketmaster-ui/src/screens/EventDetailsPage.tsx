@@ -54,6 +54,22 @@ export default function EventDetailsPage() {
   const qc = useQueryClient();
   const { token, userType, clearAuth } = useAuthStore();
 
+  const isCouponPolicy = (p: DiscountPolicyDTO | any) => {
+    const raw = p as any;
+    const anyP = raw?.policy && typeof raw.policy === 'object' ? raw.policy : raw;
+    const t = (anyP?.type ?? anyP?.policyType ?? anyP?.kind) as string | undefined;
+    return t === 'COUPON' || typeof anyP?.code === 'string';
+  };
+
+  const couponPolicyExpiresAtMs = (p: DiscountPolicyDTO | any) => {
+    const raw = p as any;
+    const anyP = raw?.policy && typeof raw.policy === 'object' ? raw.policy : raw;
+    const expiresAt = anyP?.expiresAt;
+    if (typeof expiresAt !== 'string' || !expiresAt) return null;
+    const ms = new Date(expiresAt).getTime();
+    return Number.isFinite(ms) ? ms : null;
+  };
+
   const describePurchasePolicy = (p: PurchasePolicyDTO) => {
     const anyP = p as any;
     const t = (anyP?.type ?? anyP?.policyType ?? anyP?.kind) as string | undefined;
@@ -161,6 +177,7 @@ export default function EventDetailsPage() {
   const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>([]);
   const [standingQuantity, setStandingQuantity] = useState(1);
   const [guestBirthDate, setGuestBirthDate] = useState('');
+  const [couponCode, setCouponCode] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeOrderId, setActiveOrderId] = useState<string | null>(() => {
     const fromSession = sessionStorage.getItem('activeOrderId');
@@ -192,7 +209,7 @@ export default function EventDetailsPage() {
         buyerBirthDate: null,
         quantity: input.quantity,
         seatIds: input.seatIds,
-        couponCode: null,
+        couponCode: couponCode.trim() || null,
       });
       if (res.data.error) throw new Error(res.data.error);
     } catch (e) {
@@ -660,6 +677,24 @@ export default function EventDetailsPage() {
 
   const eligibilityStatus = lotteryEligibilityQuery.data?.status ?? null;
 
+  const nowTick = Date.now();
+  const couponPolicySources = [
+    ...(discountPoliciesQuery.data ?? []),
+    ...(companyDiscountPoliciesQuery.data ?? []),
+  ];
+
+  const hasActiveCoupon = couponPolicySources.some((p) => {
+    if (!isCouponPolicy(p)) return false;
+    const exp = couponPolicyExpiresAtMs(p);
+    if (exp == null) return true;
+    return exp > nowTick;
+  });
+
+  useEffect(() => {
+    if (hasActiveCoupon) return;
+    setCouponCode('');
+  }, [hasActiveCoupon]);
+
   const actionError =
     requestAccessMutation.error ||
     createOrderMutation.error ||
@@ -1038,6 +1073,19 @@ export default function EventDetailsPage() {
             <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
               You were not selected in the lottery draw for this event.
             </div>
+          )}
+
+          {hasActiveCoupon && (
+            <label className="mt-4 block">
+              <div className="text-sm font-medium text-slate-700">Coupon code</div>
+              <input
+                type="text"
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value)}
+                placeholder="Enter coupon code"
+                className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              />
+            </label>
           )}
 
           <div className="mt-4 flex flex-wrap gap-2">
