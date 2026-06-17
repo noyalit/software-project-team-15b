@@ -45,8 +45,10 @@ export default function CompanyPage() {
   const [minTickets, setMinTickets] = useState('');
   const [purchasePolicySuccessMessage, setPurchasePolicySuccessMessage] = useState<string | null>(null);
 
-  const [discountPolicyKind, setDiscountPolicyKind] = useState<'NONE' | 'SIMPLE' | 'CONDITIONAL'>('NONE');
+  const [discountPolicyKind, setDiscountPolicyKind] = useState<'NONE' | 'SIMPLE' | 'CONDITIONAL' | 'COUPON'>('NONE');
   const [discountPercent, setDiscountPercent] = useState('');
+  const [couponCode, setCouponCode] = useState('');
+  const [couponExpiresAt, setCouponExpiresAt] = useState('');
   const [conditionKind, setConditionKind] = useState<'MAX_TICKETS' | 'MIN_TICKETS' | 'TIME_WINDOW'>(
     'MAX_TICKETS'
   );
@@ -89,6 +91,7 @@ export default function CompanyPage() {
 
     const cls = String(p['@class'] ?? raw?.['@class'] ?? '');
     const clsShort = cls ? (cls.split('.').pop() ?? cls) : '';
+    const code = p.code ?? raw?.code;
     const percent =
       p.percent ??
       p.percentage ??
@@ -96,6 +99,11 @@ export default function CompanyPage() {
       p.discountPercentage ??
       raw?.percent ??
       raw?.percentage;
+
+    if (clsShort.includes('CouponDiscountPolicy') || typeof code === 'string') {
+      const pct = percent != null ? `${percent}%` : null;
+      return `Coupon ${String(code ?? '').trim()}${pct ? ` (${pct})` : ''}`.trim();
+    }
 
     const condition =
       (p.condition && typeof p.condition === 'object' ? p.condition : null) ??
@@ -295,11 +303,24 @@ export default function CompanyPage() {
   }, [companyPurchasePoliciesQuery.data]);
 
   useEffect(() => {
-    const p = (companyDiscountPoliciesQuery.data ?? [])[0] as any;
+    const raw = (companyDiscountPoliciesQuery.data ?? [])[0] as any;
+    if (!raw || typeof raw !== 'object') return;
+
+    const p = raw?.policy && typeof raw.policy === 'object' ? raw.policy : raw;
     if (!p || typeof p !== 'object') return;
+
+    const cls = String(p['@class'] ?? raw?.['@class'] ?? '');
+    const clsShort = cls ? (cls.split('.').pop() ?? cls) : '';
 
     const percent = p.percent ?? p.percentage ?? null;
     if (percent != null) setDiscountPercent(String(percent));
+
+    if ((clsShort.includes('CouponDiscountPolicy') || typeof p.code === 'string') && p.code) {
+      setDiscountPolicyKind('COUPON');
+      setCouponCode(String(p.code));
+      if (p.expiresAt) setCouponExpiresAt(String(p.expiresAt));
+      return;
+    }
 
     const cond = p.condition && typeof p.condition === 'object' ? p.condition : null;
     if (cond) {
@@ -369,6 +390,26 @@ export default function CompanyPage() {
       return {
         '@class': 'com.software_project_team_15b.Ticketmaster.Domain.policy.SimpleDiscountPolicy',
         percent,
+      };
+    }
+
+    if (discountPolicyKind === 'COUPON') {
+      const code = couponCode.trim();
+      if (!code) {
+        throw new Error('Coupon code is required');
+      }
+      const expiresAt = couponExpiresAt.trim();
+      if (expiresAt) {
+        const ms = new Date(expiresAt).getTime();
+        if (!Number.isFinite(ms)) {
+          throw new Error('Expires at must be an ISO timestamp (e.g. 2026-12-31T23:59:59Z)');
+        }
+      }
+      return {
+        '@class': 'com.software_project_team_15b.Ticketmaster.Domain.Event.policy.CouponDiscountPolicy',
+        code,
+        percentage: percent,
+        expiresAt: expiresAt ? expiresAt : null,
       };
     }
 
@@ -1045,10 +1086,11 @@ export default function CompanyPage() {
                 <option value="NONE">Select discount policy…</option>
                 <option value="SIMPLE">Simple discount</option>
                 <option value="CONDITIONAL">Conditional discount</option>
+                <option value="COUPON">Coupon code</option>
               </select>
             </div>
 
-            {(discountPolicyKind === 'SIMPLE' || discountPolicyKind === 'CONDITIONAL') && (
+            {(discountPolicyKind === 'SIMPLE' || discountPolicyKind === 'CONDITIONAL' || discountPolicyKind === 'COUPON') && (
               <div className="mt-3">
                 <div className="text-sm font-medium text-slate-700">Discount percent</div>
                 <input
@@ -1057,6 +1099,29 @@ export default function CompanyPage() {
                   placeholder="e.g. 10"
                   className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                 />
+              </div>
+            )}
+
+            {discountPolicyKind === 'COUPON' && (
+              <div className="mt-3 grid gap-3">
+                <div>
+                  <div className="text-sm font-medium text-slate-700">Coupon code</div>
+                  <input
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value)}
+                    placeholder="e.g. SUMMER10"
+                    className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-slate-700">Expires at (optional, ISO)</div>
+                  <input
+                    value={couponExpiresAt}
+                    onChange={(e) => setCouponExpiresAt(e.target.value)}
+                    placeholder="e.g. 2026-12-31T23:59:59Z"
+                    className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
               </div>
             )}
 
