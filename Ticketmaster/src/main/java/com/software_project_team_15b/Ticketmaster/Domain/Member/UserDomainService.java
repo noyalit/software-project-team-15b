@@ -930,6 +930,17 @@ public class UserDomainService {
         }
     }
 
+    public void isActiveOwnerOrFounderOrCompanyManager(UUID companyId, UUID callerId, ManagerPermission requiredPermission) {
+        Objects.requireNonNull(companyId, "eventId");
+        Objects.requireNonNull(callerId, "callerId");
+        if (!isActiveFounder(callerId, companyId) &&
+                !isActiveOwner(callerId, companyId) &&
+                !hasCompanyManagerPermission(callerId, companyId, requiredPermission)) {
+            throw new UnauthorizedCompanyActionException(
+                    "Only active owners/founders/managers with the required permission can perform this action");
+        }
+    }
+
     public MemberDTO toDTO(Member member) {
         if (member == null) {
             throw new InvalidMemberInputException("Member cannot be null");
