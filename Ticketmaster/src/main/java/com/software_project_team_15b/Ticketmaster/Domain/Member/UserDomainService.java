@@ -337,61 +337,45 @@ public class UserDomainService {
         return managerRole.getPermissions();
     }
 
-    /**
-     * Returns {@code true} if the given user holds an approved Manager role in the specified
-     * company that carries the {@link ManagerPermission#DEFINE_PURCHASE_POLICY} permission.
-     *
-     * @param userId    the ID of the member to check
-     * @param companyId the company whose purchase-policy permission is being queried
-     * @return {@code true} when the member has an approved manager role with the required
-     *         permission; {@code false} otherwise
-     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException
-     *         if {@code userId} is {@code null}
-     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.MemberNotFoundException
-     *         if no member exists with the given {@code userId}
-     */
     @Transactional(readOnly = true)
     public boolean canChangePurchasePolicy(UUID userId, UUID companyId) {
-        Member manager = getMemberOrThrow(userId);
-        Manager managerRole = manager.getAssignedRoles()
-                .stream()
-                .filter(role -> role instanceof Manager)
-                .map(role -> (Manager) role)
-                .filter(role -> role.isAppointmentApproved())
-                .filter(role -> role.belongsToCompany(companyId))
-                .filter(role -> role.hasPermission(ManagerPermission.DEFINE_PURCHASE_POLICY))
-                .findFirst()
-                .orElse(null);
-        return managerRole != null;
+        Member member = getMemberOrThrow(userId);
+        return member.getAssignedRoles()
+            .stream()
+            .anyMatch(role ->
+                    role.isAppointmentApproved()
+                            && role.belongsToCompany(companyId)
+                            && (
+                            (role instanceof Manager manager
+                                    && manager.hasPermission(ManagerPermission.DEFINE_PURCHASE_POLICY))
+                                    ||
+                                    (role instanceof CompanyManager companyManager
+                                            && companyManager.hasPermission(ManagerPermission.DEFINE_PURCHASE_POLICY))
+                    )
+            );
+
     }
 
-    /**
-     * Returns {@code true} if the given user holds an approved Manager role in the specified
-     * company that carries the {@link ManagerPermission#DEFINE_DISCOUNT_POLICY} permission.
-     *
-     * @param userId    the ID of the member to check
-     * @param companyId the company whose discount-policy permission is being queried
-     * @return {@code true} when the member has an approved manager role with the required
-     *         permission; {@code false} otherwise
-     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException
-     *         if {@code userId} is {@code null}
-     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.MemberNotFoundException
-     *         if no member exists with the given {@code userId}
-     */
-    @Transactional(readOnly = true)
+
+   @Transactional(readOnly = true)
     public boolean canChangeDiscountPolicy(UUID userId, UUID companyId) {
-        Member manager = getMemberOrThrow(userId);
-        Manager managerRole = manager.getAssignedRoles()
+        Member member = getMemberOrThrow(userId);
+        return member.getAssignedRoles()
                 .stream()
-                .filter(role -> role instanceof Manager)
-                .map(role -> (Manager) role)
-                .filter(Role::isAppointmentApproved)
-                .filter(role -> role.belongsToCompany(companyId))
-                .filter(role -> role.hasPermission(ManagerPermission.DEFINE_DISCOUNT_POLICY))
-                .findFirst()
-                .orElse(null);
-        return managerRole != null;
+                .anyMatch(role ->
+                        role.isAppointmentApproved()
+                                && role.belongsToCompany(companyId)
+                                && (
+                                (role instanceof Manager manager
+                                        && manager.hasPermission(ManagerPermission.DEFINE_DISCOUNT_POLICY))
+                                        ||
+                                        (role instanceof CompanyManager companyManager
+                                                && companyManager.hasPermission(ManagerPermission.DEFINE_DISCOUNT_POLICY))
+                        )
+                );
+
     }
+
 
     private boolean hasManagerPermission(
             UUID managerId,
@@ -410,6 +394,20 @@ public class UserDomainService {
                                 && manager.belongsToCompany(companyId)
                                 && eventId.equals(manager.getEventId())
                                 && manager.hasPermission(required)
+                );
+    }
+
+    private boolean hasCompanyManagerPermission(UUID managerId, UUID companyId, ManagerPermission required) {
+        Member member = getMemberOrThrow(managerId);
+
+        return member.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof CompanyManager)
+                .map(role -> (CompanyManager) role)
+                .anyMatch(companyManager ->
+                        companyManager.isAppointmentApproved()
+                                && companyManager.belongsToCompany(companyId)
+                                && companyManager.hasPermission(required)
                 );
     }
 
@@ -469,6 +467,9 @@ public class UserDomainService {
                 if (role instanceof Manager manager) {
                     eventId = manager.getEventId();
                     permissions = manager.getPermissions();
+                }
+                if (role instanceof CompanyManager companyManager) {
+                    permissions = companyManager.getPermissions();
                 }
 
                 String appointedByName = null;
