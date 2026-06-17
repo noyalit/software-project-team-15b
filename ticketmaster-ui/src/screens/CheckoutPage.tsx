@@ -163,6 +163,8 @@ export default function CheckoutPage() {
   };
 
   const [couponCode, setCouponCode] = useState('');
+  const [appliedCouponCode, setAppliedCouponCode] = useState('');
+  const [couponError, setCouponError] = useState<string | null>(null);
   const [cardNumber, setCardNumber] = useState('');
   const [cardMonth, setCardMonth] = useState('');
   const [cardYear, setCardYear] = useState('');
@@ -358,10 +360,11 @@ export default function CheckoutPage() {
   });
 
   useEffect(() => {
-    if (!hasActiveCoupon && couponCode) {
-      setCouponCode('');
-    }
-  }, [hasActiveCoupon, couponCode]);
+    if (hasActiveCoupon) return;
+    if (couponCode) setCouponCode('');
+    if (appliedCouponCode) setAppliedCouponCode('');
+    if (couponError) setCouponError(null);
+  }, [hasActiveCoupon, couponCode, appliedCouponCode, couponError]);
 
   const priceQuoteQuery = useQuery({
     queryKey: [
@@ -371,7 +374,7 @@ export default function CheckoutPage() {
       activeOrderQuery.data?.areaId,
       activeOrderQuery.data?.seatIds?.length,
       activeOrderQuery.data?.seats?.length,
-      couponCode,
+      appliedCouponCode,
       meQuery.data?.userId,
       meQuery.data?.birthDate,
       guestBirthDate,
@@ -399,7 +402,7 @@ export default function CheckoutPage() {
           quantity,
           buyerId,
           buyerBirthDate,
-          couponCode: couponCode.trim() || null,
+          couponCode: appliedCouponCode.trim() || null,
         }
       );
       if (res.data.error) throw new Error(res.data.error);
@@ -549,7 +552,7 @@ export default function CheckoutPage() {
         const res = await http.post<ApiResponse<CheckoutCompletedDTO>>(
           `/api/active-orders/${activeOrderId}/checkout/member/complete`,
           {
-            couponCode: couponCode.trim() || null,
+            couponCode: appliedCouponCode.trim() || null,
             paymentDetails,
           }
         );
@@ -561,7 +564,7 @@ export default function CheckoutPage() {
         `/api/active-orders/${activeOrderId}/checkout/guest/complete`,
         {
           birthDate: localStorage.getItem('guestBirthDate') ?? '',
-          couponCode: couponCode.trim() || null,
+          couponCode: appliedCouponCode.trim() || null,
           paymentDetails,
         }
       );
@@ -843,13 +846,67 @@ export default function CheckoutPage() {
             {hasActiveCoupon && (
               <label className="block text-sm font-semibold text-slate-900">
                 Coupon code
-                <input
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value)}
-                  placeholder="Optional"
-                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                />
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    value={couponCode}
+                    onChange={(e) => {
+                      setCouponCode(e.target.value);
+                      setCouponError(null);
+                    }}
+                    placeholder="Optional"
+                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const code = couponCode.trim();
+                      if (!code) {
+                        setAppliedCouponCode('');
+                        setCouponError(null);
+                        return;
+                      }
+
+                      if (!activeCouponCodes.has(code)) {
+                        setAppliedCouponCode('');
+                        setCouponError('Coupon code is not valid for this event/company (or is expired).');
+                        return;
+                      }
+
+                      setAppliedCouponCode(code);
+                      setCouponError(null);
+                    }}
+                    className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    Apply
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCouponCode('');
+                      setAppliedCouponCode('');
+                      setCouponError(null);
+                    }}
+                    disabled={!couponCode && !appliedCouponCode}
+                    className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    Clear
+                  </button>
+                </div>
               </label>
+            )}
+
+            {hasActiveCoupon && couponError && (
+              <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {couponError}
+              </div>
+            )}
+
+            {hasActiveCoupon && !couponError && appliedCouponCode && (
+              <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                Applied coupon: {appliedCouponCode}
+              </div>
             )}
 
             <div className="mt-4 grid gap-3">
