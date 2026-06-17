@@ -113,37 +113,46 @@ export default function CheckoutPage() {
     if (!p || typeof p !== 'object') return 'Unknown policy';
     const raw = p;
     const anyP = raw?.policy && typeof raw.policy === 'object' ? raw.policy : raw;
-    const cls = String(anyP['@class'] ?? '');
+    const cls = String(anyP['@class'] ?? raw?.['@class'] ?? '');
 
     if (typeof anyP.code === 'string' && anyP.code) {
       const pct = anyP.percentage ?? anyP.percent;
       return `Coupon ${anyP.code}${pct != null ? ` (${pct}%)` : ''}`;
     }
 
-    if (anyP.percent != null && cls.includes('SimpleDiscountPolicy')) {
-      return `Simple discount (${anyP.percent}%)`;
+    if (Array.isArray(anyP.children) && anyP.children.length > 0) {
+      if (cls.includes('MaxDiscountPolicy')) return 'Best available discount (max)';
+      if (cls.includes('SumDiscountPolicy')) return 'Combined discounts (sum)';
+      return 'Combined discounts';
     }
 
-    if (anyP.percent != null && cls.includes('ConditionalDiscountPolicy')) {
-      const cond = anyP.condition;
+    const percent = anyP.percent ?? anyP.percentage ?? null;
+    const condition = anyP.condition && typeof anyP.condition === 'object' ? anyP.condition : null;
+
+    if (percent != null && (!condition || cls.includes('SimpleDiscountPolicy'))) {
+      return `Simple discount (${percent}%)`;
+    }
+
+    if (percent != null && (condition || cls.includes('ConditionalDiscountPolicy'))) {
+      const cond = condition;
       if (cond && typeof cond === 'object') {
         const condCls = String(cond['@class'] ?? '');
         if (cond.max != null && condCls.includes('MaxTicketsCondition')) {
-          return `Conditional discount (${anyP.percent}%) when quantity <= ${cond.max}`;
+          return `Conditional discount (${percent}%) when quantity <= ${cond.max}`;
         }
         if (cond.min != null && condCls.includes('MinTicketsCondition')) {
-          return `Conditional discount (${anyP.percent}%) when quantity >= ${cond.min}`;
+          return `Conditional discount (${percent}%) when quantity >= ${cond.min}`;
         }
         if (condCls.includes('TimeWindowCondition')) {
           const from = cond.from ? new Date(cond.from).toLocaleString() : null;
           const to = cond.to ? new Date(cond.to).toLocaleString() : null;
-          if (from && to) return `Conditional discount (${anyP.percent}%) between ${from} and ${to}`;
-          if (from) return `Conditional discount (${anyP.percent}%) from ${from}`;
-          if (to) return `Conditional discount (${anyP.percent}%) until ${to}`;
-          return `Conditional discount (${anyP.percent}%)`;
+          if (from && to) return `Conditional discount (${percent}%) between ${from} and ${to}`;
+          if (from) return `Conditional discount (${percent}%) from ${from}`;
+          if (to) return `Conditional discount (${percent}%) until ${to}`;
+          return `Conditional discount (${percent}%)`;
         }
       }
-      return `Conditional discount (${anyP.percent}%)`;
+      return `Conditional discount (${percent}%)`;
     }
 
     if (cls) return cls.split('.').pop() ?? cls;
@@ -548,12 +557,21 @@ export default function CheckoutPage() {
         id,
       };
 
+      const payloadPaymentDetails = {
+        cardNumber: paymentDetails.cardNumber,
+        month: paymentDetails.month,
+        year: paymentDetails.year,
+        holder: paymentDetails.holder,
+        cvv: paymentDetails.cvv,
+        id: paymentDetails.id,
+      };
+
       if (userType === 'member') {
         const res = await http.post<ApiResponse<CheckoutCompletedDTO>>(
           `/api/active-orders/${activeOrderId}/checkout/member/complete`,
           {
             couponCode: appliedCouponCode.trim() || null,
-            paymentDetails,
+            paymentDetails: payloadPaymentDetails,
           }
         );
         if (res.data.error) throw new Error(res.data.error);
@@ -565,7 +583,7 @@ export default function CheckoutPage() {
         {
           birthDate: localStorage.getItem('guestBirthDate') ?? '',
           couponCode: appliedCouponCode.trim() || null,
-          paymentDetails,
+          paymentDetails: payloadPaymentDetails,
         }
       );
       if (res.data.error) throw new Error(res.data.error);
