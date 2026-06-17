@@ -177,6 +177,32 @@ public class UserDomainService {
     }
 
     @Transactional
+    public Member appointCompanyManager(UUID memberId, UUID ownerId, UUID companyId, Set<ManagerPermission> permissions) {
+        if (permissions == null || permissions.isEmpty()) {
+            throw new InvalidManagerPermissionsException("Company manager must have at least one permission");
+        }
+
+        Member member = getMemberOrThrow(memberId);
+
+        validateNoAppointmentCycle(member, ownerId, companyId);
+        validateOwnerAppointer(ownerId, companyId);
+
+        boolean alreadyCompanyManagerInCompany = member.getAssignedRoles()
+                .stream()
+                .anyMatch(role -> role instanceof CompanyManager
+                        && role.belongsToCompany(companyId));
+
+        if (alreadyCompanyManagerInCompany) {
+            throw new RoleNotAssignedException("Member is already a company manager in this company");
+        }
+
+        Role companyManagerRole = new CompanyManager(ownerId, companyId, permissions);
+        member.addRole(companyManagerRole);
+
+        return memberRepository.save(member);
+    }
+
+    @Transactional
     public Member appointOwner(UUID memberId, UUID ownerId, UUID companyId) {
         Member member = getMemberOrThrow(memberId);
 
@@ -678,7 +704,7 @@ public class UserDomainService {
             UUID nextAppointerId = current.getAssignedRoles()
                     .stream()
                     .filter(role -> role.belongsToCompany(companyId))
-                    .filter(role -> role instanceof Owner || role instanceof Manager || role instanceof Founder)
+                    .filter(role -> role instanceof Owner || role instanceof Manager || role instanceof Founder || role instanceof CompanyManager)
                     .map(Role::getAppointedBy)
                     .filter(appointerId -> appointerId != null)
                     .findFirst()
@@ -724,7 +750,7 @@ public class UserDomainService {
         boolean hasRoleInCompany = root.getAssignedRoles()
                 .stream()
                 .anyMatch(role ->
-                        (role instanceof Manager || role instanceof Owner || role instanceof Founder)
+                        (role instanceof Manager || role instanceof Owner || role instanceof Founder || role instanceof CompanyManager)
                                 && role.isAppointmentApproved()
                                 && role.belongsToCompany(companyId)
                 );
