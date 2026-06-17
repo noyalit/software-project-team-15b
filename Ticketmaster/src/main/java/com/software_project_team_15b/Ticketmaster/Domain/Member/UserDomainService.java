@@ -110,6 +110,28 @@ public class UserDomainService {
     }
 
     @Transactional
+    public Member changeRoleToCompanyManager(UUID userId, UUID companyId) {
+        if (companyId == null) {
+            throw new InvalidMemberInputException("Company ID cannot be null");
+        }
+
+        Member member = getMemberOrThrow(userId);
+
+        Role companyManagerRole = member.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof CompanyManager)
+                .filter(role -> role.belongsToCompany(companyId))
+                .findFirst()
+                .orElseThrow(() -> new RoleNotAssignedException(
+                        "Member does not have an assigned CompanyManager role for this company"
+                ));
+
+        member.switchActiveRole(companyManagerRole);
+        return memberRepository.save(member);
+    }
+
+
+    @Transactional
     public Member changeRoleToOwner(UUID userId, UUID companyId) {
         if (companyId == null) {
             throw new InvalidMemberInputException("Company ID cannot be null");
@@ -278,6 +300,27 @@ public class UserDomainService {
     }
 
     @Transactional
+    public Member removeCompanyManagerAppointment(UUID removerOwnerId, UUID memberToRemoveId, UUID companyId) {
+        Member memberToRemove = getMemberOrThrow(memberToRemoveId);
+
+        validateOwnerAppointer(removerOwnerId, companyId);
+
+        Role companyManagerRoleToRemove = memberToRemove.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof CompanyManager)
+                .filter(role -> removerOwnerId.equals(role.getAppointedBy()))
+                .filter(role -> role.belongsToCompany(companyId))
+                .findFirst()
+                .orElseThrow(() -> new RoleNotAssignedException(
+                        "No company manager appointment by this owner was found"
+                ));
+
+        memberToRemove.removeRole(companyManagerRoleToRemove);
+
+        return memberRepository.save(memberToRemove);
+    }
+
+    @Transactional
     public Member ownerResign(UUID ownerId, UUID companyId) {
         Member owner = getMemberOrThrow(ownerId);
 
@@ -335,6 +378,53 @@ public class UserDomainService {
                 ));
 
         return managerRole.getPermissions();
+    }
+
+    @Transactional
+    public Member changeCompanyManagerPermissions(
+            UUID ownerId,
+            UUID companyManagerId,
+            UUID companyId,
+            Set<ManagerPermission> newPermissions
+    ) {
+        Member companyManager = getMemberOrThrow(companyManagerId);
+
+        validateOwnerAppointer(ownerId, companyId);
+
+        CompanyManager companyManagerRole = companyManager.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof CompanyManager)
+                .map(role -> (CompanyManager) role)
+                .filter(role -> ownerId.equals(role.getAppointedBy()))
+                .filter(role -> role.belongsToCompany(companyId))
+                .findFirst()
+                .orElseThrow(() -> new RoleNotAssignedException(
+                        "No company manager appointment by this owner was found"
+                ));
+
+        companyManagerRole.setPermissions(newPermissions);
+
+        return memberRepository.save(companyManager);
+    }
+
+    @Transactional(readOnly = true)
+    public Set<ManagerPermission> getCompanyManagerPermissions(UUID ownerId, UUID companyManagerId, UUID companyId) {
+        Member companyManager = getMemberOrThrow(companyManagerId);
+
+        validateOwnerAppointer(ownerId, companyId);
+
+        CompanyManager companyManagerRole = companyManager.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof CompanyManager)
+                .map(role -> (CompanyManager) role)
+                .filter(role -> ownerId.equals(role.getAppointedBy()))
+                .filter(role -> role.belongsToCompany(companyId))
+                .findFirst()
+                .orElseThrow(() -> new RoleNotAssignedException(
+                        "No company manager appointment by this owner was found"
+                ));
+
+        return companyManagerRole.getPermissions();
     }
 
     @Transactional(readOnly = true)
@@ -586,6 +676,18 @@ public class UserDomainService {
     }
 
     @Transactional(readOnly = true)
+    public boolean isActiveCompanyManager(UUID userId, UUID companyId) {
+        Member member = getMemberOrThrow(userId);
+
+        return member.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof CompanyManager)
+                .map(role -> (CompanyManager) role)
+                .anyMatch(companyManager -> companyManager.isAppointmentApproved()
+                        && companyManager.belongsToCompany(companyId));
+    }
+
+    @Transactional(readOnly = true)
     public boolean isActiveFounder(UUID userId, UUID companyId) {
         Member member = getMemberOrThrow(userId);
 
@@ -622,7 +724,8 @@ public class UserDomainService {
         boolean isAllowed =
                 isActiveFounder(managerId, companyId)
                         || isActiveOwner(managerId, companyId)
-                        || hasManagerPermission(managerId, eventId, companyId, required);
+                        || hasManagerPermission(managerId, eventId, companyId, required)
+                        || hasCompanyManagerPermission(managerId, companyId, required);
 
         if (!isAllowed) {
             throw new InvalidManagerPermissionsException(
