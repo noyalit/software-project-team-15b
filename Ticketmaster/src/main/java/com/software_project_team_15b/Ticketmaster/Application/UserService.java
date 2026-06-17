@@ -61,6 +61,23 @@ public class UserService {
         this.notifier = notifier;
     }
 
+    public MemberDTO resolveMemberByUsername(String token, String username) {
+        if (!auth.isTokenValid(token) || !(auth.isMember(token) || auth.isSystemAdmin(token))) {
+            throw new InvalidTokenException("Only an authenticated member or system admin can resolve members");
+        }
+
+        Member member = userDomainService.getMemberByUsername(username);
+        return userDomainService.toDTO(member);
+    }
+
+    public MemberDTO resolveMemberById(String token, UUID userId) {
+        if (!auth.isTokenValid(token) || !(auth.isMember(token) || auth.isSystemAdmin(token))) {
+            throw new InvalidTokenException("Only an authenticated member or system admin can resolve members");
+        }
+
+        return userDomainService.resolveMemberById(userId);
+    }
+
     /**
      * Registers a new member with the given username, password, and birth date.
      * 
