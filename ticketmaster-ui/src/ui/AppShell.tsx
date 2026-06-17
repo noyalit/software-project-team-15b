@@ -78,6 +78,8 @@ export default function AppShell() {
   }, []);
 
   const activeRole = meQuery.data?.activeRole;
+  const hasManagerAssignment =
+    Boolean(meQuery.data?.assignedRoles?.some((r) => r.roleName === 'Manager' && r.eventId));
 
   const appointmentApprovedQuery = useQuery({
     queryKey: ['appointment-approved', token, activeRole],
@@ -99,7 +101,7 @@ const canAccessOwnerPages =
   activeRole === 'Founder' || (activeRole === 'Owner' && isApprovedAppointment);
 
 const canAccessManagerPages =
-  canAccessOwnerPages || (activeRole === 'Manager' && isApprovedAppointment);
+  canAccessOwnerPages || (activeRole === 'Manager' && isApprovedAppointment) || hasManagerAssignment;
 
   const badgeText = (() => {
     if (!token) return null;

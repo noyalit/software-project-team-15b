@@ -170,6 +170,9 @@ export default function MyEventsPage() {
   });
 
   const activeRole = meQuery.data?.activeRole;
+  const hasManagerAssignment = Boolean(
+    (meQuery.data?.assignedRoles ?? []).some((r) => r.roleName === 'Manager' && r.eventId)
+  );
   const isApprovedAppointment =
     activeRole === 'Founder' || appointmentApprovedQuery.data === true;
 
@@ -540,7 +543,8 @@ export default function MyEventsPage() {
   if (
     meQuery.data?.activeRole !== 'Founder' &&
     meQuery.data?.activeRole !== 'Owner' &&
-    meQuery.data?.activeRole !== 'Manager'
+    meQuery.data?.activeRole !== 'Manager' &&
+    !hasManagerAssignment
   ) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
