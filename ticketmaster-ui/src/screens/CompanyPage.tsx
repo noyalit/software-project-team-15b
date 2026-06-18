@@ -37,6 +37,17 @@ export default function CompanyPage() {
   const [managerSuccessMessage, setManagerSuccessMessage] = useState<string | null>(null);
   const [removeManagerSuccessMessage, setRemoveManagerSuccessMessage] = useState<string | null>(null);
 
+  const [companyManagerUsername, setCompanyManagerUsername] = useState('');
+  const [companyManagerPermissions, setCompanyManagerPermissions] = useState<ManagerPermission[]>([]);
+  const [companyManagerSuccessMessage, setCompanyManagerSuccessMessage] = useState<string | null>(null);
+
+  const [changeCompanyManagerUsername, setChangeCompanyManagerUsername] = useState('');
+  const [newCompanyManagerPermissions, setNewCompanyManagerPermissions] = useState<ManagerPermission[]>([]);
+  const [changeCompanyManagerSuccessMessage, setChangeCompanyManagerSuccessMessage] = useState<string | null>(null);
+
+  const [removeCompanyManagerUsername, setRemoveCompanyManagerUsername] = useState('');
+  const [removeCompanyManagerSuccessMessage, setRemoveCompanyManagerSuccessMessage] = useState<string | null>(null);
+
   const [purchasePolicyKind, setPurchasePolicyKind] = useState<
     'NONE' | 'MAX_TICKETS' | 'MIN_AGE' | 'MIN_TICKETS'
   >('NONE');
@@ -648,7 +659,7 @@ export default function CompanyPage() {
       setManagerUsername('');
       setManagerPermissions([]);
       setManagerEventId('');
-      setManagerSuccessMessage('Manager appointed successfully.');
+      setManagerSuccessMessage('Event manager appointed successfully.');
     },
   });
 
@@ -706,7 +717,7 @@ export default function CompanyPage() {
     onSuccess: () => {
       setRemoveManagerUsername('');
       setRemoveManagerEventId('');
-      setRemoveManagerSuccessMessage('Manager removed successfully.');
+      setRemoveManagerSuccessMessage('Event manager removed successfully.');
     },
   });
 
@@ -755,7 +766,110 @@ export default function CompanyPage() {
       setChangeManagerUsername('');
       setChangeManagerEventId('');
       setNewManagerPermissions([]);
-      setChangeManagerSuccessMessage('Manager permissions updated successfully.');
+      setChangeManagerSuccessMessage('Event manager permissions updated successfully.');
+    },
+  });
+
+  const appointCompanyManagerMutation = useMutation({
+    mutationFn: async () => {
+      setCompanyManagerSuccessMessage(null);
+
+      if (!companyId) throw new Error('Company ID is missing.');
+
+      const username = companyManagerUsername.trim();
+      if (!username) throw new Error('Please enter a username.');
+
+      const resolved = await http.get<ApiResponse<MemberDTO>>('/api/users/members/resolve', {
+        params: { username },
+      });
+
+      if (resolved.data.error) throw new Error(resolved.data.error);
+
+      const memberId = resolved.data.data?.userId;
+      if (!memberId) throw new Error('Member not found.');
+
+      const res = await http.post<ApiResponse<MemberDTO>>('/api/users/roles/company-manager', {
+        memberId,
+        companyId,
+        permissions: companyManagerPermissions,
+      });
+
+      if (res.data.error) throw new Error(res.data.error);
+
+      return res.data.data;
+    },
+    onSuccess: () => {
+      setCompanyManagerUsername('');
+      setCompanyManagerPermissions([]);
+      setCompanyManagerSuccessMessage('Company manager appointed successfully.');
+    },
+  });
+
+  const changeCompanyManagerPermissionsMutation = useMutation({
+    mutationFn: async () => {
+      setChangeCompanyManagerSuccessMessage(null);
+
+      if (!companyId) throw new Error('Company ID is missing.');
+
+      const username = changeCompanyManagerUsername.trim();
+      if (!username) throw new Error('Please enter a username.');
+
+      const resolved = await http.get<ApiResponse<MemberDTO>>('/api/users/members/resolve', {
+        params: { username },
+      });
+
+      if (resolved.data.error) throw new Error(resolved.data.error);
+
+      const companyManagerId = resolved.data.data?.userId;
+      if (!companyManagerId) throw new Error('Company manager not found.');
+
+      const res = await http.post<ApiResponse<MemberDTO>>('/api/users/roles/company-manager/permissions', {
+        companyManagerId,
+        companyId,
+        newPermissions: newCompanyManagerPermissions,
+      });
+
+      if (res.data.error) throw new Error(res.data.error);
+
+      return res.data.data;
+    },
+    onSuccess: () => {
+      setChangeCompanyManagerUsername('');
+      setNewCompanyManagerPermissions([]);
+      setChangeCompanyManagerSuccessMessage('Company manager permissions updated successfully.');
+    },
+  });
+
+  const removeCompanyManagerMutation = useMutation({
+    mutationFn: async () => {
+      setRemoveCompanyManagerSuccessMessage(null);
+
+      if (!companyId) throw new Error('Company ID is missing.');
+
+      const username = removeCompanyManagerUsername.trim();
+      if (!username) throw new Error('Please enter a username.');
+
+      const resolved = await http.get<ApiResponse<MemberDTO>>('/api/users/members/resolve', {
+        params: { username },
+      });
+
+      if (resolved.data.error) throw new Error(resolved.data.error);
+
+      const memberToRemoveId = resolved.data.data?.userId;
+      if (!memberToRemoveId) throw new Error('Member not found.');
+
+      const res = await http.post<ApiResponse<MemberDTO>>('/api/users/roles/company-manager/remove', {
+        memberToRemoveId,
+        companyId,
+      });
+
+      if (res.data.error) throw new Error(res.data.error);
+
+      return res.data.data;
+    },
+    onSuccess: () => {
+      setRemoveCompanyManagerUsername('');
+      setRemoveCompanyManagerSuccessMessage('Company manager removed successfully.');
     },
   });
 
@@ -1303,7 +1417,7 @@ export default function CompanyPage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="text-slate-900 font-semibold">Add manager</div>
+        <div className="text-slate-900 font-semibold">Add Event Manager</div>
 
         <div className="mt-4 grid gap-4">
           <div>
@@ -1373,7 +1487,7 @@ export default function CompanyPage() {
             disabled={appointManagerMutation.isPending}
             className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
           >
-            Add manager
+            Add Event Manager
           </button>
 
           {appointManagerMutation.isError && (
@@ -1391,7 +1505,7 @@ export default function CompanyPage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="text-slate-900 font-semibold">Change manager permissions</div>
+        <div className="text-slate-900 font-semibold">Change Event Manager Permissions</div>
 
         <div className="mt-4 grid gap-4">
           <div>
@@ -1478,7 +1592,7 @@ export default function CompanyPage() {
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="text-slate-900 font-semibold">
-          Remove manager appointment
+          Remove Event Manager Appointment
         </div>
 
         <div className="mt-4 grid gap-4">
@@ -1516,7 +1630,7 @@ export default function CompanyPage() {
             disabled={removeManagerMutation.isPending}
             className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 hover:bg-rose-100"
           >
-            Remove manager
+            Remove Event Manager
           </button>
 
           {removeManagerMutation.isError && (
@@ -1528,6 +1642,177 @@ export default function CompanyPage() {
           {removeManagerSuccessMessage && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
               {removeManagerSuccessMessage}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="text-slate-900 font-semibold">Add Company Manager</div>
+
+        <div className="mt-2 text-sm text-slate-600">
+          Company managers belong to the company and are not limited to a specific event.
+        </div>
+
+        <div className="mt-4 grid gap-3">
+          <label className="block">
+            <div className="text-sm font-medium text-slate-700">Username</div>
+            <input
+              value={companyManagerUsername}
+              onChange={(e) => setCompanyManagerUsername(e.target.value)}
+              placeholder="e.g. alice"
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            />
+          </label>
+
+          <div className="grid gap-2 md:grid-cols-2">
+            {allPermissions.map((permission) => (
+              <label key={permission} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={companyManagerPermissions.includes(permission)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setCompanyManagerPermissions((prev) => [...prev, permission]);
+                    } else {
+                      setCompanyManagerPermissions((prev) =>
+                        prev.filter((p) => p !== permission)
+                      );
+                    }
+                  }}
+                />
+                {permission}
+              </label>
+            ))}
+          </div>
+
+          <button
+            onClick={() => appointCompanyManagerMutation.mutate()}
+            disabled={appointCompanyManagerMutation.isPending}
+            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+          >
+            {appointCompanyManagerMutation.isPending
+              ? 'Adding...'
+              : 'Add Company Manager'}
+          </button>
+
+          {appointCompanyManagerMutation.isError && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              {(appointCompanyManagerMutation.error as Error).message}
+            </div>
+          )}
+
+          {companyManagerSuccessMessage && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {companyManagerSuccessMessage}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="text-slate-900 font-semibold">
+          Change Company Manager Permissions
+        </div>
+
+        <div className="mt-4 grid gap-3">
+          <label className="block">
+            <div className="text-sm font-medium text-slate-700">Username</div>
+            <input
+              value={changeCompanyManagerUsername}
+              onChange={(e) => setChangeCompanyManagerUsername(e.target.value)}
+              placeholder="e.g. alice"
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            />
+          </label>
+
+          <div className="grid gap-2 md:grid-cols-2">
+            {allPermissions.map((permission) => (
+              <label key={permission} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={newCompanyManagerPermissions.includes(permission)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setNewCompanyManagerPermissions((prev) => [
+                        ...prev,
+                        permission,
+                      ]);
+                    } else {
+                      setNewCompanyManagerPermissions((prev) =>
+                        prev.filter((p) => p !== permission)
+                      );
+                    }
+                  }}
+                />
+                {permission}
+              </label>
+            ))}
+          </div>
+
+          <button
+            onClick={() => changeCompanyManagerPermissionsMutation.mutate()}
+            disabled={changeCompanyManagerPermissionsMutation.isPending}
+            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+          >
+            {changeCompanyManagerPermissionsMutation.isPending
+              ? 'Updating...'
+              : 'Change Company Manager Permissions'}
+          </button>
+
+          {changeCompanyManagerPermissionsMutation.isError && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              {(changeCompanyManagerPermissionsMutation.error as Error).message}
+            </div>
+          )}
+
+          {changeCompanyManagerSuccessMessage && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {changeCompanyManagerSuccessMessage}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="text-slate-900 font-semibold">
+          Remove Company Manager Appointment
+        </div>
+
+        <div className="mt-2 text-sm text-slate-600">
+          Enter a username to remove their company manager appointment.
+        </div>
+
+        <div className="mt-4 grid gap-3">
+          <label className="block">
+            <div className="text-sm font-medium text-slate-700">Username</div>
+            <input
+              value={removeCompanyManagerUsername}
+              onChange={(e) => setRemoveCompanyManagerUsername(e.target.value)}
+              placeholder="e.g. alice"
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            />
+          </label>
+
+          <button
+            onClick={() => removeCompanyManagerMutation.mutate()}
+            disabled={removeCompanyManagerMutation.isPending}
+            className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 hover:bg-rose-100 disabled:opacity-60"
+          >
+            {removeCompanyManagerMutation.isPending
+              ? 'Removing...'
+              : 'Remove Company Manager'}
+          </button>
+
+          {removeCompanyManagerMutation.isError && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              {(removeCompanyManagerMutation.error as Error).message}
+            </div>
+          )}
+
+          {removeCompanyManagerSuccessMessage && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {removeCompanyManagerSuccessMessage}
             </div>
           )}
         </div>
