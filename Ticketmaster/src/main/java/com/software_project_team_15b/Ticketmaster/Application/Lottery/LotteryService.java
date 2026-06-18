@@ -190,6 +190,29 @@ public class LotteryService {
                 AUDIT.warn("op=notifyLotteryWinners eventId={} result=error reason={}", eventId, e.getMessage());
             }
 
+            Set<UUID> losers = Set.of();
+            try {
+                losers = lotteryDomainService.getEventLotteryLosers(eventId);
+            } catch (RuntimeException e) {
+                AUDIT.warn("op=getLotteryLosersForNotification eventId={} result=error reason={}", eventId, e.getMessage());
+            }
+
+            // Notify each remaining entrant that they were not selected (best-effort; swallow notifier failures)
+            try {
+                for (UUID loser : losers) {
+                    String title = "Lottery results";
+                    String message = "You were not selected in the lottery for event " + eventId + ".";
+                    NotificationDTO dto = new NotificationDTO(NotificationType.LOTTERY_LOST, title, message, Instant.now());
+                    try {
+                        notifier.notifyUser(loser, dto);
+                    } catch (RuntimeException e) {
+                        AUDIT.warn("op=notifyLotteryLoser userId={} eventId={} result=error reason={}", loser, eventId, e.getMessage());
+                    }
+                }
+            } catch (RuntimeException e) {
+                AUDIT.warn("op=notifyLotteryLosers eventId={} result=error reason={}", eventId, e.getMessage());
+            }
+
             return drawn;
         } catch (RuntimeException e) {
             AUDIT.warn("op=runEventLottery eventId={} count={} result=error error={}", eventId, count, e.getMessage());

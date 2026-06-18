@@ -7,13 +7,16 @@ import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotterySer
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationType;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -51,6 +54,7 @@ class LotteryServiceWhiteTest {
 
     private static final UUID EVENT_ID   = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID USER_A     = UUID.fromString("00000000-0000-0000-0000-000000000002");
+    private static final UUID USER_B     = UUID.fromString("00000000-0000-0000-0000-000000000003");
     private static final UUID COMPANY_ID = UUID.fromString("00000000-0000-0000-0000-000000000010");
     private static final String TOKEN_A  = "token-a";
     private static final LocalDateTime EXPIRY = LocalDateTime.now().plusHours(1);
@@ -108,6 +112,7 @@ class LotteryServiceWhiteTest {
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(EVENT_ID, 2, EXPIRY)).thenReturn(expected);
+        when(lotteryDomainService.getEventLotteryLosers(EVENT_ID)).thenReturn(Set.of(USER_B));
 
         Set<UUID> result = service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 2, EXPIRY);
 
@@ -116,7 +121,41 @@ class LotteryServiceWhiteTest {
         verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).runEventLottery(EVENT_ID, 2, EXPIRY);
+        verify(lotteryDomainService).getEventLotteryLosers(EVENT_ID);
         verify(notifier).notifyUser(eq(USER_A), any());
+        verify(notifier).notifyUser(eq(USER_B), any());
+    }
+
+    @Test
+    void runEventLottery_notifiesWinnerAndLoserWithExpectedNotificationTypes() {
+        Set<UUID> winners = Set.of(USER_A);
+        Set<UUID> losers = Set.of(USER_B);
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        when(lotteryDomainService.runEventLottery(EVENT_ID, 1, EXPIRY)).thenReturn(winners);
+        when(lotteryDomainService.getEventLotteryLosers(EVENT_ID)).thenReturn(losers);
+
+        service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 1, EXPIRY);
+
+        ArgumentCaptor<NotificationDTO> winnerNotification = ArgumentCaptor.forClass(NotificationDTO.class);
+        ArgumentCaptor<NotificationDTO> loserNotification = ArgumentCaptor.forClass(NotificationDTO.class);
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(lotteryDomainService).runEventLottery(EVENT_ID, 1, EXPIRY);
+        verify(lotteryDomainService).getEventLotteryLosers(EVENT_ID);
+        verify(notifier).notifyUser(eq(USER_A), winnerNotification.capture());
+        verify(notifier).notifyUser(eq(USER_B), loserNotification.capture());
+
+        assertThat(winnerNotification.getValue().getType()).isEqualTo(NotificationType.LOTTERY_WON);
+        assertThat(winnerNotification.getValue().getTitle()).isEqualTo("You won the lottery");
+        assertThat(winnerNotification.getValue().getMessage()).contains(EVENT_ID.toString());
+        assertThat(loserNotification.getValue().getType()).isEqualTo(NotificationType.LOTTERY_LOST);
+        assertThat(loserNotification.getValue().getTitle()).isEqualTo("Lottery results");
+        assertThat(loserNotification.getValue().getMessage())
+                .contains("not selected")
+                .contains(EVENT_ID.toString());
     }
 
     @Test
@@ -214,6 +253,7 @@ class LotteryServiceWhiteTest {
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, eid)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(eid, 7, EXPIRY)).thenReturn(Set.of());
+        when(lotteryDomainService.getEventLotteryLosers(eid)).thenReturn(Set.of());
 
         service.runEventLottery(TOKEN_A, COMPANY_ID, eid, 7, EXPIRY);
 
@@ -221,6 +261,7 @@ class LotteryServiceWhiteTest {
         verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, eid);
         verify(lotteryDomainService).runEventLottery(eid, 7, EXPIRY);
+        verify(lotteryDomainService).getEventLotteryLosers(eid);
     }
 
     // =========================================================================
@@ -594,6 +635,7 @@ class LotteryServiceWhiteTest {
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(EVENT_ID, 1, EXPIRY)).thenReturn(Set.of(USER_A));
+        when(lotteryDomainService.getEventLotteryLosers(EVENT_ID)).thenReturn(Set.of());
         when(userDomainService.resolveMemberById(USER_A)).thenReturn(memberDTO);
         when(memberDTO.getUsername()).thenReturn("alice");
 
@@ -604,6 +646,7 @@ class LotteryServiceWhiteTest {
         verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).runEventLottery(EVENT_ID, 1, EXPIRY);
+        verify(lotteryDomainService).getEventLotteryLosers(EVENT_ID);
         verify(userDomainService).resolveMemberById(USER_A);
         verify(notifier).notifyUser(eq(USER_A), any());
     }
@@ -614,6 +657,7 @@ class LotteryServiceWhiteTest {
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(EVENT_ID, 1, EXPIRY)).thenReturn(Set.of(USER_A));
+        when(lotteryDomainService.getEventLotteryLosers(EVENT_ID)).thenReturn(Set.of());
         when(userDomainService.resolveMemberById(USER_A)).thenThrow(new RuntimeException("not found"));
 
         Set<String> result = service.runEventLotteryUsernames(TOKEN_A, COMPANY_ID, EVENT_ID, 1, EXPIRY);
@@ -623,6 +667,7 @@ class LotteryServiceWhiteTest {
         verify(auth).extractUserId(TOKEN_A);
         verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
         verify(lotteryDomainService).runEventLottery(EVENT_ID, 1, EXPIRY);
+        verify(lotteryDomainService).getEventLotteryLosers(EVENT_ID);
         verify(userDomainService).resolveMemberById(USER_A);
         verify(notifier).notifyUser(eq(USER_A), any());
     }

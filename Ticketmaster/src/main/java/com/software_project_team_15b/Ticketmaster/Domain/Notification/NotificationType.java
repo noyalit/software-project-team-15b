@@ -29,4 +29,6 @@ public enum NotificationType {
     ADMIN_MESSAGE,
     /** A user won an event lottery. */
     LOTTERY_WON,
+    /** A user was not selected in an event lottery. */
+    LOTTERY_LOST,
 }

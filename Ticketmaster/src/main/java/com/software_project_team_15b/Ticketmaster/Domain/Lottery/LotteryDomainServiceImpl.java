@@ -253,6 +253,27 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
     }
 
     /**
+     * Returns the set of all entries that were not drawn for the given event.
+     *
+     * @param eventId the unique identifier of the event; must not be null
+     * @return an unmodifiable set of loser UUIDs
+     * @throws IllegalArgumentException if {@code eventId} is null
+     * @throws LotteryNotFoundException if no lottery exists for the given event
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Set<UUID> getEventLotteryLosers(UUID eventId) {
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+        Lottery lottery = lotteryRepository.getLottery(eventId);
+        if (lottery == null) {
+            throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
+        }
+        return Set.copyOf(lottery.getEntries());
+    }
+
+    /**
      * Returns the lottery eligibility status for the given user and event.
      *
      * <ul>

@@ -73,6 +73,14 @@ public interface ILotteryDomainService {
     Set<UUID> getEventLotteryWinners(UUID eventId);
 
     /**
+     * Returns the set of users who entered the lottery but were not selected.
+     *
+     * @param eventId the unique identifier of the event; must not be null
+     * @return an unmodifiable set of loser UUIDs
+     */
+    Set<UUID> getEventLotteryLosers(UUID eventId);
+
+    /**
      * Returns the lottery eligibility status for the given user and event.
      *
      * @param userId  the unique identifier of the user; must not be null
