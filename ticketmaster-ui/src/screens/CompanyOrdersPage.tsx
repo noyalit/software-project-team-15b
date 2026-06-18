@@ -271,7 +271,7 @@ export default function CompanyOrdersPage() {
               className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm disabled:opacity-60"
             >
               <option value="">Select a company…</option>
-              {companiesQuery.data?.map((c) => (
+              {visibleCompanies.map((c) => (
                 <option key={c.companyId} value={c.companyId}>
                   {c.name}
                 </option>

@@ -166,7 +166,7 @@ export default function MyEventsPage() {
     enabled:
       Boolean(token) &&
       userType === 'member' &&
-      (meQuery.data?.activeRole === 'Owner' || meQuery.data?.activeRole === 'Manager'),
+      (meQuery.data?.activeRole === 'Owner' || meQuery.data?.activeRole === 'Manager' || meQuery.data?.activeRole === 'CompanyManager'),
   });
 
   const activeRole = meQuery.data?.activeRole;
@@ -201,12 +201,26 @@ export default function MyEventsPage() {
     const ids = (managerEventsQuery.data ?? []).map((e) => e.companyId);
     return Array.from(new Set(ids));
   }, [managerEventsQuery.data]);
+
+  const companyManagerCompanyIds = useMemo(() => {
+    const ids = (meQuery.data?.assignedRoles ?? [])
+      .filter((r) => r.roleName === 'CompanyManager' && r.approved === true && Boolean(r.companyId))
+      .map((r) => r.companyId as string);
+
+    return Array.from(new Set(ids));
+  }, [meQuery.data?.assignedRoles]);
+
   const isApprovedAppointment =
     activeRole === 'Founder' || appointmentApprovedQuery.data === true;
 
   const canManageEvents =
-  activeRole === 'Founder' ||
-  ((activeRole === 'Owner' || activeRole === 'Manager') && isApprovedAppointment);
+    activeRole === 'Founder' ||
+    (
+      (activeRole === 'Owner' ||
+        activeRole === 'Manager' ||
+        activeRole === 'CompanyManager') &&
+      isApprovedAppointment
+    );
 
   const canCreateEvents = activeRole === 'Founder' || activeRole === 'Owner';
 
@@ -345,10 +359,34 @@ export default function MyEventsPage() {
     enabled: Boolean(token) && userType === 'member' && managerCompanyIds.length > 0,
   });
 
-  const availableCompanies =
-    (companiesQuery.data?.length ?? 0) > 0
-      ? (companiesQuery.data ?? [])
-      : (managerCompaniesQuery.data ?? []);
+  const companyManagerCompaniesQuery = useQuery({
+    queryKey: ['company-manager-companies', companyManagerCompanyIds.join(','), token],
+    queryFn: async () => {
+      const companies = await Promise.all(
+        companyManagerCompanyIds.map(async (companyId) => {
+          const res = await http.get<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}`);
+          if (res.data.error) throw new Error(res.data.error);
+          if (!res.data.data) throw new Error('Company not found');
+          return res.data.data;
+        })
+      );
+
+      return companies;
+    },
+    enabled:
+      Boolean(token) &&
+      userType === 'member' &&
+      companyManagerCompanyIds.length > 0,
+  });
+
+  const availableCompanies = [
+    ...(companiesQuery.data ?? []),
+    ...(managerCompaniesQuery.data ?? []),
+    ...(companyManagerCompaniesQuery.data ?? []),
+  ].filter(
+    (company, index, arr) =>
+      arr.findIndex((c) => c.companyId === company.companyId) === index
+  );
 
   const eventsQuery = useQuery({
     queryKey: ['company-events', selectedCompanyId],
@@ -612,6 +650,7 @@ export default function MyEventsPage() {
     meQuery.data?.activeRole !== 'Founder' &&
     meQuery.data?.activeRole !== 'Owner' &&
     meQuery.data?.activeRole !== 'Manager' &&
+    meQuery.data?.activeRole !== 'CompanyManager' &&
     !hasManagerAssignment
   ) {
     return (
