@@ -523,7 +523,7 @@ public class UserDomainService {
         }
 
         // Keep the view authorization check
-        if (!isActiveFounder(requesterId, companyId) && !isActiveOwner(requesterId, companyId)) {
+        if (!isActiveFounder(requesterId, companyId) && !isActiveOwner(requesterId, companyId) && !hasCompanyManagerPermission(requesterId, companyId, ManagerPermission.GENERATE_SALES_REPORTS)) {
             throw new UnauthorizedCompanyActionException(
                     "Only company owners or founders can view the role tree"
             );
