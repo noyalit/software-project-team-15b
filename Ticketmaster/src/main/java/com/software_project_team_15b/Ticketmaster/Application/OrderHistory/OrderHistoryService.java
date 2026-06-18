@@ -624,7 +624,7 @@ public class OrderHistoryService implements EventSubscriber{
             .filter(manager -> manager.isAppointmentApproved())
             .anyMatch(manager -> manager.hasPermission(requiredPermission));
 
-        return (isPermittedManager || isFounderOrOwner(callerId, companyId));
+        return (isPermittedManager || isPermittedCompanyManager || isFounderOrOwner(callerId, companyId));
     }
 
     private void refundPaymentForOrder(OrderHistory orderHistory) {
