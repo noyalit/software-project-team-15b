@@ -131,7 +131,7 @@ export default function MyCompaniesPage() {
   }
 
   const activeRole = meQuery.data.activeRole ?? 'RegularMember';
-  const canManageCompanies = activeRole === 'Founder' || activeRole === 'Owner';
+  const canManageCompanies = activeRole === 'Founder' || activeRole === 'Owner' || activeRole === 'CompanyManager';
 
   return (
     <div className="space-y-4">
@@ -161,7 +161,7 @@ export default function MyCompaniesPage() {
       {!canManageCompanies ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="text-slate-900 font-semibold">
-            Company management is available only for active Founders or Owners.
+            Company management is available only for active Founders, Owners, or Company Managers.
           </div>
 
           <div className="mt-1 text-sm text-slate-600">
