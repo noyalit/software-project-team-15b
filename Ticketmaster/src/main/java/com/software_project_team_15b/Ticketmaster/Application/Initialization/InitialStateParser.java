@@ -3,6 +3,8 @@ package com.software_project_team_15b.Ticketmaster.Application.Initialization;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
@@ -22,9 +24,15 @@ import org.springframework.stereotype.Component;
 @Component
 public class InitialStateParser {
 
+    private static final Logger LOG = LoggerFactory.getLogger(InitialStateParser.class);
+
+    /** Longest statement snippet echoed back in an error message before truncation. */
+    private static final int MAX_SNIPPET = 80;
+
     public List<Statement> parse(String text) {
         if (text == null) {
-            throw new InitialStateException("Initial-state content is null");
+            throw new InitialStateException(
+                    "Initial-state content is null (the file could not be read or was empty)");
         }
 
         String stripped = stripComments(text);
@@ -69,14 +77,21 @@ public class InitialStateParser {
         }
 
         if (inQuotes) {
-            throw new InitialStateException("Unterminated quoted argument near line " + statementStartLine);
+            throw new InitialStateException(
+                    "Unterminated quoted argument starting near line " + statementStartLine
+                            + ": a '\"' was opened but never closed before end of file"
+                            + " (offending text: " + snippet(buffer.toString()) + ")");
         }
         if (!buffer.toString().isBlank()) {
+            int where = statementStartLine == 0 ? line : statementStartLine;
             throw new InitialStateException(
-                    "Missing ';' terminator for statement near line "
-                            + (statementStartLine == 0 ? line : statementStartLine));
+                    "Missing ';' terminator for the statement starting on line " + where
+                            + "; every statement must end with ';'"
+                            + " (offending text: " + snippet(buffer.toString()) + ")");
         }
 
+        LOG.debug("Parsed {} statement(s) from {} character(s) of initial-state content",
+                statements.size(), stripped.length());
         return statements;
     }
 
@@ -108,19 +123,36 @@ public class InitialStateParser {
         int open = trimmed.indexOf('(');
         if (open < 0) {
             throw new InitialStateException(
-                    "Expected '(' in statement near line " + line + ": " + trimmed);
+                    "Expected '(' after the operation name on line " + line
+                            + "; a statement looks like 'operation(arg1, arg2, ...)'"
+                            + " (offending text: " + snippet(trimmed) + ")");
         }
         if (!trimmed.endsWith(")")) {
             throw new InitialStateException(
-                    "Expected ')' to close statement near line " + line + ": " + trimmed);
+                    "Expected closing ')' to end the statement on line " + line
+                            + " (offending text: " + snippet(trimmed) + ")");
         }
         String name = trimmed.substring(0, open).trim();
         if (name.isEmpty()) {
-            throw new InitialStateException("Missing operation name near line " + line + ": " + trimmed);
+            throw new InitialStateException(
+                    "Missing operation name before '(' on line " + line
+                            + " (offending text: " + snippet(trimmed) + ")");
         }
 
         String inner = trimmed.substring(open + 1, trimmed.length() - 1);
-        return new Statement(name, splitArgs(inner), line);
+        Statement statement = new Statement(name, splitArgs(inner), line);
+        LOG.trace("Parsed statement on line {}: operation={} argCount={}",
+                line, name, statement.argCount());
+        return statement;
+    }
+
+    /** Returns a single-line, length-bounded, quoted view of {@code text} for error messages. */
+    private String snippet(String text) {
+        String oneLine = text.trim().replaceAll("\\s+", " ");
+        if (oneLine.length() > MAX_SNIPPET) {
+            oneLine = oneLine.substring(0, MAX_SNIPPET) + "…";
+        }
+        return "'" + oneLine + "'";
     }
 
     private List<String> splitArgs(String inner) {

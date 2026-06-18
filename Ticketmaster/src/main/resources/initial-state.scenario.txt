@@ -1,0 +1,46 @@
+# 1. Register users u1, u2, u3, u4
+guest-registration(u1, U1pass123!, 1990-01-01);
+guest-registration(u2, U2pass123!, 1991-02-02);
+guest-registration(u3, U3pass123!, 1992-03-03);
+guest-registration(u4, U4pass123!, 1993-04-04);
+
+# 2. Login u1
+login(u1, U1pass123!);
+
+# 3. u1 opens production company p1 (becomes its active, approved founder)
+open-production-company(u1, p1);
+
+# 4. u1 appoints u2 as owner (appointment is pending until u2 confirms)
+appoint-owner-pending(u1, p1, u2);
+
+# 5. u2 login
+login(u2, U2pass123!);
+
+# 6. u2 confirms the owner appointment
+confirm-owner(u2, p1);
+
+# 10. u2 adds event e1 to p1 with a standing zone (30 tickets @ 50) and a
+#     seating zone (100 tickets, 10x10 layout @ 100). Hoisted above the manager
+#     appointment because a manager is bound to a concrete event.
+create-event(u2, p1, e1, "TBD Artist", CONCERT, 2026-12-01T20:00:00Z, "Main Venue");
+add-standing-area(u2, e1, "Standing Zone", 50, USD, 30);
+add-seating-area(u2, e1, "Seating Zone", 100, USD, 10, 10);
+
+# 7. u2 appoints u3 as manager of e1 with venue-layout permissions
+#    (CONFIGURE_HALLS_AND_SEATS + UPDATE_EVENT_MAP) but NOT the policy
+#    permissions (no DEFINE_PURCHASE_POLICY / DEFINE_DISCOUNT_POLICY).
+appoint-manager-pending(u2, e1, u3, CONFIGURE_HALLS_AND_SEATS|UPDATE_EVENT_MAP);
+
+# 8. u3 login
+login(u3, U3pass123!);
+
+# 9. u3 confirms the manager appointment
+confirm-manager(u3, e1);
+
+# 11. u2 adds a company-wide 20% coupon discount with code "sale123"
+add-company-coupon(u2, p1, sale123, 20);
+
+# 12. All logged-in users log out
+logout(u1);
+logout(u2);
+logout(u3);
