@@ -227,6 +227,9 @@ export default function ProfilePage() {
       } else if (roleTarget.startsWith('Manager:')) {
         const eventId = roleTarget.replace('Manager:', '');
         url = `/api/users/me/roles/manager/${eventId}`;
+      } else if (roleTarget.startsWith('CompanyManager:')) {
+        const companyId = roleTarget.replace('CompanyManager:', '');
+        url = `/api/users/me/roles/company-manager/${companyId}`;
       } else {
         throw new Error('Unsupported role.');
       }
@@ -311,6 +314,13 @@ export default function ProfilePage() {
   const managerEventIds = assignedRoles
     .filter((role) => typeof role !== 'string' && role.roleName === 'Manager' && role.eventId)
     .map((role) => role.eventId);
+  const companyManagerCompanyIds = assignedRoles
+    .filter((role) => typeof role !== 'string' && role.roleName === 'CompanyManager' && role.companyId)
+    .map((role) => role.companyId as string);
+
+  const companyManagerCompanies = companies.filter((company) =>
+    companyManagerCompanyIds.includes(company.companyId)
+  );
   const founderCompanies = companies.filter((company) => company.founderId === me.userId);
   const ownerCompanies = roleNames.includes('Owner') || currentRole === 'Owner'
     ? companies
@@ -320,6 +330,7 @@ export default function ProfilePage() {
   const hasFounderRole = founderCompanies.length > 0 || roleNames.includes('Founder')|| currentRole === 'Founder';
   const hasOwnerRole = ownerCompanies.length > 0 || roleNames.includes('Owner') || currentRole === 'Owner';
   const hasManagerRole = roleNames.includes('Manager') || currentRole === 'Manager';
+  const hasCompanyManagerRole = roleNames.includes('CompanyManager') || currentRole === 'CompanyManager';
 
   const updateError =
     changeUsernameMutation.error ??
@@ -592,6 +603,53 @@ export default function ProfilePage() {
 
                         {renderRoleButton(currentRole === 'Manager', `Manager:${event.eventId}`, true)}
                       </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {hasCompanyManagerRole && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-slate-900">CompanyManager</div>
+
+                  {currentRole === 'CompanyManager' && (
+                    <div className="mt-1 text-xs font-semibold text-emerald-700">
+                      Active now
+                    </div>
+                  )}
+                </div>
+
+                {companyManagerCompanies.length > 0 &&
+                  renderRoleButton(
+                    currentRole === 'CompanyManager',
+                    `CompanyManager:${companyManagerCompanies[0].companyId}`
+                  )}
+              </div>
+
+              <div className="mt-3 space-y-2">
+                {companyManagerCompanies.length === 0 ? (
+                  <div className="text-sm text-slate-600">
+                    No company manager companies found.
+                  </div>
+                ) : (
+                  companyManagerCompanies.map((company) => (
+                    <div
+                      key={company.companyId}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2"
+                    >
+                      <span className="text-sm font-medium text-slate-800">
+                        {company.name}
+                      </span>
+
+                      {renderRoleButton(
+                        currentRole === 'CompanyManager',
+                        `CompanyManager:${company.companyId}`,
+                        true
+                      )}
                     </div>
                   ))
                 )}
