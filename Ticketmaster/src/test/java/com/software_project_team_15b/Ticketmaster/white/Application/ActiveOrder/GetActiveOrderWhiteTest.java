@@ -19,7 +19,7 @@ class GetActiveOrderWhiteTest extends PurchasingServiceWhiteTestBase {
 
         ActiveOrder order = activeOrderWithSeats(seatId1);
 
-        when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
+        when(purchasingDomainService.getOwnedOrderForView(userId, orderId))
                 .thenReturn(order);
 
         mockPurchaseAccessAllowed();
@@ -51,7 +51,7 @@ class GetActiveOrderWhiteTest extends PurchasingServiceWhiteTestBase {
         assertEquals(orderId, view.orderId());
         assertEquals(eventId, view.eventId());
 
-        verify(purchasingDomainService).getOwnedOrderForUpdate(userId, orderId);
+        verify(purchasingDomainService).getOwnedOrderForView(userId, orderId);
         verify(purchasingDomainService).validateOrderIsActive(order);
         verify(lotteryDomainService).getLotteryEligibilityForEvent(userId, eventId);
         verify(queueDomainService).hasAccess(token, eventId);
@@ -64,7 +64,7 @@ class GetActiveOrderWhiteTest extends PurchasingServiceWhiteTestBase {
 
         ActiveOrder order = activeOrderWithSeats(seatId1);
 
-        when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
+        when(purchasingDomainService.getOwnedOrderForView(userId, orderId))
                 .thenReturn(order);
 
         doThrow(new TimeExpiredException("expired"))
@@ -92,14 +92,14 @@ class GetActiveOrderWhiteTest extends PurchasingServiceWhiteTestBase {
     void getActiveOrderShouldThrowWhenOrderDoesNotExist() {
         mockValidUser();
 
-        when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
+        when(purchasingDomainService.getOwnedOrderForView(userId, orderId))
                 .thenThrow(new IllegalArgumentException("Active order not found: " + orderId));
 
         assertThrows(IllegalArgumentException.class, () ->
                 service.getActiveOrder(token, orderId)
         );
 
-        verify(purchasingDomainService).getOwnedOrderForUpdate(userId, orderId);
+        verify(purchasingDomainService).getOwnedOrderForView(userId, orderId);
         verify(queueDomainService, never()).hasAccess(any(), any());
         verify(eventDomainService, never()).getEvent(any());
     }

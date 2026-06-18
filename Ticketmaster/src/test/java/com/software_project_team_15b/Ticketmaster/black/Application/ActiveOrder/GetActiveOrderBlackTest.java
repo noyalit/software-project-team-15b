@@ -117,7 +117,7 @@ class GetActiveOrderBlackTest {
         mockValidUser();
         mockPurchaseAccess(true);
 
-        when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
+        when(purchasingDomainService.getOwnedOrderForView(userId, orderId))
                 .thenReturn(order);
 
         when(eventDomainService.getSeatsAvailability(eventId, areaId, order.getOrderSeats()))
@@ -153,7 +153,7 @@ class GetActiveOrderBlackTest {
     void getActiveOrderShouldFailWhenOrderDoesNotExist() {
         mockValidUser();
 
-        when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
+        when(purchasingDomainService.getOwnedOrderForView(userId, orderId))
                 .thenThrow(new IllegalArgumentException("Active order not found: " + orderId));
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
@@ -169,7 +169,7 @@ class GetActiveOrderBlackTest {
 
         LotteryEligibilityDTO eligibility = mockValidUserAndAccessObjects(false);
 
-        when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
+        when(purchasingDomainService.getOwnedOrderForView(userId, orderId))
                 .thenReturn(order);
 
         doThrow(new TimeExpiredException("User does not have access"))
@@ -189,7 +189,7 @@ class GetActiveOrderBlackTest {
 
         mockValidUser();
 
-        when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
+        when(purchasingDomainService.getOwnedOrderForView(userId, orderId))
                 .thenReturn(order);
 
         doThrow(new TimeExpiredException("expired"))
@@ -218,7 +218,7 @@ class GetActiveOrderBlackTest {
         mockValidUser();
         mockPurchaseAccess(true);
 
-        when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId))
+        when(purchasingDomainService.getOwnedOrderForView(userId, orderId))
                 .thenReturn(order);
 
         when(eventDomainService.getSeatsAvailability(eventId, areaId, order.getOrderSeats()))

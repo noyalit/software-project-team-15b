@@ -362,6 +362,12 @@ public class EventDomainServiceImpl implements IEventDomainService {
     @Override
     @Transactional(readOnly = true)
     public Map<Boolean, Set<UUID>> getSeatsAvailability(UUID eventId, UUID areaId, Set<UUID> seatIds) {
+        return getSeatsAvailability(eventId, areaId, seatIds, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Map<Boolean, Set<UUID>> getSeatsAvailability(UUID eventId, UUID areaId, Set<UUID> seatIds, UUID holdToken) {
         Objects.requireNonNull(areaId, "areaId");
         Objects.requireNonNull(seatIds, "seatIds");
         Event event = requireEvent(eventId);
@@ -373,7 +379,11 @@ public class EventDomainServiceImpl implements IEventDomainService {
         for (UUID seatId : seatIds) {
             Objects.requireNonNull(seatId, "seatIds element");
             Seat seat = seats.get(seatId);
-            if (seat != null && seat.status() == SeatStatus.AVAILABLE) {
+            boolean isAvailable = seat != null && seat.status() == SeatStatus.AVAILABLE;
+            if (!isAvailable && seat != null && holdToken != null) {
+                isAvailable = seat.status() == SeatStatus.HELD && holdToken.equals(seat.heldBy());
+            }
+            if (isAvailable) {
                 available.add(seatId);
             } else {
                 unavailable.add(seatId);

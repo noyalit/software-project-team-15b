@@ -187,7 +187,7 @@ class CheckoutNotificationsWhiteTest extends PurchasingServiceWhiteTestBase {
                 mockValidUser();
 
                 ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
-                when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
+                when(purchasingDomainService.getOwnedOrderForView(userId, orderId)).thenReturn(order);
                 mockPurchaseAccessAllowed();
 
                 Map<Boolean, Set<UUID>> seatsAvailability = Map.of(
@@ -213,7 +213,7 @@ class CheckoutNotificationsWhiteTest extends PurchasingServiceWhiteTestBase {
                 mockValidUser();
 
                 ActiveOrder order = activeOrderInCheckoutWithSeats(seatId1);
-                when(purchasingDomainService.getOwnedOrderForUpdate(userId, orderId)).thenReturn(order);
+                when(purchasingDomainService.getOwnedOrderForView(userId, orderId)).thenReturn(order);
                 mockPurchaseAccessAllowed();
 
                 Map<Boolean, Set<UUID>> seatsAvailability = Map.of(

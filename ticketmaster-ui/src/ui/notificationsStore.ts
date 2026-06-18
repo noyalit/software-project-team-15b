@@ -12,6 +12,9 @@ type NotificationsState = {
   markAllRead: () => void;
   markRead: (id: string) => void;
   clear: () => void;
+  autoOpenToken: number;
+  lastConsumedAutoOpenToken: number;
+  consumeAutoOpen: (token: number) => void;
 };
 
 function makeId(n: NotificationDTO) {
@@ -26,11 +29,16 @@ function makeId(n: NotificationDTO) {
 
 export const useNotificationsStore = create<NotificationsState>((set) => ({
   notifications: [],
+  autoOpenToken: 0,
+  lastConsumedAutoOpenToken: 0,
   addNotification: (n) =>
     set((s) => {
       const id = makeId(n);
       const next: UiNotification = { ...n, id, read: false };
-      return { notifications: [next, ...s.notifications].slice(0, 200) };
+      return {
+        notifications: [next, ...s.notifications].slice(0, 200),
+        autoOpenToken: s.autoOpenToken + 1,
+      };
     }),
   markAllRead: () =>
     set((s) => ({
@@ -41,4 +49,5 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
       notifications: s.notifications.map((n) => (n.id === id ? { ...n, read: true } : n)),
     })),
   clear: () => set({ notifications: [] }),
+  consumeAutoOpen: (token) => set({ lastConsumedAutoOpenToken: token }),
 }));
