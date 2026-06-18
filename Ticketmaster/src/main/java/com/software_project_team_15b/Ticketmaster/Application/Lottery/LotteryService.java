@@ -9,6 +9,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
@@ -39,6 +40,7 @@ public class LotteryService {
     private final UserDomainService userDomainService;
     private final IAuth auth;
     private final INotifier notifier;
+    @Autowired
     public LotteryService(ILotteryDomainService lotteryDomainService, UserDomainService userDomainService,  IAuth auth, INotifier notifier) {
         this.lotteryDomainService = Objects.requireNonNull(lotteryDomainService);
         this.userDomainService = Objects.requireNonNull(userDomainService);
