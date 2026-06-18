@@ -243,13 +243,20 @@ export default function CompanyPage() {
     enabled:
       Boolean(token) &&
       userType === 'member' &&
-      (meQuery.data?.activeRole === 'Owner' || meQuery.data?.activeRole === 'Manager'),
+      (
+        meQuery.data?.activeRole === 'Owner' ||
+        meQuery.data?.activeRole === 'Manager' ||
+        meQuery.data?.activeRole === 'CompanyManager'
+      ),
   });
 
   const activeRole = meQuery.data?.activeRole;
   const canManageCompany =
     activeRole === 'Founder' ||
-    (activeRole === 'Owner' && appointmentApprovedQuery.data === true);
+    (
+      (activeRole === 'Owner' || activeRole === 'CompanyManager') &&
+      appointmentApprovedQuery.data === true
+    );
 
   if (!canManageCompany) {
     return (
@@ -258,7 +265,7 @@ export default function CompanyPage() {
           Company
         </h1>
         <p className="mt-2 text-slate-600">
-          Your owner appointment must be approved before you can manage this company.
+          Your appointment must be approved before you can manage this company.
         </p>
       </div>
     );
