@@ -381,6 +381,22 @@ export default function ProfilePage() {
     </button>
   );
 
+  const formatPermission = (permission: string) =>
+    permission
+      .toLowerCase()
+      .replaceAll('_', ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const getCompanyManagerPermissions = (companyId: string) =>
+    assignedRoles
+      .filter(
+        (role) =>
+          typeof role !== 'string' &&
+          role.roleName === 'CompanyManager' &&
+          role.companyId === companyId
+      )
+      .flatMap((role) => role.permissions ?? []);
+
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -674,6 +690,17 @@ export default function ProfilePage() {
                       <span className="text-sm font-medium text-slate-800">
                         {company.name}
                       </span>
+
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {getCompanyManagerPermissions(company.companyId).map((permission) => (
+                          <span
+                            key={permission}
+                            className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700"
+                          >
+                            {formatPermission(permission)}
+                          </span>
+                        ))}
+                      </div>
 
                       {approvedAppointmentTarget === company.companyId ? (
                         <span className="rounded-md bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-800">

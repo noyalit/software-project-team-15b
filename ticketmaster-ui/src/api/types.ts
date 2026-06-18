@@ -115,6 +115,7 @@ export type AssignedRoleDTO = {
   companyId?: string | null;
   eventId?: string | null;
   approved: boolean;
+  permissions?: ManagerPermission[];
 };
 
 export type ManagerPermission =

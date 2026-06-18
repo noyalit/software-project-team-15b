@@ -952,12 +952,23 @@ public class UserDomainService {
 
         List<AssignedRoleDTO> assignedRoles = member.getAssignedRoles()
                 .stream()
-                .map(role -> new AssignedRoleDTO(
-                        role.getRoleName(),
-                        role.getCompanyId(),
-                        role instanceof Manager manager ? manager.getEventId() : null,
-                        role.isAppointmentApproved()
-                ))
+                .map(role -> {
+                    Set<ManagerPermission> permissions = Set.of();
+
+                    if (role instanceof Manager manager) {
+                        permissions = manager.getPermissions();
+                    } else if (role instanceof CompanyManager companyManager) {
+                        permissions = companyManager.getPermissions();
+                    }
+
+                    return new AssignedRoleDTO(
+                            role.getRoleName(),
+                            role.getCompanyId(),
+                            role instanceof Manager manager ? manager.getEventId() : null,
+                            role.isAppointmentApproved(),
+                            permissions
+                    );
+                })
                 .toList();
 
         return new MemberDTO(
