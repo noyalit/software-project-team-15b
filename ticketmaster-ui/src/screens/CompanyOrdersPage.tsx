@@ -18,6 +18,17 @@ export default function CompanyOrdersPage() {
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [loadedOrders, setLoadedOrders] = useState<OrderHistoryDTO[]>([]);
 
+  const meQuery = useQuery({
+    queryKey: ['me', token],
+    queryFn: async () => {
+      const res = await http.get<ApiResponse<MemberDTO>>('/api/users/me');
+      if (res.data.error) throw new Error(res.data.error);
+      if (!res.data.data) throw new Error('No profile data');
+      return res.data.data;
+    },
+    enabled: userType === 'member' && Boolean(token),
+  });
+
   const companiesQuery = useQuery({
     queryKey: ['company-orders', 'companies', token],
     queryFn: async () => {
@@ -44,6 +55,32 @@ export default function CompanyOrdersPage() {
       }
     },
     enabled: userType === 'member' && Boolean(token),
+  });
+
+  const companyManagerCompaniesQuery = useQuery({
+    queryKey: ['company-orders', 'company-manager-companies', token, meQuery.data?.assignedRoles],
+    queryFn: async () => {
+      const companyIds = (meQuery.data?.assignedRoles ?? [])
+        .filter((role) => role.roleName === 'CompanyManager' && role.companyId)
+        .map((role) => role.companyId as string);
+
+      const uniqueCompanyIds = [...new Set(companyIds)];
+
+      const companies = await Promise.all(
+        uniqueCompanyIds.map(async (companyId) => {
+          const res = await http.get<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}`);
+          if (res.data.error) throw new Error(res.data.error);
+          if (!res.data.data) throw new Error('Company not found');
+          return res.data.data;
+        })
+      );
+
+      return companies;
+    },
+    enabled:
+      userType === 'member' &&
+      Boolean(token) &&
+      Boolean(meQuery.data?.assignedRoles?.some((role) => role.roleName === 'CompanyManager')),
   });
 
   const eventsQuery = useQuery({
@@ -195,7 +232,15 @@ export default function CompanyOrdersPage() {
     );
   }
 
-  const selectedCompany = companiesQuery.data?.find(
+  const visibleCompanies = [
+    ...(companiesQuery.data ?? []),
+    ...(companyManagerCompaniesQuery.data ?? []),
+  ].filter(
+    (company, index, arr) =>
+      arr.findIndex((c) => c.companyId === company.companyId) === index
+  );
+
+  const selectedCompany = visibleCompanies.find(
     (c) => c.companyId === selectedCompanyId
   );
 
