@@ -52,6 +52,32 @@ export default function MyCompaniesPage() {
     enabled: userType === 'member' && Boolean(token),
   });
 
+  const companyManagerCompaniesQuery = useQuery({
+    queryKey: ['companies', 'company-manager', token, meQuery.data?.assignedRoles],
+    queryFn: async () => {
+      const companyIds = (meQuery.data?.assignedRoles ?? [])
+        .filter((role) => role.roleName === 'CompanyManager' && role.companyId)
+        .map((role) => role.companyId as string);
+
+      const uniqueCompanyIds = [...new Set(companyIds)];
+
+      const companies = await Promise.all(
+        uniqueCompanyIds.map(async (companyId) => {
+          const res = await http.get<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}`);
+          if (res.data.error) throw new Error(res.data.error);
+          if (!res.data.data) throw new Error('Company not found');
+          return res.data.data;
+        })
+      );
+
+      return companies;
+    },
+    enabled:
+      userType === 'member' &&
+      Boolean(token) &&
+      Boolean(meQuery.data?.assignedRoles?.some((role) => role.roleName === 'CompanyManager')),
+  });
+
   if (userType !== 'member') {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -133,6 +159,14 @@ export default function MyCompaniesPage() {
   const activeRole = meQuery.data.activeRole ?? 'RegularMember';
   const canManageCompanies = activeRole === 'Founder' || activeRole === 'Owner' || activeRole === 'CompanyManager';
 
+  const allVisibleCompanies = [
+    ...(companiesQuery.data ?? []),
+    ...(companyManagerCompaniesQuery.data ?? []),
+  ].filter(
+    (company, index, arr) =>
+      arr.findIndex((c) => c.companyId === company.companyId) === index
+  );
+
   return (
     <div className="space-y-4">
       <div>
@@ -168,7 +202,7 @@ export default function MyCompaniesPage() {
             You can still create a new company. After creating it, switch your active role to Founder to manage it.
           </div>
         </div>
-      ) : companiesQuery.data.length === 0 ? (
+      ) : allVisibleCompanies.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="text-slate-900 font-semibold">No companies yet</div>
 
@@ -178,7 +212,7 @@ export default function MyCompaniesPage() {
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          {companiesQuery.data.map((c) => (
+          {allVisibleCompanies.map((c) => (
             <div
               key={c.companyId}
               className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"

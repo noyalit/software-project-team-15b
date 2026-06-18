@@ -68,6 +68,34 @@ export default function ProfilePage() {
     enabled: Boolean(token) && userType === 'member',
   });
 
+  const companyManagerCompaniesQuery = useQuery({
+    queryKey: ['profile', 'company-manager-companies', token, meQuery.data?.assignedRoles],
+    queryFn: async () => {
+      const roles = meQuery.data?.assignedRoles ?? [];
+
+      const companyIds = roles
+        .filter((role) => role.roleName === 'CompanyManager' && role.companyId)
+        .map((role) => role.companyId as string);
+
+      const uniqueCompanyIds = [...new Set(companyIds)];
+
+      const companies = await Promise.all(
+        uniqueCompanyIds.map(async (companyId) => {
+          const res = await http.get<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}`);
+          if (res.data.error) throw new Error(res.data.error);
+          if (!res.data.data) throw new Error('Company not found');
+          return res.data.data;
+        })
+      );
+
+      return companies;
+    },
+    enabled:
+      Boolean(token) &&
+      userType === 'member' &&
+      Boolean(meQuery.data?.assignedRoles?.some((role) => role.roleName === 'CompanyManager')),
+  });
+
   const companyEventsQuery = useQuery({
     queryKey: ['profile', 'company-events', token, companiesQuery.data?.map((c) => c.companyId).join(',')],
     queryFn: async () => {
@@ -318,9 +346,7 @@ export default function ProfilePage() {
     .filter((role) => typeof role !== 'string' && role.roleName === 'CompanyManager' && role.companyId)
     .map((role) => role.companyId as string);
 
-  const companyManagerCompanies = companies.filter((company) =>
-    companyManagerCompanyIds.includes(company.companyId)
-  );
+  const companyManagerCompanies = companyManagerCompaniesQuery.data ?? [];
   const founderCompanies = companies.filter((company) => company.founderId === me.userId);
   const ownerCompanies = roleNames.includes('Owner') || currentRole === 'Owner'
     ? companies
