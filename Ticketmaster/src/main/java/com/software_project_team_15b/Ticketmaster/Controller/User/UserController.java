@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyRoleTreeDTO;
@@ -288,6 +289,9 @@ public class UserController {
 
             return ResponseEntity.ok(new ApiResponse<>(result, null));
 
+        } catch (UnauthorizedCompanyActionException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ApiResponse<>(null, ex.getMessage()));
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         } catch (IllegalStateException ex) {
@@ -313,6 +317,9 @@ public class UserController {
                     ),
                     null
             ));
+        } catch (UnauthorizedCompanyActionException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ApiResponse<>(null, ex.getMessage()));
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         } catch (IllegalStateException ex) {
@@ -337,6 +344,9 @@ public class UserController {
 
             return ResponseEntity.ok(new ApiResponse<>(result, null));
 
+        } catch (UnauthorizedCompanyActionException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ApiResponse<>(null, ex.getMessage()));
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         } catch (IllegalStateException ex) {
@@ -404,8 +414,13 @@ public class UserController {
                     null
             ));
 
+        } catch (UnauthorizedCompanyActionException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ApiResponse<>(null, ex.getMessage()));
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
+        } catch (IllegalStateException ex) {
+            return conflict(ex);
         } catch (Exception ex) {
             return internalServerError(ex);
         }
@@ -426,8 +441,13 @@ public class UserController {
                     ),
                     null
             ));
+        } catch (UnauthorizedCompanyActionException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ApiResponse<>(null, ex.getMessage()));
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
+        } catch (IllegalStateException ex) {
+            return conflict(ex);
         } catch (Exception ex) {
             return internalServerError(ex);
         }

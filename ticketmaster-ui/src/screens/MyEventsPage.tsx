@@ -222,7 +222,20 @@ export default function MyEventsPage() {
       isApprovedAppointment
     );
 
-  const canCreateEvents = activeRole === 'Founder' || activeRole === 'Owner';
+  const companyManagerCanManageEvents = Boolean(
+    (meQuery.data?.assignedRoles ?? []).some(
+      (r) =>
+        r.roleName === 'CompanyManager' &&
+        r.approved === true &&
+        r.companyId === selectedCompanyId &&
+        r.permissions?.includes('MANAGE_EVENTS')
+    )
+  );
+
+  const canCreateEvents =
+    activeRole === 'Founder' ||
+    activeRole === 'Owner' ||
+    (activeRole === 'CompanyManager' && companyManagerCanManageEvents);
 
   const deleteLotteryMutation = useMutation({
     mutationFn: async ({ companyId, eventId }: { companyId: string; eventId: string }) => {
@@ -657,7 +670,7 @@ export default function MyEventsPage() {
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-extrabold text-slate-900">My Events</h1>
         <p className="mt-2 text-slate-600">
-          Only active Owners, Founders, or Managers can manage events.
+          Only active Owners, Founders, Managers, or Company Managers can manage events.
         </p>
       </div>
     );
