@@ -30,6 +30,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.CompanyManager;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Manager;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
@@ -612,6 +613,13 @@ public class OrderHistoryService implements EventSubscriber{
         boolean isPermittedManager = member.getAssignedRoles().stream()
             .filter(role -> role instanceof Manager)
             .map(role -> (Manager) role)
+            .filter(manager -> companyId.equals(manager.getCompanyId()))
+            .filter(manager -> manager.isAppointmentApproved())
+            .anyMatch(manager -> manager.hasPermission(requiredPermission));
+
+        boolean isPermittedCompanyManager = member.getAssignedRoles().stream()
+            .filter(role -> role instanceof CompanyManager)
+            .map(role -> (CompanyManager) role)
             .filter(manager -> companyId.equals(manager.getCompanyId()))
             .filter(manager -> manager.isAppointmentApproved())
             .anyMatch(manager -> manager.hasPermission(requiredPermission));
