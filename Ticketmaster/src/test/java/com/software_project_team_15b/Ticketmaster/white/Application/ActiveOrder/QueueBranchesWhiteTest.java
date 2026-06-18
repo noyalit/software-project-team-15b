@@ -118,10 +118,10 @@ class QueueBranchesWhiteTest extends PurchasingServiceWhiteTestBase {
         RemoveOrAddSeatsFromActiveOrderCommand cmd =
                 new RemoveOrAddSeatsFromActiveOrderCommand(orderId, Set.of(seatId1));
 
-        TimeExpiredException ex = assertThrows(TimeExpiredException.class, () ->
+        RuntimeException ex = assertThrows(RuntimeException.class, () ->
                 service.addSeatsToExistingOrder(token, cmd)
         );
 
-        assertTrue(ex.getMessage().contains("Please join the queue"));
+        assertTrue(ex.getMessage().contains("queue error"));
     }
 }

@@ -36,6 +36,7 @@ export type MoneyDTO = {
 export type PurchasePolicyDTO =
   | { type: 'MAX_TICKETS_PER_ORDER'; max: number }
   | { type: 'AGE_RESTRICTION'; minAge: number }
+  | { type: 'MIN_TICKETS_PER_ORDER'; min: number }
   | { type: 'NO_LONELY_SEAT' }
   | { type: string; [k: string]: unknown };
 
@@ -114,6 +115,7 @@ export type AssignedRoleDTO = {
   companyId?: string | null;
   eventId?: string | null;
   approved: boolean;
+  permissions?: ManagerPermission[];
 };
 
 export type ManagerPermission =

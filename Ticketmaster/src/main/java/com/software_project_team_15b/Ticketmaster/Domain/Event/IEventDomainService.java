@@ -68,6 +68,8 @@ public interface IEventDomainService {
 
     Map<Boolean, Set<UUID>> getSeatsAvailability(UUID eventId, UUID areaId, Set<UUID> seatIds);
 
+    Map<Boolean, Set<UUID>> getSeatsAvailability(UUID eventId, UUID areaId, Set<UUID> seatIds, UUID holdToken);
+
     // ---- Pricing (combined event + company) ---------------------------------
 
     PriceBreakdown getPrice(

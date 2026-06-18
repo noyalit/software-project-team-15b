@@ -1,5 +1,14 @@
 package com.software_project_team_15b.Ticketmaster.Application.Lottery;
 
+import java.time.LocalDateTime;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
@@ -7,16 +16,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Unautho
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
-
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
-
-import java.time.LocalDateTime;
-import java.util.Objects;
-import java.util.Set;
-import java.util.UUID;
 
 /**
  * Application-layer facade over the lottery domain.
@@ -242,6 +242,7 @@ public class LotteryService {
 
     private void requireEventPermissions(UUID userId, UUID companyId, UUID eventId) {
         if (!userDomainService.isActiveManager(userId, companyId, eventId) &&
+            !userDomainService.isActiveCompanyManager(userId, companyId) &&
             !userDomainService.isActiveOwner(userId, companyId) &&
             !userDomainService.isActiveFounder(userId, companyId)) {
             throw new UnauthorizedException("user does not have permission to perform this action");

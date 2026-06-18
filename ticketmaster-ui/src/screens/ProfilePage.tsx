@@ -55,7 +55,11 @@ export default function ProfilePage() {
     enabled:
       Boolean(token) &&
       userType === 'member' &&
-      (meQuery.data?.activeRole === 'Owner' || meQuery.data?.activeRole === 'Manager'),
+      (
+        meQuery.data?.activeRole === 'Owner' ||
+        meQuery.data?.activeRole === 'Manager' ||
+        meQuery.data?.activeRole === 'CompanyManager'
+      ),
   });
 
   const companiesQuery = useQuery({
@@ -66,6 +70,34 @@ export default function ProfilePage() {
       return res.data.data ?? [];
     },
     enabled: Boolean(token) && userType === 'member',
+  });
+
+  const companyManagerCompaniesQuery = useQuery({
+    queryKey: ['profile', 'company-manager-companies', token, meQuery.data?.assignedRoles],
+    queryFn: async () => {
+      const roles = meQuery.data?.assignedRoles ?? [];
+
+      const companyIds = roles
+        .filter((role) => role.roleName === 'CompanyManager' && role.companyId)
+        .map((role) => role.companyId as string);
+
+      const uniqueCompanyIds = [...new Set(companyIds)];
+
+      const companies = await Promise.all(
+        uniqueCompanyIds.map(async (companyId) => {
+          const res = await http.get<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}`);
+          if (res.data.error) throw new Error(res.data.error);
+          if (!res.data.data) throw new Error('Company not found');
+          return res.data.data;
+        })
+      );
+
+      return companies;
+    },
+    enabled:
+      Boolean(token) &&
+      userType === 'member' &&
+      Boolean(meQuery.data?.assignedRoles?.some((role) => role.roleName === 'CompanyManager')),
   });
 
   const companyEventsQuery = useQuery({
@@ -227,6 +259,9 @@ export default function ProfilePage() {
       } else if (roleTarget.startsWith('Manager:')) {
         const eventId = roleTarget.replace('Manager:', '');
         url = `/api/users/me/roles/manager/${eventId}`;
+      } else if (roleTarget.startsWith('CompanyManager:')) {
+        const companyId = roleTarget.replace('CompanyManager:', '');
+        url = `/api/users/me/roles/company-manager/${companyId}`;
       } else {
         throw new Error('Unsupported role.');
       }
@@ -311,6 +346,11 @@ export default function ProfilePage() {
   const managerEventIds = assignedRoles
     .filter((role) => typeof role !== 'string' && role.roleName === 'Manager' && role.eventId)
     .map((role) => role.eventId);
+  const companyManagerCompanyIds = assignedRoles
+    .filter((role) => typeof role !== 'string' && role.roleName === 'CompanyManager' && role.companyId)
+    .map((role) => role.companyId as string);
+
+  const companyManagerCompanies = companyManagerCompaniesQuery.data ?? [];
   const founderCompanies = companies.filter((company) => company.founderId === me.userId);
   const ownerCompanies = roleNames.includes('Owner') || currentRole === 'Owner'
     ? companies
@@ -320,6 +360,7 @@ export default function ProfilePage() {
   const hasFounderRole = founderCompanies.length > 0 || roleNames.includes('Founder')|| currentRole === 'Founder';
   const hasOwnerRole = ownerCompanies.length > 0 || roleNames.includes('Owner') || currentRole === 'Owner';
   const hasManagerRole = roleNames.includes('Manager') || currentRole === 'Manager';
+  const hasCompanyManagerRole = roleNames.includes('CompanyManager') || currentRole === 'CompanyManager';
 
   const updateError =
     changeUsernameMutation.error ??
@@ -339,6 +380,22 @@ export default function ProfilePage() {
       {isActive ? 'Active' : small ? 'Switch' : 'Switch to this role'}
     </button>
   );
+
+  const formatPermission = (permission: string) =>
+    permission
+      .toLowerCase()
+      .replaceAll('_', ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const getCompanyManagerPermissions = (companyId: string) =>
+    assignedRoles
+      .filter(
+        (role) =>
+          typeof role !== 'string' &&
+          role.roleName === 'CompanyManager' &&
+          role.companyId === companyId
+      )
+      .flatMap((role) => role.permissions ?? []);
 
   return (
     <div className="space-y-4">
@@ -592,6 +649,78 @@ export default function ProfilePage() {
 
                         {renderRoleButton(currentRole === 'Manager', `Manager:${event.eventId}`, true)}
                       </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {hasCompanyManagerRole && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-slate-900">CompanyManager</div>
+
+                  {currentRole === 'CompanyManager' && (
+                    <div className="mt-1 text-xs font-semibold text-emerald-700">
+                      Active now
+                    </div>
+                  )}
+                </div>
+
+                {companyManagerCompanies.length > 0 &&
+                  renderRoleButton(
+                    currentRole === 'CompanyManager',
+                    `CompanyManager:${companyManagerCompanies[0].companyId}`
+                  )}
+              </div>
+
+              <div className="mt-3 space-y-2">
+                {companyManagerCompanies.length === 0 ? (
+                  <div className="text-sm text-slate-600">
+                    No company manager companies found.
+                  </div>
+                ) : (
+                  companyManagerCompanies.map((company) => (
+                    <div
+                      key={company.companyId}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2"
+                    >
+                      <span className="text-sm font-medium text-slate-800">
+                        {company.name}
+                      </span>
+
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {getCompanyManagerPermissions(company.companyId).map((permission) => (
+                          <span
+                            key={permission}
+                            className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700"
+                          >
+                            {formatPermission(permission)}
+                          </span>
+                        ))}
+                      </div>
+
+                      {approvedAppointmentTarget === company.companyId ? (
+                        <span className="rounded-md bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-800">
+                          Appointment approved
+                        </span>
+                      ) : currentRole === 'CompanyManager' && !isCurrentAppointmentApproved ? (
+                        <button
+                          onClick={() => approveAppointmentMutation.mutate(company.companyId)}
+                          disabled={approveAppointmentMutation.isPending}
+                          className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                        >
+                          Approve appointment
+                        </button>
+                      ) : (
+                        renderRoleButton(
+                          currentRole === 'CompanyManager',
+                          `CompanyManager:${company.companyId}`,
+                          true
+                        )
+                      )}
                     </div>
                   ))
                 )}

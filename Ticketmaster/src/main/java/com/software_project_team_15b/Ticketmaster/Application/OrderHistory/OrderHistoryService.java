@@ -30,6 +30,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.CompanyManager;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Manager;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
@@ -616,7 +617,14 @@ public class OrderHistoryService implements EventSubscriber{
             .filter(manager -> manager.isAppointmentApproved())
             .anyMatch(manager -> manager.hasPermission(requiredPermission));
 
-        return (isPermittedManager || isFounderOrOwner(callerId, companyId));
+        boolean isPermittedCompanyManager = member.getAssignedRoles().stream()
+            .filter(role -> role instanceof CompanyManager)
+            .map(role -> (CompanyManager) role)
+            .filter(manager -> companyId.equals(manager.getCompanyId()))
+            .filter(manager -> manager.isAppointmentApproved())
+            .anyMatch(manager -> manager.hasPermission(requiredPermission));
+
+        return (isPermittedManager || isPermittedCompanyManager || isFounderOrOwner(callerId, companyId));
     }
 
     private void refundPaymentForOrder(OrderHistory orderHistory) {

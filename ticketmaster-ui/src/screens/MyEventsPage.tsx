@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { http } from '../api/http';
 import { getApiErrorMessage } from '../api/errors';
@@ -51,6 +51,9 @@ export default function MyEventsPage() {
     if (t === 'MAX_TICKETS_PER_ORDER' || anyP?.max != null) {
       return `Max tickets per order: ${anyP?.max}`;
     }
+    if (t === 'MIN_TICKETS_PER_ORDER' || anyP?.min != null) {
+      return `Min tickets per order: ${anyP?.min}`;
+    }
     if (t === 'AGE_RESTRICTION' || anyP?.minAge != null) {
       return `Age restriction: ${anyP?.minAge}+`;
     }
@@ -73,6 +76,10 @@ export default function MyEventsPage() {
   };
 
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
+
+  const [newlyCreatedEventId, setNewlyCreatedEventId] = useState<string | null>(null);
+
+  const step2Ref = useRef<HTMLDivElement | null>(null);
 
   const [name, setName] = useState('');
   const [artist, setArtist] = useState('');
@@ -123,8 +130,11 @@ export default function MyEventsPage() {
 
   const [showSavedPolicies, setShowSavedPolicies] = useState(false);
 
-  const [newPurchaseType, setNewPurchaseType] = useState<'MAX_TICKETS_PER_ORDER' | 'AGE_RESTRICTION' | 'NO_LONELY_SEAT'>('MAX_TICKETS_PER_ORDER');
+  const [newPurchaseType, setNewPurchaseType] = useState<
+    'MAX_TICKETS_PER_ORDER' | 'MIN_TICKETS_PER_ORDER' | 'AGE_RESTRICTION' | 'NO_LONELY_SEAT'
+  >('MAX_TICKETS_PER_ORDER');
   const [newMaxTickets, setNewMaxTickets] = useState('4');
+  const [newMinTickets, setNewMinTickets] = useState('1');
   const [newMinAge, setNewMinAge] = useState('18');
 
   const [newDiscountType, setNewDiscountType] = useState<'COUPON' | 'EARLY_BIRD'>('COUPON');
@@ -156,16 +166,76 @@ export default function MyEventsPage() {
     enabled:
       Boolean(token) &&
       userType === 'member' &&
-      (meQuery.data?.activeRole === 'Owner' || meQuery.data?.activeRole === 'Manager'),
+      (meQuery.data?.activeRole === 'Owner' || meQuery.data?.activeRole === 'Manager' || meQuery.data?.activeRole === 'CompanyManager'),
   });
 
   const activeRole = meQuery.data?.activeRole;
+  const hasManagerAssignment = Boolean(
+    (meQuery.data?.assignedRoles ?? []).some((r) => r.roleName === 'Manager' && r.eventId)
+  );
+
+  const managerEventIds = useMemo(() => {
+    const ids = (meQuery.data?.assignedRoles ?? [])
+      .filter((r) => r.roleName === 'Manager' && r.approved === true && Boolean(r.eventId))
+      .map((r) => r.eventId as string);
+    return Array.from(new Set(ids));
+  }, [meQuery.data?.assignedRoles]);
+
+  const managerEventsQuery = useQuery({
+    queryKey: ['manager-events', managerEventIds.join(',')],
+    queryFn: async () => {
+      const events = await Promise.all(
+        managerEventIds.map(async (eventId) => {
+          const res = await http.get<ApiResponse<EventDTO>>(`/api/events/${eventId}`);
+          if (res.data.error) throw new Error(res.data.error);
+          if (!res.data.data) throw new Error('Event not found');
+          return res.data.data;
+        })
+      );
+      return events;
+    },
+    enabled: Boolean(token) && userType === 'member' && managerEventIds.length > 0,
+  });
+
+  const managerCompanyIds = useMemo(() => {
+    const ids = (managerEventsQuery.data ?? []).map((e) => e.companyId);
+    return Array.from(new Set(ids));
+  }, [managerEventsQuery.data]);
+
+  const companyManagerCompanyIds = useMemo(() => {
+    const ids = (meQuery.data?.assignedRoles ?? [])
+      .filter((r) => r.roleName === 'CompanyManager' && r.approved === true && Boolean(r.companyId))
+      .map((r) => r.companyId as string);
+
+    return Array.from(new Set(ids));
+  }, [meQuery.data?.assignedRoles]);
+
   const isApprovedAppointment =
     activeRole === 'Founder' || appointmentApprovedQuery.data === true;
 
   const canManageEvents =
-  activeRole === 'Founder' ||
-  ((activeRole === 'Owner' || activeRole === 'Manager') && isApprovedAppointment);
+    activeRole === 'Founder' ||
+    (
+      (activeRole === 'Owner' ||
+        activeRole === 'Manager' ||
+        activeRole === 'CompanyManager') &&
+      isApprovedAppointment
+    );
+
+  const companyManagerCanManageEvents = Boolean(
+    (meQuery.data?.assignedRoles ?? []).some(
+      (r) =>
+        r.roleName === 'CompanyManager' &&
+        r.approved === true &&
+        r.companyId === selectedCompanyId &&
+        r.permissions?.includes('MANAGE_EVENTS')
+    )
+  );
+
+  const canCreateEvents =
+    activeRole === 'Founder' ||
+    activeRole === 'Owner' ||
+    (activeRole === 'CompanyManager' && companyManagerCanManageEvents);
 
   const deleteLotteryMutation = useMutation({
     mutationFn: async ({ companyId, eventId }: { companyId: string; eventId: string }) => {
@@ -281,6 +351,56 @@ export default function MyEventsPage() {
     enabled: Boolean(token) && userType === 'member',
   });
 
+  const managerCompaniesQuery = useQuery({
+    queryKey: ['manager-companies', managerCompanyIds.join(','), token],
+    queryFn: async () => {
+      const companies = await Promise.all(
+        managerCompanyIds.map(async (companyId) => {
+          try {
+            const res = await http.get<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}`);
+            if (res.data.error) throw new Error(res.data.error);
+            if (!res.data.data) throw new Error('Company not found');
+            return res.data.data;
+          } catch {
+            return { companyId, name: companyId, status: 'ACTIVE' } as CompanyDTO;
+          }
+        })
+      );
+
+      return companies;
+    },
+    enabled: Boolean(token) && userType === 'member' && managerCompanyIds.length > 0,
+  });
+
+  const companyManagerCompaniesQuery = useQuery({
+    queryKey: ['company-manager-companies', companyManagerCompanyIds.join(','), token],
+    queryFn: async () => {
+      const companies = await Promise.all(
+        companyManagerCompanyIds.map(async (companyId) => {
+          const res = await http.get<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}`);
+          if (res.data.error) throw new Error(res.data.error);
+          if (!res.data.data) throw new Error('Company not found');
+          return res.data.data;
+        })
+      );
+
+      return companies;
+    },
+    enabled:
+      Boolean(token) &&
+      userType === 'member' &&
+      companyManagerCompanyIds.length > 0,
+  });
+
+  const availableCompanies = [
+    ...(companiesQuery.data ?? []),
+    ...(managerCompaniesQuery.data ?? []),
+    ...(companyManagerCompaniesQuery.data ?? []),
+  ].filter(
+    (company, index, arr) =>
+      arr.findIndex((c) => c.companyId === company.companyId) === index
+  );
+
   const eventsQuery = useQuery({
     queryKey: ['company-events', selectedCompanyId],
     queryFn: async () => {
@@ -290,13 +410,25 @@ export default function MyEventsPage() {
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? [];
     },
-    enabled: Boolean(selectedCompanyId),
+    enabled: Boolean(selectedCompanyId) && !hasManagerAssignment,
   });
+
+  const displayedEvents = hasManagerAssignment
+    ? (managerEventsQuery.data ?? []).filter(
+        (e) => !selectedCompanyId || e.companyId === selectedCompanyId
+      )
+    : (eventsQuery.data ?? []);
+
+  useEffect(() => {
+    if (selectedCompanyId) return;
+    if (availableCompanies.length === 0) return;
+    setSelectedCompanyId(availableCompanies[0].companyId);
+  }, [availableCompanies, selectedCompanyId]);
 
   const lotteryStatusByEventQuery = useQuery({
     queryKey: ['lottery', 'eligibility', 'company-events', selectedCompanyId, token],
     queryFn: async () => {
-      const events = eventsQuery.data ?? [];
+      const events = displayedEvents ?? [];
 
       const statuses = await Promise.all(
         events.map(async (event) => {
@@ -314,7 +446,7 @@ export default function MyEventsPage() {
 
       return Object.fromEntries(statuses) as Record<string, string>;
     },
-    enabled: Boolean(token) && Boolean(eventsQuery.data?.length),
+    enabled: Boolean(token) && Boolean(displayedEvents?.length),
   });
 
   const createEventMutation = useMutation({
@@ -343,13 +475,21 @@ export default function MyEventsPage() {
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data;
     },
-    onSuccess: async () => {
+    onSuccess: async (eventId) => {
       setName('');
       setArtist('');
       setCategory('');
       setStartsAt('');
       setLocation('');
-      setSuccessMessage('Event created successfully.');
+      setSuccessMessage('Event created. Continue below to define the event map, then publish.');
+      setNewlyCreatedEventId(eventId ?? null);
+      if (eventId) {
+        setOpenEventDetailsId(eventId);
+        setPolicyEventId(eventId);
+        setAreaEventId(eventId);
+        setEditingAreaId(null);
+        setEditingEventId(null);
+      }
       await qc.invalidateQueries({ queryKey: ['company-events', selectedCompanyId] });
     },
   });
@@ -522,13 +662,15 @@ export default function MyEventsPage() {
   if (
     meQuery.data?.activeRole !== 'Founder' &&
     meQuery.data?.activeRole !== 'Owner' &&
-    meQuery.data?.activeRole !== 'Manager'
+    meQuery.data?.activeRole !== 'Manager' &&
+    meQuery.data?.activeRole !== 'CompanyManager' &&
+    !hasManagerAssignment
   ) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-extrabold text-slate-900">My Events</h1>
         <p className="mt-2 text-slate-600">
-          Only active Owners, Founders, or Managers can manage events.
+          Only active Owners, Founders, Managers, or Company Managers can manage events.
         </p>
       </div>
     );
@@ -615,6 +757,18 @@ export default function MyEventsPage() {
 
   const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
 
+  const newlyCreatedEvent = newlyCreatedEventId
+    ? (displayedEvents ?? []).find((e) => e.eventId === newlyCreatedEventId) ?? null
+    : null;
+
+  useEffect(() => {
+    if (!newlyCreatedEventId) return;
+    const id = window.setTimeout(() => {
+      step2Ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [newlyCreatedEventId]);
+
   return (
     <div className="space-y-4">
       {!canManageEvents && (
@@ -631,7 +785,9 @@ export default function MyEventsPage() {
           <div>
             <h1 className="text-2xl font-extrabold text-slate-900">My Events</h1>
             <p className="mt-1 text-sm text-slate-600">
-              Select a company, create events, manage areas, and define the event map.
+              {canCreateEvents
+                ? 'Select a company, create events, manage areas, and define the event map.'
+                : 'Select a company and manage the events you were assigned to.'}
             </p>
           </div>
 
@@ -645,11 +801,12 @@ export default function MyEventsPage() {
             setSuccessMessage(null);
             setEditingEventId(null);
             setAreaEventId(null);
+            setNewlyCreatedEventId(null);
           }}
           className="mt-3 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
         >
           <option value="">Select company...</option>
-          {companiesQuery.data?.map((company) => (
+          {availableCompanies.map((company) => (
             <option key={company.companyId} value={company.companyId}>
               {company.name}
             </option>
@@ -657,7 +814,7 @@ export default function MyEventsPage() {
         </select>
       </div>
 
-      {selectedCompanyId && (
+      {canCreateEvents && selectedCompanyId && (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Create event</h2>
 
@@ -681,8 +838,132 @@ export default function MyEventsPage() {
             disabled={createEventMutation.isPending}
             className="mt-4 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
           >
-            {createEventMutation.isPending ? 'Creating...' : 'Create event'}
+            {createEventMutation.isPending ? 'Moving...' : 'Move to map creation'}
           </button>
+        </div>
+      )}
+
+      {canCreateEvents && selectedCompanyId && newlyCreatedEventId && (
+        <div ref={step2Ref} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Step 2: Create event map</h2>
+              <div className="mt-1 text-sm text-slate-600">
+                Add at least one area to the event map. When ready, publish.
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setNewlyCreatedEventId(null);
+                setAreaEventId(null);
+                setEditingAreaId(null);
+              }}
+              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+            >
+              Exit
+            </button>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+            <div className="font-semibold text-slate-900">Add area</div>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <input
+                value={areaName}
+                onChange={(e) => setAreaName(e.target.value)}
+                placeholder="Area name"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+              />
+
+              <select
+                value={areaType}
+                onChange={(e) => setAreaType(e.target.value as AreaType)}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+              >
+                <option value="SEATING">Seating</option>
+                <option value="STANDING">Standing</option>
+              </select>
+
+              <input
+                value={areaPrice}
+                onChange={(e) => setAreaPrice(e.target.value)}
+                placeholder="Base price"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+              />
+
+              <input
+                value={areaCurrency}
+                onChange={(e) => setAreaCurrency(e.target.value)}
+                placeholder="Currency"
+                className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+              />
+
+              {areaType === 'SEATING' ? (
+                <>
+                  <input
+                    value={seatRows}
+                    onChange={(e) => setSeatRows(e.target.value)}
+                    placeholder="Rows"
+                    className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  />
+                  <input
+                    value={seatsPerRow}
+                    onChange={(e) => setSeatsPerRow(e.target.value)}
+                    placeholder="Seats per row"
+                    className="rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  />
+                </>
+              ) : (
+                <input
+                  value={standingCapacity}
+                  onChange={(e) => setStandingCapacity(e.target.value)}
+                  placeholder="Standing capacity"
+                  className="rounded-md border border-slate-200 px-3 py-2 text-sm md:col-span-2"
+                />
+              )}
+            </div>
+
+            <button
+              onClick={() => {
+                setAreaEventId(newlyCreatedEventId);
+                addAreaMutation.mutate();
+              }}
+              disabled={addAreaMutation.isPending}
+              className="mt-3 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {addAreaMutation.isPending ? 'Adding...' : 'Add area'}
+            </button>
+
+            {newlyCreatedEvent?.areas?.length ? (
+              <div className="mt-4">
+                <div className="text-sm font-semibold text-slate-900">Current areas</div>
+                <div className="mt-2 grid gap-2">
+                  {newlyCreatedEvent.areas.map((a) => (
+                    <div key={a.areaId} className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                      <div className="font-semibold text-slate-900">{a.name}</div>
+                      <div className="text-slate-600">
+                        {a.type} | {a.basePrice?.amount} {a.basePrice?.currency}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 text-sm text-slate-600">No areas yet. Add your first area to enable publishing.</div>
+            )}
+
+            <button
+              onClick={() => {
+                if (!newlyCreatedEvent) return;
+                setNewlyCreatedEventId(null);
+                publishMutation.mutate(newlyCreatedEvent);
+              }}
+              disabled={publishMutation.isPending || !(newlyCreatedEvent?.areas?.length)}
+              className="mt-3 w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {publishMutation.isPending ? 'Creating and publishing...' : 'Create and publish event'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -691,11 +972,11 @@ export default function MyEventsPage() {
           <h2 className="text-lg font-semibold text-slate-900">Company events</h2>
 
           <div className="mt-4 grid gap-3">
-            {eventsQuery.data?.length === 0 && (
+            {displayedEvents.length === 0 && (
               <div className="text-sm text-slate-600">No events found.</div>
             )}
 
-            {eventsQuery.data?.map((event) => {
+            {displayedEvents.map((event) => {
               const isCancelled = event.status === 'CANCELLED';
               const canEditMap = event.status === 'DRAFT';
               const areas = event.areas ?? [];
@@ -744,16 +1025,10 @@ export default function MyEventsPage() {
                             }}
                             className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
                           >
-                            {canEditMap ? 'Manage map' : 'View map'}
+                            {canEditMap ? 'Manage map & policies' : 'View map & policies'}
                           </button>
                         {event.status === 'DRAFT' && (
-                          <button
-                            onClick={() => publishMutation.mutate(event)}
-                            disabled={publishMutation.isPending}
-                            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                          >
-                            Publish
-                          </button>
+                          <></>
                         )}
 
                           <button
@@ -1063,6 +1338,7 @@ export default function MyEventsPage() {
                               className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                             >
                               <option value="MAX_TICKETS_PER_ORDER">Max tickets per order</option>
+                              <option value="MIN_TICKETS_PER_ORDER">Min tickets per order</option>
                               <option value="AGE_RESTRICTION">Age restriction</option>
                               <option value="NO_LONELY_SEAT">No lonely seat</option>
                             </select>
@@ -1072,6 +1348,15 @@ export default function MyEventsPage() {
                                 value={newMaxTickets}
                                 onChange={(e) => setNewMaxTickets(e.target.value)}
                                 placeholder="Max"
+                                className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                              />
+                            )}
+
+                            {newPurchaseType === 'MIN_TICKETS_PER_ORDER' && (
+                              <input
+                                value={newMinTickets}
+                                onChange={(e) => setNewMinTickets(e.target.value)}
+                                placeholder="Min"
                                 className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                               />
                             )}
@@ -1094,6 +1379,14 @@ export default function MyEventsPage() {
                                   if (!Number.isFinite(max) || max < 1) return;
                                   setPurchasePoliciesDirty(true);
                                   setPurchasePoliciesDraft([...base, { type: 'MAX_TICKETS_PER_ORDER', max }]);
+                                  return;
+                                }
+
+                                if (newPurchaseType === 'MIN_TICKETS_PER_ORDER') {
+                                  const min = Number(newMinTickets);
+                                  if (!Number.isFinite(min) || min < 1) return;
+                                  setPurchasePoliciesDirty(true);
+                                  setPurchasePoliciesDraft([...base, { type: 'MIN_TICKETS_PER_ORDER', min }]);
                                   return;
                                 }
 
@@ -1128,6 +1421,14 @@ export default function MyEventsPage() {
                                     policies = [{ type: 'MAX_TICKETS_PER_ORDER', max }];
                                   } else {
                                     setPolicyErrorMessage('Please enter a valid max tickets value.');
+                                    return;
+                                  }
+                                } else if (newPurchaseType === 'MIN_TICKETS_PER_ORDER') {
+                                  const min = Number(newMinTickets);
+                                  if (Number.isFinite(min) && min >= 1) {
+                                    policies = [{ type: 'MIN_TICKETS_PER_ORDER', min }];
+                                  } else {
+                                    setPolicyErrorMessage('Please enter a valid min tickets value.');
                                     return;
                                   }
                                 } else if (newPurchaseType === 'AGE_RESTRICTION') {
@@ -1584,6 +1885,19 @@ export default function MyEventsPage() {
                       >
                         {addAreaMutation.isPending ? 'Adding...' : 'Add area'}
                       </button>
+
+                      {event.status === 'DRAFT' && areas.length > 0 && (
+                        <button
+                          onClick={() => {
+                            setNewlyCreatedEventId(null);
+                            publishMutation.mutate(event);
+                          }}
+                          disabled={publishMutation.isPending}
+                          className="mt-3 w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                        >
+                          {publishMutation.isPending ? 'Creating and publishing...' : 'Create and publish event'}
+                        </button>
+                      )}
                     </div>
                   )}
 
