@@ -55,7 +55,11 @@ export default function ProfilePage() {
     enabled:
       Boolean(token) &&
       userType === 'member' &&
-      (meQuery.data?.activeRole === 'Owner' || meQuery.data?.activeRole === 'Manager'),
+      (
+        meQuery.data?.activeRole === 'Owner' ||
+        meQuery.data?.activeRole === 'Manager' ||
+        meQuery.data?.activeRole === 'CompanyManager'
+      ),
   });
 
   const companiesQuery = useQuery({
@@ -671,10 +675,24 @@ export default function ProfilePage() {
                         {company.name}
                       </span>
 
-                      {renderRoleButton(
-                        currentRole === 'CompanyManager',
-                        `CompanyManager:${company.companyId}`,
-                        true
+                      {approvedAppointmentTarget === company.companyId ? (
+                        <span className="rounded-md bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-800">
+                          Appointment approved
+                        </span>
+                      ) : currentRole === 'CompanyManager' && !isCurrentAppointmentApproved ? (
+                        <button
+                          onClick={() => approveAppointmentMutation.mutate(company.companyId)}
+                          disabled={approveAppointmentMutation.isPending}
+                          className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+                        >
+                          Approve appointment
+                        </button>
+                      ) : (
+                        renderRoleButton(
+                          currentRole === 'CompanyManager',
+                          `CompanyManager:${company.companyId}`,
+                          true
+                        )
                       )}
                     </div>
                   ))
