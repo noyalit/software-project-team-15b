@@ -774,29 +774,38 @@ export default function CompanyPage() {
     mutationFn: async () => {
       setCompanyManagerSuccessMessage(null);
 
-      if (!companyId) throw new Error('Company ID is missing.');
+      try {
+        if (!companyId) throw new Error('Company ID is missing.');
 
-      const username = companyManagerUsername.trim();
-      if (!username) throw new Error('Please enter a username.');
+        const username = companyManagerUsername.trim();
+        if (!username) throw new Error('Please enter a username.');
 
-      const resolved = await http.get<ApiResponse<MemberDTO>>('/api/users/members/resolve', {
-        params: { username },
-      });
+        const resolved = await http.get<ApiResponse<MemberDTO>>('/api/users/members/resolve', {
+          params: { username },
+        });
 
-      if (resolved.data.error) throw new Error(resolved.data.error);
+        if (resolved.data.error) throw new Error(resolved.data.error);
 
-      const memberId = resolved.data.data?.userId;
-      if (!memberId) throw new Error('Member not found.');
+        const memberId = resolved.data.data?.userId;
+        if (!memberId) throw new Error('Member not found.');
 
-      const res = await http.post<ApiResponse<MemberDTO>>('/api/users/roles/company-manager', {
-        memberId,
-        companyId,
-        permissions: companyManagerPermissions,
-      });
+        const res = await http.post<ApiResponse<MemberDTO>>('/api/users/roles/company-manager', {
+          memberId,
+          companyId,
+          permissions: companyManagerPermissions,
+        });
 
-      if (res.data.error) throw new Error(res.data.error);
+        if (res.data.error) throw new Error(res.data.error);
 
-      return res.data.data;
+        return res.data.data;
+      } catch (e) {
+        throw new Error(
+          getApiErrorMessage<MemberDTO>(e, {
+            fallback: 'Failed to appoint company manager.',
+            serverFallback: 'Could not appoint company manager. Please check that the user can be appointed and try again.',
+          })
+        );
+      }
     },
     onSuccess: () => {
       setCompanyManagerUsername('');
@@ -809,29 +818,38 @@ export default function CompanyPage() {
     mutationFn: async () => {
       setChangeCompanyManagerSuccessMessage(null);
 
-      if (!companyId) throw new Error('Company ID is missing.');
+      try {
+        if (!companyId) throw new Error('Company ID is missing.');
 
-      const username = changeCompanyManagerUsername.trim();
-      if (!username) throw new Error('Please enter a username.');
+        const username = changeCompanyManagerUsername.trim();
+        if (!username) throw new Error('Please enter a username.');
 
-      const resolved = await http.get<ApiResponse<MemberDTO>>('/api/users/members/resolve', {
-        params: { username },
-      });
+        const resolved = await http.get<ApiResponse<MemberDTO>>('/api/users/members/resolve', {
+          params: { username },
+        });
 
-      if (resolved.data.error) throw new Error(resolved.data.error);
+        if (resolved.data.error) throw new Error(resolved.data.error);
 
-      const companyManagerId = resolved.data.data?.userId;
-      if (!companyManagerId) throw new Error('Company manager not found.');
+        const companyManagerId = resolved.data.data?.userId;
+        if (!companyManagerId) throw new Error('Company manager not found.');
 
-      const res = await http.post<ApiResponse<MemberDTO>>('/api/users/roles/company-manager/permissions', {
-        companyManagerId,
-        companyId,
-        newPermissions: newCompanyManagerPermissions,
-      });
+        const res = await http.post<ApiResponse<MemberDTO>>('/api/users/roles/company-manager/permissions', {
+          companyManagerId,
+          companyId,
+          newPermissions: newCompanyManagerPermissions,
+        });
 
-      if (res.data.error) throw new Error(res.data.error);
+        if (res.data.error) throw new Error(res.data.error);
 
-      return res.data.data;
+        return res.data.data;
+      } catch (e) {
+        throw new Error(
+          getApiErrorMessage<MemberDTO>(e, {
+            fallback: 'Failed to change company manager permissions.',
+            serverFallback: 'Could not change company manager permissions. Please try again.',
+          })
+        );
+      }
     },
     onSuccess: () => {
       setChangeCompanyManagerUsername('');
@@ -844,28 +862,37 @@ export default function CompanyPage() {
     mutationFn: async () => {
       setRemoveCompanyManagerSuccessMessage(null);
 
-      if (!companyId) throw new Error('Company ID is missing.');
+      try {
+        if (!companyId) throw new Error('Company ID is missing.');
 
-      const username = removeCompanyManagerUsername.trim();
-      if (!username) throw new Error('Please enter a username.');
+        const username = removeCompanyManagerUsername.trim();
+        if (!username) throw new Error('Please enter a username.');
 
-      const resolved = await http.get<ApiResponse<MemberDTO>>('/api/users/members/resolve', {
-        params: { username },
-      });
+        const resolved = await http.get<ApiResponse<MemberDTO>>('/api/users/members/resolve', {
+          params: { username },
+        });
 
-      if (resolved.data.error) throw new Error(resolved.data.error);
+        if (resolved.data.error) throw new Error(resolved.data.error);
 
-      const memberToRemoveId = resolved.data.data?.userId;
-      if (!memberToRemoveId) throw new Error('Member not found.');
+        const memberToRemoveId = resolved.data.data?.userId;
+        if (!memberToRemoveId) throw new Error('Member not found.');
 
-      const res = await http.post<ApiResponse<MemberDTO>>('/api/users/roles/company-manager/remove', {
-        memberToRemoveId,
-        companyId,
-      });
+        const res = await http.post<ApiResponse<MemberDTO>>('/api/users/roles/company-manager/remove', {
+          memberToRemoveId,
+          companyId,
+        });
 
-      if (res.data.error) throw new Error(res.data.error);
+        if (res.data.error) throw new Error(res.data.error);
 
-      return res.data.data;
+        return res.data.data;
+      } catch (e) {
+        throw new Error(
+          getApiErrorMessage<MemberDTO>(e, {
+            fallback: 'Failed to remove company manager.',
+            serverFallback: 'Could not remove company manager. Please try again.',
+          })
+        );
+      }
     },
     onSuccess: () => {
       setRemoveCompanyManagerUsername('');
