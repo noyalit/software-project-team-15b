@@ -139,7 +139,9 @@ const canAccessManagerPages =
                 <NavLink to="/company-sales" label="Sales Report" />
             )}
 
-            {userType === 'member' && canAccessOwnerPages  && (
+            {userType === 'member' &&
+              (activeRole === 'Founder' || activeRole === 'Owner') &&
+              canAccessOwnerPages && (
                 <NavLink to="/hierarchy-report" label="Hierarchy Report" />
             )}
             {userType === 'member' && <NavLink to="/orders" label="Orders" />}
