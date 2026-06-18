@@ -1681,7 +1681,10 @@ export default function CompanyPage() {
                     }
                   }}
                 />
-                {permission}
+                {permission
+                  .toLowerCase()
+                  .replaceAll('_', ' ')
+                  .replace(/\b\w/g, (c) => c.toUpperCase())}
               </label>
             ))}
           </div>
@@ -1745,7 +1748,10 @@ export default function CompanyPage() {
                     }
                   }}
                 />
-                {permission}
+                {permission
+                  .toLowerCase()
+                  .replaceAll('_', ' ')
+                  .replace(/\b\w/g, (c) => c.toUpperCase())}
               </label>
             ))}
           </div>
