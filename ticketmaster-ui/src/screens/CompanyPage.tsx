@@ -487,9 +487,23 @@ export default function CompanyPage() {
       setPurchasePolicySuccessMessage(null);
       if (!companyId) throw new Error('Company ID is missing.');
       const policy = buildPurchasePolicy();
-      const res = await http.put<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}/purchase-policy`, policy);
-      if (res.data.error) throw new Error(res.data.error);
-      return res.data.data ?? null;
+      try {
+        const res = await http.put<ApiResponse<CompanyDTO>>(
+          `/api/companies/${companyId}/purchase-policy`,
+          policy
+        );
+
+        if (res.data.error) throw new Error(res.data.error);
+        return res.data.data ?? null;
+      } catch (e) {
+        const err = e as AxiosError<ApiResponse<CompanyDTO>>;
+
+        if (err.response?.status === 403) {
+          throw new Error('You do not have permission to edit the purchase policy for this company.');
+        }
+
+        throw new Error(getApiErrorMessage<CompanyDTO>(e));
+      }
     },
     onSuccess: async () => {
       setPurchasePolicySuccessMessage('Company purchase policy saved successfully.');
@@ -503,9 +517,23 @@ export default function CompanyPage() {
       setDiscountPolicySuccessMessage(null);
       if (!companyId) throw new Error('Company ID is missing.');
       const policy = buildDiscountPolicy();
-      const res = await http.put<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}/discount-policy`, policy);
-      if (res.data.error) throw new Error(res.data.error);
-      return res.data.data ?? null;
+      try {
+        const res = await http.put<ApiResponse<CompanyDTO>>(
+          `/api/companies/${companyId}/discount-policy`,
+          policy
+        );
+
+        if (res.data.error) throw new Error(res.data.error);
+        return res.data.data ?? null;
+      } catch (e) {
+        const err = e as AxiosError<ApiResponse<CompanyDTO>>;
+
+        if (err.response?.status === 403) {
+          throw new Error('You do not have permission to edit the discount policy for this company.');
+        }
+
+        throw new Error(getApiErrorMessage<CompanyDTO>(e));
+      }
     },
     onSuccess: async () => {
       setDiscountPolicySuccessMessage('Company discount policy saved successfully.');
