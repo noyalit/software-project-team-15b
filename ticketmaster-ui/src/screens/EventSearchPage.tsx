@@ -51,7 +51,11 @@ export default function EventSearchPage() {
     return prices.length === 0 ? null : Math.min(...prices);
   };
 
-  const sorted = [...(search.data ?? [])].sort((a, b) => {
+  const publishedEvents = (search.data ?? []).filter(
+    (e) => e.status === 'PUBLISHED'
+  );
+
+  const sorted = [...publishedEvents].sort((a, b) => {
     if (sortBy === 'nameAsc') return a.name.localeCompare(b.name);
     if (sortBy === 'nameDesc') return b.name.localeCompare(a.name);
     const da = new Date(a.startsAt).getTime();
