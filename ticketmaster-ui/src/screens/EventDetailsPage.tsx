@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { http } from '../api/http';
 import type {
   ApiResponse,
+  CompanyDTO,
   DiscountPolicyDTO,
   EventDTO,
   PurchasePolicyDTO,
@@ -287,6 +288,27 @@ export default function EventDetailsPage() {
       return res.data.data;
     },
     enabled: Boolean(eventId),
+  });
+
+  const companyQuery = useQuery({
+    queryKey: ['company', eventQuery.data?.companyId],
+    queryFn: async () => {
+      const companyId = eventQuery.data?.companyId;
+
+      if (!companyId) {
+        throw new Error('Company ID is missing.');
+      }
+
+      const res = await http.get<ApiResponse<CompanyDTO>>(
+        `/api/companies/${companyId}`
+      );
+
+      if (res.data.error) throw new Error(res.data.error);
+      if (!res.data.data) throw new Error('Company not found');
+
+      return res.data.data;
+    },
+    enabled: Boolean(eventQuery.data?.companyId),
   });
 
   const companyPurchasePoliciesQuery = useQuery({
@@ -749,18 +771,10 @@ export default function EventDetailsPage() {
             <div className="mt-1 text-slate-700">{event.artist}</div>
             <div className="mt-2 text-sm text-slate-500">{event.location}</div>
           </div>
-
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-              {event.status}
-            </span>
-
-            <Link
-              to={`/companies/${event.companyId}`}
-              className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200"
-            >
-              Company
-            </Link>
+          <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+            {companyQuery.isPending
+              ? 'Loading company...'
+              : companyQuery.data?.name ?? 'Unknown company'}
           </div>
         </div>
 
