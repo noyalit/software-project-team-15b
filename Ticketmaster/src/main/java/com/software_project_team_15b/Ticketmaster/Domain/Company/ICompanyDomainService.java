@@ -27,8 +27,10 @@ public interface ICompanyDomainService {
 
     /**
      * Aggregate discount AMOUNT (not post-discount price) produced by the company's
-     * discount policy tree for the given subtotal. Returns zero in the subtotal's
-     * currency when no policy applies or the company cannot be found.
+     * discount policies for the given subtotal. Multiple policies are stacked as a
+     * multiplicative cascade (each applied to the price left by its predecessors).
+     * Returns zero in the subtotal's currency when no policy applies or the company
+     * cannot be found.
      */
     Money discountAmountFor(UUID companyId, Money subtotal, PurchaseRequest request);
 
