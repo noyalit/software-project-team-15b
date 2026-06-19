@@ -118,6 +118,22 @@ public class Company {
     }
 
     /**
+     * Replaces the entire purchase-policy chain. The company must be {@link CompanyStatus#ACTIVE}.
+     * Passing an empty list clears the chain.
+     *
+     * @param policies the new purchase-policy chain, in evaluation order; must not be null and must not contain nulls
+     * @throws NullPointerException   if {@code policies} or any element is null
+     * @throws IllegalStateException  if the company is not active
+     */
+    public void replacePurchasePolicies(List<ICompanyPurchasePolicy> policies) {
+        verifyActive();
+        Objects.requireNonNull(policies, "policies");
+        List<ICompanyPurchasePolicy> copy = new ArrayList<>(policies);
+        copy.forEach(p -> Objects.requireNonNull(p, "purchase policy element"));
+        this.purchasePolicies = copy;
+    }
+
+    /**
      * Replaces the discount policy. The company must be {@link CompanyStatus#ACTIVE}.
      *
      * @param policy the new discount policy; must not be null
@@ -128,6 +144,22 @@ public class Company {
         verifyActive();
         Objects.requireNonNull(policy, "policy");
         this.discountPolicies = new ArrayList<>(List.of(policy));
+    }
+
+    /**
+     * Replaces the entire discount-policy chain. The company must be {@link CompanyStatus#ACTIVE}.
+     * Passing an empty list clears the chain.
+     *
+     * @param policies the new discount-policy chain, in evaluation order; must not be null and must not contain nulls
+     * @throws NullPointerException   if {@code policies} or any element is null
+     * @throws IllegalStateException  if the company is not active
+     */
+    public void replaceDiscountPolicies(List<ICompanyDiscountPolicy> policies) {
+        verifyActive();
+        Objects.requireNonNull(policies, "policies");
+        List<ICompanyDiscountPolicy> copy = new ArrayList<>(policies);
+        copy.forEach(p -> Objects.requireNonNull(p, "discount policy element"));
+        this.discountPolicies = copy;
     }
 
     /**
