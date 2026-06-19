@@ -6,9 +6,13 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompany
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
+import com.software_project_team_15b.Ticketmaster.Domain.policy.IDiscountPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.policy.PolicyContext;
+import com.software_project_team_15b.Ticketmaster.Domain.policy.SumDiscountPolicy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
@@ -37,20 +41,17 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         if (request == null) {
             throw new IllegalArgumentException("request cannot be null");
         }
-        Optional<Company> opt = companyRepository.findById(companyId);
-        if (opt.isEmpty()) return subtotal;
-        Company company = opt.get();
-        Money best = subtotal;
-        for (ICompanyDiscountPolicy policy : company.getDiscountPolicies()) {
-            Money candidate = policy.apply(subtotal, request);
-            if (candidate != null && candidate.amount().compareTo(best.amount()) < 0) {
-                best = candidate;
-            }
-        }
-        return best;
+        return subtotal.subtract(discountAmountFor(companyId, subtotal, request));
     }
 
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     * <p>The company's discount policies are <strong>stacked</strong> as a multiplicative
+     * cascade (כפל הנחות): each policy is applied to the running price left by its
+     * predecessors, mirroring an event whose root is a {@code SumDiscountPolicy}. To get
+     * "best single discount wins" semantics instead, configure the company with a single
+     * {@code MaxDiscountPolicy} root.
+     */
     @Override
     @Transactional(readOnly = true)
     public Money discountAmountFor(UUID companyId, Money subtotal, PurchaseRequest request) {
@@ -63,8 +64,14 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         if (request == null) {
             throw new IllegalArgumentException("request cannot be null");
         }
-        Money cheapest = cheapestPriceFor(companyId, subtotal, request);
-        return subtotal.subtract(cheapest);
+        Optional<Company> opt = companyRepository.findById(companyId);
+        if (opt.isEmpty()) return Money.zero(subtotal.currency());
+        Company company = opt.get();
+        List<ICompanyDiscountPolicy> policies = company.getDiscountPolicies();
+        if (policies.isEmpty()) return Money.zero(subtotal.currency());
+        SumDiscountPolicy combined = new SumDiscountPolicy(new ArrayList<IDiscountPolicy>(policies));
+        Money discount = combined.discount(subtotal, PolicyContext.of(request, company));
+        return IDiscountPolicy.clamp(discount, subtotal);
     }
 
     /**
