@@ -206,6 +206,25 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
     }
 
     /**
+     * {@inheritDoc}
+     * <p>Status enforcement is delegated to {@link Company#replacePurchasePolicies}, which throws
+     * {@link IllegalStateException} when the company is not {@link CompanyStatus#ACTIVE}.
+     */
+    @Override
+    @Transactional
+    public Company replacePurchasePolicies(UUID companyId, List<ICompanyPurchasePolicy> policies) {
+        if (companyId == null) {
+            throw new IllegalArgumentException("companyId cannot be null");
+        }
+        if (policies == null) {
+            throw new IllegalArgumentException("policies cannot be null");
+        }
+        Company company = getCompanyOrThrow(companyId);
+        company.replacePurchasePolicies(policies);
+        return companyRepository.save(company);
+    }
+
+    /**
      * Replaces the company's discount policy. The company must be {@link CompanyStatus#ACTIVE}.
      *
      * @param companyId the target company's id; must not be null
@@ -226,6 +245,30 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         }
         Company company = getCompanyOrThrow(companyId);
         company.updateDiscountPolicy(policy);
+        return companyRepository.save(company);
+    }
+
+    /**
+     * Replaces the company's entire discount-policy chain. The company must be {@link CompanyStatus#ACTIVE}.
+     *
+     * @param companyId the target company's id; must not be null
+     * @param policies  the new discount-policy chain; must not be null
+     * @return the updated, persisted company
+     * @throws IllegalArgumentException if {@code companyId} or {@code policies} is null
+     * @throws IllegalStateException    if the company is not active
+     * @throws CompanyNotFoundException if no company exists with the given id
+     */
+    @Override
+    @Transactional
+    public Company replaceDiscountPolicies(UUID companyId, List<ICompanyDiscountPolicy> policies) {
+        if (companyId == null) {
+            throw new IllegalArgumentException("companyId cannot be null");
+        }
+        if (policies == null) {
+            throw new IllegalArgumentException("policies cannot be null");
+        }
+        Company company = getCompanyOrThrow(companyId);
+        company.replaceDiscountPolicies(policies);
         return companyRepository.save(company);
     }
 
