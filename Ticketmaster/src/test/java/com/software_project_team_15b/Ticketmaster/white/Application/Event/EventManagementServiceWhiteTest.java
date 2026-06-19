@@ -177,6 +177,7 @@ class EventManagementServiceWhiteTest {
         service.cancel(eventId, caller);
 
         verify(eventDomainService).cancel(eventId);
+        verify(cancelManager).cancelEvent(eventId);
     }
 
     @Test
@@ -406,18 +407,16 @@ class EventManagementServiceWhiteTest {
     // -------------------- notifyEventIsCancelled (subscriber callback) --------------------
 
     @Test
-    void GivenEventId_WhenNotifyEventIsCancelled_ThenDelegatesToDomainCancel() {
+    void GivenEventId_WhenNotifyEventIsCancelled_ThenNotifiesAttendeesWithoutReCancelling() {
         UUID eventId = UUID.randomUUID();
-        service.notifyEventIsCancelled(eventId);
-        verify(eventDomainService).cancel(eventId);
-    }
+        UUID attendee = UUID.randomUUID();
+        when(eventDomainService.collectAttendeeUserIds(eventId)).thenReturn(List.of(attendee));
 
-    @Test
-    void GivenDomainRejectsCancel_WhenNotifyEventIsCancelled_ThenRethrows() {
-        UUID eventId = UUID.randomUUID();
-        doThrow(new InvalidEventStateException("bad")).when(eventDomainService).cancel(eventId);
-        assertThatThrownBy(() -> service.notifyEventIsCancelled(eventId))
-                .isInstanceOf(InvalidEventStateException.class);
+        service.notifyEventIsCancelled(eventId);
+
+        // The status transition is owned by cancel(); this subscriber must not re-cancel.
+        verify(eventDomainService, never()).cancel(eventId);
+        verify(notifier).notifyUser(eq(attendee), any());
     }
 
     @Test
