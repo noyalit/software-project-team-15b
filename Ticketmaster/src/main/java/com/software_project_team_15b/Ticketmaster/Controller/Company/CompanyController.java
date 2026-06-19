@@ -109,6 +109,50 @@ public class CompanyController {
         }
     }
 
+    @Operation(summary = "Replace the company's purchase-policy chain (empty list clears)")
+    @PutMapping(path = "/{companyId}/purchase-policies", consumes = "application/json")
+    public ResponseEntity<ApiResponse<CompanyDTO>> replaceCompanyPurchasePolicies(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID companyId,
+            @RequestBody List<ICompanyPurchasePolicy> policies
+    ) {
+        try {
+            return ResponseEntity.ok(new ApiResponse<>(companyService.replacePurchasePolicies(token, companyId, policies), null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
+        } catch (CompanyNotFoundException ex) {
+            return notFound(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Replace the company's discount-policy chain (empty list clears)")
+    @PutMapping(path = "/{companyId}/discount-policies", consumes = "application/json")
+    public ResponseEntity<ApiResponse<CompanyDTO>> replaceCompanyDiscountPolicies(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID companyId,
+            @RequestBody List<ICompanyDiscountPolicy> policies
+    ) {
+        try {
+            return ResponseEntity.ok(new ApiResponse<>(companyService.replaceDiscountPolicies(token, companyId, policies), null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (UnauthorizedCompanyActionException ex) {
+            return forbidden(ex);
+        } catch (CompanyNotFoundException ex) {
+            return notFound(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     @Operation(summary = "List the company's purchase-policy chain in order")
     @GetMapping("/{companyId}/purchase-policies")
     public ResponseEntity<ApiResponse<List<ICompanyPurchasePolicy>>> getCompanyPurchasePolicies(
