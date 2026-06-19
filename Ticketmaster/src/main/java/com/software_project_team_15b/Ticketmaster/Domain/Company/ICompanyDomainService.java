@@ -101,6 +101,18 @@ public interface ICompanyDomainService {
     Company updatePurchasePolicy(UUID companyId, ICompanyPurchasePolicy policy);
 
     /**
+     * Replaces the company's entire purchase-policy chain. The company must be
+     * {@link CompanyStatus#ACTIVE}. Passing an empty list clears the chain.
+     *
+     * @param companyId the target company's id; must not be null
+     * @param policies  the new purchase-policy chain, in evaluation order; must not be null and must not contain nulls
+     * @return the updated, persisted company
+     * @throws CompanyNotFoundException if no company with {@code companyId} exists
+     * @throws IllegalStateException    if the company is not active
+     */
+    Company replacePurchasePolicies(UUID companyId, List<ICompanyPurchasePolicy> policies);
+
+    /**
      * Replaces the company's discount policy. The company must be {@link CompanyStatus#ACTIVE}.
      *
      * @param companyId the target company's id; must not be null
@@ -110,6 +122,18 @@ public interface ICompanyDomainService {
      * @throws IllegalStateException    if the company is not active
      */
     Company updateDiscountPolicy(UUID companyId, ICompanyDiscountPolicy policy);
+
+    /**
+     * Replaces the company's entire discount-policy chain. The company must be
+     * {@link CompanyStatus#ACTIVE}. Passing an empty list clears the chain.
+     *
+     * @param companyId the target company's id; must not be null
+     * @param policies  the new discount-policy chain, in evaluation order; must not be null and must not contain nulls
+     * @return the updated, persisted company
+     * @throws CompanyNotFoundException if no company with {@code companyId} exists
+     * @throws IllegalStateException    if the company is not active
+     */
+    Company replaceDiscountPolicies(UUID companyId, List<ICompanyDiscountPolicy> policies);
 
     /**
      * Transitions the company to the given status and persists the change.
