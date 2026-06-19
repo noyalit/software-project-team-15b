@@ -100,7 +100,7 @@ class CompanyDomainServiceImplTest {
     }
 
     @Test
-    void cheapestPriceFor_picks_minimum_across_multiple_discount_policies() {
+    void cheapestPriceFor_stacks_multiple_discount_policies() {
         Company company = new Company("Acme", UUID.randomUUID());
         ICompanyDiscountPolicy twentyOff = (subtotal, ctx) -> Money.of("20.00", "USD");
         ICompanyDiscountPolicy tenOff = (subtotal, ctx) -> Money.of("10.00", "USD");
@@ -109,7 +109,8 @@ class CompanyDomainServiceImplTest {
 
         Money result = service.cheapestPriceFor(UUID.randomUUID(), Money.of("100.00", "USD"), makeRequest());
 
-        assertThat(result).isEqualTo(Money.of("80.00", "USD"));
+        // Discounts stack as a cascade: 100 - 20 = 80, then 80 - 10 = 70.
+        assertThat(result).isEqualTo(Money.of("70.00", "USD"));
     }
 
     @Test
@@ -557,6 +558,22 @@ class CompanyDomainServiceImplTest {
         Money subtotal = Money.of("100.00", "USD");
         Money discount = service.discountAmountFor(UUID.randomUUID(), subtotal, makeRequest());
         assertThat(discount.amount()).isEqualByComparingTo(java.math.BigDecimal.ZERO);
+    }
+
+    @Test
+    void discountAmountFor_stacks_percentage_policies_as_cascade() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        // 20%, then 12%, then 30% — applied as a cascade on the running price.
+        setDiscountPolicies(company, List.of(
+                new com.software_project_team_15b.Ticketmaster.Domain.policy.SimpleDiscountPolicy(new BigDecimal("20")),
+                new com.software_project_team_15b.Ticketmaster.Domain.policy.SimpleDiscountPolicy(new BigDecimal("12")),
+                new com.software_project_team_15b.Ticketmaster.Domain.policy.SimpleDiscountPolicy(new BigDecimal("30"))));
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+
+        Money discount = service.discountAmountFor(UUID.randomUUID(), Money.of("150.00", "USD"), makeRequest());
+
+        // 150 -20% = 120, -12% = 105.60, -30% = 73.92 -> discount 76.08 (not the 45 a max-single rule gives).
+        assertThat(discount).isEqualTo(Money.of("76.08", "USD"));
     }
 
     @Test
