@@ -12,20 +12,6 @@ import java.util.UUID;
 
 public interface ICompanyDomainService {
     /**
-     * Returns the cheapest price the company is willing to offer for the given subtotal.
-     * Mirrors {@link com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy}
-     * but for the company side. The returned amount is clamped to the subtotal so a misbehaving
-     * policy cannot raise the price.
-     *
-     * @param companyId the owning company's id; must not be null
-     * @param subtotal  the base subtotal in the buyer's currency; must not be null
-     * @param request   the purchase request; must not be null
-     * @return the lowest price the company offers, never above {@code subtotal}, in {@code subtotal}'s currency
-     * @throws CompanyNotFoundException if the company does not exist
-     */
-    Money cheapestPriceFor(UUID companyId, Money subtotal, PurchaseRequest request);
-
-    /**
      * Aggregate discount AMOUNT (not post-discount price) produced by the company's
      * discount policies for the given subtotal. Multiple policies are stacked as a
      * multiplicative cascade (each applied to the price left by its predecessors).
@@ -37,8 +23,7 @@ public interface ICompanyDomainService {
     /**
      * @return the company's configured strategy for combining event-level and
      *         company-level discounts, defaulting to
-     *         {@link com.software_project_team_15b.Ticketmaster.Domain.Company.DiscountCombineStrategy#SUM SUM}
-     *         when the company is unknown.
+     *         {@link com.software_project_team_15b.Ticketmaster.Domain.Company.DiscountCombineStrategy#CASCADE CASCADE}.
      */
     DiscountCombineStrategy discountCombineStrategyFor(UUID companyId);
 
