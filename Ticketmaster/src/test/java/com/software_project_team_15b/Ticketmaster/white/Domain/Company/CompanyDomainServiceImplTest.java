@@ -590,9 +590,9 @@ class CompanyDomainServiceImplTest {
     // discountCombineStrategyFor
 
     @Test
-    void discountCombineStrategyFor_returns_SUM() {
+    void discountCombineStrategyFor_returns_CASCADE() {
         assertThat(service.discountCombineStrategyFor(UUID.randomUUID()))
-                .isEqualTo(DiscountCombineStrategy.SUM);
+                .isEqualTo(DiscountCombineStrategy.CASCADE);
     }
 
     // ===========================================================================================
