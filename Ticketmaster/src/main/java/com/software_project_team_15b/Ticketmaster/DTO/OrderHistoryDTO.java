@@ -14,6 +14,7 @@ public class OrderHistoryDTO {
 	private final MoneyDTO totalPrice;
 	private final List<TicketDTO> tickets;
 	private final boolean cancelled;
+	private final String ticketIdentifier;
 
 	public OrderHistoryDTO(UUID orderId,
 						   UUID userId,
@@ -22,7 +23,8 @@ public class OrderHistoryDTO {
 						   Integer paymentTransactionId,
 						   MoneyDTO totalPrice,
 						   List<TicketDTO> tickets,
-						   boolean cancelled) {
+						   boolean cancelled,
+						   String ticketIdentifier) {
 		this.orderId = orderId;
 		this.userId = userId;
 		this.eventId = eventId;
@@ -31,6 +33,7 @@ public class OrderHistoryDTO {
 		this.totalPrice = totalPrice;
 		this.tickets = tickets == null ? List.of() : List.copyOf(tickets);
 		this.cancelled = cancelled;
+		this.ticketIdentifier = ticketIdentifier;
 	}
 
 	public static OrderHistoryDTO from(com.software_project_team_15b.Ticketmaster.Domain.OrderHistory.OrderHistory orderHistory) {
@@ -46,7 +49,8 @@ public class OrderHistoryDTO {
                 orderHistory.getPaymentTransactionId(),
                 MoneyDTO.from(orderHistory.getTotalPrice()),
                 tickets,
-                orderHistory.isCancelled()
+                orderHistory.isCancelled(),
+                orderHistory.getTicketIdentifier()
         );
     }
 
@@ -80,5 +84,9 @@ public class OrderHistoryDTO {
 
 	public boolean isCancelled() {
 		return cancelled;
+	}
+
+	public String getTicketIdentifier() {
+		return ticketIdentifier;
 	}
 }
