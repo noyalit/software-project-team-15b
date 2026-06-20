@@ -162,7 +162,7 @@ public class LotteryService {
      * @throws LotteryNotFoundException     if no lottery exists for the given event
      * @throws LotteryAlreadyDrawnException if the lottery for this event has already been drawn
      */
-    public Set runEventLottery(String token,
+    public Set<UUID> runEventLottery(String token,
     UUID companyId,
     UUID eventId,
     int count,
