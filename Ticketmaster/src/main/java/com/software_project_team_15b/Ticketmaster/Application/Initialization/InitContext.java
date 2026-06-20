@@ -32,6 +32,10 @@ public class InitContext {
         tokensByUsername.put(username, token);
     }
 
+    public void unbindToken(String username) {
+        tokensByUsername.remove(username);
+    }
+
     public void bindUserId(String username, UUID userId) {
         userIdsByUsername.put(username, userId);
     }

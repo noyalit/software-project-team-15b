@@ -1,11 +1,9 @@
 package com.software_project_team_15b.Ticketmaster.Controller.User;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
-import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.Member;
-import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpHeaders;
@@ -24,12 +22,10 @@ import java.util.UUID;
 @Tag(name = "Users", description = "User lookup utilities")
 public class MemberLookupController {
 
-    private final UserDomainService userDomainService;
-    private final IAuth auth;
+    private final UserService userService;
 
-    public MemberLookupController(UserDomainService userDomainService, IAuth auth) {
-        this.userDomainService = userDomainService;
-        this.auth = auth;
+    public MemberLookupController(UserService userService) {
+        this.userService = userService;
     }
 
     @Operation(summary = "Resolve a member by username (for memberId discovery)")
@@ -39,12 +35,7 @@ public class MemberLookupController {
             @RequestParam String username
     ) {
         try {
-            if (!auth.isTokenValid(token) || !(auth.isMember(token) || auth.isSystemAdmin(token))) {
-                throw new InvalidTokenException("Only an authenticated member or system admin can resolve members");
-            }
-
-            Member member = userDomainService.getMemberByUsername(username);
-            return ResponseEntity.ok(new ApiResponse<>(userDomainService.toDTO(member), null));
+            return ResponseEntity.ok(new ApiResponse<>(userService.resolveMemberByUsername(token, username), null));
 
         } catch (InvalidTokenException ex) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -68,11 +59,7 @@ public class MemberLookupController {
             @RequestParam UUID userId
     ) {
         try {
-            if (!auth.isTokenValid(token) || !(auth.isMember(token) || auth.isSystemAdmin(token))) {
-                throw new InvalidTokenException("Only an authenticated member or system admin can resolve members");
-            }
-
-            return ResponseEntity.ok(new ApiResponse<>(userDomainService.resolveMemberById(userId), null));
+            return ResponseEntity.ok(new ApiResponse<>(userService.resolveMemberById(token, userId), null));
 
         } catch (InvalidTokenException ex) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)

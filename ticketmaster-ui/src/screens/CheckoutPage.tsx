@@ -34,23 +34,33 @@ type CheckoutCompletedDTO = {
   orderId?: string;
 };
 
+async function sleep(ms: number) {
+  return new Promise((r) => window.setTimeout(r, ms));
+}
+
 export default function CheckoutPage() {
   const { orderId } = useParams();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { token, userType, clearAuth } = useAuthStore();
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [orderId]);
+
   const isCouponPolicy = (p: DiscountPolicyDTO) => {
-    const anyP = p as any;
+    const raw = p as any;
+    const anyP = raw?.policy && typeof raw.policy === 'object' ? raw.policy : raw;
     const t = (anyP?.type ?? anyP?.policyType ?? anyP?.kind) as string | undefined;
     return t === 'COUPON' || typeof anyP?.code === 'string';
   };
 
   const couponPolicyExpiresAtMs = (p: DiscountPolicyDTO) => {
-    const anyP = p as any;
-    const raw = anyP?.expiresAt;
-    if (typeof raw !== 'string' || !raw) return null;
-    const ms = new Date(raw).getTime();
+    const raw = p as any;
+    const anyP = raw?.policy && typeof raw.policy === 'object' ? raw.policy : raw;
+    const expiresAt = anyP?.expiresAt;
+    if (typeof expiresAt !== 'string' || !expiresAt) return null;
+    const ms = new Date(expiresAt).getTime();
     return Number.isFinite(ms) ? ms : null;
   };
 
@@ -59,6 +69,9 @@ export default function CheckoutPage() {
     const t = (anyP?.type ?? anyP?.policyType ?? anyP?.kind) as string | undefined;
     if (t === 'MAX_TICKETS_PER_ORDER' || anyP?.max != null) {
       return `Max tickets per order: ${anyP?.max}`;
+    }
+    if (t === 'MIN_TICKETS_PER_ORDER' || anyP?.min != null) {
+      return `Min tickets per order: ${anyP?.min}`;
     }
     if (t === 'AGE_RESTRICTION' || anyP?.minAge != null) {
       return `Age restriction: ${anyP?.minAge}+`;
@@ -98,32 +111,48 @@ export default function CheckoutPage() {
 
   const describeCompanyDiscountPolicy = (p: any): string => {
     if (!p || typeof p !== 'object') return 'Unknown policy';
-    const cls = String(p['@class'] ?? '');
+    const raw = p;
+    const anyP = raw?.policy && typeof raw.policy === 'object' ? raw.policy : raw;
+    const cls = String(anyP['@class'] ?? raw?.['@class'] ?? '');
 
-    if (p.percent != null && cls.includes('SimpleDiscountPolicy')) {
-      return `Simple discount (${p.percent}%)`;
+    if (typeof anyP.code === 'string' && anyP.code) {
+      const pct = anyP.percentage ?? anyP.percent;
+      return `Coupon ${anyP.code}${pct != null ? ` (${pct}%)` : ''}`;
     }
 
-    if (p.percent != null && cls.includes('ConditionalDiscountPolicy')) {
-      const cond = p.condition;
+    if (Array.isArray(anyP.children) && anyP.children.length > 0) {
+      if (cls.includes('MaxDiscountPolicy')) return 'Best available discount (max)';
+      if (cls.includes('SumDiscountPolicy')) return 'Combined discounts (sum)';
+      return 'Combined discounts';
+    }
+
+    const percent = anyP.percent ?? anyP.percentage ?? null;
+    const condition = anyP.condition && typeof anyP.condition === 'object' ? anyP.condition : null;
+
+    if (percent != null && (!condition || cls.includes('SimpleDiscountPolicy'))) {
+      return `Simple discount (${percent}%)`;
+    }
+
+    if (percent != null && (condition || cls.includes('ConditionalDiscountPolicy'))) {
+      const cond = condition;
       if (cond && typeof cond === 'object') {
         const condCls = String(cond['@class'] ?? '');
         if (cond.max != null && condCls.includes('MaxTicketsCondition')) {
-          return `Conditional discount (${p.percent}%) when quantity <= ${cond.max}`;
+          return `Conditional discount (${percent}%) when quantity <= ${cond.max}`;
         }
         if (cond.min != null && condCls.includes('MinTicketsCondition')) {
-          return `Conditional discount (${p.percent}%) when quantity >= ${cond.min}`;
+          return `Conditional discount (${percent}%) when quantity >= ${cond.min}`;
         }
         if (condCls.includes('TimeWindowCondition')) {
           const from = cond.from ? new Date(cond.from).toLocaleString() : null;
           const to = cond.to ? new Date(cond.to).toLocaleString() : null;
-          if (from && to) return `Conditional discount (${p.percent}%) between ${from} and ${to}`;
-          if (from) return `Conditional discount (${p.percent}%) from ${from}`;
-          if (to) return `Conditional discount (${p.percent}%) until ${to}`;
-          return `Conditional discount (${p.percent}%)`;
+          if (from && to) return `Conditional discount (${percent}%) between ${from} and ${to}`;
+          if (from) return `Conditional discount (${percent}%) from ${from}`;
+          if (to) return `Conditional discount (${percent}%) until ${to}`;
+          return `Conditional discount (${percent}%)`;
         }
       }
-      return `Conditional discount (${p.percent}%)`;
+      return `Conditional discount (${percent}%)`;
     }
 
     if (cls) return cls.split('.').pop() ?? cls;
@@ -143,6 +172,15 @@ export default function CheckoutPage() {
   };
 
   const [couponCode, setCouponCode] = useState('');
+  const [appliedCouponCode, setAppliedCouponCode] = useState('');
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardMonth, setCardMonth] = useState('');
+  const [cardYear, setCardYear] = useState('');
+  const [cardHolder, setCardHolder] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
+  const [cardHolderId, setCardHolderId] = useState('');
+  const [paymentErrors, setPaymentErrors] = useState<Record<string, string>>({});
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -199,6 +237,15 @@ export default function CheckoutPage() {
             navigate('/events', { replace: true });
           }
           throw new Error('This active order has expired. Please start a new order.');
+        }
+
+        if (status === 404) {
+          sessionStorage.removeItem('activeOrderId');
+          localStorage.removeItem('activeOrderId');
+          if (!orderId) {
+            navigate('/events', { replace: true });
+          }
+          throw new Error('Active order was not found. Please start a new order.');
         }
 
         if (status === 409) {
@@ -285,19 +332,24 @@ export default function CheckoutPage() {
     enabled: Boolean(eventQuery.data?.eventId),
   });
 
-  const hasActiveCoupon = (discountPoliciesQuery.data ?? []).some((p) => {
+  const couponPolicySources = [
+    ...(discountPoliciesQuery.data ?? []),
+    ...(companyDiscountPoliciesQuery.data ?? []),
+  ];
+
+  const hasActiveCoupon = couponPolicySources.some((p) => {
     if (!isCouponPolicy(p)) return false;
     const exp = couponPolicyExpiresAtMs(p);
-    if (exp == null) return false;
+    if (exp == null) return true;
     return exp > nowTick;
   });
 
   const activeCouponCodes = new Set(
-    (discountPoliciesQuery.data ?? [])
+    couponPolicySources
       .filter((p) => {
         if (!isCouponPolicy(p)) return false;
         const exp = couponPolicyExpiresAtMs(p);
-        return exp != null && exp > nowTick;
+        return exp == null || exp > nowTick;
       })
       .map((p) => String((p as any)?.code ?? ''))
       .filter(Boolean)
@@ -311,11 +363,17 @@ export default function CheckoutPage() {
     return shouldShowCouponPolicies;
   });
 
+  const visibleCompanyDiscountPolicies = (companyDiscountPoliciesQuery.data ?? []).filter((p) => {
+    if (!isCouponPolicy(p)) return true;
+    return shouldShowCouponPolicies;
+  });
+
   useEffect(() => {
-    if (!hasActiveCoupon && couponCode) {
-      setCouponCode('');
-    }
-  }, [hasActiveCoupon, couponCode]);
+    if (hasActiveCoupon) return;
+    if (couponCode) setCouponCode('');
+    if (appliedCouponCode) setAppliedCouponCode('');
+    if (couponError) setCouponError(null);
+  }, [hasActiveCoupon, couponCode, appliedCouponCode, couponError]);
 
   const priceQuoteQuery = useQuery({
     queryKey: [
@@ -325,7 +383,7 @@ export default function CheckoutPage() {
       activeOrderQuery.data?.areaId,
       activeOrderQuery.data?.seatIds?.length,
       activeOrderQuery.data?.seats?.length,
-      couponCode,
+      appliedCouponCode,
       meQuery.data?.userId,
       meQuery.data?.birthDate,
       guestBirthDate,
@@ -353,7 +411,7 @@ export default function CheckoutPage() {
           quantity,
           buyerId,
           buyerBirthDate,
-          couponCode: couponCode.trim() || null,
+          couponCode: appliedCouponCode.trim() || null,
         }
       );
       if (res.data.error) throw new Error(res.data.error);
@@ -372,25 +430,160 @@ export default function CheckoutPage() {
     mutationFn: async () => {
       if (!activeOrderId) throw new Error('No active order found');
 
+      const nextPaymentErrors: Record<string, string> = {};
+      const cardNumberDigits = cardNumber.replace(/\s+/g, '');
+      if (!cardNumberDigits) {
+        nextPaymentErrors.cardNumber = 'Please enter your card number.';
+      } else if (!/^\d{13,19}$/.test(cardNumberDigits)) {
+        nextPaymentErrors.cardNumber = 'Card number must contain 13-19 digits.';
+      }
+
+      const monthStr = cardMonth.trim();
+      const month = monthStr ? Number(monthStr) : NaN;
+      if (!monthStr) {
+        nextPaymentErrors.cardMonth = 'Please enter the card expiry month.';
+      } else if (!Number.isInteger(month) || month < 1 || month > 12) {
+        nextPaymentErrors.cardMonth = 'Month must be a number between 1 and 12.';
+      }
+
+      const yearStr = cardYear.trim();
+      const normalizedYear = yearStr.length === 2 ? `20${yearStr}` : yearStr;
+      const year = normalizedYear ? Number(normalizedYear) : NaN;
+      if (!yearStr) {
+        nextPaymentErrors.cardYear = 'Please enter the card expiry year.';
+      } else if (!/^\d{2}$/.test(yearStr) && !/^\d{4}$/.test(yearStr)) {
+        nextPaymentErrors.cardYear = 'Year must be 2 digits (YY) or 4 digits (YYYY).';
+      } else if (!Number.isInteger(year) || year < 2000 || year > 2100) {
+        nextPaymentErrors.cardYear = 'Please enter a valid year.';
+      }
+
+      const holder = cardHolder.trim();
+      if (!holder) {
+        nextPaymentErrors.cardHolder = 'Please enter the card holder name.';
+      } else if (holder.length < 2) {
+        nextPaymentErrors.cardHolder = 'Card holder name is too short.';
+      }
+
+      const cvv = cardCvv.trim();
+      if (!cvv) {
+        nextPaymentErrors.cardCvv = 'Please enter the CVV/CVC code.';
+      } else if (!/^\d{3,4}$/.test(cvv)) {
+        nextPaymentErrors.cardCvv = 'CVV must be 3-4 digits.';
+      }
+
+      const id = cardHolderId.trim();
+      if (!id) {
+        nextPaymentErrors.cardHolderId = 'Please enter the ID of the card holder.';
+      } else if (!/^\d{5,20}$/.test(id)) {
+        nextPaymentErrors.cardHolderId = 'ID must contain only digits.';
+      }
+
+      if (!nextPaymentErrors.cardMonth && !nextPaymentErrors.cardYear) {
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth() + 1;
+        if (Number.isFinite(month) && Number.isFinite(year)) {
+          if (year < currentYear || (year === currentYear && month < currentMonth)) {
+            nextPaymentErrors.cardYear = 'This card appears to be expired.';
+          }
+        }
+      }
+
+      setPaymentErrors(nextPaymentErrors);
+      if (Object.keys(nextPaymentErrors).length > 0) {
+        throw new Error('Please fix the payment details highlighted above.');
+      }
+
+      let orderView: ActiveOrderDTO | null = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          const res = await http.get<ApiResponse<ActiveOrderDTO>>(`/api/active-orders/${activeOrderId}`);
+          if (res.data.error) throw new Error(res.data.error);
+          orderView = res.data.data;
+          break;
+        } catch (e) {
+          const err = e as AxiosError<ApiResponse<unknown>>;
+          if (err.response?.status === 404) {
+            sessionStorage.removeItem('activeOrderId');
+            localStorage.removeItem('activeOrderId');
+            throw new Error('Active order was not found. Please start a new order.');
+          }
+          if (err.response?.status === 409) {
+            if (attempt === 4) {
+              const serverError = err.response?.data && typeof err.response.data === 'object' ? (err.response.data as any).error : null;
+              if (typeof serverError === 'string' && serverError.trim()) {
+                throw new Error(serverError);
+              }
+              throw e;
+            }
+            await sleep(Math.min(400 * (attempt + 1), 1200));
+            continue;
+          }
+          throw e;
+        }
+      }
+
+      if (!orderView) throw new Error('Checkout is temporarily unavailable. Please try again in a moment.');
+
+      const isInCheckout = Boolean(orderView?.expiresAt);
+      if (!isInCheckout) {
+        try {
+          if (userType === 'member') {
+            const res = await http.post<ApiResponse<unknown>>(
+              `/api/active-orders/${activeOrderId}/checkout/member/start`
+            );
+            if (res.data.error) throw new Error(res.data.error);
+          } else {
+            const guestBirthDate = localStorage.getItem('guestBirthDate') ?? '';
+            if (!guestBirthDate) throw new Error('Please enter birth date for guest checkout.');
+            const res = await http.post<ApiResponse<unknown>>(
+              `/api/active-orders/${activeOrderId}/checkout/guest/start`,
+              { birthDate: guestBirthDate }
+            );
+            if (res.data.error) throw new Error(res.data.error);
+          }
+        } catch (e) {
+          const err = e as AxiosError<ApiResponse<unknown>>;
+          if (err.response?.status !== 409) throw e;
+        }
+      }
+
+      const paymentDetails = {
+        cardNumber: cardNumberDigits,
+        month: monthStr,
+        year: normalizedYear,
+        holder,
+        cvv,
+        id,
+      };
+
+      const payloadPaymentDetails = {
+        cardNumber: paymentDetails.cardNumber,
+        month: paymentDetails.month,
+        year: paymentDetails.year,
+        holder: paymentDetails.holder,
+        cvv: paymentDetails.cvv,
+        id: paymentDetails.id,
+      };
+
       if (userType === 'member') {
         const res = await http.post<ApiResponse<CheckoutCompletedDTO>>(
           `/api/active-orders/${activeOrderId}/checkout/member/complete`,
           {
-            couponCode: couponCode.trim() || null,
+            couponCode: appliedCouponCode.trim() || null,
+            paymentDetails: payloadPaymentDetails,
           }
         );
         if (res.data.error) throw new Error(res.data.error);
         return res.data.data;
       }
 
-      const guestBirthDate = localStorage.getItem('guestBirthDate') ?? '';
-      if (!guestBirthDate) throw new Error('Please enter birth date for guest checkout.');
-
       const res = await http.post<ApiResponse<CheckoutCompletedDTO>>(
         `/api/active-orders/${activeOrderId}/checkout/guest/complete`,
         {
-          birthDate: guestBirthDate,
-          couponCode: couponCode.trim() || null,
+          birthDate: localStorage.getItem('guestBirthDate') ?? '',
+          couponCode: appliedCouponCode.trim() || null,
+          paymentDetails: payloadPaymentDetails,
         }
       );
       if (res.data.error) throw new Error(res.data.error);
@@ -417,6 +610,16 @@ export default function CheckoutPage() {
   const actionError = activeOrderQuery.error || completeCheckoutMutation.error;
   const actionErrorMessage =
     !successMessage && actionError ? getApiErrorMessage(actionError) : null;
+
+  useEffect(() => {
+    if (!actionErrorMessage) return;
+    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+  }, [actionErrorMessage]);
+
+  useEffect(() => {
+    if (Object.keys(paymentErrors).length === 0) return;
+    window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+  }, [paymentErrors]);
 
   const formatMoney = (m?: { amount: number | string; currency: string } | null) => {
     if (!m) return '—';
@@ -458,6 +661,143 @@ export default function CheckoutPage() {
             <div className="mt-1 font-mono text-sm text-slate-900">
               {activeOrderQuery.data.orderId}
             </div>
+
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-900">Payment details</div>
+
+            {Object.keys(paymentErrors).length > 0 && (
+              <div className="mt-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+                Please review the payment details below and fix the highlighted fields.
+              </div>
+            )}
+
+            <div className="mt-3 grid gap-3 md:grid-cols-2">
+              <label className="block md:col-span-2">
+                <div className="text-xs font-medium text-slate-600">Card number</div>
+                <input
+                  value={cardNumber}
+                  onChange={(e) => {
+                    setCardNumber(e.target.value);
+                    setPaymentErrors((prev) => {
+                      if (!prev.cardNumber) return prev;
+                      const { cardNumber, ...rest } = prev;
+                      return rest;
+                    });
+                  }}
+                  placeholder="1234123412341234"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+                {paymentErrors.cardNumber && (
+                  <div className="mt-1 text-xs text-rose-700">{paymentErrors.cardNumber}</div>
+                )}
+              </label>
+
+              <label className="block">
+                <div className="text-xs font-medium text-slate-600">Month</div>
+                <input
+                  value={cardMonth}
+                  onChange={(e) => {
+                    setCardMonth(e.target.value);
+                    setPaymentErrors((prev) => {
+                      if (!prev.cardMonth) return prev;
+                      const { cardMonth, ...rest } = prev;
+                      return rest;
+                    });
+                  }}
+                  placeholder="MM"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+                {paymentErrors.cardMonth && (
+                  <div className="mt-1 text-xs text-rose-700">{paymentErrors.cardMonth}</div>
+                )}
+              </label>
+
+              <label className="block">
+                <div className="text-xs font-medium text-slate-600">Year</div>
+                <input
+                  value={cardYear}
+                  onChange={(e) => {
+                    setCardYear(e.target.value);
+                    setPaymentErrors((prev) => {
+                      if (!prev.cardYear) return prev;
+                      const { cardYear, ...rest } = prev;
+                      return rest;
+                    });
+                  }}
+                  placeholder="YYYY"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+                {paymentErrors.cardYear && (
+                  <div className="mt-1 text-xs text-rose-700">{paymentErrors.cardYear}</div>
+                )}
+              </label>
+
+              <label className="block md:col-span-2">
+                <div className="text-xs font-medium text-slate-600">Card holder</div>
+                <input
+                  value={cardHolder}
+                  onChange={(e) => {
+                    setCardHolder(e.target.value);
+                    setPaymentErrors((prev) => {
+                      if (!prev.cardHolder) return prev;
+                      const { cardHolder, ...rest } = prev;
+                      return rest;
+                    });
+                  }}
+                  placeholder="Full name"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+                {paymentErrors.cardHolder && (
+                  <div className="mt-1 text-xs text-rose-700">{paymentErrors.cardHolder}</div>
+                )}
+              </label>
+
+              <label className="block">
+                <div className="text-xs font-medium text-slate-600">CVV</div>
+                <input
+                  value={cardCvv}
+                  onChange={(e) => {
+                    setCardCvv(e.target.value);
+                    setPaymentErrors((prev) => {
+                      if (!prev.cardCvv) return prev;
+                      const { cardCvv, ...rest } = prev;
+                      return rest;
+                    });
+                  }}
+                  placeholder="123"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+                {paymentErrors.cardCvv && (
+                  <div className="mt-1 text-xs text-rose-700">{paymentErrors.cardCvv}</div>
+                )}
+              </label>
+
+              <label className="block">
+                <div className="text-xs font-medium text-slate-600">ID</div>
+                <input
+                  value={cardHolderId}
+                  onChange={(e) => {
+                    setCardHolderId(e.target.value);
+                    setPaymentErrors((prev) => {
+                      if (!prev.cardHolderId) return prev;
+                      const { cardHolderId, ...rest } = prev;
+                      return rest;
+                    });
+                  }}
+                  placeholder="ID number"
+                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                />
+                {paymentErrors.cardHolderId && (
+                  <div className="mt-1 text-xs text-rose-700">{paymentErrors.cardHolderId}</div>
+                )}
+              </label>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-900">Order summary</div>
 
             <div className="mt-4 text-sm text-slate-600">Selected seats</div>
             <div className="mt-1 grid gap-1">
@@ -534,13 +874,67 @@ export default function CheckoutPage() {
             {hasActiveCoupon && (
               <label className="block text-sm font-semibold text-slate-900">
                 Coupon code
-                <input
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value)}
-                  placeholder="Optional"
-                  className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                />
+                <div className="mt-1 flex items-center gap-2">
+                  <input
+                    value={couponCode}
+                    onChange={(e) => {
+                      setCouponCode(e.target.value);
+                      setCouponError(null);
+                    }}
+                    placeholder="Optional"
+                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const code = couponCode.trim();
+                      if (!code) {
+                        setAppliedCouponCode('');
+                        setCouponError(null);
+                        return;
+                      }
+
+                      if (!activeCouponCodes.has(code)) {
+                        setAppliedCouponCode('');
+                        setCouponError('Coupon code is not valid for this event/company (or is expired).');
+                        return;
+                      }
+
+                      setAppliedCouponCode(code);
+                      setCouponError(null);
+                    }}
+                    className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    Apply
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCouponCode('');
+                      setAppliedCouponCode('');
+                      setCouponError(null);
+                    }}
+                    disabled={!couponCode && !appliedCouponCode}
+                    className="shrink-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    Clear
+                  </button>
+                </div>
               </label>
+            )}
+
+            {hasActiveCoupon && couponError && (
+              <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {couponError}
+              </div>
+            )}
+
+            {hasActiveCoupon && !couponError && appliedCouponCode && (
+              <div className="mt-2 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                Applied coupon: {appliedCouponCode}
+              </div>
             )}
 
             <div className="mt-4 grid gap-3">
@@ -646,11 +1040,11 @@ export default function CheckoutPage() {
                   <div className="mt-1 text-sm text-rose-700">
                     {getApiErrorMessage(companyDiscountPoliciesQuery.error)}
                   </div>
-                ) : (companyDiscountPoliciesQuery.data ?? []).length === 0 ? (
+                ) : visibleCompanyDiscountPolicies.length === 0 ? (
                   <div className="mt-1 text-sm text-slate-600">No company discount policies.</div>
                 ) : (
                   <div className="mt-2 grid gap-1">
-                    {(companyDiscountPoliciesQuery.data ?? []).map((p: any, idx: number) => (
+                    {visibleCompanyDiscountPolicies.map((p: any, idx: number) => (
                       <div key={idx} className="text-sm text-slate-800">
                         {describeCompanyDiscountPolicy(p)}
                       </div>
@@ -661,21 +1055,22 @@ export default function CheckoutPage() {
             </div>
 
             <button
+              type="button"
               onClick={() => {
                 if (completeCheckoutMutation.isPending) return;
-                setSuccessMessage(null);
-                completeCheckoutMutation.mutate();
+                setSuccessMessage('Processing purchase…');
+                completeCheckoutMutation.mutate(undefined, {
+                  onError: () => {
+                    setSuccessMessage(null);
+                  },
+                });
               }}
               disabled={
-                completeCheckoutMutation.isPending ||
-                (activeOrderQuery.isError &&
-                  !getApiErrorMessage(activeOrderQuery.error)
-                    .toLowerCase()
-                    .includes('order is being updated'))
+                completeCheckoutMutation.isPending || !activeOrderQuery.data
               }
               className="mt-4 inline-flex rounded-md bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
             >
-              Complete purchase
+              {completeCheckoutMutation.isPending ? 'Completing…' : 'Complete purchase'}
             </button>
           </div>
         </div>
