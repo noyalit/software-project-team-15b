@@ -82,12 +82,13 @@ export default function Barcode({
   return (
     <svg
       className={className}
-      width={totalWidth}
+      width="100%"
       height={height}
       viewBox={`0 0 ${totalWidth} ${height}`}
       role="img"
       aria-label={`Barcode for ${value}`}
-      preserveAspectRatio="xMidYMid meet"
+      preserveAspectRatio="none"
+      style={{ display: 'block', maxWidth: totalWidth }}
     >
       <rect x={0} y={0} width={totalWidth} height={height} fill="#ffffff" />
       {bars.map((bar, i) => (

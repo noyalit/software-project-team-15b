@@ -141,12 +141,14 @@ export default function OrderDetailsPage() {
             </div>
 
             {/* One barcode per order, encoding the ticketing number */}
-            <div className="flex flex-col items-center rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <Barcode value={ticketNumber} height={80} barWidth={2} />
+            <div className="flex w-full max-w-sm flex-col items-center rounded-xl border border-slate-200 bg-slate-50 p-4 sm:w-72">
+              <div className="w-full">
+                <Barcode value={ticketNumber} height={80} barWidth={2} />
+              </div>
               <div className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Ticket number
               </div>
-              <div className="font-mono text-sm font-bold tracking-widest text-slate-900">
+              <div className="break-all text-center font-mono text-xs font-bold tracking-wider text-slate-900">
                 {ticketNumber}
               </div>
             </div>
