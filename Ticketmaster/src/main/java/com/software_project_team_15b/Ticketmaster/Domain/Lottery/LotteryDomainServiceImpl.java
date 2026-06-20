@@ -1,9 +1,10 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Lottery;
 
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyLotteryException;
-import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
-import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
-import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
+import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.retry.annotation.Backoff;
@@ -11,10 +12,10 @@ import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.Objects;
-import java.util.Set;
-import java.util.UUID;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.EmptyLotteryException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryNotFoundException;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
 
 /**
  * Domain service for managing event lotteries.
@@ -266,11 +267,19 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
         }
+
         Lottery lottery = lotteryRepository.getLottery(eventId);
+
         if (lottery == null) {
-            throw new LotteryNotFoundException("Lottery not found for eventId: " + eventId);
+            throw new LotteryNotFoundException(
+                    "Lottery not found for eventId: " + eventId
+            );
         }
-        return Set.copyOf(lottery.getEntries());
+
+        Set<UUID> losers = new HashSet<>(lottery.getEntries());
+        losers.removeAll(lottery.getWinners());
+
+        return Set.copyOf(losers);
     }
 
     /**

@@ -8,8 +8,8 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.LotteryAlreadyDrawnException;
@@ -162,65 +162,124 @@ public class LotteryService {
      * @throws LotteryNotFoundException     if no lottery exists for the given event
      * @throws LotteryAlreadyDrawnException if the lottery for this event has already been drawn
      */
-    public Set<UUID> runEventLottery(String token, UUID companyId, UUID eventId, int count, LocalDateTime expirationTime) {
+    public Set runEventLottery(String token,
+    UUID companyId,
+    UUID eventId,
+    int count,
+    LocalDateTime expirationTime) {
+
+    if (token == null)
+        throw new IllegalArgumentException("token cannot be null");
+
+    if (eventId == null)
+        throw new IllegalArgumentException("eventId cannot be null");
+
+    if (count < 0)
+        throw new IllegalArgumentException("count cannot be negative");
+
+    if (expirationTime == null)
+        throw new IllegalArgumentException("expirationTime cannot be null");
+
+    if (expirationTime.isBefore(LocalDateTime.now()))
+        throw new IllegalArgumentException("expirationTime must be in the future");
+
+    validateToken(token);
+
+    UUID userId = auth.extractUserId(token);
+
+    requireEventPermissions(userId, companyId, eventId);
+
+    Set<UUID> drawn =
+            lotteryDomainService.runEventLottery(
+                    eventId,
+                    count,
+                    expirationTime
+            );
+
+    AUDIT.info(
+            "op=runEventLottery eventId={} count={} winnersDrawn={} result=ok",
+            eventId,
+            count,
+            drawn.size()
+    );
+
+    // notify winners
+    for (UUID winner : drawn) {
+
         try {
-            if (token == null) throw new IllegalArgumentException("token cannot be null");
-            if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-            if (count < 0) throw new IllegalArgumentException("count cannot be negative");
-            if (expirationTime == null) throw new IllegalArgumentException("expirationTime cannot be null");
-            if (expirationTime.isBefore(LocalDateTime.now())) throw new IllegalArgumentException("expirationTime must be in the future");
 
-            validateToken(token);
-            UUID userId = auth.extractUserId(token);
-            requireEventPermissions(userId, companyId, eventId);
-            Set<UUID> drawn = lotteryDomainService.runEventLottery(eventId, count, expirationTime);
-            AUDIT.info("op=runEventLottery eventId={} count={} winnersDrawn={} result=ok", eventId, count, drawn.size());
+            NotificationDTO dto =
+                    new NotificationDTO(
+                            NotificationType.LOTTERY_WON,
+                            "You won the lottery",
+                            "You won the lottery for event "
+                                    + eventId
+                                    + ". Access expires at "
+                                    + expirationTime,
+                            Instant.now()
+                    );
 
-            // Notify each winner about their win (best-effort; swallow notifier failures)
-            try {
-                for (UUID winner : drawn) {
-                    String title = "You won the lottery";
-                    String message = "You won the lottery for event " + eventId + ". Access expires at " + expirationTime.toString();
-                    NotificationDTO dto = new NotificationDTO(NotificationType.LOTTERY_WON, title, message, Instant.now());
-                    try {
-                        notifier.notifyUser(winner, dto);
-                    } catch (RuntimeException e) {
-                        AUDIT.warn("op=notifyLotteryWinner userId={} eventId={} result=error reason={}", winner, eventId, e.getMessage());
-                    }
-                }
-            } catch (RuntimeException e) {
-                AUDIT.warn("op=notifyLotteryWinners eventId={} result=error reason={}", eventId, e.getMessage());
-            }
+            notifier.notifyUser(winner, dto);
 
-            Set<UUID> losers = Set.of();
-            try {
-                losers = lotteryDomainService.getEventLotteryLosers(eventId);
-            } catch (RuntimeException e) {
-                AUDIT.warn("op=getLotteryLosersForNotification eventId={} result=error reason={}", eventId, e.getMessage());
-            }
-
-            // Notify each remaining entrant that they were not selected (best-effort; swallow notifier failures)
-            try {
-                for (UUID loser : losers) {
-                    String title = "Lottery results";
-                    String message = "You were not selected in the lottery for event " + eventId + ".";
-                    NotificationDTO dto = new NotificationDTO(NotificationType.LOTTERY_LOST, title, message, Instant.now());
-                    try {
-                        notifier.notifyUser(loser, dto);
-                    } catch (RuntimeException e) {
-                        AUDIT.warn("op=notifyLotteryLoser userId={} eventId={} result=error reason={}", loser, eventId, e.getMessage());
-                    }
-                }
-            } catch (RuntimeException e) {
-                AUDIT.warn("op=notifyLotteryLosers eventId={} result=error reason={}", eventId, e.getMessage());
-            }
-
-            return drawn;
         } catch (RuntimeException e) {
-            AUDIT.warn("op=runEventLottery eventId={} count={} result=error error={}", eventId, count, e.getMessage());
-            throw e;
+
+            AUDIT.warn(
+                    "op=notifyLotteryWinner userId={} eventId={} result=error reason={}",
+                    winner,
+                    eventId,
+                    e.getMessage()
+            );
         }
     }
+
+    Set<UUID> losers = Set.of();
+
+    try {
+
+        losers =
+                lotteryDomainService.getEventLotteryLosers(eventId);
+
+    } catch (RuntimeException e) {
+
+        AUDIT.warn(
+                "op=getLotteryLosersForNotification eventId={} result=error reason={}",
+                eventId,
+                e.getMessage()
+        );
+    }
+
+    // notify losers
+    for (UUID loser : losers) {
+
+        try {
+
+            NotificationDTO dto =
+                    new NotificationDTO(
+                            NotificationType.LOTTERY_LOST,
+                            "Lottery results",
+                            "You were not selected in the lottery for event "
+                                    + eventId
+                                    + ".",
+                            Instant.now()
+                    );
+
+            notifier.notifyUser(loser, dto);
+
+        } catch (RuntimeException e) {
+
+            AUDIT.warn(
+                    "op=notifyLotteryLoser userId={} eventId={} result=error reason={}",
+                    loser,
+                    eventId,
+                    e.getMessage()
+            );
+        }
+    }
+
+    return drawn;
+
+    }
+    
 
     public Set<String> runEventLotteryUsernames(String token, UUID companyId, UUID eventId, int count, LocalDateTime expirationTime) {
         Set<UUID> winners = runEventLottery(token, companyId, eventId, count, expirationTime);
