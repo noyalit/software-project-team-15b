@@ -263,6 +263,16 @@ export default function CompanyPage() {
     enabled: Boolean(companyId) && Boolean(token) && userType === 'member',
   });
 
+  // Reset editor state when switching companies so an unsaved draft from one company
+  // can't leak into (and overwrite) another company's policy chain. Clearing the dirty
+  // flags lets the seeding effects below re-seed from the new company's data.
+  useEffect(() => {
+    setPurchasePoliciesDirty(false);
+    setDiscountPoliciesDirty(false);
+    setPurchasePoliciesDraft([]);
+    setDiscountPoliciesDraft([]);
+  }, [companyId]);
+
   // Seed the editable purchase-policy chain from the server's current chain, until the user edits it.
   // The server returns the clean "type"-tagged DTO shape, so the items round-trip back on save as-is.
   useEffect(() => {
@@ -1158,7 +1168,7 @@ export default function CompanyPage() {
 
             <button
               onClick={() => updatePurchasePolicyMutation.mutate()}
-              disabled={updatePurchasePolicyMutation.isPending}
+              disabled={updatePurchasePolicyMutation.isPending || !companyPurchasePoliciesQuery.isSuccess}
               className="mt-4 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
             >
               {updatePurchasePolicyMutation.isPending ? 'Saving…' : 'Save purchase policies'}
@@ -1337,7 +1347,7 @@ export default function CompanyPage() {
 
             <button
               onClick={() => updateDiscountPolicyMutation.mutate()}
-              disabled={updateDiscountPolicyMutation.isPending}
+              disabled={updateDiscountPolicyMutation.isPending || !companyDiscountPoliciesQuery.isSuccess}
               className="mt-4 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
             >
               {updateDiscountPolicyMutation.isPending ? 'Saving…' : 'Save discount policies'}
