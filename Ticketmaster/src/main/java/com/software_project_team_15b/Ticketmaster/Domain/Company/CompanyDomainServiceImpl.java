@@ -76,12 +76,14 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
 
     /**
      * {@inheritDoc}
-     * <p>This implementation always returns {@link DiscountCombineStrategy#SUM}.
+     * <p>This implementation always returns {@link DiscountCombineStrategy#CASCADE}, so the
+     * event-level and company-level discounts stack multiplicatively (as a single cascade)
+     * rather than as a sum of independent amounts.
      */
     @Override
     @Transactional(readOnly = true)
     public DiscountCombineStrategy discountCombineStrategyFor(UUID companyId) {
-        return DiscountCombineStrategy.SUM;
+        return DiscountCombineStrategy.CASCADE;
     }
 
     /** {@inheritDoc} */
