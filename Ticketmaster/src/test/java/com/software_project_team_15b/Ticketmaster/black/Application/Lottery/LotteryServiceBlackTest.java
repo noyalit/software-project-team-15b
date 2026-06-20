@@ -179,6 +179,7 @@ class LotteryServiceBlackTest {
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(EVENT_ID, 1, EXPIRY)).thenReturn(expected);
+        when(lotteryDomainService.getEventLotteryLosers(EVENT_ID)).thenReturn(Set.of(USER_B));
 
         assertThat(service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 1, EXPIRY))
                 .containsExactlyInAnyOrderElementsOf(expected);
@@ -190,8 +191,22 @@ class LotteryServiceBlackTest {
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(EVENT_ID, 5, EXPIRY)).thenReturn(Set.of());
+        when(lotteryDomainService.getEventLotteryLosers(EVENT_ID)).thenReturn(Set.of());
 
         assertThat(service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 5, EXPIRY)).isEmpty();
+    }
+
+    @Test
+    void runEventLottery_positive_handlesNullLosersFromDomain() {
+        Set<UUID> expected = Set.of(USER_A);
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        when(lotteryDomainService.runEventLottery(EVENT_ID, 1, EXPIRY)).thenReturn(expected);
+        when(lotteryDomainService.getEventLotteryLosers(EVENT_ID)).thenReturn(null);
+
+        assertThat(service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 1, EXPIRY))
+                .containsExactlyInAnyOrderElementsOf(expected);
     }
 
     @Test
@@ -491,6 +506,7 @@ class LotteryServiceBlackTest {
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(EVENT_ID, 1, EXPIRY)).thenReturn(expected);
+        when(lotteryDomainService.getEventLotteryLosers(EVENT_ID)).thenReturn(Set.of(USER_B));
 
         int threads = 25;
         CountDownLatch start = new CountDownLatch(1);

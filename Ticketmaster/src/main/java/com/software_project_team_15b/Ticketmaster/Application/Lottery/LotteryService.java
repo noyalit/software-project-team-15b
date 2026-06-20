@@ -162,11 +162,7 @@ public class LotteryService {
      * @throws LotteryNotFoundException     if no lottery exists for the given event
      * @throws LotteryAlreadyDrawnException if the lottery for this event has already been drawn
      */
-    public Set runEventLottery(String token,
-    UUID companyId,
-    UUID eventId,
-    int count,
-    LocalDateTime expirationTime) {
+    public Set<UUID> runEventLottery(String token, UUID companyId, UUID eventId, int count, LocalDateTime expirationTime) {
 
     if (token == null)
         throw new IllegalArgumentException("token cannot be null");
@@ -232,12 +228,14 @@ public class LotteryService {
         }
     }
 
-    Set<UUID> losers = Set.of();
+    Set<UUID> losers;
 
     try {
 
-        losers =
-                lotteryDomainService.getEventLotteryLosers(eventId);
+        losers = lotteryDomainService.getEventLotteryLosers(eventId);
+        if (losers == null) {
+            losers = Set.of();
+        }
 
     } catch (RuntimeException e) {
 
@@ -246,6 +244,7 @@ public class LotteryService {
                 eventId,
                 e.getMessage()
         );
+        losers = Set.of();
     }
 
     // notify losers
