@@ -263,8 +263,13 @@ export default function CompanyPage() {
     enabled: Boolean(companyId) && Boolean(token) && userType === 'member',
   });
 
-  // Seed the editable purchase-policy chain from the server's current chain, until the user edits it.
-  // The server returns the clean "type"-tagged DTO shape, so the items round-trip back on save as-is.
+  useEffect(() => {
+    setPurchasePoliciesDraft([]);
+    setDiscountPoliciesDraft([]);
+    setPurchasePoliciesDirty(false);
+    setDiscountPoliciesDirty(false);
+  }, [companyId]);
+
   useEffect(() => {
     if (!companyPurchasePoliciesQuery.isSuccess) return;
     if (purchasePoliciesDirty) return;
