@@ -189,6 +189,41 @@ public class CompanyService {
     }
 
     /**
+     * Replaces the entire purchase-policy chain of the specified company. The caller must be an active
+     * founder or owner of the company, or an approved manager who holds the
+     * {@link com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission#DEFINE_PURCHASE_POLICY}
+     * permission for that company. Passing an empty list clears the chain.
+     *
+     * @param token     the caller's member session token
+     * @param companyId the UUID of the target company
+     * @param policies  the new purchase-policy chain, in evaluation order (must not be null)
+     * @return a {@link CompanyDTO} reflecting the updated state
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
+     *         if the token is invalid or expired
+     * @throws UnauthorizedCompanyActionException if the caller lacks the required role or permission
+     * @throws IllegalArgumentException          if {@code companyId} or {@code policies} is null
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
+     *         if no company exists with the given {@code companyId}
+     */
+    public CompanyDTO replacePurchasePolicies(String token, UUID companyId, List<ICompanyPurchasePolicy> policies) {
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireNonNull(policies, "Purchase policies");
+            UUID callerId = requireAuthenticatedMember(token);
+            boolean isOwner = userDomainService.isActiveOwner(callerId, companyId) || userDomainService.isActiveFounder(callerId, companyId);
+            if (!isOwner && !userDomainService.canChangePurchasePolicy(callerId, companyId)) {
+                throw new UnauthorizedCompanyActionException("User does not have permission to change purchase policy");
+            }
+            var saved = companyDomainService.replacePurchasePolicies(companyId, policies);
+            AUDIT.info("op=replacePurchasePolicies callerId={} companyId={} count={} result=ok", callerId, companyId, policies.size());
+            return CompanyDTO.from(saved);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=replacePurchasePolicies companyId={} result=rejected reason={}", companyId, e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
      * Replaces the discount policy of the specified company.
      * The caller must be an active founder or owner of the company, or an approved manager who holds
      * the {@link com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission#DEFINE_DISCOUNT_POLICY}
@@ -219,6 +254,41 @@ public class CompanyService {
             return CompanyDTO.from(saved);
         } catch (RuntimeException e) {
             AUDIT.warn("op=updateDiscountPolicy companyId={} result=rejected reason={}", companyId, e.getMessage());
+            throw e;
+        }
+    }
+
+    /**
+     * Replaces the entire discount-policy chain of the specified company. The caller must be an active
+     * founder or owner of the company, or an approved manager who holds the
+     * {@link com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission#DEFINE_DISCOUNT_POLICY}
+     * permission for that company. Passing an empty list clears the chain.
+     *
+     * @param token     the caller's member session token
+     * @param companyId the UUID of the target company
+     * @param policies  the new discount-policy chain, in evaluation order (must not be null)
+     * @return a {@link CompanyDTO} reflecting the updated state
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException
+     *         if the token is invalid or expired
+     * @throws UnauthorizedCompanyActionException if the caller lacks the required role or permission
+     * @throws IllegalArgumentException           if {@code companyId} or {@code policies} is null
+     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
+     *         if no company exists with the given {@code companyId}
+     */
+    public CompanyDTO replaceDiscountPolicies(String token, UUID companyId, List<ICompanyDiscountPolicy> policies) {
+        try {
+            requireNonNull(companyId, "Company ID");
+            requireNonNull(policies, "Discount policies");
+            UUID callerId = requireAuthenticatedMember(token);
+            boolean isOwner = userDomainService.isActiveOwner(callerId, companyId) || userDomainService.isActiveFounder(callerId, companyId);
+            if (!isOwner && !userDomainService.canChangeDiscountPolicy(callerId, companyId)) {
+                throw new UnauthorizedCompanyActionException("User does not have permission to change discount policy");
+            }
+            var saved = companyDomainService.replaceDiscountPolicies(companyId, policies);
+            AUDIT.info("op=replaceDiscountPolicies callerId={} companyId={} count={} result=ok", callerId, companyId, policies.size());
+            return CompanyDTO.from(saved);
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=replaceDiscountPolicies companyId={} result=rejected reason={}", companyId, e.getMessage());
             throw e;
         }
     }

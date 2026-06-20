@@ -22,6 +22,8 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Invalid
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.CompanyDiscountPolicyDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.CompanyPurchasePolicyDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 
@@ -65,15 +67,18 @@ public class CompanyController {
         }
     }
 
-    @Operation(summary = "Replace the company's purchase policy")
-    @PutMapping("/{companyId}/purchase-policy")
-    public ResponseEntity<ApiResponse<CompanyDTO>> updateCompanyPurchasePolicy(
+    @Operation(summary = "Replace the company's purchase-policy chain (empty list clears)")
+    @PutMapping(path = "/{companyId}/purchase-policies", consumes = "application/json")
+    public ResponseEntity<ApiResponse<CompanyDTO>> replaceCompanyPurchasePolicies(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
             @PathVariable UUID companyId,
-            @RequestBody ICompanyPurchasePolicy policy
+            @RequestBody List<CompanyPurchasePolicyDTO> policies
     ) {
         try {
-            return ResponseEntity.ok(new ApiResponse<>(companyService.updatePurchasePolicy(token, companyId, policy), null));
+            List<ICompanyPurchasePolicy> domain = policies.stream()
+                    .map(CompanyPurchasePolicyDTO::toDomain)
+                    .toList();
+            return ResponseEntity.ok(new ApiResponse<>(companyService.replacePurchasePolicies(token, companyId, domain), null));
         } catch (InvalidTokenException ex) {
             return unauthorized(ex);
         } catch (UnauthorizedCompanyActionException ex) {
@@ -87,15 +92,18 @@ public class CompanyController {
         }
     }
 
-    @Operation(summary = "Replace the company's discount policy")
-    @PutMapping("/{companyId}/discount-policy")
-    public ResponseEntity<ApiResponse<CompanyDTO>> updateCompanyDiscountPolicy(
+    @Operation(summary = "Replace the company's discount-policy chain (empty list clears)")
+    @PutMapping(path = "/{companyId}/discount-policies", consumes = "application/json")
+    public ResponseEntity<ApiResponse<CompanyDTO>> replaceCompanyDiscountPolicies(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
             @PathVariable UUID companyId,
-            @RequestBody ICompanyDiscountPolicy policy
+            @RequestBody List<CompanyDiscountPolicyDTO> policies
     ) {
         try {
-            return ResponseEntity.ok(new ApiResponse<>(companyService.updateDiscountPolicy(token, companyId, policy), null));
+            List<ICompanyDiscountPolicy> domain = policies.stream()
+                    .map(CompanyDiscountPolicyDTO::toDomain)
+                    .toList();
+            return ResponseEntity.ok(new ApiResponse<>(companyService.replaceDiscountPolicies(token, companyId, domain), null));
         } catch (InvalidTokenException ex) {
             return unauthorized(ex);
         } catch (UnauthorizedCompanyActionException ex) {
@@ -111,12 +119,15 @@ public class CompanyController {
 
     @Operation(summary = "List the company's purchase-policy chain in order")
     @GetMapping("/{companyId}/purchase-policies")
-    public ResponseEntity<ApiResponse<List<ICompanyPurchasePolicy>>> getCompanyPurchasePolicies(
+    public ResponseEntity<ApiResponse<List<CompanyPurchasePolicyDTO>>> getCompanyPurchasePolicies(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
             @PathVariable UUID companyId
     ) {
         try {
-            return ResponseEntity.ok(new ApiResponse<>(companyService.getCompanyPurchasePolicies(token, companyId), null));
+            List<CompanyPurchasePolicyDTO> dtos = companyService.getCompanyPurchasePolicies(token, companyId).stream()
+                    .map(CompanyPurchasePolicyDTO::fromDomain)
+                    .toList();
+            return ResponseEntity.ok(new ApiResponse<>(dtos, null));
         } catch (InvalidTokenException ex) {
             return unauthorized(ex);
         } catch (UnauthorizedCompanyActionException ex) {
@@ -132,12 +143,15 @@ public class CompanyController {
 
     @Operation(summary = "List the company's discount-policy chain in order")
     @GetMapping("/{companyId}/discount-policies")
-    public ResponseEntity<ApiResponse<List<ICompanyDiscountPolicy>>> getCompanyDiscountPolicies(
+    public ResponseEntity<ApiResponse<List<CompanyDiscountPolicyDTO>>> getCompanyDiscountPolicies(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
             @PathVariable UUID companyId
     ) {
         try {
-            return ResponseEntity.ok(new ApiResponse<>(companyService.getCompanyDiscountPolicies(token, companyId), null));
+            List<CompanyDiscountPolicyDTO> dtos = companyService.getCompanyDiscountPolicies(token, companyId).stream()
+                    .map(CompanyDiscountPolicyDTO::fromDomain)
+                    .toList();
+            return ResponseEntity.ok(new ApiResponse<>(dtos, null));
         } catch (InvalidTokenException ex) {
             return unauthorized(ex);
         } catch (UnauthorizedCompanyActionException ex) {
