@@ -80,7 +80,7 @@ export default function CompanyPage() {
 
   // Policies use the clean "type" discriminator wire format (see CompanyPurchasePolicyDTO /
   // CompanyDiscountPolicyDTO on the backend), e.g. { type: 'MAX_TICKETS', max: 4 }.
-  const describeCompanyPurchasePolicy = (p: any): string[] => {
+  const describeCompanyPurchasePolicy = (p: any, depth = 0): string[] => {
     if (!p || typeof p !== 'object') return ['Unknown policy'];
     switch (p.type) {
       case 'MAX_TICKETS':
@@ -89,38 +89,60 @@ export default function CompanyPage() {
         return [`Min tickets per order: ${p.min}`];
       case 'MIN_AGE':
         return [`Age restriction: ${p.minAge}+`];
+      case 'AND':
+      case 'OR': {
+        const lines = [p.type === 'OR' ? 'Any of:' : 'All of:'];
+        for (const child of p.children ?? []) {
+          for (const l of describeCompanyPurchasePolicy(child, depth + 1)) {
+            lines.push('  '.repeat(depth + 1) + l);
+          }
+        }
+        return lines;
+      }
       default:
         return ['Unknown policy'];
     }
   };
 
-  const describeCompanyDiscountPolicy = (p: any): string => {
-    if (!p || typeof p !== 'object') return 'Unknown policy';
+  const describeCompanyDiscountPolicy = (p: any, depth = 0): string[] => {
+    if (!p || typeof p !== 'object') return ['Unknown policy'];
     switch (p.type) {
       case 'SIMPLE':
-        return `Simple discount (${p.percent}%)`;
+        return [`Simple discount (${p.percent}%)`];
       case 'COUPON': {
         const pct = p.percentage != null ? ` (${p.percentage}%)` : '';
-        return `Coupon ${String(p.code ?? '').trim()}${pct}`.trim();
+        return [`Coupon ${String(p.code ?? '').trim()}${pct}`.trim()];
       }
       case 'CONDITIONAL': {
         const cond = p.condition;
         const base = `Conditional discount (${p.percent}%)`;
         if (cond && typeof cond === 'object') {
-          if (cond.type === 'MAX_TICKETS') return `${base} when quantity <= ${cond.max}`;
-          if (cond.type === 'MIN_TICKETS') return `${base} when quantity >= ${cond.min}`;
+          if (cond.type === 'MAX_TICKETS') return [`${base} when quantity <= ${cond.max}`];
+          if (cond.type === 'MIN_TICKETS') return [`${base} when quantity >= ${cond.min}`];
           if (cond.type === 'TIME_WINDOW') {
             const from = cond.from ? new Date(cond.from).toLocaleString() : null;
             const to = cond.to ? new Date(cond.to).toLocaleString() : null;
-            if (from && to) return `${base} between ${from} and ${to}`;
-            if (from) return `${base} from ${from}`;
-            if (to) return `${base} until ${to}`;
+            if (from && to) return [`${base} between ${from} and ${to}`];
+            if (from) return [`${base} from ${from}`];
+            if (to) return [`${base} until ${to}`];
           }
         }
-        return base;
+        return [base];
+      }
+      case 'EARLY_BIRD':
+        return [`Early-bird discount (${p.percentage}%)${p.until ? ` until ${new Date(p.until).toLocaleString()}` : ''}`];
+      case 'SUM':
+      case 'MAX': {
+        const lines = [p.type === 'SUM' ? 'Sum of:' : 'Max of:'];
+        for (const child of p.children ?? []) {
+          for (const l of describeCompanyDiscountPolicy(child, depth + 1)) {
+            lines.push('  '.repeat(depth + 1) + l);
+          }
+        }
+        return lines;
       }
       default:
-        return 'Unknown policy';
+        return ['Unknown policy'];
     }
   };
 
@@ -263,13 +285,18 @@ export default function CompanyPage() {
     enabled: Boolean(companyId) && Boolean(token) && userType === 'member',
   });
 
+  // Reset editor state when switching companies so an unsaved draft from one company
+  // can't leak into (and overwrite) another company's policy chain. Clearing the dirty
+  // flags lets the seeding effects below re-seed from the new company's data.
   useEffect(() => {
-    setPurchasePoliciesDraft([]);
-    setDiscountPoliciesDraft([]);
     setPurchasePoliciesDirty(false);
     setDiscountPoliciesDirty(false);
+    setPurchasePoliciesDraft([]);
+    setDiscountPoliciesDraft([]);
   }, [companyId]);
 
+  // Seed the editable purchase-policy chain from the server's current chain, until the user edits it.
+  // The server returns the clean "type"-tagged DTO shape, so the items round-trip back on save as-is.
   useEffect(() => {
     if (!companyPurchasePoliciesQuery.isSuccess) return;
     if (purchasePoliciesDirty) return;
@@ -1163,7 +1190,7 @@ export default function CompanyPage() {
 
             <button
               onClick={() => updatePurchasePolicyMutation.mutate()}
-              disabled={updatePurchasePolicyMutation.isPending}
+              disabled={updatePurchasePolicyMutation.isPending || !companyPurchasePoliciesQuery.isSuccess}
               className="mt-4 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
             >
               {updatePurchasePolicyMutation.isPending ? 'Saving…' : 'Save purchase policies'}
@@ -1198,7 +1225,11 @@ export default function CompanyPage() {
                     key={idx}
                     className="flex items-start justify-between gap-2 rounded-md border border-slate-200 bg-white px-3 py-2"
                   >
-                    <div className="text-sm text-slate-800">{describeCompanyDiscountPolicy(p)}</div>
+                    <div className="text-sm text-slate-800">
+                      {describeCompanyDiscountPolicy(p).map((line, j) => (
+                        <div key={j}>{line}</div>
+                      ))}
+                    </div>
                     <button
                       onClick={() => removeDiscountPolicyFromDraft(idx)}
                       className="shrink-0 rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-900"
@@ -1342,7 +1373,7 @@ export default function CompanyPage() {
 
             <button
               onClick={() => updateDiscountPolicyMutation.mutate()}
-              disabled={updateDiscountPolicyMutation.isPending}
+              disabled={updateDiscountPolicyMutation.isPending || !companyDiscountPoliciesQuery.isSuccess}
               className="mt-4 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
             >
               {updateDiscountPolicyMutation.isPending ? 'Saving…' : 'Save discount policies'}
