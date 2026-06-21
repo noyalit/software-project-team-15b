@@ -396,13 +396,33 @@ export default function ProfilePage() {
           role.companyId === companyId
       )
       .flatMap((role) => role.permissions ?? []);
+  
+  const age = useMemo(() => {
+    if (!me.birthDate) return '—';
+
+    const birth = new Date(me.birthDate);
+    const today = new Date();
+
+    let years = today.getFullYear() - birth.getFullYear();
+
+    const monthDiff = today.getMonth() - birth.getMonth();
+
+    if (
+      monthDiff < 0 ||
+      (monthDiff === 0 && today.getDate() < birth.getDate())
+    ) {
+      years--;
+    }
+
+    return years;
+  }, [me.birthDate]);
 
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Profile</h1>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-sm text-slate-600">Username</div>
             <div className="mt-1 font-semibold text-slate-900">{me.username}</div>
@@ -411,6 +431,12 @@ export default function ProfilePage() {
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-sm text-slate-600">Birth date</div>
             <div className="mt-1 font-semibold text-slate-900">{me.birthDate ?? '—'}</div>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm text-slate-600">Age</div>
+            <div className="mt-1 font-semibold text-slate-900">
+              {age}
+            </div>
           </div>
         </div>
       </div>

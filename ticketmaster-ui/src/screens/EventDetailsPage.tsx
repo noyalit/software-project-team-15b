@@ -190,7 +190,9 @@ export default function EventDetailsPage() {
         eventId,
         areaId: input.areaId,
         buyerId: null,
-        buyerBirthDate: null,
+        buyerBirthDate: userType === 'member'
+          ? meQuery.data?.birthDate ?? null
+          : guestBirthDate || null,
         quantity: input.quantity,
         seatIds: input.seatIds,
         couponCode: null,
@@ -288,6 +290,19 @@ export default function EventDetailsPage() {
       return res.data.data;
     },
     enabled: Boolean(eventId),
+  });
+
+  const meQuery = useQuery({
+    queryKey: ['me', token],
+    queryFn: async () => {
+      const res = await http.get<ApiResponse<{ birthDate?: string }>>('/api/users/me');
+
+      if (res.data.error) throw new Error(res.data.error);
+      if (!res.data.data) throw new Error('No profile data');
+
+      return res.data.data;
+    },
+    enabled: Boolean(token) && userType === 'member',
   });
 
   const companyQuery = useQuery({
@@ -1165,13 +1180,13 @@ export default function EventDetailsPage() {
 
       {!isPastEvent && activeOrderId && (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Active order</h2>
+          <h2 className="text-lg font-semibold text-slate-900">
+            Active order
+          </h2>
 
-          <div className="mt-2 text-sm text-slate-600">
-            Order ID: {activeOrderId}
-          </div>
+          <div className="mt-4" />
 
-          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
               Purchase policies
             </div>

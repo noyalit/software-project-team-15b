@@ -656,13 +656,6 @@ export default function CheckoutPage() {
 
       {activeOrderQuery.data && (
         <div className="mt-6 grid gap-4">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="text-sm text-slate-600">Order ID</div>
-            <div className="mt-1 font-mono text-sm text-slate-900">
-              {activeOrderQuery.data.orderId}
-            </div>
-
-          </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-sm font-semibold text-slate-900">Payment details</div>
