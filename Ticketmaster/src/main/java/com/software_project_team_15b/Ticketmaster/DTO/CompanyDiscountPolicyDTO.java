@@ -5,7 +5,6 @@ import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.CouponDiscountPolicy;
-import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.EarlyBirdDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.policy.ConditionalDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.policy.IDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.policy.MaxDiscountPolicy;
@@ -66,15 +65,6 @@ public sealed interface CompanyDiscountPolicyDTO {
         }
         if (policy instanceof SimpleDiscountPolicy s) {
             return new Simple(s.percent());
-        }
-        if (policy instanceof EarlyBirdDiscountPolicy e) {
-            return new EarlyBird(e.percentage(), e.until());
-        }
-        if (policy instanceof SumDiscountPolicy sum) {
-            return new Sum(mapChildren(sum.children()));
-        }
-        if (policy instanceof MaxDiscountPolicy max) {
-            return new Max(mapChildren(max.children()));
         }
         throw new IllegalArgumentException(
                 "Unsupported company discount policy type for wire format: " + policy.getClass().getName());

@@ -64,12 +64,6 @@ public sealed interface CompanyPurchasePolicyDTO {
         if (policy instanceof MinAgeRule a) {
             return new MinAge(a.minAge());
         }
-        if (policy instanceof AndPurchasePolicy and) {
-            return new And(mapChildren(and.children()));
-        }
-        if (policy instanceof OrPurchasePolicy or) {
-            return new Or(mapChildren(or.children()));
-        }
         throw new IllegalArgumentException(
                 "Unsupported company purchase policy type for wire format: " + policy.getClass().getName());
     }
