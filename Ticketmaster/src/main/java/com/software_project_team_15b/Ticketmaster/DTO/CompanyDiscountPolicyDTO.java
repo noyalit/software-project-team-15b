@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.CouponDiscountPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.EarlyBirdDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.policy.ConditionalDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.policy.IDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.policy.MaxDiscountPolicy;
@@ -40,6 +41,7 @@ import java.util.List;
         @JsonSubTypes.Type(value = CompanyDiscountPolicyDTO.Simple.class, name = "SIMPLE"),
         @JsonSubTypes.Type(value = CompanyDiscountPolicyDTO.Coupon.class, name = "COUPON"),
         @JsonSubTypes.Type(value = CompanyDiscountPolicyDTO.Conditional.class, name = "CONDITIONAL"),
+        @JsonSubTypes.Type(value = CompanyDiscountPolicyDTO.EarlyBird.class, name = "EARLY_BIRD"),
         @JsonSubTypes.Type(value = CompanyDiscountPolicyDTO.Sum.class, name = "SUM"),
         @JsonSubTypes.Type(value = CompanyDiscountPolicyDTO.Max.class, name = "MAX")
 })
@@ -65,6 +67,9 @@ public sealed interface CompanyDiscountPolicyDTO {
         }
         if (policy instanceof SimpleDiscountPolicy s) {
             return new Simple(s.percent());
+        }
+        if (policy instanceof EarlyBirdDiscountPolicy e) {
+            return new EarlyBird(e.percentage(), e.until());
         }
         throw new IllegalArgumentException(
                 "Unsupported company discount policy type for wire format: " + policy.getClass().getName());
@@ -119,6 +124,19 @@ public sealed interface CompanyDiscountPolicyDTO {
         @Override
         public ICompanyDiscountPolicy toDomain() {
             return new ConditionalDiscountPolicy(percent, condition.toDomain());
+        }
+    }
+
+    record EarlyBird(BigDecimal percentage, Instant until) implements CompanyDiscountPolicyDTO {
+        @Override
+        @JsonProperty("type")
+        public String type() {
+            return "EARLY_BIRD";
+        }
+
+        @Override
+        public ICompanyDiscountPolicy toDomain() {
+            return new EarlyBirdDiscountPolicy(percentage, until);
         }
     }
 
