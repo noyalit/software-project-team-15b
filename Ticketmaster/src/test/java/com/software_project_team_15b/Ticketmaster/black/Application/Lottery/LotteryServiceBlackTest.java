@@ -217,6 +217,19 @@ class LotteryServiceBlackTest {
     }
 
     @Test
+    void runEventLottery_negative_propagatesLoserLookupFailure() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        when(lotteryDomainService.runEventLottery(EVENT_ID, 1, EXPIRY)).thenReturn(Set.of(USER_A));
+        when(lotteryDomainService.getEventLotteryLosers(EVENT_ID)).thenThrow(new RuntimeException("db down"));
+
+        assertThatThrownBy(() -> service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 1, EXPIRY))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("db down");
+    }
+
+    @Test
     void runEventLottery_negative_userNotAuthorized_throwsUnauthorized() {
         when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);

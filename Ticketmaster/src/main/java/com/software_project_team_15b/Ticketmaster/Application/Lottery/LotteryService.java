@@ -192,6 +192,11 @@ public class LotteryService {
                     expirationTime
             );
 
+    Set<UUID> losers = Objects.requireNonNullElse(
+            lotteryDomainService.getEventLotteryLosers(eventId),
+            Set.of()
+    );
+
     AUDIT.info(
             "op=runEventLottery eventId={} count={} winnersDrawn={} result=ok",
             eventId,
@@ -226,25 +231,6 @@ public class LotteryService {
                     e.getMessage()
             );
         }
-    }
-
-    Set<UUID> losers;
-
-    try {
-
-        losers = lotteryDomainService.getEventLotteryLosers(eventId);
-        if (losers == null) {
-            losers = Set.of();
-        }
-
-    } catch (RuntimeException e) {
-
-        AUDIT.warn(
-                "op=getLotteryLosersForNotification eventId={} result=error reason={}",
-                eventId,
-                e.getMessage()
-        );
-        losers = Set.of();
     }
 
     // notify losers

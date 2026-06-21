@@ -205,6 +205,27 @@ class LotteryServiceWhiteTest {
         verify(notifier).notifyUser(eq(USER_A), any(NotificationDTO.class));
     }
     @Test
+    void runEventLottery_propagatesLoserLookupFailure() {
+        Set<UUID> winners = Set.of(USER_A);
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        when(lotteryDomainService.runEventLottery(EVENT_ID, 1, EXPIRY)).thenReturn(winners);
+        when(lotteryDomainService.getEventLotteryLosers(EVENT_ID)).thenThrow(new RuntimeException("db down"));
+
+        assertThatThrownBy(() -> service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 1, EXPIRY))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("db down");
+
+        verify(auth).isTokenValid(TOKEN_A);
+        verify(auth).extractUserId(TOKEN_A);
+        verify(userDomainService).isActiveManager(USER_A, COMPANY_ID, EVENT_ID);
+        verify(lotteryDomainService).runEventLottery(EVENT_ID, 1, EXPIRY);
+        verify(lotteryDomainService).getEventLotteryLosers(EVENT_ID);
+        verifyNoInteractions(notifier);
+    }
+
+    @Test
     void getEventLotteryWinners_delegates_andReturnsDomainServiceResult() {
         Set<UUID> expected = Set.of(USER_A);
         when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
