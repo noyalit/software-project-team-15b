@@ -976,9 +976,12 @@ export default function CompanyPage() {
       }
 
       try {
-        const res = await http.patch<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}/status`, {
-          status: newStatus,
-        });
+        const endpoint =
+          newStatus === 'CLOSED'
+            ? `/api/companies/${companyId}/close`
+            : `/api/companies/${companyId}/activate`;
+
+        const res = await http.patch<ApiResponse<CompanyDTO>>(endpoint);
         if (res.data.error) throw new Error(res.data.error);
         return res.data.data ?? null;
       } catch (e) {

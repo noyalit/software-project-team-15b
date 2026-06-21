@@ -20,6 +20,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompany
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
 
 /**
  * Application-level facade for {@link Company} use cases.
@@ -242,7 +243,7 @@ public class CompanyService {
                 throw new UnauthorizedCompanyActionException("Only system admins can suspend companies");
             }
             Company saved = companyDomainService.changeStatus(companyId, CompanyStatus.SUSPENDED);
-            eventDomainService.searchInCompany(companyId, null)
+            eventDomainService.searchInCompany(companyId, SearchCriteria.empty())
                     .forEach(event -> eventDomainService.cancel(event.eventId()));
             UUID callerId = auth.extractUserId(token);
             AUDIT.info("op=suspendCompany callerId={} companyId={} result=ok", callerId, companyId);
@@ -273,7 +274,7 @@ public class CompanyService {
                 throw new UnauthorizedCompanyActionException("Only company founder can close the company");
             }
             Company saved = companyDomainService.changeStatus(companyId, CompanyStatus.CLOSED);
-            eventDomainService.searchInCompany(companyId, null)
+            eventDomainService.searchInCompany(companyId, SearchCriteria.empty())
                     .forEach(event -> eventDomainService.cancel(event.eventId()));
             AUDIT.info("op=closeCompany callerId={} companyId={} result=ok", callerId, companyId);
             return CompanyDTO.from(saved);
