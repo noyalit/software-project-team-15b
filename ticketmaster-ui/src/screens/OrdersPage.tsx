@@ -79,8 +79,9 @@ export default function OrdersPage() {
                   key={o.orderId}
                   className="rounded-xl border border-slate-200 bg-slate-50 p-4"
                 >
-                  <div className="text-sm font-semibold text-slate-900">Active order</div>
-                  <div className="mt-1 text-sm text-slate-600">Order ID: {o.orderId}</div>
+                  <div className="text-sm font-semibold text-slate-900">
+                    Active order
+                  </div>
 
                   <div className="mt-3 flex flex-wrap gap-2">
                     <Link
@@ -131,8 +132,9 @@ export default function OrdersPage() {
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <div className="text-sm font-semibold text-slate-900">Order ID</div>
-                        <div className="mt-1 font-mono text-xs text-slate-700">{o.orderId}</div>
+                        <div className="text-sm font-semibold text-slate-900">
+                          Completed order
+                        </div>
                       </div>
 
                       <div className="text-right">
