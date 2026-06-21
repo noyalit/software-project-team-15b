@@ -20,17 +20,15 @@ import java.util.List;
  * Transport-layer representation of a company discount policy.
  *
  * <p>Wire format uses a clean {@code "type"} discriminator field (no Java class
- * names): one of {@code "SIMPLE"}, {@code "COUPON"}, {@code "CONDITIONAL"},
- * {@code "EARLY_BIRD"} for the leaf policies, or {@code "SUM"} / {@code "MAX"} for
- * composites that nest a {@code children} list of further policies.
+ * names): one of {@code "SIMPLE"}, {@code "COUPON"}, {@code "CONDITIONAL"} (leaves),
+ * or {@code "SUM"}, {@code "MAX"} (composite roots that carry a {@code children} list).
  *
  * <p>Examples:
  * <pre>
  *   { "type": "SIMPLE", "percent": 10 }
  *   { "type": "COUPON", "code": "SUMMER25", "percentage": 25, "expiresAt": "2026-08-31T23:59:59Z" }
  *   { "type": "CONDITIONAL", "percent": 20, "condition": { "type": "MAX_TICKETS", "max": 4 } }
- *   { "type": "EARLY_BIRD", "percentage": 15, "until": "2026-07-01T00:00:00Z" }
- *   { "type": "MAX", "children": [ { "type": "SIMPLE", "percent": 10 }, { "type": "EARLY_BIRD", "percentage": 15, "until": "2026-07-01T00:00:00Z" } ] }
+ *   { "type": "MAX", "children": [ { "type": "SIMPLE", "percent": 10 }, { "type": "SIMPLE", "percent": 20 } ] }
  * </pre>
  *
  * <p>The discriminator uses {@link JsonTypeInfo.As#EXISTING_PROPERTY} backed by a real
@@ -43,7 +41,6 @@ import java.util.List;
         @JsonSubTypes.Type(value = CompanyDiscountPolicyDTO.Simple.class, name = "SIMPLE"),
         @JsonSubTypes.Type(value = CompanyDiscountPolicyDTO.Coupon.class, name = "COUPON"),
         @JsonSubTypes.Type(value = CompanyDiscountPolicyDTO.Conditional.class, name = "CONDITIONAL"),
-        @JsonSubTypes.Type(value = CompanyDiscountPolicyDTO.EarlyBird.class, name = "EARLY_BIRD"),
         @JsonSubTypes.Type(value = CompanyDiscountPolicyDTO.Sum.class, name = "SUM"),
         @JsonSubTypes.Type(value = CompanyDiscountPolicyDTO.Max.class, name = "MAX")
 })
@@ -55,6 +52,12 @@ public sealed interface CompanyDiscountPolicyDTO {
     ICompanyDiscountPolicy toDomain();
 
     static CompanyDiscountPolicyDTO fromDomain(ICompanyDiscountPolicy policy) {
+        if (policy instanceof SumDiscountPolicy s) {
+            return new Sum(s.children().stream().map(CompanyDiscountPolicyDTO::fromChild).toList());
+        }
+        if (policy instanceof MaxDiscountPolicy m) {
+            return new Max(m.children().stream().map(CompanyDiscountPolicyDTO::fromChild).toList());
+        }
         if (policy instanceof CouponDiscountPolicy c) {
             return new Coupon(c.code(), c.percentage(), c.expiresAt());
         }
@@ -77,18 +80,17 @@ public sealed interface CompanyDiscountPolicyDTO {
                 "Unsupported company discount policy type for wire format: " + policy.getClass().getName());
     }
 
-    private static List<CompanyDiscountPolicyDTO> mapChildren(List<IDiscountPolicy> children) {
-        return children.stream().map(child -> {
-            if (child instanceof ICompanyDiscountPolicy companyChild) {
-                return fromDomain(companyChild);
-            }
-            throw new IllegalArgumentException(
-                    "Unsupported discount policy child for wire format: " + child.getClass().getName());
-        }).toList();
-    }
-
-    private static List<IDiscountPolicy> toDomainChildren(List<CompanyDiscountPolicyDTO> children) {
-        return children.stream().map(c -> (IDiscountPolicy) c.toDomain()).toList();
+    /**
+     * Maps a composite child back to its DTO. Children of a persisted company discount
+     * root are themselves company discount policies (leaves or nested composites), so
+     * the cast holds; a non-company child surfaces as the same "unsupported" error.
+     */
+    private static CompanyDiscountPolicyDTO fromChild(IDiscountPolicy child) {
+        if (child instanceof ICompanyDiscountPolicy c) {
+            return fromDomain(c);
+        }
+        throw new IllegalArgumentException(
+                "Unsupported company discount policy type for wire format: " + child.getClass().getName());
     }
 
     record Simple(BigDecimal percent) implements CompanyDiscountPolicyDTO {
@@ -130,19 +132,6 @@ public sealed interface CompanyDiscountPolicyDTO {
         }
     }
 
-    record EarlyBird(BigDecimal percentage, Instant until) implements CompanyDiscountPolicyDTO {
-        @Override
-        @JsonProperty("type")
-        public String type() {
-            return "EARLY_BIRD";
-        }
-
-        @Override
-        public ICompanyDiscountPolicy toDomain() {
-            return new EarlyBirdDiscountPolicy(percentage, until);
-        }
-    }
-
     record Sum(List<CompanyDiscountPolicyDTO> children) implements CompanyDiscountPolicyDTO {
         @Override
         @JsonProperty("type")
@@ -152,7 +141,10 @@ public sealed interface CompanyDiscountPolicyDTO {
 
         @Override
         public ICompanyDiscountPolicy toDomain() {
-            return new SumDiscountPolicy(toDomainChildren(children));
+            return new SumDiscountPolicy(children.stream()
+                    .map(CompanyDiscountPolicyDTO::toDomain)
+                    .map(d -> (IDiscountPolicy) d)
+                    .toList());
         }
     }
 
@@ -165,7 +157,10 @@ public sealed interface CompanyDiscountPolicyDTO {
 
         @Override
         public ICompanyDiscountPolicy toDomain() {
-            return new MaxDiscountPolicy(toDomainChildren(children));
+            return new MaxDiscountPolicy(children.stream()
+                    .map(CompanyDiscountPolicyDTO::toDomain)
+                    .map(d -> (IDiscountPolicy) d)
+                    .toList());
         }
     }
 }

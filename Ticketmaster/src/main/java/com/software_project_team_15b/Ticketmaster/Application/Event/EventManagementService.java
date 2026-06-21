@@ -131,9 +131,16 @@ public class EventManagementService implements IEventManagementService, EventSub
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.MANAGE_EVENTS);
             // Cancel the event once here, then publish so subscribers can run their
-            // side-effects (order cancellation, refunds, notifications).
+            // side-effects (order cancellation, refunds, notifications). The status
+            // transition is already committed at this point, so a subscriber failure is
+            // best-effort: log it but do not surface it as a cancel failure.
             eventDomainService.cancel(eventId);
-            cancelManager.cancelEvent(eventId);
+            try {
+                cancelManager.cancelEvent(eventId);
+            } catch (RuntimeException notifyEx) {
+                AUDIT.warn("op=cancel event={} caller={} result=ok-notify-failed reason={}",
+                        eventId, callerId, notifyEx.getMessage());
+            }
             AUDIT.info("op=cancel event={} caller={} result=ok", eventId, callerId);
         } catch (RuntimeException e) {
             AUDIT.warn("op=cancel event={} caller={} result=rejected reason={}", eventId, callerId, e.getMessage());

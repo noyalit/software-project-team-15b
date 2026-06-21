@@ -1,6 +1,7 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Company;
 
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
+import com.software_project_team_15b.Ticketmaster.Domain.policy.IDiscountPolicy;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
@@ -31,8 +32,8 @@ public enum DiscountCombineStrategy {
         @Override
         public Money combine(Money eventDiscount, Money companyDiscount, Money subtotal) {
             if (subtotal.amount().signum() == 0) return Money.zero(subtotal.currency());
-            BigDecimal afterEvent = subtotal.subtract(clampToSubtotal(eventDiscount, subtotal)).amount();
-            BigDecimal afterCompany = subtotal.subtract(clampToSubtotal(companyDiscount, subtotal)).amount();
+            BigDecimal afterEvent = subtotal.subtract(IDiscountPolicy.clamp(eventDiscount, subtotal)).amount();
+            BigDecimal afterCompany = subtotal.subtract(IDiscountPolicy.clamp(companyDiscount, subtotal)).amount();
             BigDecimal running = afterEvent.multiply(afterCompany)
                     .divide(subtotal.amount(), 2, RoundingMode.HALF_UP);
             return subtotal.subtract(new Money(running, subtotal.currency()));
@@ -50,9 +51,4 @@ public enum DiscountCombineStrategy {
     };
 
     public abstract Money combine(Money eventDiscount, Money companyDiscount, Money subtotal);
-
-    /** Caps a discount amount at the subtotal so the running price never goes negative. */
-    static Money clampToSubtotal(Money discount, Money subtotal) {
-        return discount.amount().compareTo(subtotal.amount()) > 0 ? subtotal : discount;
-    }
 }

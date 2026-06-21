@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.DTO;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.AgeRestrictionPolicy;
@@ -23,8 +24,9 @@ import com.software_project_team_15b.Ticketmaster.Domain.policy.MinTicketsRule;
  *   { "type": "MIN_TICKETS_PER_ORDER", "min": 2 }
  *   { "type": "NO_LONELY_SEAT" }
  * </pre>
+
  */
-@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type", visible = false)
 @JsonSubTypes({
         @JsonSubTypes.Type(value = PurchasePolicyDTO.MaxTicketsPerOrder.class, name = "MAX_TICKETS_PER_ORDER"),
         @JsonSubTypes.Type(value = PurchasePolicyDTO.AgeRestriction.class, name = "AGE_RESTRICTION"),
@@ -32,6 +34,9 @@ import com.software_project_team_15b.Ticketmaster.Domain.policy.MinTicketsRule;
         @JsonSubTypes.Type(value = PurchasePolicyDTO.NoLonelySeat.class, name = "NO_LONELY_SEAT")
 })
 public sealed interface PurchasePolicyDTO {
+
+    @JsonProperty("type")
+    String type();
 
     IEventPurchasePolicy toDomain();
 
@@ -54,12 +59,24 @@ public sealed interface PurchasePolicyDTO {
 
     record MaxTicketsPerOrder(int max) implements PurchasePolicyDTO {
         @Override
+        @JsonProperty("type")
+        public String type() {
+            return "MAX_TICKETS_PER_ORDER";
+        }
+
+        @Override
         public IEventPurchasePolicy toDomain() {
             return new MaxTicketsPerOrderPolicy(max);
         }
     }
 
     record AgeRestriction(int minAge) implements PurchasePolicyDTO {
+        @Override
+        @JsonProperty("type")
+        public String type() {
+            return "AGE_RESTRICTION";
+        }
+
         @Override
         public IEventPurchasePolicy toDomain() {
             return new AgeRestrictionPolicy(minAge);
@@ -68,12 +85,24 @@ public sealed interface PurchasePolicyDTO {
 
     record MinTicketsPerOrder(int min) implements PurchasePolicyDTO {
         @Override
+        @JsonProperty("type")
+        public String type() {
+            return "MIN_TICKETS_PER_ORDER";
+        }
+
+        @Override
         public IEventPurchasePolicy toDomain() {
             return new MinTicketsRule(min);
         }
     }
 
     record NoLonelySeat() implements PurchasePolicyDTO {
+        @Override
+        @JsonProperty("type")
+        public String type() {
+            return "NO_LONELY_SEAT";
+        }
+
         @Override
         public IEventPurchasePolicy toDomain() {
             return new NoLonelySeatPolicy();

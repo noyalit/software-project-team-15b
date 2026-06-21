@@ -28,22 +28,6 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         this.companyRepository = Objects.requireNonNull(companyRepository, "companyRepository cannot be null");
     }
 
-    /** {@inheritDoc} */
-    @Override
-    @Transactional(readOnly = true)
-    public Money cheapestPriceFor(UUID companyId, Money subtotal, PurchaseRequest request) {
-        if (companyId == null) {
-            throw new IllegalArgumentException("companyId cannot be null");
-        }
-        if (subtotal == null) {
-            throw new IllegalArgumentException("subtotal cannot be null");
-        }
-        if (request == null) {
-            throw new IllegalArgumentException("request cannot be null");
-        }
-        return subtotal.subtract(discountAmountFor(companyId, subtotal, request));
-    }
-
     /**
      * {@inheritDoc}
      * <p>The company's discount policies are <strong>stacked</strong> as a multiplicative

@@ -129,8 +129,6 @@ export default function CompanyPage() {
         }
         return [base];
       }
-      case 'EARLY_BIRD':
-        return [`Early-bird discount (${p.percentage}%)${p.until ? ` until ${new Date(p.until).toLocaleString()}` : ''}`];
       case 'SUM':
       case 'MAX': {
         const lines = [p.type === 'SUM' ? 'Sum of:' : 'Max of:'];

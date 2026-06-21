@@ -192,6 +192,22 @@ class EventManagementServiceWhiteTest {
                 .isInstanceOf(InvalidEventStateException.class);
     }
 
+    @Test
+    void GivenSubscriberFails_WhenCancel_ThenSucceedsBestEffort() {
+        UUID eventId = UUID.randomUUID();
+        UUID caller = UUID.randomUUID();
+        UUID company = UUID.randomUUID();
+        when(eventDomainService.getCompanyIdForEventId(eventId)).thenReturn(company);
+        // The status transition is already committed before the fan-out; a failing
+        // subscriber must not surface as a cancel failure.
+        doThrow(new RuntimeException("notify boom")).when(cancelManager).cancelEvent(eventId);
+
+        service.cancel(eventId, caller);
+
+        verify(eventDomainService).cancel(eventId);
+        verify(cancelManager).cancelEvent(eventId);
+    }
+
     // -------------------- addArea --------------------
 
     @Test
