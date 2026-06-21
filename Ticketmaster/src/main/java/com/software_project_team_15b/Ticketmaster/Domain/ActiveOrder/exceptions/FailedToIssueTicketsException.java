@@ -6,4 +6,8 @@ public class FailedToIssueTicketsException extends RuntimeException {
         super(message);
     }
 
+    public FailedToIssueTicketsException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
 }

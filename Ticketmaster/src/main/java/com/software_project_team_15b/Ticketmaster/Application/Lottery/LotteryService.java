@@ -367,6 +367,7 @@ public class LotteryService {
 
     private void requireEventPermissions(UUID userId, UUID companyId, UUID eventId) {
         if (!userDomainService.isActiveManager(userId, companyId, eventId) &&
+            !userDomainService.isActiveCompanyManager(userId, companyId) &&
             !userDomainService.isActiveOwner(userId, companyId) &&
             !userDomainService.isActiveFounder(userId, companyId)) {
             throw new UnauthorizedException("user does not have permission to perform this action");

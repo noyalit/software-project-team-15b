@@ -37,6 +37,17 @@ export default function CompanyPage() {
   const [managerSuccessMessage, setManagerSuccessMessage] = useState<string | null>(null);
   const [removeManagerSuccessMessage, setRemoveManagerSuccessMessage] = useState<string | null>(null);
 
+  const [companyManagerUsername, setCompanyManagerUsername] = useState('');
+  const [companyManagerPermissions, setCompanyManagerPermissions] = useState<ManagerPermission[]>([]);
+  const [companyManagerSuccessMessage, setCompanyManagerSuccessMessage] = useState<string | null>(null);
+
+  const [changeCompanyManagerUsername, setChangeCompanyManagerUsername] = useState('');
+  const [newCompanyManagerPermissions, setNewCompanyManagerPermissions] = useState<ManagerPermission[]>([]);
+  const [changeCompanyManagerSuccessMessage, setChangeCompanyManagerSuccessMessage] = useState<string | null>(null);
+
+  const [removeCompanyManagerUsername, setRemoveCompanyManagerUsername] = useState('');
+  const [removeCompanyManagerSuccessMessage, setRemoveCompanyManagerSuccessMessage] = useState<string | null>(null);
+
   const [purchasePolicyKind, setPurchasePolicyKind] = useState<
     'NONE' | 'MAX_TICKETS' | 'MIN_AGE' | 'MIN_TICKETS'
   >('NONE');
@@ -45,8 +56,10 @@ export default function CompanyPage() {
   const [minTickets, setMinTickets] = useState('');
   const [purchasePolicySuccessMessage, setPurchasePolicySuccessMessage] = useState<string | null>(null);
 
-  const [discountPolicyKind, setDiscountPolicyKind] = useState<'NONE' | 'SIMPLE' | 'CONDITIONAL'>('NONE');
+  const [discountPolicyKind, setDiscountPolicyKind] = useState<'NONE' | 'SIMPLE' | 'CONDITIONAL' | 'COUPON'>('NONE');
   const [discountPercent, setDiscountPercent] = useState('');
+  const [couponCode, setCouponCode] = useState('');
+  const [couponExpiresAt, setCouponExpiresAt] = useState('');
   const [conditionKind, setConditionKind] = useState<'MAX_TICKETS' | 'MIN_TICKETS' | 'TIME_WINDOW'>(
     'MAX_TICKETS'
   );
@@ -55,6 +68,18 @@ export default function CompanyPage() {
   const [windowFrom, setWindowFrom] = useState('');
   const [windowTo, setWindowTo] = useState('');
   const [discountPolicySuccessMessage, setDiscountPolicySuccessMessage] = useState<string | null>(null);
+
+  const toLocalDateTimeInputValue = (iso: string) => {
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const mm = pad(d.getMonth() + 1);
+    const dd = pad(d.getDate());
+    const hh = pad(d.getHours());
+    const mi = pad(d.getMinutes());
+    return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+  };
 
   const describeCompanyPurchasePolicy = (p: any, depth = 0): string[] => {
     if (!p || typeof p !== 'object') return ['Unknown policy'];
@@ -89,6 +114,7 @@ export default function CompanyPage() {
 
     const cls = String(p['@class'] ?? raw?.['@class'] ?? '');
     const clsShort = cls ? (cls.split('.').pop() ?? cls) : '';
+    const code = p.code ?? raw?.code;
     const percent =
       p.percent ??
       p.percentage ??
@@ -96,6 +122,11 @@ export default function CompanyPage() {
       p.discountPercentage ??
       raw?.percent ??
       raw?.percentage;
+
+    if (clsShort.includes('CouponDiscountPolicy') || typeof code === 'string') {
+      const pct = percent != null ? `${percent}%` : null;
+      return `Coupon ${String(code ?? '').trim()}${pct ? ` (${pct})` : ''}`.trim();
+    }
 
     const condition =
       (p.condition && typeof p.condition === 'object' ? p.condition : null) ??
@@ -212,13 +243,20 @@ export default function CompanyPage() {
     enabled:
       Boolean(token) &&
       userType === 'member' &&
-      (meQuery.data?.activeRole === 'Owner' || meQuery.data?.activeRole === 'Manager'),
+      (
+        meQuery.data?.activeRole === 'Owner' ||
+        meQuery.data?.activeRole === 'Manager' ||
+        meQuery.data?.activeRole === 'CompanyManager'
+      ),
   });
 
   const activeRole = meQuery.data?.activeRole;
   const canManageCompany =
     activeRole === 'Founder' ||
-    (activeRole === 'Owner' && appointmentApprovedQuery.data === true);
+    (
+      (activeRole === 'Owner' || activeRole === 'CompanyManager') &&
+      appointmentApprovedQuery.data === true
+    );
 
   if (!canManageCompany) {
     return (
@@ -227,7 +265,7 @@ export default function CompanyPage() {
           Company
         </h1>
         <p className="mt-2 text-slate-600">
-          Your owner appointment must be approved before you can manage this company.
+          Your appointment must be approved before you can manage this company.
         </p>
       </div>
     );
@@ -295,11 +333,24 @@ export default function CompanyPage() {
   }, [companyPurchasePoliciesQuery.data]);
 
   useEffect(() => {
-    const p = (companyDiscountPoliciesQuery.data ?? [])[0] as any;
+    const raw = (companyDiscountPoliciesQuery.data ?? [])[0] as any;
+    if (!raw || typeof raw !== 'object') return;
+
+    const p = raw?.policy && typeof raw.policy === 'object' ? raw.policy : raw;
     if (!p || typeof p !== 'object') return;
+
+    const cls = String(p['@class'] ?? raw?.['@class'] ?? '');
+    const clsShort = cls ? (cls.split('.').pop() ?? cls) : '';
 
     const percent = p.percent ?? p.percentage ?? null;
     if (percent != null) setDiscountPercent(String(percent));
+
+    if ((clsShort.includes('CouponDiscountPolicy') || typeof p.code === 'string') && p.code) {
+      setDiscountPolicyKind('COUPON');
+      setCouponCode(String(p.code));
+      if (p.expiresAt) setCouponExpiresAt(toLocalDateTimeInputValue(String(p.expiresAt)));
+      return;
+    }
 
     const cond = p.condition && typeof p.condition === 'object' ? p.condition : null;
     if (cond) {
@@ -372,6 +423,26 @@ export default function CompanyPage() {
       };
     }
 
+    if (discountPolicyKind === 'COUPON') {
+      const code = couponCode.trim();
+      if (!code) {
+        throw new Error('Coupon code is required');
+      }
+      const expiresAt = couponExpiresAt.trim();
+      if (expiresAt) {
+        const ms = new Date(expiresAt).getTime();
+        if (!Number.isFinite(ms)) {
+          throw new Error('Expires at must be a valid date/time');
+        }
+      }
+      return {
+        '@class': 'com.software_project_team_15b.Ticketmaster.Domain.Event.policy.CouponDiscountPolicy',
+        code,
+        percentage: percent,
+        expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+      };
+    }
+
     if (discountPolicyKind === 'CONDITIONAL') {
       let condition: any;
       if (conditionKind === 'MAX_TICKETS') {
@@ -416,9 +487,23 @@ export default function CompanyPage() {
       setPurchasePolicySuccessMessage(null);
       if (!companyId) throw new Error('Company ID is missing.');
       const policy = buildPurchasePolicy();
-      const res = await http.put<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}/purchase-policy`, policy);
-      if (res.data.error) throw new Error(res.data.error);
-      return res.data.data ?? null;
+      try {
+        const res = await http.put<ApiResponse<CompanyDTO>>(
+          `/api/companies/${companyId}/purchase-policy`,
+          policy
+        );
+
+        if (res.data.error) throw new Error(res.data.error);
+        return res.data.data ?? null;
+      } catch (e) {
+        const err = e as AxiosError<ApiResponse<CompanyDTO>>;
+
+        if (err.response?.status === 403) {
+          throw new Error('You do not have permission to edit the purchase policy for this company.');
+        }
+
+        throw new Error(getApiErrorMessage<CompanyDTO>(e));
+      }
     },
     onSuccess: async () => {
       setPurchasePolicySuccessMessage('Company purchase policy saved successfully.');
@@ -432,9 +517,23 @@ export default function CompanyPage() {
       setDiscountPolicySuccessMessage(null);
       if (!companyId) throw new Error('Company ID is missing.');
       const policy = buildDiscountPolicy();
-      const res = await http.put<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}/discount-policy`, policy);
-      if (res.data.error) throw new Error(res.data.error);
-      return res.data.data ?? null;
+      try {
+        const res = await http.put<ApiResponse<CompanyDTO>>(
+          `/api/companies/${companyId}/discount-policy`,
+          policy
+        );
+
+        if (res.data.error) throw new Error(res.data.error);
+        return res.data.data ?? null;
+      } catch (e) {
+        const err = e as AxiosError<ApiResponse<CompanyDTO>>;
+
+        if (err.response?.status === 403) {
+          throw new Error('You do not have permission to edit the discount policy for this company.');
+        }
+
+        throw new Error(getApiErrorMessage<CompanyDTO>(e));
+      }
     },
     onSuccess: async () => {
       setDiscountPolicySuccessMessage('Company discount policy saved successfully.');
@@ -595,7 +694,7 @@ export default function CompanyPage() {
       setManagerUsername('');
       setManagerPermissions([]);
       setManagerEventId('');
-      setManagerSuccessMessage('Manager appointed successfully.');
+      setManagerSuccessMessage('Event manager appointed successfully.');
     },
   });
 
@@ -653,7 +752,7 @@ export default function CompanyPage() {
     onSuccess: () => {
       setRemoveManagerUsername('');
       setRemoveManagerEventId('');
-      setRemoveManagerSuccessMessage('Manager removed successfully.');
+      setRemoveManagerSuccessMessage('Event manager removed successfully.');
     },
   });
 
@@ -702,7 +801,137 @@ export default function CompanyPage() {
       setChangeManagerUsername('');
       setChangeManagerEventId('');
       setNewManagerPermissions([]);
-      setChangeManagerSuccessMessage('Manager permissions updated successfully.');
+      setChangeManagerSuccessMessage('Event manager permissions updated successfully.');
+    },
+  });
+
+  const appointCompanyManagerMutation = useMutation({
+    mutationFn: async () => {
+      setCompanyManagerSuccessMessage(null);
+
+      try {
+        if (!companyId) throw new Error('Company ID is missing.');
+
+        const username = companyManagerUsername.trim();
+        if (!username) throw new Error('Please enter a username.');
+
+        const resolved = await http.get<ApiResponse<MemberDTO>>('/api/users/members/resolve', {
+          params: { username },
+        });
+
+        if (resolved.data.error) throw new Error(resolved.data.error);
+
+        const memberId = resolved.data.data?.userId;
+        if (!memberId) throw new Error('Member not found.');
+
+        const res = await http.post<ApiResponse<MemberDTO>>('/api/users/roles/company-manager', {
+          memberId,
+          companyId,
+          permissions: companyManagerPermissions,
+        });
+
+        if (res.data.error) throw new Error(res.data.error);
+
+        return res.data.data;
+      } catch (e) {
+        throw new Error(
+          getApiErrorMessage<MemberDTO>(e, {
+            fallback: 'Failed to appoint company manager.',
+            serverFallback: 'Could not appoint company manager. Please check that the user can be appointed and try again.',
+          })
+        );
+      }
+    },
+    onSuccess: () => {
+      setCompanyManagerUsername('');
+      setCompanyManagerPermissions([]);
+      setCompanyManagerSuccessMessage('Company manager appointed successfully.');
+    },
+  });
+
+  const changeCompanyManagerPermissionsMutation = useMutation({
+    mutationFn: async () => {
+      setChangeCompanyManagerSuccessMessage(null);
+
+      try {
+        if (!companyId) throw new Error('Company ID is missing.');
+
+        const username = changeCompanyManagerUsername.trim();
+        if (!username) throw new Error('Please enter a username.');
+
+        const resolved = await http.get<ApiResponse<MemberDTO>>('/api/users/members/resolve', {
+          params: { username },
+        });
+
+        if (resolved.data.error) throw new Error(resolved.data.error);
+
+        const companyManagerId = resolved.data.data?.userId;
+        if (!companyManagerId) throw new Error('Company manager not found.');
+
+        const res = await http.post<ApiResponse<MemberDTO>>('/api/users/roles/company-manager/permissions', {
+          companyManagerId,
+          companyId,
+          newPermissions: newCompanyManagerPermissions,
+        });
+
+        if (res.data.error) throw new Error(res.data.error);
+
+        return res.data.data;
+      } catch (e) {
+        throw new Error(
+          getApiErrorMessage<MemberDTO>(e, {
+            fallback: 'Failed to change company manager permissions.',
+            serverFallback: 'Could not change company manager permissions. Please try again.',
+          })
+        );
+      }
+    },
+    onSuccess: () => {
+      setChangeCompanyManagerUsername('');
+      setNewCompanyManagerPermissions([]);
+      setChangeCompanyManagerSuccessMessage('Company manager permissions updated successfully.');
+    },
+  });
+
+  const removeCompanyManagerMutation = useMutation({
+    mutationFn: async () => {
+      setRemoveCompanyManagerSuccessMessage(null);
+
+      try {
+        if (!companyId) throw new Error('Company ID is missing.');
+
+        const username = removeCompanyManagerUsername.trim();
+        if (!username) throw new Error('Please enter a username.');
+
+        const resolved = await http.get<ApiResponse<MemberDTO>>('/api/users/members/resolve', {
+          params: { username },
+        });
+
+        if (resolved.data.error) throw new Error(resolved.data.error);
+
+        const memberToRemoveId = resolved.data.data?.userId;
+        if (!memberToRemoveId) throw new Error('Member not found.');
+
+        const res = await http.post<ApiResponse<MemberDTO>>('/api/users/roles/company-manager/remove', {
+          memberToRemoveId,
+          companyId,
+        });
+
+        if (res.data.error) throw new Error(res.data.error);
+
+        return res.data.data;
+      } catch (e) {
+        throw new Error(
+          getApiErrorMessage<MemberDTO>(e, {
+            fallback: 'Failed to remove company manager.',
+            serverFallback: 'Could not remove company manager. Please try again.',
+          })
+        );
+      }
+    },
+    onSuccess: () => {
+      setRemoveCompanyManagerUsername('');
+      setRemoveCompanyManagerSuccessMessage('Company manager removed successfully.');
     },
   });
 
@@ -1045,10 +1274,11 @@ export default function CompanyPage() {
                 <option value="NONE">Select discount policy…</option>
                 <option value="SIMPLE">Simple discount</option>
                 <option value="CONDITIONAL">Conditional discount</option>
+                <option value="COUPON">Coupon code</option>
               </select>
             </div>
 
-            {(discountPolicyKind === 'SIMPLE' || discountPolicyKind === 'CONDITIONAL') && (
+            {(discountPolicyKind === 'SIMPLE' || discountPolicyKind === 'CONDITIONAL' || discountPolicyKind === 'COUPON') && (
               <div className="mt-3">
                 <div className="text-sm font-medium text-slate-700">Discount percent</div>
                 <input
@@ -1057,6 +1287,29 @@ export default function CompanyPage() {
                   placeholder="e.g. 10"
                   className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                 />
+              </div>
+            )}
+
+            {discountPolicyKind === 'COUPON' && (
+              <div className="mt-3 grid gap-3">
+                <div>
+                  <div className="text-sm font-medium text-slate-700">Coupon code</div>
+                  <input
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value)}
+                    placeholder="e.g. SUMMER10"
+                    className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-slate-700">Expires at (optional)</div>
+                  <input
+                    type="datetime-local"
+                    value={couponExpiresAt}
+                    onChange={(e) => setCouponExpiresAt(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                  />
+                </div>
               </div>
             )}
 
@@ -1226,7 +1479,7 @@ export default function CompanyPage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="text-slate-900 font-semibold">Add manager</div>
+        <div className="text-slate-900 font-semibold">Add Event Manager</div>
 
         <div className="mt-4 grid gap-4">
           <div>
@@ -1296,7 +1549,7 @@ export default function CompanyPage() {
             disabled={appointManagerMutation.isPending}
             className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
           >
-            Add manager
+            Add Event Manager
           </button>
 
           {appointManagerMutation.isError && (
@@ -1314,7 +1567,7 @@ export default function CompanyPage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="text-slate-900 font-semibold">Change manager permissions</div>
+        <div className="text-slate-900 font-semibold">Change Event Manager Permissions</div>
 
         <div className="mt-4 grid gap-4">
           <div>
@@ -1401,7 +1654,7 @@ export default function CompanyPage() {
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="text-slate-900 font-semibold">
-          Remove manager appointment
+          Remove Event Manager Appointment
         </div>
 
         <div className="mt-4 grid gap-4">
@@ -1439,7 +1692,7 @@ export default function CompanyPage() {
             disabled={removeManagerMutation.isPending}
             className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 hover:bg-rose-100"
           >
-            Remove manager
+            Remove Event Manager
           </button>
 
           {removeManagerMutation.isError && (
@@ -1451,6 +1704,183 @@ export default function CompanyPage() {
           {removeManagerSuccessMessage && (
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
               {removeManagerSuccessMessage}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="text-slate-900 font-semibold">Add Company Manager</div>
+
+        <div className="mt-2 text-sm text-slate-600">
+          Company managers belong to the company and are not limited to a specific event.
+        </div>
+
+        <div className="mt-4 grid gap-3">
+          <label className="block">
+            <div className="text-sm font-medium text-slate-700">Username</div>
+            <input
+              value={companyManagerUsername}
+              onChange={(e) => setCompanyManagerUsername(e.target.value)}
+              placeholder="e.g. alice"
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            />
+          </label>
+
+          <div className="grid gap-2 md:grid-cols-2">
+            {allPermissions.map((permission) => (
+              <label key={permission} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={companyManagerPermissions.includes(permission)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setCompanyManagerPermissions((prev) => [...prev, permission]);
+                    } else {
+                      setCompanyManagerPermissions((prev) =>
+                        prev.filter((p) => p !== permission)
+                      );
+                    }
+                  }}
+                />
+                {permission
+                  .toLowerCase()
+                  .replaceAll('_', ' ')
+                  .replace(/\b\w/g, (c) => c.toUpperCase())}
+              </label>
+            ))}
+          </div>
+
+          <button
+            onClick={() => appointCompanyManagerMutation.mutate()}
+            disabled={appointCompanyManagerMutation.isPending}
+            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+          >
+            {appointCompanyManagerMutation.isPending
+              ? 'Adding...'
+              : 'Add Company Manager'}
+          </button>
+
+          {appointCompanyManagerMutation.isError && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              {(appointCompanyManagerMutation.error as Error).message}
+            </div>
+          )}
+
+          {companyManagerSuccessMessage && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {companyManagerSuccessMessage}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="text-slate-900 font-semibold">
+          Change Company Manager Permissions
+        </div>
+
+        <div className="mt-4 grid gap-3">
+          <label className="block">
+            <div className="text-sm font-medium text-slate-700">Username</div>
+            <input
+              value={changeCompanyManagerUsername}
+              onChange={(e) => setChangeCompanyManagerUsername(e.target.value)}
+              placeholder="e.g. alice"
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            />
+          </label>
+
+          <div className="grid gap-2 md:grid-cols-2">
+            {allPermissions.map((permission) => (
+              <label key={permission} className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={newCompanyManagerPermissions.includes(permission)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setNewCompanyManagerPermissions((prev) => [
+                        ...prev,
+                        permission,
+                      ]);
+                    } else {
+                      setNewCompanyManagerPermissions((prev) =>
+                        prev.filter((p) => p !== permission)
+                      );
+                    }
+                  }}
+                />
+                {permission
+                  .toLowerCase()
+                  .replaceAll('_', ' ')
+                  .replace(/\b\w/g, (c) => c.toUpperCase())}
+              </label>
+            ))}
+          </div>
+
+          <button
+            onClick={() => changeCompanyManagerPermissionsMutation.mutate()}
+            disabled={changeCompanyManagerPermissionsMutation.isPending}
+            className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+          >
+            {changeCompanyManagerPermissionsMutation.isPending
+              ? 'Updating...'
+              : 'Change Company Manager Permissions'}
+          </button>
+
+          {changeCompanyManagerPermissionsMutation.isError && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              {(changeCompanyManagerPermissionsMutation.error as Error).message}
+            </div>
+          )}
+
+          {changeCompanyManagerSuccessMessage && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {changeCompanyManagerSuccessMessage}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="text-slate-900 font-semibold">
+          Remove Company Manager Appointment
+        </div>
+
+        <div className="mt-2 text-sm text-slate-600">
+          Enter a username to remove their company manager appointment.
+        </div>
+
+        <div className="mt-4 grid gap-3">
+          <label className="block">
+            <div className="text-sm font-medium text-slate-700">Username</div>
+            <input
+              value={removeCompanyManagerUsername}
+              onChange={(e) => setRemoveCompanyManagerUsername(e.target.value)}
+              placeholder="e.g. alice"
+              className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+            />
+          </label>
+
+          <button
+            onClick={() => removeCompanyManagerMutation.mutate()}
+            disabled={removeCompanyManagerMutation.isPending}
+            className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 hover:bg-rose-100 disabled:opacity-60"
+          >
+            {removeCompanyManagerMutation.isPending
+              ? 'Removing...'
+              : 'Remove Company Manager'}
+          </button>
+
+          {removeCompanyManagerMutation.isError && (
+            <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              {(removeCompanyManagerMutation.error as Error).message}
+            </div>
+          )}
+
+          {removeCompanyManagerSuccessMessage && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {removeCompanyManagerSuccessMessage}
             </div>
           )}
         </div>

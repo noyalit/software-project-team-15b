@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.Application.Initialization;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
@@ -24,6 +25,7 @@ import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Category;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.CouponDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 
 /**
@@ -199,6 +201,38 @@ public class InitialStateExecutor {
             userService.approveAppointment(targetToken);
         });
 
+        // Split appointment ops: the actor appoints the target (no handshake), and the
+        // target later runs their own confirm op once logged in. Unlike the folded
+        // appoint-* ops above, the target does NOT need to be logged in to be appointed,
+        // so these model the "appoint -> login -> confirm" sequence one step at a time.
+        handlers.put("appoint-owner-pending", (s, ctx) -> {
+            requireArgs(s, 3);
+            userService.appointOwner(
+                    ctx.userIdOf(s.arg(2)), ctx.tokenOf(s.arg(0)), ctx.companyIdOf(s.arg(1)));
+        });
+
+        handlers.put("confirm-owner", (s, ctx) -> {
+            requireArgs(s, 2);
+            String targetToken = ctx.tokenOf(s.arg(0));
+            userService.changeRoleToOwner(targetToken, ctx.companyIdOf(s.arg(1)));
+            userService.approveAppointment(targetToken);
+        });
+
+        handlers.put("appoint-manager-pending", (s, ctx) -> {
+            requireArgs(s, 4);
+            UUID eventId = ctx.eventIdOf(s.arg(1));
+            UUID companyId = eventService.getCompanyIdForEventId(eventId);
+            userService.appointManager(
+                    ctx.userIdOf(s.arg(2)), ctx.tokenOf(s.arg(0)), companyId, eventId, parsePermissions(s.arg(3)));
+        });
+
+        handlers.put("confirm-manager", (s, ctx) -> {
+            requireArgs(s, 2);
+            String targetToken = ctx.tokenOf(s.arg(0));
+            userService.changeRoleToManager(targetToken, ctx.eventIdOf(s.arg(1)));
+            userService.approveAppointment(targetToken);
+        });
+
         handlers.put("create-lottery", (s, ctx) -> {
             requireArgs(s, 3);
             lotteryService.createEventLottery(ctx.tokenOf(s.arg(0)), ctx.companyIdOf(s.arg(1)), ctx.eventIdOf(s.arg(2)));
@@ -208,6 +242,22 @@ public class InitialStateExecutor {
             requireArgs(s, 4);
             queueService.createEventQueue(
                     ctx.tokenOf(s.arg(0)), ctx.eventIdOf(s.arg(1)), parseInt(s, 2), parseInt(s, 3));
+        });
+
+        // Attaches a company-wide coupon discount: buyers who present the code at
+        // checkout get the configured percentage off the subtotal.
+        handlers.put("add-company-coupon", (s, ctx) -> {
+            requireArgs(s, 4);
+            companyService.updateDiscountPolicy(
+                    ctx.tokenOf(s.arg(0)),
+                    ctx.companyIdOf(s.arg(1)),
+                    new CouponDiscountPolicy(s.arg(2), parsePercent(s, 3)));
+        });
+
+        handlers.put("logout", (s, ctx) -> {
+            requireArgs(s, 1);
+            userService.logout(ctx.tokenOf(s.arg(0)));
+            ctx.unbindToken(s.arg(0));
         });
     }
 
@@ -252,6 +302,14 @@ public class InitialStateExecutor {
             return Integer.parseInt(s.arg(index).trim());
         } catch (RuntimeException e) {
             throw new InitialStateException("Invalid integer '" + s.arg(index) + "'", e);
+        }
+    }
+
+    private BigDecimal parsePercent(Statement s, int index) {
+        try {
+            return new BigDecimal(s.arg(index).trim());
+        } catch (RuntimeException e) {
+            throw new InitialStateException("Invalid percentage '" + s.arg(index) + "'", e);
         }
     }
 

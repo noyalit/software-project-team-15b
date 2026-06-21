@@ -6,6 +6,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.AgeRestric
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.MaxTicketsPerOrderPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.NoLonelySeatPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.policy.MinTicketsRule;
 
 /**
  * Transport-layer representation of an event purchase policy.
@@ -13,12 +14,13 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.NoLonelySe
  * <p>Wire format uses a clean {@code "type"} discriminator field (no Java
  * class names): one of
  * {@code "MAX_TICKETS_PER_ORDER"}, {@code "AGE_RESTRICTION"},
- * {@code "NO_LONELY_SEAT"}.
+ * {@code "MIN_TICKETS_PER_ORDER"}, {@code "NO_LONELY_SEAT"}.
  *
  * <p>Examples:
  * <pre>
  *   { "type": "MAX_TICKETS_PER_ORDER", "max": 4 }
  *   { "type": "AGE_RESTRICTION", "minAge": 18 }
+ *   { "type": "MIN_TICKETS_PER_ORDER", "min": 2 }
  *   { "type": "NO_LONELY_SEAT" }
  * </pre>
  */
@@ -26,6 +28,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.NoLonelySe
 @JsonSubTypes({
         @JsonSubTypes.Type(value = PurchasePolicyDTO.MaxTicketsPerOrder.class, name = "MAX_TICKETS_PER_ORDER"),
         @JsonSubTypes.Type(value = PurchasePolicyDTO.AgeRestriction.class, name = "AGE_RESTRICTION"),
+        @JsonSubTypes.Type(value = PurchasePolicyDTO.MinTicketsPerOrder.class, name = "MIN_TICKETS_PER_ORDER"),
         @JsonSubTypes.Type(value = PurchasePolicyDTO.NoLonelySeat.class, name = "NO_LONELY_SEAT")
 })
 public sealed interface PurchasePolicyDTO {
@@ -38,6 +41,9 @@ public sealed interface PurchasePolicyDTO {
         }
         if (policy instanceof AgeRestrictionPolicy a) {
             return new AgeRestriction(a.minAge());
+        }
+        if (policy instanceof MinTicketsRule m) {
+            return new MinTicketsPerOrder(m.min());
         }
         if (policy instanceof NoLonelySeatPolicy) {
             return new NoLonelySeat();
@@ -57,6 +63,13 @@ public sealed interface PurchasePolicyDTO {
         @Override
         public IEventPurchasePolicy toDomain() {
             return new AgeRestrictionPolicy(minAge);
+        }
+    }
+
+    record MinTicketsPerOrder(int min) implements PurchasePolicyDTO {
+        @Override
+        public IEventPurchasePolicy toDomain() {
+            return new MinTicketsRule(min);
         }
     }
 

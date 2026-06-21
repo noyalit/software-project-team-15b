@@ -285,6 +285,12 @@ commented reference is in
 | `appoint-owner` | `(actorUsername, companyName, targetUsername)` |
 | `appoint-founder` | `(actorUsername, companyName, targetUsername)` |
 | `appoint-manager` | `(actorUsername, eventName, targetUsername, PERM1\|PERM2\|...)` |
+| `appoint-owner-pending` | `(actorUsername, companyName, targetUsername)` — appoint only, no handshake |
+| `appoint-manager-pending` | `(actorUsername, eventName, targetUsername, PERM1\|PERM2\|...)` — appoint only, no handshake |
+| `confirm-owner` | `(targetUsername, companyName)` — appointee switches role + approves |
+| `confirm-manager` | `(targetUsername, eventName)` — appointee switches role + approves |
+| `add-company-coupon` | `(actorUsername, companyName, code, percentage[0-100])` — company-wide coupon discount |
+| `logout` | `(username)` |
 | `create-lottery` | `(actorUsername, companyName, eventName)` |
 | `create-event-queue` | `(actorUsername, eventName, capacity, maxAccepted)` |
 

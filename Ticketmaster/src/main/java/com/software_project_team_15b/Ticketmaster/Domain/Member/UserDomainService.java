@@ -110,6 +110,28 @@ public class UserDomainService {
     }
 
     @Transactional
+    public Member changeRoleToCompanyManager(UUID userId, UUID companyId) {
+        if (companyId == null) {
+            throw new InvalidMemberInputException("Company ID cannot be null");
+        }
+
+        Member member = getMemberOrThrow(userId);
+
+        Role companyManagerRole = member.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof CompanyManager)
+                .filter(role -> role.belongsToCompany(companyId))
+                .findFirst()
+                .orElseThrow(() -> new RoleNotAssignedException(
+                        "Member does not have an assigned CompanyManager role for this company"
+                ));
+
+        member.switchActiveRole(companyManagerRole);
+        return memberRepository.save(member);
+    }
+
+
+    @Transactional
     public Member changeRoleToOwner(UUID userId, UUID companyId) {
         if (companyId == null) {
             throw new InvalidMemberInputException("Company ID cannot be null");
@@ -172,6 +194,32 @@ public class UserDomainService {
 
         Role managerRole = new Manager(ownerId, companyId, eventId, permissions);
         member.addRole(managerRole);
+
+        return memberRepository.save(member);
+    }
+
+    @Transactional
+    public Member appointCompanyManager(UUID memberId, UUID ownerId, UUID companyId, Set<ManagerPermission> permissions) {
+        if (permissions == null || permissions.isEmpty()) {
+            throw new InvalidManagerPermissionsException("Company manager must have at least one permission");
+        }
+
+        Member member = getMemberOrThrow(memberId);
+
+        validateNoAppointmentCycle(member, ownerId, companyId);
+        validateOwnerAppointer(ownerId, companyId);
+
+        boolean alreadyCompanyManagerInCompany = member.getAssignedRoles()
+                .stream()
+                .anyMatch(role -> role instanceof CompanyManager
+                        && role.belongsToCompany(companyId));
+
+        if (alreadyCompanyManagerInCompany) {
+            throw new RoleNotAssignedException("Member is already a company manager in this company");
+        }
+
+        Role companyManagerRole = new CompanyManager(ownerId, companyId, permissions);
+        member.addRole(companyManagerRole);
 
         return memberRepository.save(member);
     }
@@ -252,6 +300,27 @@ public class UserDomainService {
     }
 
     @Transactional
+    public Member removeCompanyManagerAppointment(UUID removerOwnerId, UUID memberToRemoveId, UUID companyId) {
+        Member memberToRemove = getMemberOrThrow(memberToRemoveId);
+
+        validateOwnerAppointer(removerOwnerId, companyId);
+
+        Role companyManagerRoleToRemove = memberToRemove.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof CompanyManager)
+                .filter(role -> removerOwnerId.equals(role.getAppointedBy()))
+                .filter(role -> role.belongsToCompany(companyId))
+                .findFirst()
+                .orElseThrow(() -> new RoleNotAssignedException(
+                        "No company manager appointment by this owner was found"
+                ));
+
+        memberToRemove.removeRole(companyManagerRoleToRemove);
+
+        return memberRepository.save(memberToRemove);
+    }
+
+    @Transactional
     public Member ownerResign(UUID ownerId, UUID companyId) {
         Member owner = getMemberOrThrow(ownerId);
 
@@ -311,61 +380,92 @@ public class UserDomainService {
         return managerRole.getPermissions();
     }
 
-    /**
-     * Returns {@code true} if the given user holds an approved Manager role in the specified
-     * company that carries the {@link ManagerPermission#DEFINE_PURCHASE_POLICY} permission.
-     *
-     * @param userId    the ID of the member to check
-     * @param companyId the company whose purchase-policy permission is being queried
-     * @return {@code true} when the member has an approved manager role with the required
-     *         permission; {@code false} otherwise
-     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException
-     *         if {@code userId} is {@code null}
-     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.MemberNotFoundException
-     *         if no member exists with the given {@code userId}
-     */
-    @Transactional(readOnly = true)
-    public boolean canChangePurchasePolicy(UUID userId, UUID companyId) {
-        Member manager = getMemberOrThrow(userId);
-        Manager managerRole = manager.getAssignedRoles()
+    @Transactional
+    public Member changeCompanyManagerPermissions(
+            UUID ownerId,
+            UUID companyManagerId,
+            UUID companyId,
+            Set<ManagerPermission> newPermissions
+    ) {
+        Member companyManager = getMemberOrThrow(companyManagerId);
+
+        validateOwnerAppointer(ownerId, companyId);
+
+        CompanyManager companyManagerRole = companyManager.getAssignedRoles()
                 .stream()
-                .filter(role -> role instanceof Manager)
-                .map(role -> (Manager) role)
-                .filter(role -> role.isAppointmentApproved())
+                .filter(role -> role instanceof CompanyManager)
+                .map(role -> (CompanyManager) role)
+                .filter(role -> ownerId.equals(role.getAppointedBy()))
                 .filter(role -> role.belongsToCompany(companyId))
-                .filter(role -> role.hasPermission(ManagerPermission.DEFINE_PURCHASE_POLICY))
                 .findFirst()
-                .orElse(null);
-        return managerRole != null;
+                .orElseThrow(() -> new RoleNotAssignedException(
+                        "No company manager appointment by this owner was found"
+                ));
+
+        companyManagerRole.setPermissions(newPermissions);
+
+        return memberRepository.save(companyManager);
     }
 
-    /**
-     * Returns {@code true} if the given user holds an approved Manager role in the specified
-     * company that carries the {@link ManagerPermission#DEFINE_DISCOUNT_POLICY} permission.
-     *
-     * @param userId    the ID of the member to check
-     * @param companyId the company whose discount-policy permission is being queried
-     * @return {@code true} when the member has an approved manager role with the required
-     *         permission; {@code false} otherwise
-     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidMemberInputException
-     *         if {@code userId} is {@code null}
-     * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.MemberNotFoundException
-     *         if no member exists with the given {@code userId}
-     */
     @Transactional(readOnly = true)
-    public boolean canChangeDiscountPolicy(UUID userId, UUID companyId) {
-        Member manager = getMemberOrThrow(userId);
-        Manager managerRole = manager.getAssignedRoles()
+    public Set<ManagerPermission> getCompanyManagerPermissions(UUID ownerId, UUID companyManagerId, UUID companyId) {
+        Member companyManager = getMemberOrThrow(companyManagerId);
+
+        validateOwnerAppointer(ownerId, companyId);
+
+        CompanyManager companyManagerRole = companyManager.getAssignedRoles()
                 .stream()
-                .filter(role -> role instanceof Manager)
-                .map(role -> (Manager) role)
-                .filter(Role::isAppointmentApproved)
+                .filter(role -> role instanceof CompanyManager)
+                .map(role -> (CompanyManager) role)
+                .filter(role -> ownerId.equals(role.getAppointedBy()))
                 .filter(role -> role.belongsToCompany(companyId))
-                .filter(role -> role.hasPermission(ManagerPermission.DEFINE_DISCOUNT_POLICY))
                 .findFirst()
-                .orElse(null);
-        return managerRole != null;
+                .orElseThrow(() -> new RoleNotAssignedException(
+                        "No company manager appointment by this owner was found"
+                ));
+
+        return companyManagerRole.getPermissions();
     }
+
+    @Transactional(readOnly = true)
+    public boolean canChangePurchasePolicy(UUID userId, UUID companyId) {
+        Member member = getMemberOrThrow(userId);
+        return member.getAssignedRoles()
+            .stream()
+            .anyMatch(role ->
+                    role.isAppointmentApproved()
+                            && role.belongsToCompany(companyId)
+                            && (
+                            (role instanceof Manager manager
+                                    && manager.hasPermission(ManagerPermission.DEFINE_PURCHASE_POLICY))
+                                    ||
+                                    (role instanceof CompanyManager companyManager
+                                            && companyManager.hasPermission(ManagerPermission.DEFINE_PURCHASE_POLICY))
+                    )
+            );
+
+    }
+
+
+   @Transactional(readOnly = true)
+    public boolean canChangeDiscountPolicy(UUID userId, UUID companyId) {
+        Member member = getMemberOrThrow(userId);
+        return member.getAssignedRoles()
+                .stream()
+                .anyMatch(role ->
+                        role.isAppointmentApproved()
+                                && role.belongsToCompany(companyId)
+                                && (
+                                (role instanceof Manager manager
+                                        && manager.hasPermission(ManagerPermission.DEFINE_DISCOUNT_POLICY))
+                                        ||
+                                        (role instanceof CompanyManager companyManager
+                                                && companyManager.hasPermission(ManagerPermission.DEFINE_DISCOUNT_POLICY))
+                        )
+                );
+
+    }
+
 
     private boolean hasManagerPermission(
             UUID managerId,
@@ -384,6 +484,20 @@ public class UserDomainService {
                                 && manager.belongsToCompany(companyId)
                                 && eventId.equals(manager.getEventId())
                                 && manager.hasPermission(required)
+                );
+    }
+
+    private boolean hasCompanyManagerPermission(UUID managerId, UUID companyId, ManagerPermission required) {
+        Member member = getMemberOrThrow(managerId);
+
+        return member.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof CompanyManager)
+                .map(role -> (CompanyManager) role)
+                .anyMatch(companyManager ->
+                        companyManager.isAppointmentApproved()
+                                && companyManager.belongsToCompany(companyId)
+                                && companyManager.hasPermission(required)
                 );
     }
 
@@ -443,6 +557,9 @@ public class UserDomainService {
                 if (role instanceof Manager manager) {
                     eventId = manager.getEventId();
                     permissions = manager.getPermissions();
+                }
+                if (role instanceof CompanyManager companyManager) {
+                    permissions = companyManager.getPermissions();
                 }
 
                 String appointedByName = null;
@@ -559,6 +676,18 @@ public class UserDomainService {
     }
 
     @Transactional(readOnly = true)
+    public boolean isActiveCompanyManager(UUID userId, UUID companyId) {
+        Member member = getMemberOrThrow(userId);
+
+        return member.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof CompanyManager)
+                .map(role -> (CompanyManager) role)
+                .anyMatch(companyManager -> companyManager.isAppointmentApproved()
+                        && companyManager.belongsToCompany(companyId));
+    }
+
+    @Transactional(readOnly = true)
     public boolean isActiveFounder(UUID userId, UUID companyId) {
         Member member = getMemberOrThrow(userId);
 
@@ -595,7 +724,8 @@ public class UserDomainService {
         boolean isAllowed =
                 isActiveFounder(managerId, companyId)
                         || isActiveOwner(managerId, companyId)
-                        || hasManagerPermission(managerId, eventId, companyId, required);
+                        || hasManagerPermission(managerId, eventId, companyId, required)
+                        || hasCompanyManagerPermission(managerId, companyId, required);
 
         if (!isAllowed) {
             throw new InvalidManagerPermissionsException(
@@ -678,7 +808,7 @@ public class UserDomainService {
             UUID nextAppointerId = current.getAssignedRoles()
                     .stream()
                     .filter(role -> role.belongsToCompany(companyId))
-                    .filter(role -> role instanceof Owner || role instanceof Manager || role instanceof Founder)
+                    .filter(role -> role instanceof Owner || role instanceof Manager || role instanceof Founder || role instanceof CompanyManager)
                     .map(Role::getAppointedBy)
                     .filter(appointerId -> appointerId != null)
                     .findFirst()
@@ -724,7 +854,7 @@ public class UserDomainService {
         boolean hasRoleInCompany = root.getAssignedRoles()
                 .stream()
                 .anyMatch(role ->
-                        (role instanceof Manager || role instanceof Owner || role instanceof Founder)
+                        (role instanceof Manager || role instanceof Owner || role instanceof Founder || role instanceof CompanyManager)
                                 && role.isAppointmentApproved()
                                 && role.belongsToCompany(companyId)
                 );
@@ -800,6 +930,17 @@ public class UserDomainService {
         }
     }
 
+    public void isActiveOwnerOrFounderOrCompanyManager(UUID companyId, UUID callerId, ManagerPermission requiredPermission) {
+        Objects.requireNonNull(companyId, "eventId");
+        Objects.requireNonNull(callerId, "callerId");
+        if (!isActiveFounder(callerId, companyId) &&
+                !isActiveOwner(callerId, companyId) &&
+                !hasCompanyManagerPermission(callerId, companyId, requiredPermission)) {
+            throw new UnauthorizedCompanyActionException(
+                    "Only active owners/founders/managers with the required permission can perform this action");
+        }
+    }
+
     public MemberDTO toDTO(Member member) {
         if (member == null) {
             throw new InvalidMemberInputException("Member cannot be null");
@@ -811,12 +952,23 @@ public class UserDomainService {
 
         List<AssignedRoleDTO> assignedRoles = member.getAssignedRoles()
                 .stream()
-                .map(role -> new AssignedRoleDTO(
-                        role.getRoleName(),
-                        role.getCompanyId(),
-                        role instanceof Manager manager ? manager.getEventId() : null,
-                        role.isAppointmentApproved()
-                ))
+                .map(role -> {
+                    Set<ManagerPermission> permissions = Set.of();
+
+                    if (role instanceof Manager manager) {
+                        permissions = manager.getPermissions();
+                    } else if (role instanceof CompanyManager companyManager) {
+                        permissions = companyManager.getPermissions();
+                    }
+
+                    return new AssignedRoleDTO(
+                            role.getRoleName(),
+                            role.getCompanyId(),
+                            role instanceof Manager manager ? manager.getEventId() : null,
+                            role.isAppointmentApproved(),
+                            permissions
+                    );
+                })
                 .toList();
 
         return new MemberDTO(

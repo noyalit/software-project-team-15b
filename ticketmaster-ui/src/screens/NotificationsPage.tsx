@@ -1,4 +1,8 @@
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { http } from '../api/http';
+import type { ApiResponse, CompanyDTO } from '../api/types';
+import { useAuthStore } from '../ui/authStore';
 import { useNotificationsStore } from '../ui/notificationsStore';
 
 function formatTime(iso: string) {
@@ -7,11 +11,56 @@ function formatTime(iso: string) {
   return d.toLocaleString();
 }
 
+const uuidRegex = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i;
+
+function extractUuids(text: string) {
+  const m = text.match(new RegExp(uuidRegex.source, 'gi'));
+  return m ? Array.from(new Set(m.map((x) => x.toLowerCase()))) : [];
+}
+
 export default function NotificationsPage() {
   const notifications = useNotificationsStore((s) => s.notifications);
   const markAllRead = useNotificationsStore((s) => s.markAllRead);
+  const { token } = useAuthStore();
 
   const unread = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
+
+  const companyIdsInList = useMemo(() => {
+    const ids = new Set<string>();
+    for (const n of notifications) {
+      if (n.type !== 'PERMISSION_CHANGED' && n.type !== 'COMPANY_CLOSED' && n.type !== 'COMPANY_SUSPENDED') {
+        continue;
+      }
+      for (const id of extractUuids(`${n.title} ${n.message}`)) ids.add(id);
+    }
+    return Array.from(ids);
+  }, [notifications]);
+
+  const companyNamesQuery = useQuery({
+    queryKey: ['company-names', 'notifications', companyIdsInList],
+    queryFn: async () => {
+      const pairs = await Promise.all(
+        companyIdsInList.map(async (id) => {
+          try {
+            const res = await http.get<ApiResponse<CompanyDTO>>(`/api/companies/${id}`);
+            if (res.data.error || !res.data.data) return [id, null] as const;
+            return [id, res.data.data.name] as const;
+          } catch {
+            return [id, null] as const;
+          }
+        })
+      );
+      return Object.fromEntries(pairs.filter(([, name]) => Boolean(name))) as Record<string, string>;
+    },
+    enabled: Boolean(token) && companyIdsInList.length > 0,
+    staleTime: 5 * 60_000,
+  });
+
+  const companyNameMap = companyNamesQuery.data ?? {};
+
+  const displayText = (text: string) => {
+    return text.replace(new RegExp(uuidRegex.source, 'gi'), (m) => companyNameMap[m.toLowerCase()] ?? m);
+  };
 
   return (
     <div className="space-y-4">
@@ -42,10 +91,10 @@ export default function NotificationsPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="text-sm font-semibold text-slate-900">
-                      {n.title}
+                      {displayText(n.title)}
                       {!n.read && <span className="ml-2 text-xs font-bold text-rose-600">NEW</span>}
                     </div>
-                    <div className="mt-1 text-sm text-slate-700">{n.message}</div>
+                    <div className="mt-1 text-sm text-slate-700">{displayText(n.message)}</div>
                     <div className="mt-2 text-xs text-slate-500">{formatTime(n.createdAt)}</div>
                   </div>
                   <div className="text-xs font-semibold text-slate-600">{String(n.type)}</div>

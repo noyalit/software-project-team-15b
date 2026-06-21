@@ -78,6 +78,11 @@ export default function AppShell() {
   }, []);
 
   const activeRole = meQuery.data?.activeRole;
+  const hasManagerAssignment =
+    Boolean(meQuery.data?.assignedRoles?.some((r) => r.roleName === 'Manager' && r.eventId));
+
+  const hasCompanyManagerAssignment =
+    Boolean(meQuery.data?.assignedRoles?.some((r) => r.roleName === 'CompanyManager' && r.companyId));
 
   const appointmentApprovedQuery = useQuery({
     queryKey: ['appointment-approved', token, activeRole],
@@ -89,17 +94,18 @@ export default function AppShell() {
     enabled:
       Boolean(token) &&
       userType === 'member' &&
-      (activeRole === 'Owner' || activeRole === 'Manager'),
+      (activeRole === 'Owner' || activeRole === 'Manager' || activeRole === 'CompanyManager'),
 });
 
 const isApprovedAppointment =
   activeRole === 'Founder' || appointmentApprovedQuery.data === true;
 
 const canAccessOwnerPages =
-  activeRole === 'Founder' || (activeRole === 'Owner' && isApprovedAppointment);
+  activeRole === 'Founder' || (activeRole === 'Owner' && isApprovedAppointment)
+  || (activeRole === 'CompanyManager' && isApprovedAppointment);
 
 const canAccessManagerPages =
-  canAccessOwnerPages || (activeRole === 'Manager' && isApprovedAppointment);
+  canAccessOwnerPages || (activeRole === 'Manager' && isApprovedAppointment) || hasManagerAssignment || hasCompanyManagerAssignment;
 
   const badgeText = (() => {
     if (!token) return null;
@@ -133,7 +139,9 @@ const canAccessManagerPages =
                 <NavLink to="/company-sales" label="Sales Report" />
             )}
 
-            {userType === 'member' && canAccessOwnerPages  && (
+            {userType === 'member' &&
+              (activeRole === 'Founder' || activeRole === 'Owner') &&
+              canAccessOwnerPages && (
                 <NavLink to="/hierarchy-report" label="Hierarchy Report" />
             )}
             {userType === 'member' && <NavLink to="/orders" label="Orders" />}

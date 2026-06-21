@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getApiErrorMessage } from '../api/errors';
 import { http } from '../api/http';
-import type { ApiResponse, CompanyDTO } from '../api/types';
+import type { ApiResponse, CompanyDTO, MemberDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 
 type CompaniesResponse = ApiResponse<CompanyDTO[]>;
@@ -42,6 +42,17 @@ export default function CompanySalesReportPage() {
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [report, setReport] = useState<Record<string, unknown> | null>(null);
 
+  const meQuery = useQuery({
+    queryKey: ['me', token],
+    queryFn: async () => {
+      const res = await http.get<ApiResponse<MemberDTO>>('/api/users/me');
+      if (res.data.error) throw new Error(res.data.error);
+      if (!res.data.data) throw new Error('No profile data');
+      return res.data.data;
+    },
+    enabled: userType === 'member' && Boolean(token),
+  });
+
   const companiesQuery = useQuery({
     queryKey: ['company-sales-report', 'companies', token],
     queryFn: async () => {
@@ -68,6 +79,32 @@ export default function CompanySalesReportPage() {
       }
     },
     enabled: userType === 'member' && Boolean(token),
+  });
+
+  const companyManagerCompaniesQuery = useQuery({
+    queryKey: ['company-sales-report', 'company-manager-companies', token, meQuery.data?.assignedRoles],
+    queryFn: async () => {
+      const companyIds = (meQuery.data?.assignedRoles ?? [])
+        .filter((role) => role.roleName === 'CompanyManager' && role.companyId)
+        .map((role) => role.companyId as string);
+
+      const uniqueCompanyIds = [...new Set(companyIds)];
+
+      const companies = await Promise.all(
+        uniqueCompanyIds.map(async (companyId) => {
+          const res = await http.get<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}`);
+          if (res.data.error) throw new Error(res.data.error);
+          if (!res.data.data) throw new Error('Company not found');
+          return res.data.data;
+        })
+      );
+
+      return companies;
+    },
+    enabled:
+      userType === 'member' &&
+      Boolean(token) &&
+      Boolean(meQuery.data?.assignedRoles?.some((role) => role.roleName === 'CompanyManager')),
   });
 
   const runReport = useMutation({
@@ -143,7 +180,15 @@ export default function CompanySalesReportPage() {
     );
   }
 
-  const selectedCompany = companiesQuery.data?.find(
+  const visibleCompanies = [
+    ...(companiesQuery.data ?? []),
+    ...(companyManagerCompaniesQuery.data ?? []),
+  ].filter(
+    (company, index, arr) =>
+      arr.findIndex((c) => c.companyId === company.companyId) === index
+  );
+
+  const selectedCompany = visibleCompanies.find(
     (c) => c.companyId === selectedCompanyId
   );
 
@@ -178,7 +223,7 @@ export default function CompanySalesReportPage() {
               className="mt-1 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm disabled:opacity-60"
             >
               <option value="">Select a company…</option>
-              {companiesQuery.data?.map((c) => (
+              {visibleCompanies.map((c) => (
                 <option key={c.companyId} value={c.companyId}>
                   {c.name}
                 </option>
