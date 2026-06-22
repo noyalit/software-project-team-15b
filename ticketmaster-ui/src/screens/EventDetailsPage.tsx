@@ -4,8 +4,10 @@ import { useEffect, useState } from 'react';
 import { http } from '../api/http';
 import type {
   ApiResponse,
+  CompanyDTO,
   DiscountPolicyDTO,
   EventDTO,
+  MemberDTO,
   PurchasePolicyDTO,
 } from '../api/types';
 import { getApiErrorMessage } from '../api/errors';
@@ -183,13 +185,22 @@ export default function EventDetailsPage() {
     if (!eventId) throw new Error('Event ID is missing.');
     if (!input.areaId) throw new Error('Area ID is missing.');
     if (!input.quantity || input.quantity < 1) throw new Error('Quantity must be at least 1.');
+    if (userType === 'member' && meQuery.isPending) {
+      throw new Error('Loading your profile. Please try again in a moment.');
+    }
+
+    if (userType === 'member' && !meQuery.data?.birthDate) {
+      throw new Error('Birth date is missing from your profile.');
+    }
 
     try {
       const res = await http.post<ApiResponse<null>>(`/api/events/${eventId}/eligibility`, {
         eventId,
         areaId: input.areaId,
         buyerId: null,
-        buyerBirthDate: null,
+        buyerBirthDate: userType === 'member'
+          ? meQuery.data?.birthDate ?? null
+          : guestBirthDate || null,
         quantity: input.quantity,
         seatIds: input.seatIds,
         couponCode: null,
@@ -287,6 +298,41 @@ export default function EventDetailsPage() {
       return res.data.data;
     },
     enabled: Boolean(eventId),
+  });
+
+  const meQuery = useQuery({
+    queryKey: ['me', token],
+    queryFn: async () => {
+      const res = await http.get<ApiResponse<MemberDTO>>('/api/users/me');
+
+      if (res.data.error) throw new Error(res.data.error);
+      if (!res.data.data) throw new Error('No profile data');
+
+      return res.data.data;
+    },
+    enabled: Boolean(token) && userType === 'member',
+  });
+
+  const companyQuery = useQuery({
+    queryKey: ['company', eventQuery.data?.companyId],
+    queryFn: async () => {
+      const companyId = eventQuery.data?.companyId;
+
+      if (!companyId) {
+        throw new Error('Company ID is missing.');
+      }
+
+      const res = await http.get<ApiResponse<CompanyDTO>>(
+        `/api/companies/${companyId}`
+      );
+
+      if (res.data.error) throw new Error(res.data.error);
+      if (!res.data.data) throw new Error('Company not found');
+
+      return res.data.data;
+    },
+    enabled: Boolean(token) && Boolean(eventQuery.data?.companyId),
+    retry: false,
   });
 
   const companyPurchasePoliciesQuery = useQuery({
@@ -670,6 +716,7 @@ export default function EventDetailsPage() {
     startCheckoutMutation.error 
 
   const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
+  const isMemberProfileLoading = userType === 'member' && meQuery.isPending;
 
   const toggleSeat = (seatId: string) => {
     setSelectedSeatIds((prev) =>
@@ -749,18 +796,10 @@ export default function EventDetailsPage() {
             <div className="mt-1 text-slate-700">{event.artist}</div>
             <div className="mt-2 text-sm text-slate-500">{event.location}</div>
           </div>
-
-          <div className="flex items-center gap-2">
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-              {event.status}
-            </span>
-
-            <Link
-              to={`/companies/${event.companyId}`}
-              className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200"
-            >
-              Company
-            </Link>
+          <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+            {token && companyQuery.isPending
+              ? 'Loading company...'
+              : companyQuery.data?.name ?? 'Company'}
           </div>
         </div>
 
@@ -1063,6 +1102,7 @@ export default function EventDetailsPage() {
               disabled={
                 Boolean(activeOrderId) ||
                 !token ||
+                isMemberProfileLoading ||
                 event.status !== 'PUBLISHED' ||
                 (userType === 'member' &&
                   eligibilityStatus !== null &&
@@ -1088,7 +1128,13 @@ export default function EventDetailsPage() {
                     setSuccessMessage(null);
                     addSeatsMutation.mutate();
                   }}
-                  disabled={!activeOrderId || checkoutStarted || selectedSeatIds.length === 0 || addSeatsMutation.isPending}
+                  disabled={
+                    !activeOrderId ||
+                    checkoutStarted ||
+                    selectedSeatIds.length === 0 ||
+                    addSeatsMutation.isPending ||
+                    isMemberProfileLoading
+                  }
                   className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
                 >
                   {addSeatsMutation.isPending ? 'Adding...' : 'Add selected seats'}
@@ -1114,7 +1160,12 @@ export default function EventDetailsPage() {
                     setSuccessMessage(null);
                     addStandingQuantityMutation.mutate();
                   }}
-                  disabled={!activeOrderId || checkoutStarted || addStandingQuantityMutation.isPending}
+                  disabled={
+                    !activeOrderId ||
+                    checkoutStarted ||
+                    addStandingQuantityMutation.isPending ||
+                    isMemberProfileLoading
+                  }
                   className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
                 >
                   {addStandingQuantityMutation.isPending ? 'Adding...' : 'Add tickets'}
@@ -1151,13 +1202,13 @@ export default function EventDetailsPage() {
 
       {!isPastEvent && activeOrderId && (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Active order</h2>
+          <h2 className="text-lg font-semibold text-slate-900">
+            Active order
+          </h2>
 
-          <div className="mt-2 text-sm text-slate-600">
-            Order ID: {activeOrderId}
-          </div>
+          <div className="mt-4" />
 
-          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-slate-600">
               Purchase policies
             </div>
@@ -1255,7 +1306,11 @@ export default function EventDetailsPage() {
                 setSuccessMessage(null);
                 startCheckoutMutation.mutate();
               }}
-              disabled={startCheckoutMutation.isPending || checkoutStarted}
+              disabled={
+                startCheckoutMutation.isPending ||
+                checkoutStarted ||
+                isMemberProfileLoading
+              }
               className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
             >
               {checkoutStarted ? 'Checkout started' : 'Start checkout'}

@@ -396,10 +396,12 @@ export default function MyEventsPage() {
     ...(companiesQuery.data ?? []),
     ...(managerCompaniesQuery.data ?? []),
     ...(companyManagerCompaniesQuery.data ?? []),
-  ].filter(
-    (company, index, arr) =>
-      arr.findIndex((c) => c.companyId === company.companyId) === index
-  );
+  ]
+    .filter((company) => company.status === 'ACTIVE')
+    .filter(
+      (company, index, arr) =>
+        arr.findIndex((c) => c.companyId === company.companyId) === index
+    );
 
   const eventsQuery = useQuery({
     queryKey: ['company-events', selectedCompanyId],

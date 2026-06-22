@@ -922,16 +922,19 @@ export default function CompanyPage() {
   });
 
   const changeStatusMutation = useMutation({
-    mutationFn: async (newStatus: 'ACTIVE' | 'SUSPENDED' | 'CLOSED') => {
+    mutationFn: async (newStatus: 'ACTIVE' | 'CLOSED') => {
       setStatusSuccessMessage(null);
       if (!companyId) {
         throw new Error('Company ID is missing.');
       }
 
       try {
-        const res = await http.patch<ApiResponse<CompanyDTO>>(`/api/companies/${companyId}/status`, {
-          status: newStatus,
-        });
+        const endpoint =
+          newStatus === 'CLOSED'
+            ? `/api/companies/${companyId}/close`
+            : `/api/companies/${companyId}/activate`;
+
+        const res = await http.patch<ApiResponse<CompanyDTO>>(endpoint);
         if (res.data.error) throw new Error(res.data.error);
         return res.data.data ?? null;
       } catch (e) {

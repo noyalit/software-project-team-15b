@@ -149,7 +149,6 @@ const canAccessManagerPages =
             {userType === 'system-admin' && <NavLink to="/admin/queues" label="Site Queue" />}
             {userType === 'system-admin' && <NavLink to="/admin/event-queues" label="Event Queues" />}
             {userType === 'system-admin' && <NavLink to="/admin/companies" label="Companies" />}
-            {userType === 'system-admin' && <NavLink to="/admin/members" label="Members" />}
             {userType === 'system-admin' && <NavLink to="/admin/orders" label="Orders" />}
           </nav>
 

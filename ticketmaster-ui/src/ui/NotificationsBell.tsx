@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useNotificationsStore } from './notificationsStore';
 import { http } from '../api/http';
-import type { ApiResponse, CompanyDTO } from '../api/types';
+import type { ApiResponse, CompanyDTO, EventDTO } from '../api/types';
 import { useAuthStore } from './authStore';
 
 function formatTime(iso: string) {
@@ -17,6 +17,14 @@ const uuidRegex = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 function extractUuids(text: string) {
   const m = text.match(new RegExp(uuidRegex.source, 'gi'));
   return m ? Array.from(new Set(m.map((x) => x.toLowerCase()))) : [];
+}
+
+function isPermissionChangedEventScoped(text: string) {
+  return /\bevent\b/i.test(text);
+}
+
+function isPermissionChangedCompanyScoped(text: string) {
+  return /\bcompany\b/i.test(text);
 }
 
 export default function NotificationsBell() {
@@ -37,8 +45,37 @@ export default function NotificationsBell() {
       if (n.type !== 'PERMISSION_CHANGED' && n.type !== 'COMPANY_CLOSED' && n.type !== 'COMPANY_SUSPENDED') {
         continue;
       }
-      for (const id of extractUuids(`${n.title} ${n.message}`)) ids.add(id);
+
+      const text = `${n.title} ${n.message}`;
+      if (n.type === 'PERMISSION_CHANGED') {
+        if (!isPermissionChangedCompanyScoped(text) || isPermissionChangedEventScoped(text)) {
+          continue;
+        }
+      }
+
+      for (const id of extractUuids(text)) ids.add(id);
     }
+    return Array.from(ids);
+  }, [top]);
+
+  const eventIdsInTop = useMemo(() => {
+    const ids = new Set<string>();
+
+    for (const n of top) {
+      if (n.type !== 'PERMISSION_CHANGED') {
+        continue;
+      }
+
+      const text = `${n.title} ${n.message}`;
+      if (!isPermissionChangedEventScoped(text) || isPermissionChangedCompanyScoped(text)) {
+        continue;
+      }
+
+      for (const id of extractUuids(text)) {
+        ids.add(id);
+      }
+    }
+
     return Array.from(ids);
   }, [top]);
 
@@ -62,10 +99,37 @@ export default function NotificationsBell() {
     staleTime: 5 * 60_000,
   });
 
+  const eventNamesQuery = useQuery({
+    queryKey: ['event-names', eventIdsInTop],
+    queryFn: async () => {
+      const pairs = await Promise.all(
+        eventIdsInTop.map(async (id) => {
+          try {
+            const res = await http.get<ApiResponse<EventDTO>>(`/api/events/${id}`);
+            if (res.data.error || !res.data.data) return [id, null] as const;
+            return [id, res.data.data.name] as const;
+          } catch {
+            return [id, null] as const;
+          }
+        })
+      );
+
+      return Object.fromEntries(
+        pairs.filter(([, name]) => Boolean(name))
+      ) as Record<string, string>;
+    },
+    enabled: Boolean(token) && eventIdsInTop.length > 0,
+    staleTime: 5 * 60_000,
+  });
+
   const companyNameMap = companyNamesQuery.data ?? {};
+  const eventNameMap = eventNamesQuery.data ?? {};
 
   const displayText = (text: string) => {
-    return text.replace(new RegExp(uuidRegex.source, 'gi'), (m) => companyNameMap[m.toLowerCase()] ?? m);
+    return text.replace(
+      new RegExp(uuidRegex.source, 'gi'),
+      (m) => eventNameMap[m.toLowerCase()] ?? companyNameMap[m.toLowerCase()] ?? m
+    );
   };
 
   useEffect(() => {

@@ -228,12 +228,21 @@ export default function MyCompaniesPage() {
                   </div>
                 </div>
 
-                <Link
-                  to={`/companies/${c.companyId}`}
-                  className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
-                >
-                  Open
-                </Link>
+                {c.status === 'SUSPENDED' ? (
+                  <button
+                    disabled
+                    className="rounded-md bg-slate-300 px-3 py-2 text-sm font-semibold text-white opacity-60"
+                  >
+                    Suspended
+                  </button>
+                ) : (
+                  <Link
+                    to={`/companies/${c.companyId}`}
+                    className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                  >
+                    Open
+                  </Link>
+                )}
               </div>
             </div>
           ))}
