@@ -277,7 +277,7 @@ public class LotteryService {
 
             return drawn;
         } catch (RuntimeException e) {
-            AUDIT.warn("op=runEventLottery eventId={} result=error error={}", eventId, e.getMessage());
+            AUDIT.warn("op=runEventLottery eventId={} count={} result=error error={}", eventId, count, e.getMessage());
             throw e;
         }
 
