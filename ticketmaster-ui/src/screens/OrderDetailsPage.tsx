@@ -39,20 +39,23 @@ export default function OrderDetailsPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const { token } = useAuthStore();
 
-  // Reuse the existing order-history endpoint and pick the requested order.
   const orderQuery = useQuery({
-    queryKey: ['order-history', 'my-orders', token],
+    queryKey: ['order-history', orderId],
     queryFn: async () => {
-      const res = await http.get<ApiResponse<OrderHistoryDTO[]>>(
-        '/api/order-history/my-orders'
+      const res = await http.get<ApiResponse<OrderHistoryDTO>>(
+        `/api/order-history/${orderId}`
       );
-      if (res.data.error) throw new Error(res.data.error);
-      return res.data.data ?? [];
+
+      if (res.data.error) {
+        throw new Error(res.data.error);
+      }
+
+      return res.data.data!;
     },
-    enabled: Boolean(token),
+    enabled: Boolean(token && orderId),
   });
 
-  const order = (orderQuery.data ?? []).find((o) => o.orderId === orderId);
+  const order = orderQuery.data;
 
   // Resolve the UUIDs (event / area / seat) into real names via the event.
   const eventQuery = useQuery({
