@@ -489,34 +489,6 @@ public class UserDomainService {
     }
 
     /**
-     * Removes the {@link Founder} role from a member in the given company.
-     * Founders have no appointing owner (appointed-by is {@code null}), so no appointer validation is performed.
-     *
-     * @param memberToRemoveId the ID of the member whose Founder role is being revoked
-     * @param companyId        the ID of the company
-     * @return the updated and persisted {@link Member}
-     * @throws MemberNotFoundException  if no member exists with the given ID
-     * @throws RoleNotAssignedException if the member does not hold a Founder role in the specified company
-     */
-    @Transactional
-    public Member removeFounderAppointment(UUID memberToRemoveId, UUID companyId) {
-        Member memberToRemove = getMemberOrThrow(memberToRemoveId);
-
-        Role founderRoleToRemove = memberToRemove.getAssignedRoles()
-                .stream()
-                .filter(role -> role instanceof Founder)
-                .filter(role -> role.belongsToCompany(companyId))
-                .findFirst()
-                .orElseThrow(() -> new RoleNotAssignedException(
-                        "No founder role found for this member in the specified company"
-                ));
-
-        memberToRemove.removeRole(founderRoleToRemove);
-
-        return memberRepository.save(memberToRemove);
-    }
-
-    /**
      * Allows an owner to voluntarily resign their {@link Owner} role from the given company.
      *
      * @param ownerId   the ID of the owner who wants to resign

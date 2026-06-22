@@ -346,7 +346,7 @@ public class CompanyService {
             eventDomainService.searchInCompany(companyId, null)
                     .forEach(event -> eventDomainService.cancel(event.eventId()));
 
-            // Cancel all non-founder appointments in the company
+            // Cancel all appointments (including founders) in the company
             userDomainService.cancelAllAppointments(companyId);
 
             AUDIT.info("op=suspendCompany callerId={} companyId={} result=ok", callerId, companyId);
