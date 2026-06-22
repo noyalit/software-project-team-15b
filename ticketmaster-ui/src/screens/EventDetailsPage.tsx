@@ -331,7 +331,8 @@ export default function EventDetailsPage() {
 
       return res.data.data;
     },
-    enabled: Boolean(eventQuery.data?.companyId),
+    enabled: Boolean(token) && Boolean(eventQuery.data?.companyId),
+    retry: false,
   });
 
   const companyPurchasePoliciesQuery = useQuery({
@@ -796,9 +797,9 @@ export default function EventDetailsPage() {
             <div className="mt-2 text-sm text-slate-500">{event.location}</div>
           </div>
           <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
-            {companyQuery.isPending
+            {token && companyQuery.isPending
               ? 'Loading company...'
-              : companyQuery.data?.name ?? 'Unknown company'}
+              : companyQuery.data?.name ?? 'Company'}
           </div>
         </div>
 
