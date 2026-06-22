@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { http } from '../api/http';
-import type { ApiResponse, CompanyDTO } from '../api/types';
+import type { ApiResponse, CompanyDTO, EventDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 import { useNotificationsStore } from '../ui/notificationsStore';
 
@@ -36,6 +36,22 @@ export default function NotificationsPage() {
     return Array.from(ids);
   }, [notifications]);
 
+  const eventIdsInList = useMemo(() => {
+    const ids = new Set<string>();
+
+    for (const n of notifications) {
+      if (n.type !== 'PERMISSION_CHANGED') {
+        continue;
+      }
+
+      for (const id of extractUuids(`${n.title} ${n.message}`)) {
+        ids.add(id);
+      }
+    }
+
+    return Array.from(ids);
+  }, [notifications]);
+
   const companyNamesQuery = useQuery({
     queryKey: ['company-names', 'notifications', companyIdsInList],
     queryFn: async () => {
@@ -56,10 +72,37 @@ export default function NotificationsPage() {
     staleTime: 5 * 60_000,
   });
 
+  const eventNamesQuery = useQuery({
+    queryKey: ['event-names', 'notifications', eventIdsInList],
+    queryFn: async () => {
+      const pairs = await Promise.all(
+        eventIdsInList.map(async (id) => {
+          try {
+            const res = await http.get<ApiResponse<EventDTO>>(`/api/events/${id}`);
+            if (res.data.error || !res.data.data) return [id, null] as const;
+            return [id, res.data.data.name] as const;
+          } catch {
+            return [id, null] as const;
+          }
+        })
+      );
+
+      return Object.fromEntries(
+        pairs.filter(([, name]) => Boolean(name))
+      ) as Record<string, string>;
+    },
+    enabled: Boolean(token) && eventIdsInList.length > 0,
+    staleTime: 5 * 60_000,
+  });
+
   const companyNameMap = companyNamesQuery.data ?? {};
+  const eventNameMap = eventNamesQuery.data ?? {};
 
   const displayText = (text: string) => {
-    return text.replace(new RegExp(uuidRegex.source, 'gi'), (m) => companyNameMap[m.toLowerCase()] ?? m);
+    return text.replace(
+      new RegExp(uuidRegex.source, 'gi'),
+      (m) => eventNameMap[m.toLowerCase()] ?? companyNameMap[m.toLowerCase()] ?? m
+    );
   };
 
   return (
