@@ -40,9 +40,9 @@ export default function OrderDetailsPage() {
   const { token } = useAuthStore();
 
   const orderQuery = useQuery({
-    queryKey: ['order-history', orderId],
+    queryKey: ['order-history', orderId, token],
     queryFn: async () => {
-      const res = await http.get<ApiResponse<OrderHistoryDTO>>(
+      const res = await http.get<ApiResponse<OrderHistoryDTO | null>>(
         `/api/order-history/${orderId}`
       );
 
@@ -50,7 +50,7 @@ export default function OrderDetailsPage() {
         throw new Error(res.data.error);
       }
 
-      return res.data.data!;
+      return res.data.data ?? null;
     },
     enabled: Boolean(token && orderId),
   });
@@ -61,8 +61,9 @@ export default function OrderDetailsPage() {
   const eventQuery = useQuery({
     queryKey: ['event', order?.eventId],
     queryFn: async () => {
+      if (!order?.eventId) return null;
       const res = await http.get<ApiResponse<EventDTO>>(
-        `/api/events/${order!.eventId}`
+        `/api/events/${order.eventId}`
       );
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? null;

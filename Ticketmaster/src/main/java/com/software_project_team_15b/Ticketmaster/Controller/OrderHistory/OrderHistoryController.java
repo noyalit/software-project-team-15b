@@ -58,16 +58,26 @@ public class OrderHistoryController {
     @GetMapping("/{orderId}")
     public ResponseEntity<ApiResponse<OrderHistoryDTO>> getOrder(
             @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
-            @PathVariable UUID orderId
+            @PathVariable String orderId
     ) {
         try {
 
+            UUID parsedOrderId;
+            try {
+                parsedOrderId = UUID.fromString(orderId);
+            } catch (IllegalArgumentException ex) {
+                return badRequest(new IllegalArgumentException("orderId must be a UUID"));
+            }
+
             OrderHistoryDTO order =
-                    orderHistoryService.getOrderById(token, orderId);
+                    orderHistoryService.getOrderById(token, parsedOrderId);
 
             return ResponseEntity.ok(new ApiResponse<>(order, null));
 
         } catch (IllegalArgumentException ex) {
+            if ("Order not found".equals(ex.getMessage())) {
+                return notFound(ex);
+            }
             return badRequest(ex);
 
         } catch (Exception ex) {
@@ -288,6 +298,11 @@ public class OrderHistoryController {
 
     private <T> ResponseEntity<ApiResponse<T>> forbidden(Exception ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ApiResponse<>(null, ex.getMessage()));
+    }
+
+    private <T> ResponseEntity<ApiResponse<T>> notFound(Exception ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ApiResponse<>(null, ex.getMessage()));
     }
 
