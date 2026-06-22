@@ -42,15 +42,27 @@ export default function OrderDetailsPage() {
   const orderQuery = useQuery({
     queryKey: ['order-history', orderId, token],
     queryFn: async () => {
-      const res = await http.get<ApiResponse<OrderHistoryDTO | null>>(
-        `/api/order-history/${orderId}`
-      );
+      try {
+        const res = await http.get<ApiResponse<OrderHistoryDTO | null>>(
+          `/api/order-history/${orderId}`
+        );
 
-      if (res.data.error) {
-        throw new Error(res.data.error);
+        if (res.data.error === 'Order not found') {
+          return null;
+        }
+
+        if (res.data.error) {
+          throw new Error(res.data.error);
+        }
+
+        return res.data.data ?? null;
+      } catch (e: unknown) {
+        const msg = getApiErrorMessage(e);
+        if (msg === 'Order not found') {
+          return null;
+        }
+        throw e;
       }
-
-      return res.data.data ?? null;
     },
     enabled: Boolean(token && orderId),
   });
