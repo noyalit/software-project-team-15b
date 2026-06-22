@@ -922,7 +922,7 @@ export default function CompanyPage() {
   });
 
   const changeStatusMutation = useMutation({
-    mutationFn: async (newStatus: 'ACTIVE' | 'SUSPENDED' | 'CLOSED') => {
+    mutationFn: async (newStatus: 'ACTIVE' | 'CLOSED') => {
       setStatusSuccessMessage(null);
       if (!companyId) {
         throw new Error('Company ID is missing.');
