@@ -755,6 +755,38 @@ class CompanyServiceWhiteTest {
     }
 
     @Test
+    void suspendCompany_calls_cancelAllAppointments() {
+        UUID adminId = UUID.randomUUID();
+        String adminToken = registerSystemAdmin(adminId);
+        String founderToken = registerMember(UUID.randomUUID());
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+
+        service.suspendCompany(adminToken, dto.companyId());
+
+        verify(userDomainService).cancelAllAppointments(dto.companyId());
+    }
+
+    @Test
+    void suspendCompany_throws_when_companyId_is_null() {
+        String adminToken = registerSystemAdmin(UUID.randomUUID());
+
+        assertThatThrownBy(() -> service.suspendCompany(adminToken, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void suspendCompany_throws_when_token_is_null() {
+        assertThatThrownBy(() -> service.suspendCompany(null, UUID.randomUUID()))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void suspendCompany_throws_when_token_is_blank() {
+        assertThatThrownBy(() -> service.suspendCompany("   ", UUID.randomUUID()))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
     void concurrent_suspendCompany_does_not_throw() throws Exception {
         String adminToken = registerSystemAdmin(UUID.randomUUID());
 

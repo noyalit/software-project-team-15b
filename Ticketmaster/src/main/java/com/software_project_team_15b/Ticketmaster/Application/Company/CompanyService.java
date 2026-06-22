@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
@@ -37,6 +38,15 @@ public class CompanyService {
     private final IEventDomainService eventDomainService;
     private final IAuth auth;
 
+    /**
+     * Constructs the service with its required collaborators.
+     *
+     * @param companyDomainService domain service for company aggregate operations; must not be null
+     * @param userDomainService    domain service for member/role operations; must not be null
+     * @param eventDomainService   domain service for event operations; must not be null
+     * @param auth                 authentication/authorization gateway; must not be null
+     * @throws NullPointerException if any argument is null
+     */
     public CompanyService(ICompanyDomainService companyDomainService, UserDomainService userDomainService, IEventDomainService eventDomainService, IAuth auth) {
         this.companyDomainService = Objects.requireNonNull(companyDomainService, "companyDomainService cannot be null");
         this.userDomainService = Objects.requireNonNull(userDomainService, "userDomainService cannot be null");
@@ -55,8 +65,9 @@ public class CompanyService {
      * @throws UnauthorizedCompanyActionException if the caller is not a member
      * @throws IllegalArgumentException           if {@code name} is null or blank
      */
+    @Transactional
     public CompanyDTO createCompany(String token, String name) {
-        return createCompany(token, name, null, null);
+        return doCreateCompany(token, name, null, null);
     }
 
     /**
@@ -74,7 +85,16 @@ public class CompanyService {
      * @throws UnauthorizedCompanyActionException if the caller is not a member
      * @throws IllegalArgumentException          if {@code name} is null or blank
      */
+    @Transactional
     public CompanyDTO createCompany(
+            String token,
+            String name,
+            ICompanyPurchasePolicy purchasePolicy,
+            ICompanyDiscountPolicy discountPolicy) {
+        return doCreateCompany(token, name, purchasePolicy, discountPolicy);
+    }
+
+    private CompanyDTO doCreateCompany(
             String token,
             String name,
             ICompanyPurchasePolicy purchasePolicy,
@@ -111,6 +131,7 @@ public class CompanyService {
      *         if the token is null, blank, or invalid
      * @throws IllegalArgumentException if {@code founderId} is null
      */
+    @Transactional(readOnly = true)
     public List<CompanyDTO> findCompaniesByFounder(String token, UUID founderId) {
         requireValidToken(token);
         requireNonNull(founderId, "Founder ID");
@@ -128,6 +149,7 @@ public class CompanyService {
      *         if the token is null, blank, or invalid
      * @throws UnauthorizedCompanyActionException if the caller is not a member
      */
+    @Transactional(readOnly = true)
     public List<CompanyDTO> getMyCompanies(String token) {
         requireValidToken(token);
         UUID memberId = requireAuthenticatedMember(token);
@@ -145,6 +167,7 @@ public class CompanyService {
      *         if the token is null, blank, or invalid
      * @throws UnauthorizedCompanyActionException if the caller is not a system admin
      */
+    @Transactional(readOnly = true)
     public List<CompanyDTO> getAllCompanies(String token) {
         requireValidToken(token);
         if (!auth.isSystemAdmin(token)) {
@@ -171,6 +194,7 @@ public class CompanyService {
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
      *         if no company exists with the given {@code companyId}
      */
+    @Transactional
     public CompanyDTO updatePurchasePolicy(String token, UUID companyId, ICompanyPurchasePolicy policy) {
         try {
             requireNonNull(companyId, "Company ID");
@@ -206,6 +230,7 @@ public class CompanyService {
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
      *         if no company exists with the given {@code companyId}
      */
+    @Transactional
     public CompanyDTO replacePurchasePolicies(String token, UUID companyId, List<ICompanyPurchasePolicy> policies) {
         try {
             requireNonNull(companyId, "Company ID");
@@ -241,6 +266,7 @@ public class CompanyService {
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
      *         if no company exists with the given {@code companyId}
      */
+    @Transactional
     public CompanyDTO updateDiscountPolicy(String token, UUID companyId, ICompanyDiscountPolicy policy) {
         try {
             requireNonNull(companyId, "Company ID");
@@ -276,6 +302,7 @@ public class CompanyService {
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
      *         if no company exists with the given {@code companyId}
      */
+    @Transactional
     public CompanyDTO replaceDiscountPolicies(String token, UUID companyId, List<ICompanyDiscountPolicy> policies) {
         try {
             requireNonNull(companyId, "Company ID");
@@ -305,6 +332,7 @@ public class CompanyService {
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
      *                                           if no company with {@code companyId} exists
      */
+    @Transactional
     public CompanyDTO suspendCompany(String token, UUID companyId) {
         try {
             requireNonNull(companyId, "Company ID");
@@ -312,10 +340,14 @@ public class CompanyService {
             if (!auth.isSystemAdmin(token)) {
                 throw new UnauthorizedCompanyActionException("Only system admins can suspend companies");
             }
+            UUID callerId = auth.extractUserId(token);
             Company saved = companyDomainService.changeStatus(companyId, CompanyStatus.SUSPENDED);
             eventDomainService.searchInCompany(companyId, SearchCriteria.empty())
                     .forEach(event -> eventDomainService.cancel(event.eventId()));
-            UUID callerId = auth.extractUserId(token);
+
+            // Cancel all appointments (including founders) in the company
+            userDomainService.cancelAllAppointments(companyId);
+
             AUDIT.info("op=suspendCompany callerId={} companyId={} result=ok", callerId, companyId);
             return CompanyDTO.from(saved);
         } catch (RuntimeException e) {
@@ -335,6 +367,7 @@ public class CompanyService {
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
      *                                           if no company with {@code companyId} exists
      */
+    @Transactional
     public CompanyDTO closeCompany(String token, UUID companyId) {
         try {
             requireNonNull(companyId, "Company ID");
@@ -372,6 +405,7 @@ public class CompanyService {
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
      *                                           if no company with {@code companyId} exists
      */
+    @Transactional
     public CompanyDTO activateCompany(String token, UUID companyId) {
         try {
             requireNonNull(companyId, "Company ID");
@@ -403,6 +437,7 @@ public class CompanyService {
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
      *         if no company exists with the given {@code companyId}
      */
+    @Transactional(readOnly = true)
     public CompanyDTO getCompany(String token, UUID companyId) {
         requireNonNull(token, "Token");
         requireNonNull(companyId, "Company ID");
@@ -429,6 +464,7 @@ public class CompanyService {
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
      *         if no company exists with the given {@code companyId}
      */
+    @Transactional(readOnly = true)
     public List<ICompanyPurchasePolicy> getCompanyPurchasePolicies(String token, UUID companyId) {
         requireValidToken(token);
         requireNonNull(companyId, "Company ID");
@@ -456,6 +492,7 @@ public class CompanyService {
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
      *         if no company exists with the given {@code companyId}
      */
+    @Transactional(readOnly = true)
     public List<ICompanyDiscountPolicy> getCompanyDiscountPolicies(String token, UUID companyId) {
         requireValidToken(token);
         requireNonNull(companyId, "Company ID");
@@ -473,10 +510,19 @@ public class CompanyService {
      * @param companyId the UUID of the company to look up (may be null)
      * @return an {@link Optional} containing the {@link CompanyDTO}, or empty if not found
      */
+    @Transactional(readOnly = true)
     public Optional<CompanyDTO> findCompany(UUID companyId) {
         return companyDomainService.findCompany(companyId).map(CompanyDTO::from);
     }
 
+    /**
+     * Validates the token and asserts the caller is a member, returning their user ID.
+     *
+     * @param token the session token to validate
+     * @return the authenticated member's user ID
+     * @throws InvalidTokenException             if the token is null, blank, or invalid
+     * @throws UnauthorizedCompanyActionException if the token does not belong to a member
+     */
     private UUID requireAuthenticatedMember(String token) {
         requireValidToken(token);
         if (!auth.isMember(token)) {
@@ -489,6 +535,12 @@ public class CompanyService {
         return userId;
     }
 
+    /**
+     * Throws {@link InvalidTokenException} if the token is null, blank, or not recognized as valid.
+     *
+     * @param token the token to check
+     * @throws InvalidTokenException if the token is null, blank, or invalid/expired
+     */
     private void requireValidToken(String token) {
         if (token == null || token.isBlank()) {
             throw new InvalidTokenException("Token cannot be null or blank");
@@ -498,12 +550,26 @@ public class CompanyService {
         }
     }
 
+    /**
+     * Throws {@link IllegalArgumentException} if {@code value} is null.
+     *
+     * @param value     the value to check
+     * @param fieldName human-readable name used in the exception message
+     * @throws IllegalArgumentException if {@code value} is null
+     */
     private static void requireNonNull(Object value, String fieldName) {
         if (value == null) {
             throw new IllegalArgumentException(fieldName + " cannot be null");
         }
     }
 
+    /**
+     * Throws {@link IllegalArgumentException} if {@code value} is null or blank.
+     *
+     * @param value     the string to check
+     * @param fieldName human-readable name used in the exception message
+     * @throws IllegalArgumentException if {@code value} is null or blank
+     */
     private static void requireNonBlank(String value, String fieldName) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(fieldName + " cannot be null or blank");

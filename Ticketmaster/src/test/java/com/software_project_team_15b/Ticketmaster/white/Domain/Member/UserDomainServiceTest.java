@@ -1,8 +1,11 @@
 package com.software_project_team_15b.Ticketmaster.white.Domain.Member;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDate;
@@ -38,6 +41,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Unautho
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UsernameAlreadyExistsException;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyRoleTreeDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.CompanyManager;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Founder;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.IMemberRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.Manager;
@@ -2105,6 +2109,258 @@ class UserDomainServiceTest {
 
         assertThat(tree).isNotNull();
         assertThat(tree.root()).isNotNull();
+    }
+
+    // -------- cancelAllAppointments – positive --------
+
+    @Test
+    void cancelAllAppointments_removesOwnerRoles() {
+        UUID companyId = UUID.randomUUID();
+        UUID founderId = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+
+        Founder founderRole = new Founder(null, companyId);
+        Member founder = memberWithId(founderId, founderRole);
+        repo.store(founder);
+
+        UUID ownerId = UUID.randomUUID();
+        Owner ownerRole = new Owner(founderId, companyId);
+        ownerRole.approveAppointment();
+        Member owner = memberWithId(ownerId, ownerRole);
+        repo.store(owner);
+
+        UserDomainService sut = new UserDomainService(repo);
+        sut.cancelAllAppointments(companyId);
+
+        Member savedOwner = repo.findById(ownerId).orElseThrow();
+        assertThat(savedOwner.getAssignedRoles()).noneMatch(r -> r instanceof Owner && !(r instanceof Founder));
+    }
+
+    @Test
+    void cancelAllAppointments_removesManagerRoles() {
+        UUID companyId = UUID.randomUUID();
+        UUID founderId = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+
+        Founder founderRole = new Founder(null, companyId);
+        Member founder = memberWithId(founderId, founderRole);
+        repo.store(founder);
+
+        UUID managerId = UUID.randomUUID();
+        Manager managerRole = new Manager(founderId, companyId, UUID.randomUUID(), Set.of(ManagerPermission.MANAGE_EVENTS));
+        Member manager = memberWithId(managerId, managerRole);
+        repo.store(manager);
+
+        UserDomainService sut = new UserDomainService(repo);
+        sut.cancelAllAppointments(companyId);
+
+        Member savedManager = repo.findById(managerId).orElseThrow();
+        assertThat(savedManager.getAssignedRoles()).noneMatch(r -> r instanceof Manager);
+    }
+
+    @Test
+    void cancelAllAppointments_removesCompanyManagerRoles() {
+        UUID companyId = UUID.randomUUID();
+        UUID founderId = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+
+        Founder founderRole = new Founder(null, companyId);
+        Member founder = memberWithId(founderId, founderRole);
+        repo.store(founder);
+
+        UUID compMgrId = UUID.randomUUID();
+        CompanyManager compMgrRole = new CompanyManager(founderId, companyId, Set.of(ManagerPermission.MANAGE_EVENTS));
+        Member compMgr = memberWithId(compMgrId, compMgrRole);
+        repo.store(compMgr);
+
+        UserDomainService sut = new UserDomainService(repo);
+        sut.cancelAllAppointments(companyId);
+
+        Member saved = repo.findById(compMgrId).orElseThrow();
+        assertThat(saved.getAssignedRoles()).noneMatch(r -> r instanceof CompanyManager);
+    }
+
+    @Test
+    void cancelAllAppointments_removesFounderRoles() {
+        UUID companyId = UUID.randomUUID();
+        UUID founderId = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+
+        Founder founderRole = new Founder(null, companyId);
+        Member founder = memberWithId(founderId, founderRole);
+        Owner ownerRole = new Owner(founderId, companyId);
+        ownerRole.approveAppointment();
+        founder.addRole(ownerRole);
+        repo.store(founder);
+
+        UserDomainService sut = new UserDomainService(repo);
+        sut.cancelAllAppointments(companyId);
+
+        Member saved = repo.findById(founderId).orElseThrow();
+        assertThat(saved.getAssignedRoles()).noneMatch(r -> r instanceof Founder);
+    }
+
+    @Test
+    void cancelAllAppointments_promotesActiveRoleFromOtherCompany_whenActiveRoleRemoved() {
+        UUID companyA = UUID.randomUUID();
+        UUID companyB = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+
+        UUID memberId = UUID.randomUUID();
+        Owner ownerA = new Owner(UUID.randomUUID(), companyA);
+        ownerA.approveAppointment();
+        Member member = memberWithId(memberId, ownerA);
+
+        Manager managerB = new Manager(UUID.randomUUID(), companyB, UUID.randomUUID(), Set.of(ManagerPermission.MANAGE_EVENTS));
+        managerB.approveAppointment();
+        member.addRole(managerB);
+        repo.store(member);
+
+        UserDomainService sut = new UserDomainService(repo);
+        sut.cancelAllAppointments(companyA);
+
+        Member saved = repo.findById(memberId).orElseThrow();
+        assertThat(saved.getAssignedRoles()).noneMatch(r -> r.belongsToCompany(companyA));
+        assertThat(saved.getAssignedRoles()).anyMatch(r -> r instanceof Manager && r.belongsToCompany(companyB));
+        assertThat(saved.getActiveRole()).isNotNull();
+        assertThat(saved.getActiveRole()).isInstanceOf(Manager.class);
+    }
+
+    @Test
+    void cancelAllAppointments_doesNotAffectRolesInOtherCompanies() {
+        UUID companyId = UUID.randomUUID();
+        UUID otherCompanyId = UUID.randomUUID();
+        UUID founderId = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+
+        Founder founderRole = new Founder(null, companyId);
+        Member founder = memberWithId(founderId, founderRole);
+        repo.store(founder);
+
+        UUID ownerId = UUID.randomUUID();
+        Owner ownerRoleOther = new Owner(founderId, otherCompanyId);
+        ownerRoleOther.approveAppointment();
+        Member owner = memberWithId(ownerId, ownerRoleOther);
+        repo.store(owner);
+
+        UserDomainService sut = new UserDomainService(repo);
+        sut.cancelAllAppointments(companyId);
+
+        Member savedOwner = repo.findById(ownerId).orElseThrow();
+        assertThat(savedOwner.getAssignedRoles())
+                .anyMatch(r -> r instanceof Owner && r.belongsToCompany(otherCompanyId));
+    }
+
+    @Test
+    void cancelAllAppointments_removesMultipleRolesFromSameMember() {
+        UUID companyId = UUID.randomUUID();
+        UUID founderId = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+
+        Founder founderRole = new Founder(null, companyId);
+        Member founder = memberWithId(founderId, founderRole);
+        repo.store(founder);
+
+        UUID memberId = UUID.randomUUID();
+        Owner ownerRole = new Owner(founderId, companyId);
+        ownerRole.approveAppointment();
+        Member member = memberWithId(memberId, ownerRole);
+        Manager managerRole = new Manager(founderId, companyId, UUID.randomUUID(), Set.of(ManagerPermission.MANAGE_EVENTS));
+        member.addRole(managerRole);
+        repo.store(member);
+
+        UserDomainService sut = new UserDomainService(repo);
+        sut.cancelAllAppointments(companyId);
+
+        Member saved = repo.findById(memberId).orElseThrow();
+        assertThat(saved.getAssignedRoles()).noneMatch(r -> r.belongsToCompany(companyId));
+    }
+
+    @Test
+    void cancelAllAppointments_doesNothingWhenNoMembersHaveRolesInCompany() {
+        UUID companyId = UUID.randomUUID();
+        UUID otherCompanyId = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+
+        UUID memberId = UUID.randomUUID();
+        Owner ownerRole = new Owner(UUID.randomUUID(), otherCompanyId);
+        ownerRole.approveAppointment();
+        Member member = memberWithId(memberId, ownerRole);
+        repo.store(member);
+
+        UserDomainService sut = new UserDomainService(repo);
+        assertThatCode(() -> sut.cancelAllAppointments(companyId))
+                .doesNotThrowAnyException();
+
+        Member saved = repo.findById(memberId).orElseThrow();
+        assertThat(saved.getAssignedRoles()).anyMatch(r -> r instanceof Owner);
+    }
+
+    @Test
+    void cancelAllAppointments_doesNothingWhenRepositoryIsEmpty() {
+        MapMemberRepository repo = new MapMemberRepository();
+        UserDomainService sut = new UserDomainService(repo);
+
+        assertThatCode(() -> sut.cancelAllAppointments(UUID.randomUUID()))
+                .doesNotThrowAnyException();
+    }
+
+    // -------- cancelAllAppointments – negative --------
+
+    @Test
+    void cancelAllAppointments_throws_whenCompanyIdIsNull() {
+        assertThatThrownBy(() -> userDomainService.cancelAllAppointments(null))
+                .isInstanceOf(InvalidMemberInputException.class);
+
+        verify(memberRepository, never()).save(any());
+    }
+
+    // -------- cancelAllAppointments – concurrent --------
+
+    @Test
+    void cancelAllAppointments_concurrent_doesNotThrow() throws Exception {
+        UUID companyId = UUID.randomUUID();
+        UUID founderId = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+
+        Founder founderRole = new Founder(null, companyId);
+        Member founder = memberWithId(founderId, founderRole);
+        repo.store(founder);
+
+        for (int i = 0; i < 5; i++) {
+            UUID ownerId = UUID.randomUUID();
+            Owner ownerRole = new Owner(founderId, companyId);
+            ownerRole.approveAppointment();
+            Member owner = memberWithId(ownerId, ownerRole);
+            repo.store(owner);
+        }
+
+        UserDomainService sut = new UserDomainService(repo);
+
+        int threadCount = 10;
+        CountDownLatch ready = new CountDownLatch(threadCount);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(threadCount);
+        try {
+            List<Future<?>> futures = new ArrayList<>();
+            for (int i = 0; i < threadCount; i++) {
+                futures.add(pool.submit(() -> {
+                    ready.countDown();
+                    start.await();
+                    sut.cancelAllAppointments(companyId);
+                    return null;
+                }));
+            }
+
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            for (Future<?> f : futures) {
+                assertThatCode(() -> f.get(5, TimeUnit.SECONDS)).doesNotThrowAnyException();
+            }
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     // -------- helpers --------
