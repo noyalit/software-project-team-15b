@@ -42,6 +42,15 @@ public class Member {
         // JPA only
     }
 
+    /**
+     * Creates a new member with the given credentials and an optional initial role.
+     *
+     * @param username     the desired username; must not be null or blank
+     * @param passwordHash the pre-encoded password hash; must not be null or blank
+     * @param initialRole  the role to assign and make active immediately, or {@code null} for a regular member
+     * @param birthDate    the member's date of birth; must not be null or in the future
+     * @throws InvalidMemberInputException if any validation constraint is violated
+     */
     public Member(String username, String passwordHash, Role initialRole, LocalDate birthDate) {
         // Invariants: username is non-blank; passwordHash is already-encoded; birthDate is not in the future.
         validateUsername(username);
@@ -55,7 +64,7 @@ public class Member {
         if (initialRole != null) {
             this.assignedRoles.add(initialRole);
         }
-        this.activeRole = initialRole; 
+        this.activeRole = initialRole;
 
         AUDIT.info("op=create-member userId={} username={} role={} birthDate={}",
                 this.userId,
@@ -71,14 +80,30 @@ public class Member {
         }
     }
 
+    /**
+     * Returns the unique identifier of this member.
+     *
+     * @return the member's {@link UUID}
+     */
     public UUID getUserId() {
         return userId;
     }
 
+    /**
+     * Returns the member's current username.
+     *
+     * @return the username
+     */
     public String getUsername() {
         return username;
     }
 
+    /**
+     * Updates the member's username.
+     *
+     * @param username the new username; must not be null or blank
+     * @throws InvalidMemberInputException if {@code username} is null or blank
+     */
     public void setUsername(String username) {
         validateUsername(username);
         this.username = username.trim();
@@ -86,22 +111,43 @@ public class Member {
         AUDIT.info("op=set-username userId={} username={}", this.userId, this.username);
     }
 
+    /**
+     * Returns the member's stored password hash.
+     *
+     * @return the pre-encoded password hash
+     */
     public String getPasswordHash() {
         return passwordHash;
     }
 
+    /**
+     * Replaces the member's password hash. The hash must already be encoded by the application layer.
+     *
+     * @param passwordHash the new pre-encoded password hash; must not be null or blank
+     * @throws InvalidMemberInputException if {@code passwordHash} is null or blank
+     */
     public void setPassword(String passwordHash) {
-        // Note: passwordHash is expected to be already encoded by the application layer.
         validatePasswordHash(passwordHash);
         this.passwordHash = passwordHash;
 
         AUDIT.info("op=set-password-hash userId={}", this.userId);
     }
 
+    /**
+     * Returns the member's date of birth.
+     *
+     * @return the birth date
+     */
     public LocalDate getBirthDate() {
         return birthDate;
     }
 
+    /**
+     * Updates the member's date of birth.
+     *
+     * @param birthDate the new birth date; must not be null or in the future
+     * @throws InvalidMemberInputException if {@code birthDate} is null or in the future
+     */
     public void setBirthDate(LocalDate birthDate) {
         validateBirthDate(birthDate);
         this.birthDate = birthDate;
@@ -109,18 +155,40 @@ public class Member {
         AUDIT.info("op=set-birth-date userId={} birthDate={}", this.userId, this.birthDate);
     }
 
+    /**
+     * Returns the member's currently active role, or {@code null} if they are a regular member.
+     *
+     * @return the active {@link Role}, or {@code null}
+     */
     public Role getActiveRole() {
         return activeRole;
     }
 
+    /**
+     * Alias for {@link #getActiveRole()}.
+     *
+     * @return the active {@link Role}, or {@code null}
+     */
     public Role getRole() {
         return activeRole;
     }
 
+    /**
+     * Returns an unmodifiable view of all roles currently assigned to this member.
+     *
+     * @return an unmodifiable {@link Set} of assigned {@link Role}s
+     */
     public Set<Role> getAssignedRoles() {
         return Collections.unmodifiableSet(assignedRoles);
     }
 
+    /**
+     * Assigns a new role to this member. If the member currently has no active role, the new role
+     * also becomes the active role.
+     *
+     * @param role the role to assign; must not be null
+     * @throws InvalidMemberInputException if {@code role} is null
+     */
     public void addRole(Role role) {
         if (role == null) {
             throw new InvalidMemberInputException("Role cannot be null");
@@ -138,13 +206,20 @@ public class Member {
                 this.activeRole == null ? null : this.activeRole.getRoleName());
     }
 
+    /**
+     * Removes a role from this member's assigned roles. If the removed role was the active role,
+     * the active role is promoted to an arbitrary surviving role, or set to {@code null} if no
+     * roles remain.
+     *
+     * @param role the role to remove; no-op if {@code null}
+     */
     public void removeRole(Role role) {
         if (role == null) {
             return;
         }
         assignedRoles.remove(role);
         if (role.equals(activeRole)) {
-            activeRole = null;
+            activeRole = assignedRoles.isEmpty() ? null : assignedRoles.iterator().next();
         }
 
         AUDIT.info("op=remove-role userId={} role={} activeRole={}",
@@ -153,8 +228,14 @@ public class Member {
                 this.activeRole == null ? null : this.activeRole.getRoleName());
     }
 
+    /**
+     * Changes the member's active role to the given role, which must already be assigned.
+     * Passing {@code null} clears the active role, reverting the member to a regular member.
+     *
+     * @param role the role to activate, or {@code null} to clear the active role
+     * @throws RoleNotAssignedException if {@code role} is non-null and not in the member's assigned roles
+     */
     public void switchActiveRole(Role role) {
-        // Only roles already assigned to this member can become active.
         if (role == null) {
             activeRole = null;
 
@@ -170,8 +251,13 @@ public class Member {
         AUDIT.info("op=switch-active-role userId={} activeRole={}", this.userId, role.getRoleName());
     }
 
+    /**
+     * Convenience method that assigns the given role (if not already assigned) and immediately
+     * makes it the active role. Passing {@code null} clears the active role.
+     *
+     * @param role the role to assign and activate, or {@code null} to clear the active role
+     */
     public void setRole(Role role) {
-        // Convenience API: assigns the role (if not already assigned) and makes it active.
         if (role == null) {
             activeRole = null;
 
@@ -185,6 +271,9 @@ public class Member {
         AUDIT.info("op=set-role userId={} activeRole={}", this.userId, role.getRoleName());
     }
 
+    /**
+     * Removes all assigned roles from this member and clears the active role.
+     */
     public void clearRoles() {
         assignedRoles.clear();
         activeRole = null;

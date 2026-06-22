@@ -763,7 +763,7 @@ class CompanyServiceWhiteTest {
 
         service.suspendCompany(adminToken, dto.companyId());
 
-        verify(userDomainService).cancelAllAppointments(adminId, dto.companyId());
+        verify(userDomainService).cancelAllAppointments(dto.companyId());
     }
 
     @Test

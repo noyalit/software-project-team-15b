@@ -1304,21 +1304,19 @@ public class UserDomainService {
     }
 
     /**
-     * Removes all non-{@link Founder} appointments ({@link Owner}, {@link Manager},
+     * Removes all appointments ({@link Founder}, {@link Owner}, {@link Manager},
      * {@link CompanyManager}) from every member in the given company. Intended for use when a
      * company is suspended to atomically clean up the entire appointment hierarchy.
-     * Founder roles are preserved so the company can later be reactivated.
      *
      * <p>This method iterates all members directly rather than traversing the appointment tree
      * from {@code callerId}, because the caller (e.g. a system admin) may not hold any role
      * in the company and would therefore fail the tree-root authorization check.
      *
-     * @param callerId  the ID of the caller triggering the cancellation (reserved for auditing)
      * @param companyId the ID of the company whose appointments should be cancelled; must not be null
      * @throws InvalidMemberInputException if {@code companyId} is null
      */
     @Transactional
-    public void cancelAllAppointments(UUID callerId, UUID companyId) {
+    public void cancelAllAppointments(UUID companyId) {
         if (companyId == null) {
             throw new InvalidMemberInputException("Company ID cannot be null");
         }
@@ -1327,7 +1325,6 @@ public class UserDomainService {
             List<Role> rolesToRemove = member.getAssignedRoles()
                     .stream()
                     .filter(role -> role.belongsToCompany(companyId))
-                    .filter(role -> !(role instanceof Founder))
                     .toList();
 
             if (!rolesToRemove.isEmpty()) {

@@ -2233,7 +2233,7 @@ class UserDomainServiceTest {
         repo.store(owner);
 
         UserDomainService sut = new UserDomainService(repo);
-        sut.cancelAllAppointments(UUID.randomUUID(), companyId);
+        sut.cancelAllAppointments(companyId);
 
         Member savedOwner = repo.findById(ownerId).orElseThrow();
         assertThat(savedOwner.getAssignedRoles()).noneMatch(r -> r instanceof Owner && !(r instanceof Founder));
@@ -2255,7 +2255,7 @@ class UserDomainServiceTest {
         repo.store(manager);
 
         UserDomainService sut = new UserDomainService(repo);
-        sut.cancelAllAppointments(UUID.randomUUID(), companyId);
+        sut.cancelAllAppointments(companyId);
 
         Member savedManager = repo.findById(managerId).orElseThrow();
         assertThat(savedManager.getAssignedRoles()).noneMatch(r -> r instanceof Manager);
@@ -2277,14 +2277,14 @@ class UserDomainServiceTest {
         repo.store(compMgr);
 
         UserDomainService sut = new UserDomainService(repo);
-        sut.cancelAllAppointments(UUID.randomUUID(), companyId);
+        sut.cancelAllAppointments(companyId);
 
         Member saved = repo.findById(compMgrId).orElseThrow();
         assertThat(saved.getAssignedRoles()).noneMatch(r -> r instanceof CompanyManager);
     }
 
     @Test
-    void cancelAllAppointments_preservesFounderRoles() {
+    void cancelAllAppointments_removesFounderRoles() {
         UUID companyId = UUID.randomUUID();
         UUID founderId = UUID.randomUUID();
         MapMemberRepository repo = new MapMemberRepository();
@@ -2297,10 +2297,36 @@ class UserDomainServiceTest {
         repo.store(founder);
 
         UserDomainService sut = new UserDomainService(repo);
-        sut.cancelAllAppointments(UUID.randomUUID(), companyId);
+        sut.cancelAllAppointments(companyId);
 
         Member saved = repo.findById(founderId).orElseThrow();
-        assertThat(saved.getAssignedRoles()).anyMatch(r -> r instanceof Founder);
+        assertThat(saved.getAssignedRoles()).noneMatch(r -> r instanceof Founder);
+    }
+
+    @Test
+    void cancelAllAppointments_promotesActiveRoleFromOtherCompany_whenActiveRoleRemoved() {
+        UUID companyA = UUID.randomUUID();
+        UUID companyB = UUID.randomUUID();
+        MapMemberRepository repo = new MapMemberRepository();
+
+        UUID memberId = UUID.randomUUID();
+        Owner ownerA = new Owner(UUID.randomUUID(), companyA);
+        ownerA.approveAppointment();
+        Member member = memberWithId(memberId, ownerA);
+
+        Manager managerB = new Manager(UUID.randomUUID(), companyB, UUID.randomUUID(), Set.of(ManagerPermission.MANAGE_EVENTS));
+        managerB.approveAppointment();
+        member.addRole(managerB);
+        repo.store(member);
+
+        UserDomainService sut = new UserDomainService(repo);
+        sut.cancelAllAppointments(companyA);
+
+        Member saved = repo.findById(memberId).orElseThrow();
+        assertThat(saved.getAssignedRoles()).noneMatch(r -> r.belongsToCompany(companyA));
+        assertThat(saved.getAssignedRoles()).anyMatch(r -> r instanceof Manager && r.belongsToCompany(companyB));
+        assertThat(saved.getActiveRole()).isNotNull();
+        assertThat(saved.getActiveRole()).isInstanceOf(Manager.class);
     }
 
     @Test
@@ -2321,7 +2347,7 @@ class UserDomainServiceTest {
         repo.store(owner);
 
         UserDomainService sut = new UserDomainService(repo);
-        sut.cancelAllAppointments(UUID.randomUUID(), companyId);
+        sut.cancelAllAppointments(companyId);
 
         Member savedOwner = repo.findById(ownerId).orElseThrow();
         assertThat(savedOwner.getAssignedRoles())
@@ -2347,7 +2373,7 @@ class UserDomainServiceTest {
         repo.store(member);
 
         UserDomainService sut = new UserDomainService(repo);
-        sut.cancelAllAppointments(UUID.randomUUID(), companyId);
+        sut.cancelAllAppointments(companyId);
 
         Member saved = repo.findById(memberId).orElseThrow();
         assertThat(saved.getAssignedRoles()).noneMatch(r -> r.belongsToCompany(companyId));
@@ -2366,7 +2392,7 @@ class UserDomainServiceTest {
         repo.store(member);
 
         UserDomainService sut = new UserDomainService(repo);
-        assertThatCode(() -> sut.cancelAllAppointments(UUID.randomUUID(), companyId))
+        assertThatCode(() -> sut.cancelAllAppointments(companyId))
                 .doesNotThrowAnyException();
 
         Member saved = repo.findById(memberId).orElseThrow();
@@ -2378,7 +2404,7 @@ class UserDomainServiceTest {
         MapMemberRepository repo = new MapMemberRepository();
         UserDomainService sut = new UserDomainService(repo);
 
-        assertThatCode(() -> sut.cancelAllAppointments(UUID.randomUUID(), UUID.randomUUID()))
+        assertThatCode(() -> sut.cancelAllAppointments(UUID.randomUUID()))
                 .doesNotThrowAnyException();
     }
 
@@ -2386,7 +2412,7 @@ class UserDomainServiceTest {
 
     @Test
     void cancelAllAppointments_throws_whenCompanyIdIsNull() {
-        assertThatThrownBy(() -> userDomainService.cancelAllAppointments(UUID.randomUUID(), null))
+        assertThatThrownBy(() -> userDomainService.cancelAllAppointments(null))
                 .isInstanceOf(InvalidMemberInputException.class);
 
         verify(memberRepository, never()).save(any());
@@ -2424,7 +2450,7 @@ class UserDomainServiceTest {
                 futures.add(pool.submit(() -> {
                     ready.countDown();
                     start.await();
-                    sut.cancelAllAppointments(UUID.randomUUID(), companyId);
+                    sut.cancelAllAppointments(companyId);
                     return null;
                 }));
             }

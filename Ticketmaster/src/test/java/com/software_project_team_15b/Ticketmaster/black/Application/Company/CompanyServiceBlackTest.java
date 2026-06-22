@@ -529,7 +529,7 @@ class CompanyServiceBlackTest {
 
         service.suspendCompany(adminToken, dto.companyId());
 
-        verify(userDomainService).cancelAllAppointments(eq(adminId), eq(dto.companyId()));
+        verify(userDomainService).cancelAllAppointments(eq(dto.companyId()));
     }
 
     @Test

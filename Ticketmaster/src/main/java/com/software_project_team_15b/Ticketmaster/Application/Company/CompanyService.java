@@ -66,7 +66,7 @@ public class CompanyService {
      */
     @Transactional
     public CompanyDTO createCompany(String token, String name) {
-        return createCompany(token, name, null, null);
+        return doCreateCompany(token, name, null, null);
     }
 
     /**
@@ -86,6 +86,14 @@ public class CompanyService {
      */
     @Transactional
     public CompanyDTO createCompany(
+            String token,
+            String name,
+            ICompanyPurchasePolicy purchasePolicy,
+            ICompanyDiscountPolicy discountPolicy) {
+        return doCreateCompany(token, name, purchasePolicy, discountPolicy);
+    }
+
+    private CompanyDTO doCreateCompany(
             String token,
             String name,
             ICompanyPurchasePolicy purchasePolicy,
@@ -339,7 +347,7 @@ public class CompanyService {
                     .forEach(event -> eventDomainService.cancel(event.eventId()));
 
             // Cancel all non-founder appointments in the company
-            userDomainService.cancelAllAppointments(callerId, companyId);
+            userDomainService.cancelAllAppointments(companyId);
 
             AUDIT.info("op=suspendCompany callerId={} companyId={} result=ok", callerId, companyId);
             return CompanyDTO.from(saved);
