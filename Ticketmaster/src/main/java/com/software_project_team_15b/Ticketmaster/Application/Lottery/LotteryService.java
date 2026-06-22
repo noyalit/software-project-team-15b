@@ -167,104 +167,119 @@ public class LotteryService {
      */
     public Set<UUID> runEventLottery(String token, UUID companyId, UUID eventId, int count, LocalDateTime expirationTime) {
 
-    if (token == null)
-        throw new IllegalArgumentException("token cannot be null");
+        try {
+            if (token == null)
+                throw new IllegalArgumentException("token cannot be null");
 
-    if (eventId == null)
-        throw new IllegalArgumentException("eventId cannot be null");
+            if (eventId == null)
+                throw new IllegalArgumentException("eventId cannot be null");
 
-    if (count < 0)
-        throw new IllegalArgumentException("count cannot be negative");
+            if (count < 0)
+                throw new IllegalArgumentException("count cannot be negative");
 
-    if (expirationTime == null)
-        throw new IllegalArgumentException("expirationTime cannot be null");
+            if (expirationTime == null)
+                throw new IllegalArgumentException("expirationTime cannot be null");
 
-    if (expirationTime.isBefore(LocalDateTime.now()))
-        throw new IllegalArgumentException("expirationTime must be in the future");
+            if (expirationTime.isBefore(LocalDateTime.now()))
+                throw new IllegalArgumentException("expirationTime must be in the future");
 
-    validateToken(token);
+            validateToken(token);
 
-    UUID userId = auth.extractUserId(token);
+            UUID userId = auth.extractUserId(token);
 
-    requireEventPermissions(userId, companyId, eventId);
+            requireEventPermissions(userId, companyId, eventId);
 
-    Set<UUID> drawn =
-            lotteryDomainService.runEventLottery(
+            Set<UUID> drawn =
+                    lotteryDomainService.runEventLottery(
+                            eventId,
+                            count,
+                            expirationTime
+                    );
+
+            Set<UUID> losers;
+            try {
+                losers = Objects.requireNonNullElse(
+                        lotteryDomainService.getEventLotteryLosers(eventId),
+                        Set.of()
+                );
+            } catch (RuntimeException e) {
+                AUDIT.warn(
+                        "op=getEventLotteryLosers eventId={} result=error reason={} ",
+                        eventId,
+                        e.getMessage()
+                );
+                losers = Set.of();
+            }
+
+            AUDIT.info(
+                    "op=runEventLottery eventId={} count={} winnersDrawn={} result=ok",
                     eventId,
                     count,
-                    expirationTime
+                    drawn.size()
             );
 
-    Set<UUID> losers = Objects.requireNonNullElse(
-            lotteryDomainService.getEventLotteryLosers(eventId),
-            Set.of()
-    );
+            // notify winners
+            NotificationDTO winnerNotification =
+                    new NotificationDTO(
+                            NotificationType.LOTTERY_WON,
+                            "You won the lottery",
+                            "You won the lottery for event "
+                                    + eventId
+                                    + ". Access expires at "
+                                    + expirationTime,
+                            Instant.now()
+                    );
 
-    AUDIT.info(
-            "op=runEventLottery eventId={} count={} winnersDrawn={} result=ok",
-            eventId,
-            count,
-            drawn.size()
-    );
+            for (UUID winner : drawn) {
 
-    // notify winners
-    NotificationDTO winnerNotification =
-            new NotificationDTO(
-                    NotificationType.LOTTERY_WON,
-                    "You won the lottery",
-                    "You won the lottery for event "
-                            + eventId
-                            + ". Access expires at "
-                            + expirationTime,
-                    Instant.now()
-            );
+                try {
 
-    for (UUID winner : drawn) {
+                    notifier.notifyUser(winner, winnerNotification);
 
-        try {
+                } catch (RuntimeException e) {
 
-            notifier.notifyUser(winner, winnerNotification);
+                    AUDIT.warn(
+                            "op=notifyLotteryWinner userId={} eventId={} result=error reason={}",
+                            winner,
+                            eventId,
+                            e.getMessage()
+                    );
+                }
+            }
 
+            // notify losers
+            NotificationDTO loserNotification =
+                    new NotificationDTO(
+                            NotificationType.LOTTERY_LOST,
+                            "Lottery results",
+                            "You were not selected in the lottery for event "
+                                    + eventId
+                                    + ".",
+                            Instant.now()
+                    );
+
+            for (UUID loser : losers) {
+
+                try {
+
+                    notifier.notifyUser(loser, loserNotification);
+
+                } catch (RuntimeException e) {
+
+                    AUDIT.warn(
+                            "op=notifyLotteryLoser userId={} eventId={} result=error reason={}",
+                            loser,
+                            eventId,
+                            e.getMessage()
+                    );
+                }
+            }
+
+            return drawn;
         } catch (RuntimeException e) {
-
-            AUDIT.warn(
-                    "op=notifyLotteryWinner userId={} eventId={} result=error reason={}",
-                    winner,
-                    eventId,
-                    e.getMessage()
-            );
+            AUDIT.warn("op=runEventLottery eventId={} result=error error={}", eventId, e.getMessage());
+            throw e;
         }
-    }
-
-    // notify losers
-    NotificationDTO loserNotification =
-            new NotificationDTO(
-                    NotificationType.LOTTERY_LOST,
-                    "Lottery results",
-                    "You were not selected in the lottery for event "
-                            + eventId
-                            + ".",
-                    Instant.now()
-            );
-
-    for (UUID loser : losers) {
-
-        try {
-
-            notifier.notifyUser(loser, loserNotification);
-
-        } catch (RuntimeException e) {
-
-            AUDIT.warn(
-                    "op=notifyLotteryLoser userId={} eventId={} result=error reason={}",
-                    loser,
-                    eventId,
-                    e.getMessage()
-            );
-        }
-    }
-
-    return drawn;
 
     }
     
