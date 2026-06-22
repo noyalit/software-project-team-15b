@@ -277,7 +277,6 @@ public class LotteryDomainServiceImpl implements ILotteryDomainService {
         }
 
         Set<UUID> losers = new HashSet<>(lottery.getEntries());
-        losers.removeAll(lottery.getWinners());
 
         return Set.copyOf(losers);
     }
