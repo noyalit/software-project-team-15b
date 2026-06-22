@@ -68,19 +68,19 @@ export default function OrderDetailsPage() {
   });
 
   const order = orderQuery.data;
+  const eventId = order?.eventId;
 
   // Resolve the UUIDs (event / area / seat) into real names via the event.
   const eventQuery = useQuery({
-    queryKey: ['event', order?.eventId],
+    queryKey: ['event', eventId],
     queryFn: async () => {
-      if (!order?.eventId) return null;
       const res = await http.get<ApiResponse<EventDTO>>(
-        `/api/events/${order.eventId}`
+        `/api/events/${eventId}`
       );
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? null;
     },
-    enabled: Boolean(order?.eventId),
+    enabled: Boolean(eventId),
   });
 
   const event = eventQuery.data ?? null;
