@@ -18,6 +18,14 @@ function extractUuids(text: string) {
   return m ? Array.from(new Set(m.map((x) => x.toLowerCase()))) : [];
 }
 
+function isPermissionChangedEventScoped(text: string) {
+  return /\bevent\b/i.test(text);
+}
+
+function isPermissionChangedCompanyScoped(text: string) {
+  return /\bcompany\b/i.test(text);
+}
+
 export default function NotificationsPage() {
   const notifications = useNotificationsStore((s) => s.notifications);
   const markAllRead = useNotificationsStore((s) => s.markAllRead);
@@ -31,7 +39,15 @@ export default function NotificationsPage() {
       if (n.type !== 'PERMISSION_CHANGED' && n.type !== 'COMPANY_CLOSED' && n.type !== 'COMPANY_SUSPENDED') {
         continue;
       }
-      for (const id of extractUuids(`${n.title} ${n.message}`)) ids.add(id);
+
+      const text = `${n.title} ${n.message}`;
+      if (n.type === 'PERMISSION_CHANGED') {
+        if (!isPermissionChangedCompanyScoped(text) || isPermissionChangedEventScoped(text)) {
+          continue;
+        }
+      }
+
+      for (const id of extractUuids(text)) ids.add(id);
     }
     return Array.from(ids);
   }, [notifications]);
@@ -44,7 +60,12 @@ export default function NotificationsPage() {
         continue;
       }
 
-      for (const id of extractUuids(`${n.title} ${n.message}`)) {
+      const text = `${n.title} ${n.message}`;
+      if (!isPermissionChangedEventScoped(text) || isPermissionChangedCompanyScoped(text)) {
+        continue;
+      }
+
+      for (const id of extractUuids(text)) {
         ids.add(id);
       }
     }
