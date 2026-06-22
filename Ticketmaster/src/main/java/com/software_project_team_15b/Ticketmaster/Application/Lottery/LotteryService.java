@@ -36,6 +36,21 @@ public class LotteryService {
 
     private static final Logger AUDIT = LoggerFactory.getLogger("audit.lottery");
 
+    /** No-op notifier used by the backwards-compatible constructor. */
+    private static final INotifier NO_OP_NOTIFIER = new INotifier() {
+        @Override
+        public void notifyUser(UUID userId, NotificationDTO notification) {}
+
+        @Override
+        public void notifyCompanyManagers(UUID companyId, NotificationDTO notification) {}
+
+        @Override
+        public void notifyEventManagers(UUID eventId, NotificationDTO notification) {}
+
+        @Override
+        public void notifyEventAttendees(UUID eventId, NotificationDTO notification) {}
+    };
+
     private final ILotteryDomainService lotteryDomainService;
     private final UserDomainService userDomainService;
     private final IAuth auth;
@@ -53,19 +68,7 @@ public class LotteryService {
      * Delegates to the primary constructor with a no-op notifier implementation.
      */
     public LotteryService(ILotteryDomainService lotteryDomainService, UserDomainService userDomainService,  IAuth auth) {
-        this(lotteryDomainService, userDomainService, auth, new INotifier() {
-            @Override
-            public void notifyUser(UUID userId, NotificationDTO notification) {}
-
-            @Override
-            public void notifyCompanyManagers(UUID companyId, NotificationDTO notification) {}
-
-            @Override
-            public void notifyEventManagers(UUID eventId, NotificationDTO notification) {}
-
-            @Override
-            public void notifyEventAttendees(UUID eventId, NotificationDTO notification) {}
-        });
+        this(lotteryDomainService, userDomainService, auth, NO_OP_NOTIFIER);
     }
 
     /**
@@ -205,22 +208,22 @@ public class LotteryService {
     );
 
     // notify winners
+    NotificationDTO winnerNotification =
+            new NotificationDTO(
+                    NotificationType.LOTTERY_WON,
+                    "You won the lottery",
+                    "You won the lottery for event "
+                            + eventId
+                            + ". Access expires at "
+                            + expirationTime,
+                    Instant.now()
+            );
+
     for (UUID winner : drawn) {
 
         try {
 
-            NotificationDTO dto =
-                    new NotificationDTO(
-                            NotificationType.LOTTERY_WON,
-                            "You won the lottery",
-                            "You won the lottery for event "
-                                    + eventId
-                                    + ". Access expires at "
-                                    + expirationTime,
-                            Instant.now()
-                    );
-
-            notifier.notifyUser(winner, dto);
+            notifier.notifyUser(winner, winnerNotification);
 
         } catch (RuntimeException e) {
 
@@ -234,21 +237,21 @@ public class LotteryService {
     }
 
     // notify losers
+    NotificationDTO loserNotification =
+            new NotificationDTO(
+                    NotificationType.LOTTERY_LOST,
+                    "Lottery results",
+                    "You were not selected in the lottery for event "
+                            + eventId
+                            + ".",
+                    Instant.now()
+            );
+
     for (UUID loser : losers) {
 
         try {
 
-            NotificationDTO dto =
-                    new NotificationDTO(
-                            NotificationType.LOTTERY_LOST,
-                            "Lottery results",
-                            "You were not selected in the lottery for event "
-                                    + eventId
-                                    + ".",
-                            Instant.now()
-                    );
-
-            notifier.notifyUser(loser, dto);
+            notifier.notifyUser(loser, loserNotification);
 
         } catch (RuntimeException e) {
 
