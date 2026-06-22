@@ -6,9 +6,13 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompany
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.Money;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
+import com.software_project_team_15b.Ticketmaster.Domain.policy.IDiscountPolicy;
+import com.software_project_team_15b.Ticketmaster.Domain.policy.PolicyContext;
+import com.software_project_team_15b.Ticketmaster.Domain.policy.SumDiscountPolicy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
@@ -24,33 +28,14 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         this.companyRepository = Objects.requireNonNull(companyRepository, "companyRepository cannot be null");
     }
 
-    /** {@inheritDoc} */
-    @Override
-    @Transactional(readOnly = true)
-    public Money cheapestPriceFor(UUID companyId, Money subtotal, PurchaseRequest request) {
-        if (companyId == null) {
-            throw new IllegalArgumentException("companyId cannot be null");
-        }
-        if (subtotal == null) {
-            throw new IllegalArgumentException("subtotal cannot be null");
-        }
-        if (request == null) {
-            throw new IllegalArgumentException("request cannot be null");
-        }
-        Optional<Company> opt = companyRepository.findById(companyId);
-        if (opt.isEmpty()) return subtotal;
-        Company company = opt.get();
-        Money best = subtotal;
-        for (ICompanyDiscountPolicy policy : company.getDiscountPolicies()) {
-            Money candidate = policy.apply(subtotal, request);
-            if (candidate != null && candidate.amount().compareTo(best.amount()) < 0) {
-                best = candidate;
-            }
-        }
-        return best;
-    }
-
-    /** {@inheritDoc} */
+    /**
+     * {@inheritDoc}
+     * <p>The company's discount policies are <strong>stacked</strong> as a multiplicative
+     * cascade (כפל הנחות): each policy is applied to the running price left by its
+     * predecessors, mirroring an event whose root is a {@code SumDiscountPolicy}. To get
+     * "best single discount wins" semantics instead, configure the company with a single
+     * {@code MaxDiscountPolicy} root.
+     */
     @Override
     @Transactional(readOnly = true)
     public Money discountAmountFor(UUID companyId, Money subtotal, PurchaseRequest request) {
@@ -63,18 +48,26 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         if (request == null) {
             throw new IllegalArgumentException("request cannot be null");
         }
-        Money cheapest = cheapestPriceFor(companyId, subtotal, request);
-        return subtotal.subtract(cheapest);
+        Optional<Company> opt = companyRepository.findById(companyId);
+        if (opt.isEmpty()) return Money.zero(subtotal.currency());
+        Company company = opt.get();
+        List<ICompanyDiscountPolicy> policies = company.getDiscountPolicies();
+        if (policies.isEmpty()) return Money.zero(subtotal.currency());
+        SumDiscountPolicy combined = new SumDiscountPolicy(new ArrayList<IDiscountPolicy>(policies));
+        Money discount = combined.discount(subtotal, PolicyContext.of(request, company));
+        return IDiscountPolicy.clamp(discount, subtotal);
     }
 
     /**
      * {@inheritDoc}
-     * <p>This implementation always returns {@link DiscountCombineStrategy#SUM}.
+     * <p>This implementation always returns {@link DiscountCombineStrategy#CASCADE}, so the
+     * event-level and company-level discounts stack multiplicatively (as a single cascade)
+     * rather than as a sum of independent amounts.
      */
     @Override
     @Transactional(readOnly = true)
     public DiscountCombineStrategy discountCombineStrategyFor(UUID companyId) {
-        return DiscountCombineStrategy.SUM;
+        return DiscountCombineStrategy.CASCADE;
     }
 
     /** {@inheritDoc} */
@@ -206,6 +199,25 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
     }
 
     /**
+     * {@inheritDoc}
+     * <p>Status enforcement is delegated to {@link Company#replacePurchasePolicies}, which throws
+     * {@link IllegalStateException} when the company is not {@link CompanyStatus#ACTIVE}.
+     */
+    @Override
+    @Transactional
+    public Company replacePurchasePolicies(UUID companyId, List<ICompanyPurchasePolicy> policies) {
+        if (companyId == null) {
+            throw new IllegalArgumentException("companyId cannot be null");
+        }
+        if (policies == null) {
+            throw new IllegalArgumentException("policies cannot be null");
+        }
+        Company company = getCompanyOrThrow(companyId);
+        company.replacePurchasePolicies(policies);
+        return companyRepository.save(company);
+    }
+
+    /**
      * Replaces the company's discount policy. The company must be {@link CompanyStatus#ACTIVE}.
      *
      * @param companyId the target company's id; must not be null
@@ -226,6 +238,30 @@ public class CompanyDomainServiceImpl implements ICompanyDomainService {
         }
         Company company = getCompanyOrThrow(companyId);
         company.updateDiscountPolicy(policy);
+        return companyRepository.save(company);
+    }
+
+    /**
+     * Replaces the company's entire discount-policy chain. The company must be {@link CompanyStatus#ACTIVE}.
+     *
+     * @param companyId the target company's id; must not be null
+     * @param policies  the new discount-policy chain; must not be null
+     * @return the updated, persisted company
+     * @throws IllegalArgumentException if {@code companyId} or {@code policies} is null
+     * @throws IllegalStateException    if the company is not active
+     * @throws CompanyNotFoundException if no company exists with the given id
+     */
+    @Override
+    @Transactional
+    public Company replaceDiscountPolicies(UUID companyId, List<ICompanyDiscountPolicy> policies) {
+        if (companyId == null) {
+            throw new IllegalArgumentException("companyId cannot be null");
+        }
+        if (policies == null) {
+            throw new IllegalArgumentException("policies cannot be null");
+        }
+        Company company = getCompanyOrThrow(companyId);
+        company.replaceDiscountPolicies(policies);
         return companyRepository.save(company);
     }
 

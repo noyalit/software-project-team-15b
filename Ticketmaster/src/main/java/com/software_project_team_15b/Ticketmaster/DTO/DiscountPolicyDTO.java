@@ -1,5 +1,6 @@
 package com.software_project_team_15b.Ticketmaster.DTO;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.CouponDiscountPolicy;
@@ -20,13 +21,17 @@ import java.time.Instant;
  *   { "type": "COUPON", "code": "SUMMER25", "percentage": 25, "expiresAt": "2026-08-31T23:59:59Z" }
  *   { "type": "EARLY_BIRD", "percentage": 10, "until": "2026-06-01T00:00:00Z" }
  * </pre>
+
  */
-@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.EXISTING_PROPERTY, property = "type", visible = false)
 @JsonSubTypes({
         @JsonSubTypes.Type(value = DiscountPolicyDTO.Coupon.class, name = "COUPON"),
         @JsonSubTypes.Type(value = DiscountPolicyDTO.EarlyBird.class, name = "EARLY_BIRD")
 })
 public sealed interface DiscountPolicyDTO {
+
+    @JsonProperty("type")
+    String type();
 
     IEventDiscountPolicy toDomain();
 
@@ -43,12 +48,24 @@ public sealed interface DiscountPolicyDTO {
 
     record Coupon(String code, BigDecimal percentage, Instant expiresAt) implements DiscountPolicyDTO {
         @Override
+        @JsonProperty("type")
+        public String type() {
+            return "COUPON";
+        }
+
+        @Override
         public IEventDiscountPolicy toDomain() {
             return new CouponDiscountPolicy(code, percentage, expiresAt);
         }
     }
 
     record EarlyBird(BigDecimal percentage, Instant until) implements DiscountPolicyDTO {
+        @Override
+        @JsonProperty("type")
+        public String type() {
+            return "EARLY_BIRD";
+        }
+
         @Override
         public IEventDiscountPolicy toDomain() {
             return new EarlyBirdDiscountPolicy(percentage, until);

@@ -14,7 +14,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import org.mockito.Mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -34,6 +36,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompany
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -514,6 +517,35 @@ class CompanyServiceBlackTest {
         assertThatThrownBy(() -> service.suspendCompany(founderToken, dto.companyId()))
                 .isInstanceOf(UnauthorizedCompanyActionException.class)
                 .hasMessageContaining("system admin");
+    }
+
+    @Test
+    void suspendCompany_calls_cancelAllAppointments() {
+        UUID adminId = UUID.randomUUID();
+        String adminToken = registerSystemAdmin(adminId);
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+
+        service.suspendCompany(adminToken, dto.companyId());
+
+        verify(userDomainService).cancelAllAppointments(eq(dto.companyId()));
+    }
+
+    @Test
+    void suspendCompany_cancels_events_in_company() {
+        UUID adminId = UUID.randomUUID();
+        String adminToken = registerSystemAdmin(adminId);
+        UUID founderId = UUID.randomUUID();
+        String founderToken = registerMember(founderId);
+        CompanyDTO dto = service.createCompany(founderToken, "Acme");
+        UUID eventId = UUID.randomUUID();
+        EventDTO evt = new EventDTO(eventId, dto.companyId(), null, null, null, null, null, null, List.of());
+        when(eventDomainService.searchInCompany(eq(dto.companyId()), any())).thenReturn(List.of(evt));
+
+        service.suspendCompany(adminToken, dto.companyId());
+
+        verify(eventDomainService).cancel(eventId);
     }
 
     // ===========================================================================================

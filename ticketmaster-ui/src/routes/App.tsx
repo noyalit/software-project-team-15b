@@ -16,6 +16,7 @@ import CompanyPage from '../screens/CompanyPage';
 import AdminEventQueuesPage from '../screens/AdminEventQueuesPage';
 import MyEventsPage from '../screens/MyEventsPage';
 import OrdersPage from '../screens/OrdersPage';
+import OrderDetailsPage from '../screens/OrderDetailsPage';
 import CheckoutPage from '../screens/CheckoutPage';
 import WaitQueuePage from '../screens/WaitQueuePage';
 import CompanyOrdersPage from '../screens/CompanyOrdersPage';
@@ -31,6 +32,7 @@ export default function App() {
         <Route path="/events" element={<EventSearchPage />} />
         <Route path="/events/:eventId" element={<EventDetailsPage />} />
         <Route path="/orders" element={<OrdersPage />} />
+        <Route path="/orders/:orderId" element={<OrderDetailsPage />} />
         <Route path="/checkout/:orderId" element={<CheckoutPage />} />
         <Route path="/queue/:eventId" element={<WaitQueuePage />} />
 

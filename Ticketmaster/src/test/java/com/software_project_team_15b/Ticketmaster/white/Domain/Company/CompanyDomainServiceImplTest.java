@@ -66,98 +66,57 @@ class CompanyDomainServiceImplTest {
     }
 
     // ===========================================================================================
-    // cheapestPriceFor — positive
+    // cheapestPriceFor was a thin wrapper over discountAmountFor and has been removed;
+    // its unique scenarios are asserted directly against discountAmountFor here. The
+    // not-found / null-argument cases are covered by the discountAmountFor section below.
 
     @Test
-    void cheapestPriceFor_returns_subtotal_when_company_not_found() {
-        when(repo.findById(any())).thenReturn(Optional.empty());
-        Money subtotal = Money.of("100.00", "USD");
-
-        assertThat(service.cheapestPriceFor(UUID.randomUUID(), subtotal, makeRequest()))
-                .isEqualTo(subtotal);
-    }
-
-    @Test
-    void cheapestPriceFor_returns_subtotal_when_no_discount_policies() {
+    void discountAmountFor_returns_zero_when_company_present_but_no_discount_policies() {
         Company company = new Company("Acme", UUID.randomUUID());
         when(repo.findById(any())).thenReturn(Optional.of(company));
         Money subtotal = Money.of("100.00", "USD");
 
-        assertThat(service.cheapestPriceFor(UUID.randomUUID(), subtotal, makeRequest()))
-                .isEqualTo(subtotal);
+        assertThat(service.discountAmountFor(UUID.randomUUID(), subtotal, makeRequest()).amount())
+                .isEqualByComparingTo(java.math.BigDecimal.ZERO);
     }
 
     @Test
-    void cheapestPriceFor_returns_discounted_price_when_policy_applies() {
-        Company company = new Company("Acme", UUID.randomUUID());
-        company.updateDiscountPolicy((subtotal, req) -> subtotal.subtract(subtotal.percent(new BigDecimal("10"))));
-        when(repo.findById(any())).thenReturn(Optional.of(company));
-        Money subtotal = Money.of("100.00", "USD");
-
-        Money result = service.cheapestPriceFor(UUID.randomUUID(), subtotal, makeRequest());
-
-        assertThat(result.amount()).isLessThan(subtotal.amount());
-    }
-
-    @Test
-    void cheapestPriceFor_picks_minimum_across_multiple_discount_policies() {
+    void discountAmountFor_stacks_multiple_fixed_amount_policies() {
         Company company = new Company("Acme", UUID.randomUUID());
         ICompanyDiscountPolicy twentyOff = (subtotal, ctx) -> Money.of("20.00", "USD");
         ICompanyDiscountPolicy tenOff = (subtotal, ctx) -> Money.of("10.00", "USD");
         setDiscountPolicies(company, List.of(twentyOff, tenOff));
         when(repo.findById(any())).thenReturn(Optional.of(company));
 
-        Money result = service.cheapestPriceFor(UUID.randomUUID(), Money.of("100.00", "USD"), makeRequest());
+        Money discount = service.discountAmountFor(UUID.randomUUID(), Money.of("100.00", "USD"), makeRequest());
 
-        assertThat(result).isEqualTo(Money.of("80.00", "USD"));
+        // Discounts stack as a cascade: 100 - 20 = 80, then 80 - 10 = 70 -> discount 30.
+        assertThat(discount).isEqualTo(Money.of("30.00", "USD"));
     }
 
     @Test
-    void cheapestPriceFor_skips_policy_that_returns_null() {
+    void discountAmountFor_skips_policy_that_returns_null() {
         Company company = new Company("Acme", UUID.randomUUID());
         company.updateDiscountPolicy((subtotal, req) -> null);
         when(repo.findById(any())).thenReturn(Optional.of(company));
         Money subtotal = Money.of("100.00", "USD");
 
-        assertThat(service.cheapestPriceFor(UUID.randomUUID(), subtotal, makeRequest()))
-                .isEqualTo(subtotal);
+        assertThat(service.discountAmountFor(UUID.randomUUID(), subtotal, makeRequest()).amount())
+                .isEqualByComparingTo(java.math.BigDecimal.ZERO);
     }
 
     @Test
-    void cheapestPriceFor_does_not_raise_price_above_subtotal() {
+    void discountAmountFor_clamps_negative_policy_to_zero() {
         Company company = new Company("Acme", UUID.randomUUID());
         // misbehaving policy returns a negative "discount" that would otherwise
-        // add to the final price; the clamp must treat it as no discount.
+        // raise the final price; the clamp must treat it as no discount.
         company.updateDiscountPolicy((subtotal, ctx) ->
                 Money.of("-50.00", subtotal.currency()));
         when(repo.findById(any())).thenReturn(Optional.of(company));
         Money subtotal = Money.of("100.00", "USD");
 
-        assertThat(service.cheapestPriceFor(UUID.randomUUID(), subtotal, makeRequest()))
-                .isEqualTo(subtotal);
-    }
-
-    // cheapestPriceFor — negative
-
-    @Test
-    void cheapestPriceFor_throws_when_companyId_is_null() {
-        assertThatThrownBy(() -> service.cheapestPriceFor(null, Money.of("10.00", "USD"), makeRequest()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("companyId");
-    }
-
-    @Test
-    void cheapestPriceFor_throws_when_subtotal_is_null() {
-        assertThatThrownBy(() -> service.cheapestPriceFor(UUID.randomUUID(), null, makeRequest()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("subtotal");
-    }
-
-    @Test
-    void cheapestPriceFor_throws_when_request_is_null() {
-        assertThatThrownBy(() -> service.cheapestPriceFor(UUID.randomUUID(), Money.of("10.00", "USD"), null))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("request");
+        assertThat(service.discountAmountFor(UUID.randomUUID(), subtotal, makeRequest()).amount())
+                .isEqualByComparingTo(java.math.BigDecimal.ZERO);
     }
 
     // ===========================================================================================
@@ -460,7 +419,7 @@ class CompanyDomainServiceImplTest {
     // Concurrency
 
     @Test
-    void concurrent_cheapestPriceFor_does_not_throw() throws Exception {
+    void concurrent_discountAmountFor_does_not_throw() throws Exception {
         Company company = new Company("Acme", UUID.randomUUID());
         company.updateDiscountPolicy((subtotal, req) -> subtotal.subtract(Money.of("5.00", "USD")));
         when(repo.findById(any())).thenReturn(Optional.of(company));
@@ -476,7 +435,7 @@ class CompanyDomainServiceImplTest {
             pool.submit(() -> {
                 try {
                     start.await();
-                    service.cheapestPriceFor(companyId, subtotal, makeRequest());
+                    service.discountAmountFor(companyId, subtotal, makeRequest());
                 } catch (Exception e) {
                     failures.incrementAndGet();
                 }
@@ -560,6 +519,22 @@ class CompanyDomainServiceImplTest {
     }
 
     @Test
+    void discountAmountFor_stacks_percentage_policies_as_cascade() {
+        Company company = new Company("Acme", UUID.randomUUID());
+        // 20%, then 12%, then 30% — applied as a cascade on the running price.
+        setDiscountPolicies(company, List.of(
+                new com.software_project_team_15b.Ticketmaster.Domain.policy.SimpleDiscountPolicy(new BigDecimal("20")),
+                new com.software_project_team_15b.Ticketmaster.Domain.policy.SimpleDiscountPolicy(new BigDecimal("12")),
+                new com.software_project_team_15b.Ticketmaster.Domain.policy.SimpleDiscountPolicy(new BigDecimal("30"))));
+        when(repo.findById(any())).thenReturn(Optional.of(company));
+
+        Money discount = service.discountAmountFor(UUID.randomUUID(), Money.of("150.00", "USD"), makeRequest());
+
+        // 150 -20% = 120, -12% = 105.60, -30% = 73.92 -> discount 76.08 (not the 45 a max-single rule gives).
+        assertThat(discount).isEqualTo(Money.of("76.08", "USD"));
+    }
+
+    @Test
     void discountAmountFor_returns_positive_discount_when_policy_applies() {
         Company company = new Company("Acme", UUID.randomUUID());
         company.updateDiscountPolicy((subtotal, req) -> subtotal.subtract(subtotal.percent(new java.math.BigDecimal("10"))));
@@ -573,9 +548,9 @@ class CompanyDomainServiceImplTest {
     // discountCombineStrategyFor
 
     @Test
-    void discountCombineStrategyFor_returns_SUM() {
+    void discountCombineStrategyFor_returns_CASCADE() {
         assertThat(service.discountCombineStrategyFor(UUID.randomUUID()))
-                .isEqualTo(DiscountCombineStrategy.SUM);
+                .isEqualTo(DiscountCombineStrategy.CASCADE);
     }
 
     // ===========================================================================================

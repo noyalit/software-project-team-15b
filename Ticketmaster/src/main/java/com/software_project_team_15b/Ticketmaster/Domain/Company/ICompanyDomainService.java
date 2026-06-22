@@ -12,31 +12,18 @@ import java.util.UUID;
 
 public interface ICompanyDomainService {
     /**
-     * Returns the cheapest price the company is willing to offer for the given subtotal.
-     * Mirrors {@link com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy}
-     * but for the company side. The returned amount is clamped to the subtotal so a misbehaving
-     * policy cannot raise the price.
-     *
-     * @param companyId the owning company's id; must not be null
-     * @param subtotal  the base subtotal in the buyer's currency; must not be null
-     * @param request   the purchase request; must not be null
-     * @return the lowest price the company offers, never above {@code subtotal}, in {@code subtotal}'s currency
-     * @throws CompanyNotFoundException if the company does not exist
-     */
-    Money cheapestPriceFor(UUID companyId, Money subtotal, PurchaseRequest request);
-
-    /**
      * Aggregate discount AMOUNT (not post-discount price) produced by the company's
-     * discount policy tree for the given subtotal. Returns zero in the subtotal's
-     * currency when no policy applies or the company cannot be found.
+     * discount policies for the given subtotal. Multiple policies are stacked as a
+     * multiplicative cascade (each applied to the price left by its predecessors).
+     * Returns zero in the subtotal's currency when no policy applies or the company
+     * cannot be found.
      */
     Money discountAmountFor(UUID companyId, Money subtotal, PurchaseRequest request);
 
     /**
      * @return the company's configured strategy for combining event-level and
      *         company-level discounts, defaulting to
-     *         {@link com.software_project_team_15b.Ticketmaster.Domain.Company.DiscountCombineStrategy#SUM SUM}
-     *         when the company is unknown.
+     *         {@link com.software_project_team_15b.Ticketmaster.Domain.Company.DiscountCombineStrategy#CASCADE CASCADE}.
      */
     DiscountCombineStrategy discountCombineStrategyFor(UUID companyId);
 
@@ -101,6 +88,18 @@ public interface ICompanyDomainService {
     Company updatePurchasePolicy(UUID companyId, ICompanyPurchasePolicy policy);
 
     /**
+     * Replaces the company's entire purchase-policy chain. The company must be
+     * {@link CompanyStatus#ACTIVE}. Passing an empty list clears the chain.
+     *
+     * @param companyId the target company's id; must not be null
+     * @param policies  the new purchase-policy chain, in evaluation order; must not be null and must not contain nulls
+     * @return the updated, persisted company
+     * @throws CompanyNotFoundException if no company with {@code companyId} exists
+     * @throws IllegalStateException    if the company is not active
+     */
+    Company replacePurchasePolicies(UUID companyId, List<ICompanyPurchasePolicy> policies);
+
+    /**
      * Replaces the company's discount policy. The company must be {@link CompanyStatus#ACTIVE}.
      *
      * @param companyId the target company's id; must not be null
@@ -110,6 +109,18 @@ public interface ICompanyDomainService {
      * @throws IllegalStateException    if the company is not active
      */
     Company updateDiscountPolicy(UUID companyId, ICompanyDiscountPolicy policy);
+
+    /**
+     * Replaces the company's entire discount-policy chain. The company must be
+     * {@link CompanyStatus#ACTIVE}. Passing an empty list clears the chain.
+     *
+     * @param companyId the target company's id; must not be null
+     * @param policies  the new discount-policy chain, in evaluation order; must not be null and must not contain nulls
+     * @return the updated, persisted company
+     * @throws CompanyNotFoundException if no company with {@code companyId} exists
+     * @throws IllegalStateException    if the company is not active
+     */
+    Company replaceDiscountPolicies(UUID companyId, List<ICompanyDiscountPolicy> policies);
 
     /**
      * Transitions the company to the given status and persists the change.

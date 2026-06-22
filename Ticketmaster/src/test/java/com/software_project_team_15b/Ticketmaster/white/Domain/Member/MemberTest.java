@@ -211,7 +211,7 @@ class MemberTest {
     }
 
     @Test
-    void removeRole_shouldNullActiveRole_whenActiveRoleIsRemoved() {
+    void removeRole_shouldNullActiveRole_whenLastRoleIsRemoved() {
         Role role = new Owner(UUID.randomUUID(), UUID.randomUUID());
         member.addRole(role);
         assertEquals(role, member.getActiveRole());
@@ -220,6 +220,22 @@ class MemberTest {
 
         assertNull(member.getActiveRole());
         assertFalse(member.getAssignedRoles().contains(role));
+    }
+
+    @Test
+    void removeRole_shouldPromoteSurvivingRole_whenActiveRoleIsRemovedButOthersRemain() {
+        Role active = new Owner(UUID.randomUUID(), UUID.randomUUID());
+        Role survivor = new Owner(UUID.randomUUID(), UUID.randomUUID());
+        member.addRole(active);
+        member.addRole(survivor);
+        assertEquals(active, member.getActiveRole());
+
+        member.removeRole(active);
+
+        assertNotNull(member.getActiveRole());
+        assertEquals(survivor, member.getActiveRole());
+        assertFalse(member.getAssignedRoles().contains(active));
+        assertTrue(member.getAssignedRoles().contains(survivor));
     }
 
     @Test
