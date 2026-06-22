@@ -8,6 +8,7 @@ import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryService;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
@@ -41,6 +42,7 @@ class LotteryServiceBlackTest {
 
     @Mock private ILotteryDomainService lotteryDomainService;
     @Mock private UserDomainService userDomainService;
+    @Mock private IEventRepository eventRepository;
     @Mock private IAuth auth;
     @Mock private INotifier notifier;
     @InjectMocks private LotteryService service;
@@ -401,19 +403,31 @@ class LotteryServiceBlackTest {
 
     @Test
     void constructor_throws_when_lotteryDomainService_is_null() {
-        assertThatThrownBy(() -> new LotteryService(null, userDomainService, auth, notifier))
+        assertThatThrownBy(() -> new LotteryService(null, userDomainService, eventRepository, auth, notifier))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_userDomainService_is_null() {
-        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, null, auth, notifier))
+        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, null, eventRepository, auth, notifier))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void constructor_throws_when_eventRepository_is_null() {
+        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, userDomainService, null, auth, notifier))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_auth_is_null() {
-        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, userDomainService, null, notifier))
+        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, userDomainService, eventRepository, null, notifier))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void constructor_throws_when_notifier_is_null() {
+        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, userDomainService, eventRepository, auth, null))
                 .isInstanceOf(NullPointerException.class);
     }
 

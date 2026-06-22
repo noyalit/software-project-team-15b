@@ -19,6 +19,8 @@ import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.Event;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Notification.NotificationType;
@@ -38,12 +40,14 @@ public class LotteryService {
 
     private final ILotteryDomainService lotteryDomainService;
     private final UserDomainService userDomainService;
+    private final IEventRepository eventRepository;
     private final IAuth auth;
     private final INotifier notifier;
     @Autowired
-    public LotteryService(ILotteryDomainService lotteryDomainService, UserDomainService userDomainService,  IAuth auth, INotifier notifier) {
+    public LotteryService(ILotteryDomainService lotteryDomainService, UserDomainService userDomainService, IEventRepository eventRepository, IAuth auth, INotifier notifier) {
         this.lotteryDomainService = Objects.requireNonNull(lotteryDomainService);
         this.userDomainService = Objects.requireNonNull(userDomainService);
+        this.eventRepository = Objects.requireNonNull(eventRepository);
         this.auth = Objects.requireNonNull(auth);
         this.notifier = Objects.requireNonNull(notifier);
     }
@@ -173,6 +177,13 @@ public class LotteryService {
                             expirationTime
                     );
 
+            String eventLabel = eventId.toString();
+            try {
+                eventLabel = eventRepository.findById(eventId)
+                        .map(Event::name)
+                        .orElse(eventLabel);
+            } catch (RuntimeException ignored) {}
+
             Set<UUID> losers;
             try {
                 losers = Objects.requireNonNullElse(
@@ -201,7 +212,7 @@ public class LotteryService {
                             NotificationType.LOTTERY_WON,
                             "You won the lottery",
                             "You won the lottery for event "
-                                    + eventId
+                                    + eventLabel
                                     + ". Access expires at "
                                     + expirationTime,
                             Instant.now()
@@ -230,7 +241,7 @@ public class LotteryService {
                             NotificationType.LOTTERY_LOST,
                             "Lottery results",
                             "You were not selected in the lottery for event "
-                                    + eventId
+                                    + eventLabel
                                     + ".",
                             Instant.now()
                     );
