@@ -7,6 +7,7 @@ import type {
   CompanyDTO,
   DiscountPolicyDTO,
   EventDTO,
+  MemberDTO,
   PurchasePolicyDTO,
 } from '../api/types';
 import { getApiErrorMessage } from '../api/errors';
@@ -184,6 +185,13 @@ export default function EventDetailsPage() {
     if (!eventId) throw new Error('Event ID is missing.');
     if (!input.areaId) throw new Error('Area ID is missing.');
     if (!input.quantity || input.quantity < 1) throw new Error('Quantity must be at least 1.');
+    if (userType === 'member' && meQuery.isPending) {
+      throw new Error('Loading your profile. Please try again in a moment.');
+    }
+
+    if (userType === 'member' && !meQuery.data?.birthDate) {
+      throw new Error('Birth date is missing from your profile.');
+    }
 
     try {
       const res = await http.post<ApiResponse<null>>(`/api/events/${eventId}/eligibility`, {
@@ -295,7 +303,7 @@ export default function EventDetailsPage() {
   const meQuery = useQuery({
     queryKey: ['me', token],
     queryFn: async () => {
-      const res = await http.get<ApiResponse<{ birthDate?: string }>>('/api/users/me');
+      const res = await http.get<ApiResponse<MemberDTO>>('/api/users/me');
 
       if (res.data.error) throw new Error(res.data.error);
       if (!res.data.data) throw new Error('No profile data');
@@ -707,6 +715,7 @@ export default function EventDetailsPage() {
     startCheckoutMutation.error 
 
   const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
+  const isMemberProfileLoading = userType === 'member' && meQuery.isPending;
 
   const toggleSeat = (seatId: string) => {
     setSelectedSeatIds((prev) =>
@@ -1092,6 +1101,7 @@ export default function EventDetailsPage() {
               disabled={
                 Boolean(activeOrderId) ||
                 !token ||
+                isMemberProfileLoading ||
                 event.status !== 'PUBLISHED' ||
                 (userType === 'member' &&
                   eligibilityStatus !== null &&
@@ -1117,7 +1127,13 @@ export default function EventDetailsPage() {
                     setSuccessMessage(null);
                     addSeatsMutation.mutate();
                   }}
-                  disabled={!activeOrderId || checkoutStarted || selectedSeatIds.length === 0 || addSeatsMutation.isPending}
+                  disabled={
+                    !activeOrderId ||
+                    checkoutStarted ||
+                    selectedSeatIds.length === 0 ||
+                    addSeatsMutation.isPending ||
+                    isMemberProfileLoading
+                  }
                   className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
                 >
                   {addSeatsMutation.isPending ? 'Adding...' : 'Add selected seats'}
@@ -1143,7 +1159,12 @@ export default function EventDetailsPage() {
                     setSuccessMessage(null);
                     addStandingQuantityMutation.mutate();
                   }}
-                  disabled={!activeOrderId || checkoutStarted || addStandingQuantityMutation.isPending}
+                  disabled={
+                    !activeOrderId ||
+                    checkoutStarted ||
+                    addStandingQuantityMutation.isPending ||
+                    isMemberProfileLoading
+                  }
                   className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
                 >
                   {addStandingQuantityMutation.isPending ? 'Adding...' : 'Add tickets'}
@@ -1284,7 +1305,11 @@ export default function EventDetailsPage() {
                 setSuccessMessage(null);
                 startCheckoutMutation.mutate();
               }}
-              disabled={startCheckoutMutation.isPending || checkoutStarted}
+              disabled={
+                startCheckoutMutation.isPending ||
+                checkoutStarted ||
+                isMemberProfileLoading
+              }
               className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
             >
               {checkoutStarted ? 'Checkout started' : 'Start checkout'}
