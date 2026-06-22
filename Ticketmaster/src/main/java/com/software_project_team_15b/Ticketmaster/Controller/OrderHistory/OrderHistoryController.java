@@ -54,6 +54,27 @@ public class OrderHistoryController {
         }
     }
 
+    @Operation(summary = "Get a single order")
+    @GetMapping("/{orderId}")
+    public ResponseEntity<ApiResponse<OrderHistoryDTO>> getOrder(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @PathVariable UUID orderId
+    ) {
+        try {
+
+            OrderHistoryDTO order =
+                    orderHistoryService.getOrderById(token, orderId);
+
+            return ResponseEntity.ok(new ApiResponse<>(order, null));
+
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     @Operation(summary = "Get all orders in the system (admin only)")
     @GetMapping("/admin/all")
     public ResponseEntity<ApiResponse<List<OrderHistoryDTO>>> getAllOrders(
