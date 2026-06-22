@@ -219,6 +219,51 @@ public class OrderHistoryService implements EventSubscriber{
     }
 
     @Transactional(readOnly = true)
+    public OrderHistoryDTO getOrderById(String token, UUID orderId) {
+        UUID callerId = null;
+
+        try {
+            if (token == null) {
+                throw new IllegalArgumentException("token cannot be null");
+            }
+
+            if (orderId == null) {
+                throw new IllegalArgumentException("orderId cannot be null");
+            }
+
+            validateUser(token);
+
+            if (!auth.isMember(token)) {
+                throw new IllegalArgumentException("User must be a member");
+            }
+
+            callerId = auth.extractUserId(token);
+
+            OrderHistory order = orderHistoryRepository.findById(orderId)
+                    .orElseThrow(() ->
+                            new IllegalArgumentException("Order not found"));
+
+            if (!order.getUserId().equals(callerId)) {
+                throw new IllegalArgumentException("Order not found");
+            }
+
+            AUDIT.info("op=getOrderById callerId={} orderId={}", callerId, orderId);
+
+            return OrderHistoryDTO.from(order);
+
+        } catch (RuntimeException e) {
+            AUDIT.warn(
+                    "op=getOrderById callerId={} orderId={} result=error reason={}",
+                    callerId,
+                    orderId,
+                    e.getMessage(),
+                    e);
+
+            throw e;
+        }
+    }
+
+    @Transactional(readOnly = true)
     public List<OrderHistoryDTO> getGlobalOrderHistoryAll(String token) {
         UUID callerId = null;
         try {

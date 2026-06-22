@@ -39,32 +39,48 @@ export default function OrderDetailsPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const { token } = useAuthStore();
 
-  // Reuse the existing order-history endpoint and pick the requested order.
   const orderQuery = useQuery({
-    queryKey: ['order-history', 'my-orders', token],
+    queryKey: ['order-history', orderId, token],
     queryFn: async () => {
-      const res = await http.get<ApiResponse<OrderHistoryDTO[]>>(
-        '/api/order-history/my-orders'
-      );
-      if (res.data.error) throw new Error(res.data.error);
-      return res.data.data ?? [];
+      try {
+        const res = await http.get<ApiResponse<OrderHistoryDTO | null>>(
+          `/api/order-history/${orderId}`
+        );
+
+        if (res.data.error === 'Order not found') {
+          return null;
+        }
+
+        if (res.data.error) {
+          throw new Error(res.data.error);
+        }
+
+        return res.data.data ?? null;
+      } catch (e: unknown) {
+        const msg = getApiErrorMessage(e);
+        if (msg === 'Order not found') {
+          return null;
+        }
+        throw e;
+      }
     },
-    enabled: Boolean(token),
+    enabled: Boolean(token && orderId),
   });
 
-  const order = (orderQuery.data ?? []).find((o) => o.orderId === orderId);
+  const order = orderQuery.data;
+  const eventId = order?.eventId;
 
   // Resolve the UUIDs (event / area / seat) into real names via the event.
   const eventQuery = useQuery({
-    queryKey: ['event', order?.eventId],
+    queryKey: ['event', eventId],
     queryFn: async () => {
       const res = await http.get<ApiResponse<EventDTO>>(
-        `/api/events/${order!.eventId}`
+        `/api/events/${eventId}`
       );
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? null;
     },
-    enabled: Boolean(order?.eventId),
+    enabled: Boolean(eventId),
   });
 
   const event = eventQuery.data ?? null;
