@@ -36,21 +36,6 @@ public class LotteryService {
 
     private static final Logger AUDIT = LoggerFactory.getLogger("audit.lottery");
 
-    /** No-op notifier used by the backwards-compatible constructor. */
-    private static final INotifier NO_OP_NOTIFIER = new INotifier() {
-        @Override
-        public void notifyUser(UUID userId, NotificationDTO notification) {}
-
-        @Override
-        public void notifyCompanyManagers(UUID companyId, NotificationDTO notification) {}
-
-        @Override
-        public void notifyEventManagers(UUID eventId, NotificationDTO notification) {}
-
-        @Override
-        public void notifyEventAttendees(UUID eventId, NotificationDTO notification) {}
-    };
-
     private final ILotteryDomainService lotteryDomainService;
     private final UserDomainService userDomainService;
     private final IAuth auth;
@@ -61,14 +46,6 @@ public class LotteryService {
         this.userDomainService = Objects.requireNonNull(userDomainService);
         this.auth = Objects.requireNonNull(auth);
         this.notifier = Objects.requireNonNull(notifier);
-    }
-
-    /**
-     * Backwards-compatible constructor used by tests that don't supply a notifier.
-     * Delegates to the primary constructor with a no-op notifier implementation.
-     */
-    public LotteryService(ILotteryDomainService lotteryDomainService, UserDomainService userDomainService,  IAuth auth) {
-        this(lotteryDomainService, userDomainService, auth, NO_OP_NOTIFIER);
     }
 
     /**

@@ -373,19 +373,19 @@ class LotteryServiceWhiteTest {
 
     @Test
     void constructor_throws_when_lotteryDomainService_is_null() {
-        assertThatThrownBy(() -> new LotteryService(null, userDomainService, auth))
+        assertThatThrownBy(() -> new LotteryService(null, userDomainService, auth, notifier))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_userDomainService_is_null() {
-        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, null, auth))
+        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, null, auth, notifier))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_auth_is_null() {
-        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, userDomainService, null))
+        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, userDomainService, null, notifier))
                 .isInstanceOf(NullPointerException.class);
     }
 
