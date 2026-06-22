@@ -8,8 +8,10 @@ import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Lottery.LotteryService;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.LotteryEligibilityStatus;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Lottery.ILotteryDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
+import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -40,7 +42,9 @@ class LotteryServiceBlackTest {
 
     @Mock private ILotteryDomainService lotteryDomainService;
     @Mock private UserDomainService userDomainService;
+    @Mock private IEventRepository eventRepository;
     @Mock private IAuth auth;
+    @Mock private INotifier notifier;
     @InjectMocks private LotteryService service;
 
     private static final UUID EVENT_ID   = UUID.fromString("00000000-0000-0000-0000-000000000001");
@@ -177,6 +181,7 @@ class LotteryServiceBlackTest {
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(EVENT_ID, 1, EXPIRY)).thenReturn(expected);
+        when(lotteryDomainService.getEventLotteryLosers(EVENT_ID)).thenReturn(Set.of(USER_B));
 
         assertThat(service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 1, EXPIRY))
                 .containsExactlyInAnyOrderElementsOf(expected);
@@ -188,8 +193,22 @@ class LotteryServiceBlackTest {
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(EVENT_ID, 5, EXPIRY)).thenReturn(Set.of());
+        when(lotteryDomainService.getEventLotteryLosers(EVENT_ID)).thenReturn(Set.of());
 
         assertThat(service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 5, EXPIRY)).isEmpty();
+    }
+
+    @Test
+    void runEventLottery_positive_handlesNullLosersFromDomain() {
+        Set<UUID> expected = Set.of(USER_A);
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        when(lotteryDomainService.runEventLottery(EVENT_ID, 1, EXPIRY)).thenReturn(expected);
+        when(lotteryDomainService.getEventLotteryLosers(EVENT_ID)).thenReturn(null);
+
+        assertThat(service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 1, EXPIRY))
+                .containsExactlyInAnyOrderElementsOf(expected);
     }
 
     @Test
@@ -197,6 +216,19 @@ class LotteryServiceBlackTest {
         when(auth.isTokenValid(TOKEN_A)).thenReturn(false);
         assertThatThrownBy(() -> service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 1, EXPIRY))
                 .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void runEventLottery_negative_swallowsLoserLookupFailure() {
+        when(auth.isTokenValid(TOKEN_A)).thenReturn(true);
+        when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
+        when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
+        Set<UUID> winners = Set.of(USER_A);
+        when(lotteryDomainService.runEventLottery(EVENT_ID, 1, EXPIRY)).thenReturn(winners);
+        when(lotteryDomainService.getEventLotteryLosers(EVENT_ID)).thenThrow(new RuntimeException("db down"));
+
+        assertThat(service.runEventLottery(TOKEN_A, COMPANY_ID, EVENT_ID, 1, EXPIRY))
+                .containsExactlyInAnyOrderElementsOf(winners);
     }
 
     @Test
@@ -371,19 +403,31 @@ class LotteryServiceBlackTest {
 
     @Test
     void constructor_throws_when_lotteryDomainService_is_null() {
-        assertThatThrownBy(() -> new LotteryService(null, userDomainService, auth))
+        assertThatThrownBy(() -> new LotteryService(null, userDomainService, eventRepository, auth, notifier))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_userDomainService_is_null() {
-        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, null, auth))
+        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, null, eventRepository, auth, notifier))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void constructor_throws_when_eventRepository_is_null() {
+        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, userDomainService, null, auth, notifier))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_auth_is_null() {
-        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, userDomainService, null))
+        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, userDomainService, eventRepository, null, notifier))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void constructor_throws_when_notifier_is_null() {
+        assertThatThrownBy(() -> new LotteryService(lotteryDomainService, userDomainService, eventRepository, auth, null))
                 .isInstanceOf(NullPointerException.class);
     }
 
@@ -489,6 +533,7 @@ class LotteryServiceBlackTest {
         when(auth.extractUserId(TOKEN_A)).thenReturn(USER_A);
         when(userDomainService.isActiveManager(USER_A, COMPANY_ID, EVENT_ID)).thenReturn(true);
         when(lotteryDomainService.runEventLottery(EVENT_ID, 1, EXPIRY)).thenReturn(expected);
+        when(lotteryDomainService.getEventLotteryLosers(EVENT_ID)).thenReturn(Set.of(USER_B));
 
         int threads = 25;
         CountDownLatch start = new CountDownLatch(1);

@@ -169,6 +169,13 @@ public class Lottery {
     }
 
     /**
+     * @return an unmodifiable view of the users still in the lottery pool
+     */
+    public Set<UUID> getEntries() {
+        return Collections.unmodifiableSet(lotterySet);
+    }
+
+    /**
      * Clears the winners set.
      */
     public void clearWinners() {

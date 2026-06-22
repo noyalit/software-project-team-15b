@@ -27,4 +27,8 @@ public enum NotificationType {
     ORDER_EXPIRING_SOON,
     /** A free-text message sent to the recipient by a system administrator. */
     ADMIN_MESSAGE,
+    /** A user won an event lottery. */
+    LOTTERY_WON,
+    /** A user was not selected in an event lottery. */
+    LOTTERY_LOST,
 }
