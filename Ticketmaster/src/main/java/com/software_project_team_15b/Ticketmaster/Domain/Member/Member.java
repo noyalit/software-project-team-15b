@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Set;
 import java.util.Collections;
 import java.time.LocalDate;
@@ -27,6 +28,9 @@ public class Member {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
+    // Role state (assignedRoles + activeRole) is mutated and read through methods
+    // synchronized on this instance, so concurrent role changes on the same Member
+    // (e.g. bulk appointment cancellation) cannot corrupt the set or leave activeRole inconsistent.
     @OneToMany(cascade = CascadeType.ALL, fetch = FetchType.EAGER, orphanRemoval = true)
     @JoinColumn(name = "member_id")
     private Set<Role> assignedRoles = new HashSet<>();
@@ -160,7 +164,7 @@ public class Member {
      *
      * @return the active {@link Role}, or {@code null}
      */
-    public Role getActiveRole() {
+    public synchronized Role getActiveRole() {
         return activeRole;
     }
 
@@ -169,17 +173,17 @@ public class Member {
      *
      * @return the active {@link Role}, or {@code null}
      */
-    public Role getRole() {
+    public synchronized Role getRole() {
         return activeRole;
     }
 
     /**
      * Returns an unmodifiable view of all roles currently assigned to this member.
      *
-     * @return an unmodifiable {@link Set} of assigned {@link Role}s
+     * @return an unmodifiable snapshot {@link Set} of assigned {@link Role}s
      */
-    public Set<Role> getAssignedRoles() {
-        return Collections.unmodifiableSet(assignedRoles);
+    public synchronized Set<Role> getAssignedRoles() {
+        return Collections.unmodifiableSet(new HashSet<>(assignedRoles));
     }
 
     /**
@@ -189,7 +193,7 @@ public class Member {
      * @param role the role to assign; must not be null
      * @throws InvalidMemberInputException if {@code role} is null
      */
-    public void addRole(Role role) {
+    public synchronized void addRole(Role role) {
         if (role == null) {
             throw new InvalidMemberInputException("Role cannot be null");
         }
@@ -213,13 +217,14 @@ public class Member {
      *
      * @param role the role to remove; no-op if {@code null}
      */
-    public void removeRole(Role role) {
+    public synchronized void removeRole(Role role) {
         if (role == null) {
             return;
         }
         assignedRoles.remove(role);
         if (role.equals(activeRole)) {
-            activeRole = assignedRoles.isEmpty() ? null : assignedRoles.iterator().next();
+            Iterator<Role> remaining = assignedRoles.iterator();
+            activeRole = remaining.hasNext() ? remaining.next() : null;
         }
 
         AUDIT.info("op=remove-role userId={} role={} activeRole={}",
@@ -235,7 +240,7 @@ public class Member {
      * @param role the role to activate, or {@code null} to clear the active role
      * @throws RoleNotAssignedException if {@code role} is non-null and not in the member's assigned roles
      */
-    public void switchActiveRole(Role role) {
+    public synchronized void switchActiveRole(Role role) {
         if (role == null) {
             activeRole = null;
 
@@ -257,7 +262,7 @@ public class Member {
      *
      * @param role the role to assign and activate, or {@code null} to clear the active role
      */
-    public void setRole(Role role) {
+    public synchronized void setRole(Role role) {
         if (role == null) {
             activeRole = null;
 
@@ -274,7 +279,7 @@ public class Member {
     /**
      * Removes all assigned roles from this member and clears the active role.
      */
-    public void clearRoles() {
+    public synchronized void clearRoles() {
         assignedRoles.clear();
         activeRole = null;
 
