@@ -22,7 +22,7 @@ confirm-owner(u2, p1);
 # 10. u2 adds event e1 to p1 with a standing zone (30 tickets @ 50) and a
 #     seating zone (100 tickets, 10x10 layout @ 100). Hoisted above the manager
 #     appointment because a manager is bound to a concrete event.
-create-event(u2, p1, e1, "TBD Artist", CONCERT, 2026-12-01T20:00:00Z, "Main Venue");
+create-event(u2, p1, e1, "TBD Artist", CONCERT, 2027-12-01T20:00:00Z, "Main Venue");
 add-standing-area(u2, e1, "Standing Zone", 50, USD, 30);
 add-seating-area(u2, e1, "Seating Zone", 100, USD, 10, 10);
 

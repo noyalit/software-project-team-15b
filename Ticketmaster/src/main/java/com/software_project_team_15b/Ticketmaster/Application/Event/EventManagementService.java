@@ -130,7 +130,17 @@ public class EventManagementService implements IEventManagementService, EventSub
             Objects.requireNonNull(callerId, "callerId");
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.MANAGE_EVENTS);
+            // Cancel the event once here, then publish so subscribers can run their
+            // side-effects (order cancellation, refunds, notifications). The status
+            // transition is already committed at this point, so a subscriber failure is
+            // best-effort: log it but do not surface it as a cancel failure.
             eventDomainService.cancel(eventId);
+            try {
+                cancelManager.cancelEvent(eventId);
+            } catch (RuntimeException notifyEx) {
+                AUDIT.warn("op=cancel event={} caller={} result=ok-notify-failed reason={}",
+                        eventId, callerId, notifyEx.getMessage());
+            }
             AUDIT.info("op=cancel event={} caller={} result=ok", eventId, callerId);
         } catch (RuntimeException e) {
             AUDIT.warn("op=cancel event={} caller={} result=rejected reason={}", eventId, callerId, e.getMessage());
@@ -411,7 +421,8 @@ public class EventManagementService implements IEventManagementService, EventSub
 
         try {
             Objects.requireNonNull(event, "event");
-            eventDomainService.cancel(event);
+            // The event status transition is owned by cancel(); this subscriber
+            // only delivers cancellation notifications to attendees.
 
             NotificationDTO dtoBase = new NotificationDTO(
                     NotificationType.EVENT_CANCELLED,

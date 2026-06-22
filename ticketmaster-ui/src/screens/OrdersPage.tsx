@@ -126,9 +126,10 @@ export default function OrdersPage() {
               (orderHistoryQuery.data ?? [])
                 .filter((o) => !o.cancelled)
                 .map((o) => (
-                  <div
+                  <Link
                     key={o.orderId}
-                    className="rounded-xl border border-slate-200 bg-white p-4"
+                    to={`/orders/${o.orderId}`}
+                    className="block rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300 hover:shadow-sm"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
@@ -149,14 +150,11 @@ export default function OrdersPage() {
                       <div className="text-sm text-slate-600">
                         Tickets: {o.tickets?.length ?? 0}
                       </div>
-                      <Link
-                        to={`/events/${o.eventId}`}
-                        className="text-sm font-semibold text-slate-700 hover:text-slate-900"
-                      >
-                        View event
-                      </Link>
+                      <span className="text-sm font-semibold text-slate-700">
+                        View tickets →
+                      </span>
                     </div>
-                  </div>
+                  </Link>
                 ))
             )}
           </div>

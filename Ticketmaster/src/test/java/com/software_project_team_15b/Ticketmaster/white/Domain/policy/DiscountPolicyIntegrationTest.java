@@ -209,4 +209,30 @@ class DiscountPolicyIntegrationTest {
         assertThat(total).isEqualTo(subtotal);
         assertThat(subtotal.subtract(total)).isEqualTo(usd("0.00"));
     }
+
+    /**
+     * SUNNY: CASCADE strategy (the company default) stacks the two trees multiplicatively.
+     * Company cascade 10%+10% on 200 → 38 off (162 running); event early-bird 5% → 10 off on 200.
+     * Combined as one cascade: 200 - (200-10)(200-38)/200 = 46.10 off → 153.90 final, NOT 152.
+     */
+    @Test
+    void integration_sunny_cascade_strategy_stacks_company_and_event_multiplicatively() {
+        SumDiscountPolicy companyRoot = new SumDiscountPolicy(List.<IDiscountPolicy>of(
+                new SimpleDiscountPolicy(BigDecimal.valueOf(10)),
+                new SimpleDiscountPolicy(BigDecimal.valueOf(10))));
+        MaxDiscountPolicy eventRoot = new MaxDiscountPolicy(List.<IDiscountPolicy>of(
+                new EarlyBirdDiscountPolicy(BigDecimal.valueOf(5),
+                        Instant.now().plus(Duration.ofDays(1)))));
+
+        Money subtotal = usd("200.00");
+        PurchaseRequest r = req(null);
+        Money eventDiscount  = IDiscountPolicy.clamp(eventRoot.discount(subtotal, ctx(r)), subtotal);
+        Money companyDiscount = IDiscountPolicy.clamp(companyRoot.discount(subtotal, ctx(r)), subtotal);
+        Money total = DiscountCombineStrategy.CASCADE.combine(eventDiscount, companyDiscount, subtotal);
+
+        assertThat(eventDiscount).isEqualTo(usd("10.00"));
+        assertThat(companyDiscount).isEqualTo(usd("38.00"));
+        assertThat(total).isEqualTo(usd("46.10"));
+        assertThat(subtotal.subtract(total)).isEqualTo(usd("153.90"));
+    }
 }

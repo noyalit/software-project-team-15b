@@ -45,14 +45,23 @@ public class SystemAdminInitializer {
                     ? configuredPassword.trim()
                     : DEFAULT_ADMIN_PASSWORD;
 
-            systemAdminRepository.deleteAll();
+            String passwordHash = passwordEncoder.encode(password);
 
-            SystemAdmin admin = new SystemAdmin(
-                    username,
-                    passwordEncoder.encode(password)
-            );
+            SystemAdmin desired = null;
+            for (SystemAdmin existing : systemAdminRepository.findAll()) {
+                if (username.equals(existing.getUsername())) {
+                    desired = existing;
+                } else {
+                    systemAdminRepository.deleteById(existing.getAdminId());
+                }
+            }
 
-            systemAdminRepository.save(admin);
+            if (desired == null) {
+                systemAdminRepository.save(new SystemAdmin(username, passwordHash));
+            } else {
+                desired.setPassword(passwordHash);
+                systemAdminRepository.save(desired);
+            }
 
             System.out.println("System Admin initialized. Active username: [" + username + "]");
         });
