@@ -35,6 +35,18 @@ body {
   background-color: rgba(15, 23, 42, 0.8) !important;
 }
 
+.dark .bg-white\/70 {
+  background-color: rgba(15, 23, 42, 0.7) !important;
+}
+
+.dark .bg-gradient-to-br {
+  background-image: linear-gradient(to bottom right,
+    rgba(15, 23, 42, 0.95),
+    rgba(30, 41, 59, 0.9),
+    rgba(2, 6, 23, 0.95)
+  ) !important;
+}
+
 .dark .bg-slate-50 {
   background-color: rgba(30, 41, 59, 0.55) !important;
 }
