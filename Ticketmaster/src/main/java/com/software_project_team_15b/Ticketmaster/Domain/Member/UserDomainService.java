@@ -733,6 +733,25 @@ public class UserDomainService {
     }
 
     @Transactional(readOnly = true)
+    public boolean isAssignedManagerWithPermission(UUID managerId, UUID eventId, UUID companyId, ManagerPermission required) {
+        Objects.requireNonNull(managerId, "managerId");
+        Objects.requireNonNull(eventId, "eventId");
+        Objects.requireNonNull(companyId, "companyId");
+        Objects.requireNonNull(required, "required");
+
+        Member member = getMemberOrThrow(managerId);
+        return member.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof Manager)
+                .map(role -> (Manager) role)
+                .anyMatch(manager ->
+                        manager.belongsToCompany(companyId)
+                                && eventId.equals(manager.getEventId())
+                                && manager.hasPermission(required)
+                );
+    }
+
+    @Transactional(readOnly = true)
     public boolean isAssignedManager(UUID managerId, UUID eventId, UUID companyId) {
         Objects.requireNonNull(managerId, "managerId");
         Objects.requireNonNull(eventId, "eventId");
