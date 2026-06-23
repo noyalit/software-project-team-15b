@@ -226,6 +226,9 @@ public interface IEventManagementService {
      */
     List<EventDTO> searchInCompany(UUID companyId, SearchCriteria criteria);
 
+    /** Resolves the owning company id for an event id. */
+    UUID getCompanyIdForEventId(UUID eventId);
+
     /**
      * Validates the request against every purchase policy of the event;
      * the first failure aborts.
