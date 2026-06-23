@@ -156,8 +156,8 @@ const canAccessManagerPages =
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 border-b border-slate-200/70 bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
-          <Link to="/" className="flex items-center">
-            <img src={logo} alt="Ticket4U" className="h-10 w-auto" />
+          <Link to="/" className="flex shrink-0 items-center">
+            <img src={logo} alt="Ticket4U" className="h-10 w-auto shrink-0 object-contain" />
             <span className="sr-only">Ticket4U</span>
           </Link>
 
