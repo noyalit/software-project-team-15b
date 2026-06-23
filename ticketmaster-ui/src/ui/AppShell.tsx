@@ -35,11 +35,31 @@ export default function AppShell() {
     return window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ?? false;
   });
 
+  const [a11yOpen, setA11yOpen] = useState(false);
+  const [highContrast, setHighContrast] = useState<boolean>(() => localStorage.getItem('a11y-high-contrast') === '1');
+  const [largeText, setLargeText] = useState<boolean>(() => localStorage.getItem('a11y-large-text') === '1');
+  const [reduceMotion, setReduceMotion] = useState<boolean>(() => {
+    const saved = localStorage.getItem('a11y-reduce-motion');
+    if (saved === '1') return true;
+    if (saved === '0') return false;
+    return window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
+  });
+
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle('dark', darkMode);
     localStorage.setItem('theme', darkMode ? 'dark' : 'light');
   }, [darkMode]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle('a11y-high-contrast', highContrast);
+    root.classList.toggle('a11y-large-text', largeText);
+    root.classList.toggle('a11y-reduce-motion', reduceMotion);
+    localStorage.setItem('a11y-high-contrast', highContrast ? '1' : '0');
+    localStorage.setItem('a11y-large-text', largeText ? '1' : '0');
+    localStorage.setItem('a11y-reduce-motion', reduceMotion ? '1' : '0');
+  }, [highContrast, largeText, reduceMotion]);
 
   const themeToggleLabel = useMemo(() => (darkMode ? 'Light mode' : 'Dark mode'), [darkMode]);
 
@@ -177,6 +197,60 @@ const canAccessManagerPages =
             >
               {darkMode ? 'Light' : 'Dark'}
             </button>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setA11yOpen((v) => !v)}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                aria-expanded={a11yOpen}
+                aria-haspopup="menu"
+              >
+                Accessibility
+              </button>
+
+              {a11yOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-lg"
+                >
+                  <label className="flex items-center justify-between gap-3 text-sm text-slate-800">
+                    <span>High contrast</span>
+                    <input
+                      type="checkbox"
+                      checked={highContrast}
+                      onChange={(e) => setHighContrast(e.target.checked)}
+                    />
+                  </label>
+
+                  <label className="mt-2 flex items-center justify-between gap-3 text-sm text-slate-800">
+                    <span>Large text</span>
+                    <input
+                      type="checkbox"
+                      checked={largeText}
+                      onChange={(e) => setLargeText(e.target.checked)}
+                    />
+                  </label>
+
+                  <label className="mt-2 flex items-center justify-between gap-3 text-sm text-slate-800">
+                    <span>Reduce motion</span>
+                    <input
+                      type="checkbox"
+                      checked={reduceMotion}
+                      onChange={(e) => setReduceMotion(e.target.checked)}
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => setA11yOpen(false)}
+                    className="mt-3 w-full rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                  >
+                    Done
+                  </button>
+                </div>
+              )}
+            </div>
             {token && userType !== 'guest' ? (
               <>
                 {userType === 'member' && <NotificationsBell />}
