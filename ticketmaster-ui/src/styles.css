@@ -91,6 +91,66 @@ body {
   background-color: rgba(30, 41, 59, 0.8) !important;
 }
 
+.a11y-large-text {
+  font-size: 112.5%;
+}
+
+.a11y-high-contrast body {
+  color: #000;
+}
+
+.a11y-high-contrast .text-slate-600,
+.a11y-high-contrast .text-slate-500,
+.a11y-high-contrast .text-slate-700,
+.a11y-high-contrast .text-slate-800 {
+  color: #000 !important;
+}
+
+.a11y-high-contrast.dark body {
+  color: #fff;
+}
+
+.a11y-high-contrast.dark .text-slate-600,
+.a11y-high-contrast.dark .text-slate-500,
+.a11y-high-contrast.dark .text-slate-700,
+.a11y-high-contrast.dark .text-slate-800 {
+  color: #fff !important;
+}
+
+.a11y-high-contrast .border-slate-200,
+.a11y-high-contrast .border-slate-200\/70 {
+  border-color: currentColor !important;
+}
+
+.a11y-high-contrast .bg-slate-50,
+.a11y-high-contrast .bg-slate-100,
+.a11y-high-contrast .bg-white,
+.a11y-high-contrast .bg-white\/70,
+.a11y-high-contrast .bg-white\/80 {
+  background-color: transparent !important;
+}
+
+.a11y-high-contrast .bg-slate-900 {
+  background-color: #000 !important;
+}
+
+.a11y-high-contrast.dark .bg-slate-900 {
+  background-color: #fff !important;
+}
+
+.a11y-high-contrast.dark .text-white {
+  color: #000 !important;
+}
+
+.a11y-reduce-motion *,
+.a11y-reduce-motion *::before,
+.a11y-reduce-motion *::after {
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}
+
 a {
   color: inherit;
 }
