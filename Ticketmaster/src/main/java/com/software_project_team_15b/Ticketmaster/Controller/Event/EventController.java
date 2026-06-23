@@ -9,10 +9,13 @@ import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
 import com.software_project_team_15b.Ticketmaster.DTO.EventAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpHeaders;
@@ -36,9 +39,13 @@ import java.util.UUID;
 public class EventController {
 
     private final IEventManagementService eventService;
+    private final IAuth auth;
+    private final UserDomainService userDomainService;
 
-    public EventController(IEventManagementService eventService) {
+    public EventController(IEventManagementService eventService, IAuth auth, UserDomainService userDomainService) {
         this.eventService = eventService;
+        this.auth = auth;
+        this.userDomainService = userDomainService;
     }
 
     @Operation(summary = "Create a new event in DRAFT state")
@@ -70,9 +77,46 @@ public class EventController {
 
     @Operation(summary = "Get a single event with areas and seat statuses")
     @GetMapping("/{eventId}")
-    public ResponseEntity<ApiResponse<EventDTO>> getEvent(@PathVariable UUID eventId) {
+    public ResponseEntity<ApiResponse<EventDTO>> getEvent(
+            @PathVariable UUID eventId,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token) {
         try {
             EventDTO event = eventService.getEvent(eventId);
+
+            if (event != null && event.status() == com.software_project_team_15b.Ticketmaster.Domain.Event.EventStatus.DRAFT) {
+                if (token == null || token.isBlank()) {
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                            .body(new ApiResponse<>(null, "event not found: " + eventId));
+                }
+                if (!auth.isTokenValid(token)) {
+                    return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                            .body(new ApiResponse<>(null, "Invalid or expired token"));
+                }
+                if (!auth.isMember(token)) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(new ApiResponse<>(null, "Only members can view draft events"));
+                }
+
+                UUID callerId = auth.extractUserId(token);
+                UUID companyId = eventService.getCompanyIdForEventId(eventId);
+
+                boolean allowed = false;
+                for (ManagerPermission p : ManagerPermission.values()) {
+                    try {
+                        userDomainService.isLegalEventManager(eventId, callerId, companyId, p);
+                        allowed = true;
+                        break;
+                    } catch (RuntimeException ignored) {
+                        // try next permission
+                    }
+                }
+
+                if (!allowed) {
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                            .body(new ApiResponse<>(null, "event not found: " + eventId));
+                }
+            }
+
             return ResponseEntity.ok(new ApiResponse<>(event, null));
         } catch (InvalidEventStateException ex) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
