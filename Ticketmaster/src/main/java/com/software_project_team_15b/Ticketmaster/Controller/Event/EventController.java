@@ -100,14 +100,16 @@ public class EventController {
                 UUID callerId = auth.extractUserId(token);
                 UUID companyId = eventService.getCompanyIdForEventId(eventId);
 
-                boolean allowed = false;
-                for (ManagerPermission p : ManagerPermission.values()) {
-                    try {
-                        userDomainService.isLegalEventManager(eventId, callerId, companyId, p);
-                        allowed = true;
-                        break;
-                    } catch (RuntimeException ignored) {
-                        // try next permission
+                boolean allowed = userDomainService.isAssignedManager(callerId, eventId, companyId);
+                if (!allowed) {
+                    for (ManagerPermission p : ManagerPermission.values()) {
+                        try {
+                            userDomainService.isLegalEventManager(eventId, callerId, companyId, p);
+                            allowed = true;
+                            break;
+                        } catch (RuntimeException ignored) {
+                            // try next permission
+                        }
                     }
                 }
 
