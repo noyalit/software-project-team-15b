@@ -1511,6 +1511,23 @@ export default function CompanyPage() {
               Permissions
             </div>
 
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setManagerPermissions(allPermissions)}
+                className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-50"
+              >
+                Select all
+              </button>
+              <button
+                type="button"
+                onClick={() => setManagerPermissions([])}
+                className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-50"
+              >
+                Clear all
+              </button>
+            </div>
+
             <div className="mt-2 grid gap-2 md:grid-cols-2">
               {allPermissions.map((permission) => (
                 <label
@@ -1596,6 +1613,23 @@ export default function CompanyPage() {
 
           <div>
             <div className="text-sm font-medium text-slate-700">New permissions</div>
+
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setNewManagerPermissions(allPermissions)}
+                className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-50"
+              >
+                Select all
+              </button>
+              <button
+                type="button"
+                onClick={() => setNewManagerPermissions([])}
+                className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-50"
+              >
+                Clear all
+              </button>
+            </div>
 
             <div className="mt-2 grid gap-2 md:grid-cols-2">
               {allPermissions.map((permission) => (
