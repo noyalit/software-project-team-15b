@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { http } from '../api/http';
@@ -27,6 +27,21 @@ function NavLink({ to, label }: { to: string; label: string }) {
 
 export default function AppShell() {
   const { token, userType, username, logout, setAuth } = useAuthStore();
+
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved === 'dark') return true;
+    if (saved === 'light') return false;
+    return window.matchMedia?.('(prefers-color-scheme: dark)')?.matches ?? false;
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle('dark', darkMode);
+    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
+
+  const themeToggleLabel = useMemo(() => (darkMode ? 'Light mode' : 'Dark mode'), [darkMode]);
 
   useQuery({
     queryKey: ['enter-system'],
@@ -153,6 +168,15 @@ const canAccessManagerPages =
           </nav>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setDarkMode((v) => !v)}
+              className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+              aria-label={themeToggleLabel}
+              title={themeToggleLabel}
+            >
+              {darkMode ? 'Light' : 'Dark'}
+            </button>
             {token && userType !== 'guest' ? (
               <>
                 {userType === 'member' && <NotificationsBell />}
