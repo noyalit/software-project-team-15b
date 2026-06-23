@@ -393,6 +393,7 @@ public class EventManagementService implements IEventManagementService, EventSub
         }
     }
 
+    @Override
     public UUID getCompanyIdForEventId(UUID eventId) {
         return eventDomainService.getCompanyIdForEventId(eventId);
     }
