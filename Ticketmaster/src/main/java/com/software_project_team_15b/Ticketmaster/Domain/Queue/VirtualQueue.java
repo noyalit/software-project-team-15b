@@ -1,7 +1,5 @@
 package com.software_project_team_15b.Ticketmaster.Domain.Queue;
 
-import jakarta.persistence.*;
-
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -14,44 +12,22 @@ import java.util.UUID;
  * A virtual waiting queue that holds an ordered set of unique IDs.
  * Each queue is identified by a UUID and ensures no duplicate entries.
  * Entries are served in FIFO order.
+ *
+ * <p>This is an in-memory aggregate: its state lives only for the lifetime of the
+ * running process and is never persisted to a database. All mutating operations are
+ * {@code synchronized} to make concurrent access safe within a single instance.
  */
-@Entity
-@Table(name = "virtual_queue")
 public class VirtualQueue {
 
-    @Id
-    @Column(name = "queue_id", nullable = false, updatable = false)
-    protected UUID id;
+    private final UUID id;
 
-    @ElementCollection
-    @CollectionTable(
-            name = "virtual_queue_entries",
-            joinColumns = @JoinColumn(name = "queue_id")
-    )
-    @Column(name = "entry", nullable = false)
-    @OrderColumn(name = "position")
-    protected List<String> queue = new ArrayList<>();
+    private final List<String> queue = new ArrayList<>();
 
-    @ElementCollection
-    @CollectionTable(
-            name = "virtual_queue_access_map",
-            joinColumns = @JoinColumn(name = "queue_id")
-    )
-    @MapKeyColumn(name = "token")
-    @Column(name = "expires_at", nullable = false)
-    protected Map<String, LocalDateTime> accessMap = new HashMap<>();
+    private final Map<String, LocalDateTime> accessMap = new HashMap<>();
 
-    @Column(name = "capacity", nullable = false)
-    protected int capacity;
+    private int capacity;
 
-    @Column(name = "max_accepted", nullable = false)
-    protected int maxAccepted;
-
-    @Version
-    private long version;
-
-    // For JPA
-    protected VirtualQueue() {}
+    private int maxAccepted;
 
     /**
      * Creates an unbounded queue.

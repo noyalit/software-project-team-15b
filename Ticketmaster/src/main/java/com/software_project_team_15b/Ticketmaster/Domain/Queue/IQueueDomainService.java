@@ -11,9 +11,10 @@ import com.software_project_team_15b.Ticketmaster.DTO.SiteQueueSnapshotDTO;
 /**
  * Domain service for managing per-event virtual queues and the site-wide waiting queue.
  *
- * <p>Owns the per-event admission map, the persistent event-queue repository, the
+ * <p>Owns the per-event admission map, the in-memory event-queue repository, the
  * scheduler that advances event queues, and the in-memory site queue together with its
- * admitted-token set. Auth-dependent eviction (checking token validity before admitting
+ * admitted-token set. All queue state is held in memory only and is never persisted.
+ * Auth-dependent eviction (checking token validity before admitting
  * a user) is the responsibility of the application-layer {@code QueueService}, which
  * holds the {@code IAuth} dependency and calls {@link #removeAcceptedToken} and
  * {@link #acceptUsersFromSiteQueue} on a schedule.
@@ -161,7 +162,7 @@ public interface IQueueDomainService {
     /**
      * Returns snapshots of all virtual queues currently in the repository.
      *
-     * @return an unmodifiable list of {@link QueueSnapshotDTO}, one per persisted queue
+     * @return an unmodifiable list of {@link QueueSnapshotDTO}, one per in-memory queue
      */
     List<QueueSnapshotDTO> getAllQueueSnapshots();
 

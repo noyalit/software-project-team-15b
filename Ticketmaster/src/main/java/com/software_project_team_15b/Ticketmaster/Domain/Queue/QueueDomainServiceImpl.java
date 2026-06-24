@@ -10,12 +10,8 @@ import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessStatus;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.SiteQueueSnapshotDTO;
 
-import org.springframework.dao.OptimisticLockingFailureException;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Retryable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -25,18 +21,21 @@ import java.util.concurrent.TimeUnit;
  * Domain service for managing virtual queues associated with events and the site-wide
  * waiting queue.
  *
- * <p>Owns the persistent {@link IQueueRepository} aggregate, the in-memory site queue
+ * <p>Owns the in-memory {@link IQueueRepository} aggregate, the in-memory site queue
  * ({@link #siteQueue}), and the admitted-token set ({@link #acceptedTokens}). Per-event
- * admission state is persisted inside each {@link VirtualQueue}'s {@code accessMap}.
+ * admission state is held inside each {@link VirtualQueue}'s {@code accessMap}.
  * Each event may have at most one queue, keyed by the event's UUID.
+ *
+ * <p>All queue state lives only in memory and is discarded when the application shuts
+ * down; nothing is persisted to a database.
  *
  * <p>Auth-dependent eviction (validating token freshness before admitting users from the
  * site queue) is handled by the application-layer {@code QueueService}, which calls
  * {@link #removeAcceptedToken} and {@link #acceptUsersFromSiteQueue} on a schedule.
  *
- * <p>Mutating operations on persistent queues are transactional. Methods that perform a
- * read-then-write are additionally annotated with {@link Retryable} so that transient
- * optimistic-lock conflicts are transparently retried before propagating an error to the caller.
+ * <p>Thread-safety is provided by the {@code synchronized} mutating methods on each
+ * {@link VirtualQueue}; the in-memory repository returns live aggregate references, so a
+ * read-modify-write cycle mutates the stored instance directly.
  */
 @Service
 public class QueueDomainServiceImpl implements IQueueDomainService {
@@ -143,14 +142,13 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
     }
 
     /**
-     * Iterates every persisted queue, evicts expired access entries, and promotes waiting
+     * Iterates every in-memory queue, evicts expired access entries, and promotes waiting
      * users into the admitted set until each queue's {@code maxAccepted} cap is reached.
      * Newly admitted tokens receive an expiry window of {@link #ACCESS_TIME} seconds from now.
      *
      * <p>Runs on a fixed schedule every {@link #EVENT_QUEUE_INTERVAL} seconds.
      */
     @Scheduled(fixedRate = EVENT_QUEUE_INTERVAL, timeUnit = TimeUnit.SECONDS)
-    @Transactional
     protected void advanceEventQueues() {
         for (VirtualQueue queue : queueRepository.getAllQueues()) {
             queue.advanceQueue(LocalDateTime.now().plusSeconds(ACCESS_TIME));
@@ -211,12 +209,10 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      * @param eventId the unique identifier of the event; must not be null
      * @return a {@link QueueAccessDTO} describing the user's current access state
      * @throws IllegalArgumentException if {@code token} or {@code eventId} is null
-     * @throws QueueIsFullException     if the persistent queue has reached its capacity
+     * @throws QueueIsFullException     if the queue has reached its capacity
      * @throws AlreadyInQueueException  if the user is already waiting in the queue
      */
     @Override
-    @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
-    @Transactional
     public QueueAccessDTO requestAccess(String token, UUID eventId) {
         if (token == null) {
             throw new IllegalArgumentException("token cannot be null");
@@ -267,7 +263,6 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      * @throws IllegalArgumentException if {@code eventId} is null
      */
     @Override
-    @Transactional
     public void createEventQueue(UUID eventId, int capacity, int max_accepted) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
@@ -290,7 +285,6 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      * @throws QueueNotFoundException   if no queue exists for the given event
      */
     @Override
-    @Transactional
     public void deleteEventQueue(UUID eventId) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
@@ -305,9 +299,6 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
     /**
      * Removes and returns the user token at the front of the event's queue (FIFO order).
      *
-     * <p>If a concurrent update causes an optimistic-lock conflict the operation is
-     * retried up to 3 times with a short backoff before the exception propagates.
-     *
      * @param eventId the unique identifier of the event; must not be null
      * @return the auth token of the user at the front of the queue
      * @throws IllegalArgumentException if {@code eventId} is null
@@ -315,8 +306,6 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      * @throws EmptyQueueException      if the queue contains no entries
      */
     @Override
-    @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
-    @Transactional
     public String popFromEventQueue(UUID eventId) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
@@ -336,9 +325,6 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
     /**
      * Appends the given user to the back of the event's queue.
      *
-     * <p>If a concurrent update causes an optimistic-lock conflict the operation is
-     * retried up to 3 times with a short backoff before the exception propagates.
-     *
      * @param eventId the unique identifier of the event; must not be null
      * @param token   the user's auth token; must not be null
      * @throws IllegalArgumentException  if {@code eventId} or {@code token} is null
@@ -347,8 +333,6 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      * @throws AlreadyInQueueException   if the token is already waiting in the queue
      */
     @Override
-    @Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3, backoff = @Backoff(delay = 50))
-    @Transactional
     public void pushToEventQueue(UUID eventId, String token) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
@@ -390,7 +374,6 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      * @throws QueueNotFoundException   if no queue exists for the given event
      */
     @Override
-    @Transactional
     public void clearEventQueue(UUID eventId) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
@@ -424,7 +407,7 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
     /**
      * Returns snapshots of all virtual queues currently in the repository.
      *
-     * @return an unmodifiable list of {@link QueueSnapshotDTO}, one per persisted queue
+     * @return an unmodifiable list of {@link QueueSnapshotDTO}, one per in-memory queue
      */
     @Override
     public List<QueueSnapshotDTO> getAllQueueSnapshots() {
@@ -443,7 +426,6 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      * @throws QueueNotFoundException   if no queue exists for the given event
      */
     @Override
-    @Transactional
     public void updateQueueSettings(UUID eventId, int capacity, int max_accepted) {
         if (eventId == null) {
             throw new IllegalArgumentException("eventId cannot be null");
