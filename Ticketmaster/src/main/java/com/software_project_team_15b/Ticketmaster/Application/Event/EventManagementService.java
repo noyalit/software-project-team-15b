@@ -157,6 +157,52 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     @Override
+    public EventDTO getEvent(UUID eventId, String token) {
+        EventDTO event = eventDomainService.getEvent(eventId);
+        if (event == null) {
+            return null;
+        }
+
+        if (event.status() != EventStatus.DRAFT) {
+            return event;
+        }
+
+        if (token == null || token.isBlank()) {
+            throw new InvalidEventStateException("event not found: " + eventId);
+        }
+
+        if (!auth.isTokenValid(token)) {
+            throw new InvalidTokenException("Invalid or expired token");
+        }
+
+        if (!auth.isMember(token)) {
+            throw new PolicyViolationException("Only members can view draft events");
+        }
+
+        UUID callerId = auth.extractUserId(token);
+        UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
+
+        boolean allowed = userDomainService.isAssignedManager(callerId, eventId, companyId);
+        if (!allowed) {
+            for (ManagerPermission p : ManagerPermission.values()) {
+                try {
+                    userDomainService.isLegalEventManager(eventId, callerId, companyId, p);
+                    allowed = true;
+                    break;
+                } catch (RuntimeException ignored) {
+                    // try next permission
+                }
+            }
+        }
+
+        if (!allowed) {
+            throw new InvalidEventStateException("event not found: " + eventId);
+        }
+
+        return event;
+    }
+
+    @Override
     public List<EventDTO> search(SearchCriteria criteria) {
         return eventDomainService.search(criteria);
     }
