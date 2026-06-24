@@ -206,6 +206,14 @@ public interface IEventManagementService {
     EventDTO getEvent(UUID eventId);
 
     /**
+     * Token-aware variant of {@link #getEvent(UUID)}.
+     * <p>
+     * Used by controllers to enforce draft visibility rules without directly
+     * depending on domain services or auth internals.
+     */
+    EventDTO getEvent(UUID eventId, String token);
+
+    /**
      * Searches the catalog globally.
      * <p>
      * Requirement: {@code II.2.3.a} (global search &amp; filters).
