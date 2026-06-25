@@ -342,7 +342,7 @@ docker compose up --build       # fresh schema + empty tables
 
 ```bash
 docker compose exec postgres psql -U postgres -d ticketmaster \
-  -c "TRUNCATE members, companies, lottery, virtual_queue, virtual_queue_entries, virtual_queue_access_map, lottery_entries, lottery_winners, active_orders, active_order_seats, order_history, order_history_tickets, system_admins, notifications, roles, manager_permissions, event, event_area, seat RESTART IDENTITY CASCADE;"
+  -c "TRUNCATE members, companies, lottery, lottery_entries, lottery_winners, active_orders, active_order_seats, order_history, order_history_tickets, system_admins, notifications, roles, manager_permissions, event, event_area, seat RESTART IDENTITY CASCADE;"
 ```
 
 ---

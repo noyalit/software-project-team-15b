@@ -27,8 +27,9 @@ import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainServi
  *
  * <p>Coordinates auth-dependent site-queue eviction: on each scheduled tick, expired
  * tokens are removed from the domain service's admitted set and the domain service
- * fills vacated slots from the site queue. Per-event queue state, site-queue state,
- * repository access, transactions, and retry policy all live in the domain service.
+ * fills vacated slots from the site queue. Per-event queue state, site-queue state, and
+ * in-memory repository access all live in the domain service. No queue state is persisted
+ * to a database; it exists only for the lifetime of the running process.
  */
 @Service
 public class QueueService {
@@ -278,7 +279,7 @@ public class QueueService {
      * Returns snapshots of all virtual queues in the repository.
      *
      * @param adminToken the caller's auth token; must belong to a system admin
-     * @return an unmodifiable list of {@link QueueSnapshotDTO}, one per persisted queue
+     * @return an unmodifiable list of {@link QueueSnapshotDTO}, one per in-memory queue
      * @throws IllegalArgumentException if {@code adminToken} is null
      * @throws InvalidTokenException    if the token is invalid or expired
      * @throws UnauthorizedException    if the caller is not a system admin

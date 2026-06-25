@@ -3,7 +3,6 @@ package com.software_project_team_15b.Ticketmaster.Infrastructure.Queue;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.VirtualQueue;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -11,8 +10,15 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * In-memory store for {@link VirtualQueue} aggregates.
+ *
+ * <p>Virtual queues are intentionally never persisted: all state is held in a
+ * {@link ConcurrentHashMap} that lives only for the lifetime of the running process and
+ * is discarded when the application shuts down. This is the only {@link IQueueRepository}
+ * implementation; there is no database-backed alternative.
+ */
 @Repository
-@ConditionalOnProperty(name = "app.storage.mode", havingValue = "memory", matchIfMissing = true)
 public class InMemoryQueueRepository implements IQueueRepository {
 
     private final Map<UUID, VirtualQueue> store = new ConcurrentHashMap<>();
