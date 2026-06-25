@@ -102,10 +102,7 @@ public class EventManagementService implements IEventManagementService, EventSub
             Objects.requireNonNull(cmd, "cmd");
             Objects.requireNonNull(callerId, "callerId");
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
-            if (!userDomainService.isAssignedManagerWithPermission(
-                    callerId, eventId, companyId, ManagerPermission.CONFIGURE_HALLS_AND_SEATS)) {
-                userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.CONFIGURE_HALLS_AND_SEATS);
-            }
+            userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.CONFIGURE_HALLS_AND_SEATS);
             UUID areaId = eventDomainService.addArea(eventId, cmd);
             AUDIT.info("op=addArea event={} area={} caller={} result=ok", eventId, areaId, callerId);
             return areaId;
@@ -395,10 +392,8 @@ public class EventManagementService implements IEventManagementService, EventSub
             Objects.requireNonNull(areaId, "areaId");
             Objects.requireNonNull(callerId, "callerId");
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
-            if (!userDomainService.isAssignedManagerWithPermission(
-                    callerId, eventId, companyId, ManagerPermission.CONFIGURE_HALLS_AND_SEATS)) {
-                userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.CONFIGURE_HALLS_AND_SEATS);
-            }
+            userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.CONFIGURE_HALLS_AND_SEATS);
+            
             eventDomainService.removeArea(eventId, areaId);
             AUDIT.info("op=removeArea event={} area={} caller={} result=ok", eventId, areaId, callerId);
         } catch (RuntimeException e) {
