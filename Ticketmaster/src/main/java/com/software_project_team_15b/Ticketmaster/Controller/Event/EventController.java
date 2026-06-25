@@ -74,7 +74,17 @@ public class EventController {
             @PathVariable UUID eventId,
             @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token) {
         try {
-            EventDTO event = eventService.getEvent(eventId, token);
+            final EventDTO event;
+            if (token == null || token.isBlank()) {
+                event = eventService.getEvent(eventId);
+                if (event != null
+                        && event.status() == com.software_project_team_15b.Ticketmaster.Domain.Event.EventStatus.DRAFT) {
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                            .body(new ApiResponse<>(null, "event not found: " + eventId));
+                }
+            } else {
+                event = eventService.getEvent(eventId, token);
+            }
 
             return ResponseEntity.ok(new ApiResponse<>(event, null));
         } catch (InvalidEventStateException ex) {
