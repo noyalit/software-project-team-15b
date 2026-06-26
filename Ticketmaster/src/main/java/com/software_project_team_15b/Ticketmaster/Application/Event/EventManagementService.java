@@ -372,10 +372,7 @@ public class EventManagementService implements IEventManagementService, EventSub
             Objects.requireNonNull(cmd, "cmd");
             Objects.requireNonNull(callerId, "callerId");
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
-            if (!userDomainService.isAssignedManagerWithPermission(
-                    callerId, eventId, companyId, ManagerPermission.UPDATE_EVENT_MAP)) {
-                userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.UPDATE_EVENT_MAP);
-            }
+            userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.UPDATE_EVENT_MAP);
             eventDomainService.updateArea(eventId, areaId, cmd);
             AUDIT.info("op=updateArea event={} area={} caller={} result=ok", eventId, areaId, callerId);
         } catch (RuntimeException e) {
