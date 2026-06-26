@@ -41,6 +41,30 @@ function toDatetimeLocalValue(d: Date) {
   );
 }
 
+function getFriendlyPolicyError(error: unknown) {
+  const message = getApiErrorMessage(error);
+
+  if (
+    message.includes('DEFINE_PURCHASE_POLICY') ||
+    message.includes('requiredPermission=DEFINE_PURCHASE_POLICY')
+  ) {
+    return 'You do not have permission to edit purchase policies for this event.';
+  }
+
+  if (
+    message.includes('DEFINE_DISCOUNT_POLICY') ||
+    message.includes('requiredPermission=DEFINE_DISCOUNT_POLICY')
+  ) {
+    return 'You do not have permission to edit discount policies for this event.';
+  }
+
+  if (message.toLowerCase().includes('not authorized')) {
+    return 'You are not authorized to perform this action.';
+  }
+
+  return message;
+}
+
 export default function MyEventsPage() {
   const qc = useQueryClient();
   const { token, userType } = useAuthStore();
@@ -757,8 +781,8 @@ export default function MyEventsPage() {
     replacePurchasePoliciesMutation.error ||
     replaceDiscountPoliciesMutation.error;
 
-  const actionErrorMessage = actionError ? getApiErrorMessage(actionError) : null;
-
+  const actionErrorMessage = actionError ? getFriendlyPolicyError(actionError) : null;
+  
   const newlyCreatedEvent = newlyCreatedEventId
     ? (displayedEvents ?? []).find((e) => e.eventId === newlyCreatedEventId) ?? null
     : null;
@@ -1459,7 +1483,7 @@ export default function MyEventsPage() {
 
                           {replacePurchasePoliciesMutation.isError && (
                             <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-                              {getApiErrorMessage(replacePurchasePoliciesMutation.error)}
+                              {getFriendlyPolicyError(replacePurchasePoliciesMutation.error)}
                             </div>
                           )}
 
@@ -1649,7 +1673,7 @@ export default function MyEventsPage() {
 
                           {replaceDiscountPoliciesMutation.isError && (
                             <div className="mt-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-                              {getApiErrorMessage(replaceDiscountPoliciesMutation.error)}
+                              {getFriendlyPolicyError(replaceDiscountPoliciesMutation.error)}
                             </div>
                           )}
 
