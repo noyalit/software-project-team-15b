@@ -1,0 +1,5 @@
+# Spring Boot loads EnvironmentPostProcessor implementations from this file (NOT
+# from a META-INF/spring/*.imports file — that convention is for auto-configurations).
+# The interface lives in package org.springframework.boot as of Spring Boot 4.
+org.springframework.boot.EnvironmentPostProcessor=\
+  com.software_project_team_15b.Ticketmaster.Infrastructure.Config.DotenvEnvironmentPostProcessor
