@@ -1,0 +1,33 @@
+# Scenario: register four users, one opens a company and creates two events.
+#
+# To run this file instead of the default:
+#   INIT_RUN=true INIT_STATE_FILE=classpath:initial-state.companies-events.txt ./mvnw spring-boot:run
+#
+# Admin: a system administrator already exists from initialization
+# (seeded by SystemAdminInitializer), so no statement is needed for it here.
+
+# Register u1, u2, u3 (over 18), u4.
+# All birthdates are well over 18 as of 2026; u3 is called out explicitly.
+guest-registration(u1, U1pass123!, 1995-01-01);
+guest-registration(u2, U2pass123!, 1996-02-02);
+guest-registration(u3, U3pass123!, 1997-03-03);
+guest-registration(u4, U4pass123!, 1998-04-04);
+
+# Login u1
+login(u1, U1pass123!);
+
+# Create company C1 (u1 becomes its active, approved founder)
+open-production-company(u1, C1);
+
+# Create event E1 with 10 standing tickets and 10 seats (price unspecified -> default 50 USD)
+create-event(u1, C1, E1, "TBD Artist", CONCERT, 2027-06-01T20:00:00Z, "Venue 1");
+add-standing-area(u1, E1, "Standing", 50.00, USD, 10);
+add-seating-area(u1, E1, "Seating", 50.00, USD, 1, 10);
+
+# Create event E2 with 10 standing tickets and 10 seats, each ticket costing 10 dollars
+create-event(u1, C1, E2, "TBD Artist", CONCERT, 2027-07-01T20:00:00Z, "Venue 2");
+add-standing-area(u1, E2, "Standing", 10.00, USD, 10);
+add-seating-area(u1, E2, "Seating", 10.00, USD, 1, 10);
+
+# Logout
+logout(u1);
