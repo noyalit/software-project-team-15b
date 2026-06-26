@@ -5,6 +5,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Event.commands.Cre
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.PriceQuery;
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.UpdateEventCommand;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
+import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Controller.Event.EventController;
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
 import com.software_project_team_15b.Ticketmaster.DTO.EventAvailabilityDTO;
@@ -18,6 +19,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
+import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -44,6 +46,12 @@ class EventControllerBlackTest {
 
     @Mock
     private IEventManagementService eventService;
+
+    @Mock
+    private IAuth auth;
+
+    @Mock
+    private UserDomainService userDomainService;
 
     @InjectMocks
     private EventController controller;
@@ -137,7 +145,7 @@ class EventControllerBlackTest {
                 "Tel Aviv", EventStatus.PUBLISHED, List.of());
         when(eventService.getEvent(eq(eventId))).thenReturn(dto);
 
-        ResponseEntity<ApiResponse<EventDTO>> response = controller.getEvent(eventId);
+        ResponseEntity<ApiResponse<EventDTO>> response = controller.getEvent(eventId, null);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals("Concert", response.getBody().getData().name());
@@ -150,7 +158,7 @@ class EventControllerBlackTest {
                 .thenThrow(new InvalidEventStateException("Not found"));
 
         assertEquals(HttpStatus.NOT_FOUND,
-                controller.getEvent(eventId).getStatusCode());
+                controller.getEvent(eventId, null).getStatusCode());
     }
 
     @Test
@@ -160,7 +168,7 @@ class EventControllerBlackTest {
                 .thenThrow(new RuntimeException("Unexpected"));
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR,
-                controller.getEvent(eventId).getStatusCode());
+                controller.getEvent(eventId, null).getStatusCode());
     }
 
     // ─── updateEvent ──────────────────────────────────────────────────────────

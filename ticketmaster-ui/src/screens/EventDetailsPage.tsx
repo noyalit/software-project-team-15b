@@ -290,7 +290,7 @@ export default function EventDetailsPage() {
   }, [activeOrderId, eventId, myActiveOrdersQuery.data]);
 
   const eventQuery = useQuery({
-    queryKey: ['event', eventId],
+    queryKey: ['event', eventId, token],
     queryFn: async () => {
       const res = await http.get<ApiResponse<EventDTO>>(`/api/events/${eventId}`);
       if (res.data.error) throw new Error(res.data.error);

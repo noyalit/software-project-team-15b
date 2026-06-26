@@ -527,7 +527,6 @@ public class PurchasingService {
         Integer transactionId = null;
         String issuedTicketId = null;
 
-        boolean paymentSucceeded = false;
         boolean ticketsIssued = false;
         boolean confirmed = false;
         boolean finalizeDone = false;
@@ -539,7 +538,6 @@ public class PurchasingService {
             priceBreakdown = getPriceBreakdown(activeOrder, couponCode, birthDate);
 
             transactionId = pay(activeOrder, priceBreakdown.total(), paymentDetails);
-            paymentSucceeded = true;
 
             issuedTicketId = issueTickets(activeOrder);
             ticketsIssued = true;

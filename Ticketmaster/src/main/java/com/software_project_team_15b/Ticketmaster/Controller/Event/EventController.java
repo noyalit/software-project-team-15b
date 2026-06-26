@@ -70,12 +70,31 @@ public class EventController {
 
     @Operation(summary = "Get a single event with areas and seat statuses")
     @GetMapping("/{eventId}")
-    public ResponseEntity<ApiResponse<EventDTO>> getEvent(@PathVariable UUID eventId) {
+    public ResponseEntity<ApiResponse<EventDTO>> getEvent(
+            @PathVariable UUID eventId,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token) {
         try {
-            EventDTO event = eventService.getEvent(eventId);
+            final EventDTO event;
+            if (token == null || token.isBlank()) {
+                event = eventService.getEvent(eventId);
+                if (event != null
+                        && event.status() == com.software_project_team_15b.Ticketmaster.Domain.Event.EventStatus.DRAFT) {
+                    return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                            .body(new ApiResponse<>(null, "event not found: " + eventId));
+                }
+            } else {
+                event = eventService.getEvent(eventId, token);
+            }
+
             return ResponseEntity.ok(new ApiResponse<>(event, null));
         } catch (InvalidEventStateException ex) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ApiResponse<>(null, ex.getMessage()));
+        } catch (InvalidTokenException ex) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiResponse<>(null, ex.getMessage()));
+        } catch (PolicyViolationException ex) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(new ApiResponse<>(null, ex.getMessage()));
         } catch (Exception ex) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)

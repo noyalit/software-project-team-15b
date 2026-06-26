@@ -27,10 +27,12 @@ import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.PriceBreakdownDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.PurchasePolicyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.SeatsAvailabilityDTO;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.EventStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PriceBreakdown;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
+import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.InvalidEventStateException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.exceptions.PolicyViolationException;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.policy.IEventPurchasePolicy;
@@ -151,6 +153,52 @@ public class EventManagementService implements IEventManagementService, EventSub
     @Override
     public EventDTO getEvent(UUID eventId) {
         return eventDomainService.getEvent(eventId);
+    }
+
+    @Override
+    public EventDTO getEvent(UUID eventId, String token) {
+        EventDTO event = eventDomainService.getEvent(eventId);
+        if (event == null) {
+            return null;
+        }
+
+        if (event.status() != EventStatus.DRAFT) {
+            return event;
+        }
+
+        if (token == null || token.isBlank()) {
+            throw new InvalidEventStateException("event not found: " + eventId);
+        }
+
+        if (!auth.isTokenValid(token)) {
+            throw new InvalidTokenException("Invalid or expired token");
+        }
+
+        if (!auth.isMember(token)) {
+            throw new PolicyViolationException("Only members can view draft events");
+        }
+
+        UUID callerId = auth.extractUserId(token);
+        UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
+
+        boolean allowed = userDomainService.isAssignedManager(callerId, eventId, companyId);
+        if (!allowed) {
+            for (ManagerPermission p : ManagerPermission.values()) {
+                try {
+                    userDomainService.isLegalEventManager(eventId, callerId, companyId, p);
+                    allowed = true;
+                    break;
+                } catch (RuntimeException ignored) {
+                    // try next permission
+                }
+            }
+        }
+
+        if (!allowed) {
+            throw new InvalidEventStateException("event not found: " + eventId);
+        }
+
+        return event;
     }
 
     @Override
@@ -342,6 +390,7 @@ public class EventManagementService implements IEventManagementService, EventSub
             Objects.requireNonNull(callerId, "callerId");
             UUID companyId = eventDomainService.getCompanyIdForEventId(eventId);
             userDomainService.isLegalEventManager(eventId, callerId, companyId, ManagerPermission.CONFIGURE_HALLS_AND_SEATS);
+            
             eventDomainService.removeArea(eventId, areaId);
             AUDIT.info("op=removeArea event={} area={} caller={} result=ok", eventId, areaId, callerId);
         } catch (RuntimeException e) {
@@ -393,6 +442,7 @@ public class EventManagementService implements IEventManagementService, EventSub
         }
     }
 
+    @Override
     public UUID getCompanyIdForEventId(UUID eventId) {
         return eventDomainService.getCompanyIdForEventId(eventId);
     }

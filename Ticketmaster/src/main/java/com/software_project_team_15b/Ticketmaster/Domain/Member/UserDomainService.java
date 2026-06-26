@@ -732,6 +732,23 @@ public class UserDomainService {
                 );
     }
 
+    @Transactional(readOnly = true)
+    public boolean isAssignedManager(UUID managerId, UUID eventId, UUID companyId) {
+        Objects.requireNonNull(managerId, "managerId");
+        Objects.requireNonNull(eventId, "eventId");
+        Objects.requireNonNull(companyId, "companyId");
+
+        Member member = getMemberOrThrow(managerId);
+        return member.getAssignedRoles()
+                .stream()
+                .filter(role -> role instanceof Manager)
+                .map(role -> (Manager) role)
+                .anyMatch(manager ->
+                        manager.belongsToCompany(companyId)
+                                && eventId.equals(manager.getEventId())
+                );
+    }
+
     /**
      * Checks whether a member holds an approved {@link CompanyManager} role in the given company
      * with the specified permission.
