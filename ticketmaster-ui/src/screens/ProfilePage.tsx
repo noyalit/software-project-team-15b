@@ -418,6 +418,16 @@ export default function ProfilePage() {
       )
       .flatMap((role) => role.permissions ?? []);
   
+  const getManagerPermissions = (eventId: string) =>
+    assignedRoles
+      .filter(
+        (role) =>
+          typeof role !== 'string' &&
+          role.roleName === 'Manager' &&
+          role.eventId === eventId
+      )
+      .flatMap((role) => role.permissions ?? []);
+
   const isAppointmentApprovedForTarget = (
     roleName: string,
     targetId: string
@@ -702,6 +712,16 @@ export default function ProfilePage() {
                       <span className="text-sm font-medium text-slate-800">
                         {event.name}
                       </span>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {getManagerPermissions(event.eventId).map((permission) => (
+                          <span
+                            key={permission}
+                            className="rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700"
+                          >
+                            {formatPermission(permission)}
+                          </span>
+                        ))}
+                      </div>
                       <div className="flex items-center gap-2">
                         {isAppointmentApprovedForTarget('Manager', event.eventId) ? (
                           <span className="rounded-md bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-800">
