@@ -648,7 +648,7 @@ export default function ProfilePage() {
                           <span className="rounded-md bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-800">
                             Appointment approved
                           </span>
-                        ) : currentRole === 'Owner' ? (
+                        ) : (
                           <button
                             onClick={() =>
                               approveAppointmentMutation.mutate({
@@ -661,7 +661,7 @@ export default function ProfilePage() {
                           >
                             Approve appointment
                           </button>
-                        ) : null}
+                        )}
                       </div>
                     </div>
                   ))
@@ -707,7 +707,7 @@ export default function ProfilePage() {
                           <span className="rounded-md bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-800">
                             Appointment approved
                           </span>
-                        ) : currentRole === 'Manager' ? (
+                        ) : (
                           <button
                             onClick={() =>
                               approveAppointmentMutation.mutate({
@@ -720,7 +720,7 @@ export default function ProfilePage() {
                           >
                             Approve appointment
                           </button>
-                        ) : null}
+                        )}
                             
 
                         {renderRoleButton(currentRole === 'Manager', `Manager:${event.eventId}`, true)}
@@ -782,7 +782,7 @@ export default function ProfilePage() {
                         <span className="rounded-md bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-800">
                           Appointment approved
                         </span>
-                      ) : currentRole === 'CompanyManager' ? (
+                      ) : (
                         <button
                           onClick={() =>
                             approveAppointmentMutation.mutate({
@@ -795,12 +795,6 @@ export default function ProfilePage() {
                         >
                           Approve appointment
                         </button>
-                      ) : (
-                        renderRoleButton(
-                          currentRole === 'CompanyManager',
-                          `CompanyManager:${company.companyId}`,
-                          true
-                        )
                       )}
                     </div>
                   ))
