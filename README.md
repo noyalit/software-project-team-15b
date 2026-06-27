@@ -33,6 +33,7 @@ role-based permission system (Founder → Owner → Manager) governs who can do 
   - [Spring Profiles](#spring-profiles)
   - [The `.env` File](#the-env-file)
 - [How Docker Works](#-how-docker-works)
+- [Running Across Two Machines (DB on a separate PC)](#-running-across-two-machines-db-on-a-separate-pc)
 - [Initial-State Seeding](#-initial-state-seeding)
 - [Working with the Database](#-working-with-the-database)
 - [Testing](#-testing)
@@ -235,6 +236,54 @@ docker compose ps                   # list running services
 docker compose down                 # stop and remove containers (DATA KEPT)
 docker compose down -v              # stop and DROP the database volume (fresh DB)
 ```
+
+---
+
+## 🖧 Running Across Two Machines (DB on a separate PC)
+
+Want the **database on one machine** and the **backend + UI on another**? The backend
+already builds its JDBC URL from `POSTGRES_HOST` (the `docker` profile is fully
+env-driven), so this is purely a topology change — **no code changes**. Two extra
+Compose files split the single stack in half:
+
+| File                       | Runs on        | Services         |
+|----------------------------|----------------|------------------|
+| `docker-compose.db.yml`    | DB machine (PC-A)  | `postgres`       |
+| `docker-compose.app.yml`   | app machine (PC-B) | `backend` + `ui` |
+
+### On the DB machine (PC-A)
+
+```bash
+cp .env.db.example .env          # then set a STRONG POSTGRES_PASSWORD
+docker compose -f docker-compose.db.yml up -d
+```
+
+### On the app machine (PC-B)
+
+```bash
+cp .env.app.example .env         # then set POSTGRES_HOST=<PC-A IP> + matching creds
+docker compose -f docker-compose.app.yml up --build
+```
+
+Open the UI at **http://&lt;PC-B IP&gt;:5173**. The UI proxies `/api` and `/ws` to the
+backend on its own machine; the backend in turn talks to Postgres on PC-A.
+
+### Networking & security
+
+- **PC-A** must publish `5432` (it does, via `docker-compose.db.yml`) **and allow it
+  through its firewall**. Both machines must be on the same reachable network, and the
+  `POSTGRES_*` credentials/db/port in both `.env` files must match.
+- **The DB is now exposed on the network.** The default `postgres/postgres` is
+  insecure outside `localhost` — set a strong `POSTGRES_PASSWORD`, and ideally
+  restrict the firewall rule to **PC-B's IP** only.
+- `POSTGRES_HOST` is **required** on PC-B: Compose aborts with a clear message if it's
+  unset.
+- First app start auto-creates the schema (`ddl-auto=update`). To seed the remote DB,
+  set `INIT_RUN=true` in PC-B's `.env` for a one-time, abort-on-failure run against a
+  fresh database.
+
+> The original single-machine [`docker-compose.yml`](docker-compose.yml) is unchanged —
+> use it when everything runs on one box.
 
 ---
 

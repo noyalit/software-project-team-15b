@@ -1,0 +1,30 @@
+# Database-only stack — run this on the DB machine (PC-A).
+# The backend + UI run separately on another machine via docker-compose.app.yml,
+# connecting here over the network (set POSTGRES_HOST to this machine's IP there).
+#
+#   cp .env.db.example .env   # then set a strong POSTGRES_PASSWORD
+#   docker compose -f docker-compose.db.yml up -d
+#
+# postgres:16-alpine listens on all interfaces and generates a pg_hba.conf that
+# allows password auth from any host, so no extra Postgres config is needed for
+# remote connections — just keep port 5432 published (below) and open in the
+# machine's firewall.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ticketmaster}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ticketmaster}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
