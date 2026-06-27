@@ -34,6 +34,12 @@ services:
       #   docker compose down -v && INIT_RUN=true docker compose up --build
       INIT_RUN: ${INIT_RUN:-false}
       INIT_STATE_FILE: ${INIT_STATE_FILE:-classpath:initial-state.txt}
+    volumes:
+      # Mount the root .env read-only so the in-container config validator can lint the
+      # raw file for typos — e.g. a misspelled key like EXTERNAL_MODEs, which Compose
+      # would otherwise hide by substituting the ${EXTERNAL_MODE:-fake} default above.
+      # The effective config still comes from `environment:`; this file is validation-only.
+      - ./.env:/app/.env:ro
     ports:
       - "${BACKEND_PORT:-8081}:${SERVER_PORT:-8081}"
     depends_on:
