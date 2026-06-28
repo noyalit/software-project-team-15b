@@ -340,14 +340,16 @@ export default function EventDetailsPage() {
     queryFn: async () => {
       const companyId = eventQuery.data?.companyId;
       if (!companyId) return [] as any[];
-      const res = await http.get<ApiResponse<any[]>>(`/api/companies/${companyId}/purchase-policies`);
+      const res = await http.get<ApiResponse<any[]>>(
+        `/api/companies/${companyId}/purchase-policies`,
+        userType === 'guest'
+          ? { headers: { Authorization: undefined } }
+          : undefined
+      );
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? [];
     },
-    enabled:
-      Boolean(token) &&
-      userType === 'member' &&
-      Boolean(eventQuery.data?.companyId),
+    enabled: Boolean(eventQuery.data?.companyId),
   });
 
   const companyDiscountPoliciesQuery = useQuery({
@@ -355,14 +357,16 @@ export default function EventDetailsPage() {
     queryFn: async () => {
       const companyId = eventQuery.data?.companyId;
       if (!companyId) return [] as any[];
-      const res = await http.get<ApiResponse<any[]>>(`/api/companies/${companyId}/discount-policies`);
+      const res = await http.get<ApiResponse<any[]>>(
+        `/api/companies/${companyId}/discount-policies`,
+        userType === 'guest'
+          ? { headers: { Authorization: undefined } }
+          : undefined
+      );
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? [];
     },
-    enabled:
-      Boolean(token) &&
-      userType === 'member' &&
-      Boolean(eventQuery.data?.companyId),
+    enabled: Boolean(eventQuery.data?.companyId),
   });
 
   const purchasePoliciesQuery = useQuery({
