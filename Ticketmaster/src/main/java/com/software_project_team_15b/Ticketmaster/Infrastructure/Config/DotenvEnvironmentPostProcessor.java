@@ -79,14 +79,14 @@ public class DotenvEnvironmentPostProcessor implements EnvironmentPostProcessor,
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
-        if (environment.getPropertySources().contains(PROPERTY_SOURCE_NAME)) {
+        if (environment.getPropertySources().contains(propertySourceName())) {
             return;
         }
         Path envFile = locateEnvFile();
         if (envFile != null) {
             Map<String, Object> values = parse(envFile);
             if (!values.isEmpty()) {
-                environment.getPropertySources().addLast(new MapPropertySource(PROPERTY_SOURCE_NAME, values));
+                environment.getPropertySources().addLast(new MapPropertySource(propertySourceName(), values));
             }
         }
         // Validate the *effective* value of each critical key, whatever its source. In the
@@ -99,13 +99,29 @@ public class DotenvEnvironmentPostProcessor implements EnvironmentPostProcessor,
     private Path locateEnvFile() {
         Path dir = Paths.get(System.getProperty("user.dir", ".")).toAbsolutePath();
         for (int level = 0; level <= MAX_PARENT_LEVELS && dir != null; level++) {
-            Path candidate = dir.resolve(FILE_NAME);
+            Path candidate = dir.resolve(filename());
             if (Files.isRegularFile(candidate)) {
                 return candidate;
             }
             dir = dir.getParent();
         }
         return null;
+    }
+
+    /**
+     * Name of the {@code .env} file to load. Overridable so a test variant can load
+     * {@code .env.test} instead without clobbering a developer's {@code .env}.
+     */
+    protected String filename() {
+        return FILE_NAME;
+    }
+
+    /**
+     * Name of the property source this processor registers. Overridable so a test
+     * variant uses a distinct name and can coexist with the parent's source.
+     */
+    protected String propertySourceName() {
+        return PROPERTY_SOURCE_NAME;
     }
 
     Map<String, Object> parse(Path envFile) {
