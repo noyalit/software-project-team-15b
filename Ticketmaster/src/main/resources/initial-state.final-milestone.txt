@@ -29,5 +29,9 @@ create-event(u1, C1, E2, "TBD Artist", CONCERT, 2027-07-01T20:00:00Z, "Venue 2")
 add-standing-area(u1, E2, "Standing", 10.00, USD, 10);
 add-seating-area(u1, E2, "Seating", 10.00, USD, 1, 10);
 
+# Publish events E1 and E2
+publish-event(u1, E1);
+publish-event(u1, E2);
+
 # Logout
 logout(u1);
