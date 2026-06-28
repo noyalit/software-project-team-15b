@@ -1053,20 +1053,25 @@ export default function CompanyPage() {
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              onClick={() => changeStatusMutation.mutate('CLOSED')}
-              disabled={changeStatusMutation.isPending}
-              className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 hover:bg-rose-100 disabled:opacity-60"
-            >
-              Close
-            </button>
-            <button
-              onClick={() => changeStatusMutation.mutate('ACTIVE')}
-              disabled={changeStatusMutation.isPending}
-              className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-            >
-              Reopen
-            </button>
+            {company.status === 'ACTIVE' && (
+              <button
+                onClick={() => changeStatusMutation.mutate('CLOSED')}
+                disabled={changeStatusMutation.isPending}
+                className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-900 hover:bg-rose-100 disabled:opacity-60"
+              >
+                Close
+              </button>
+            )}
+
+            {company.status === 'CLOSED' && (
+              <button
+                onClick={() => changeStatusMutation.mutate('ACTIVE')}
+                disabled={changeStatusMutation.isPending}
+                className="rounded-md bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+              >
+                Reopen
+              </button>
+            )}
           </div>
 
           {changeStatusMutation.isError && (
