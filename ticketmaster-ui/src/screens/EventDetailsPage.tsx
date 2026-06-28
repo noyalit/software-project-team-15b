@@ -340,16 +340,11 @@ export default function EventDetailsPage() {
     queryFn: async () => {
       const companyId = eventQuery.data?.companyId;
       if (!companyId) return [] as any[];
-      const res = await http.get<ApiResponse<any[]>>(
-        `/api/companies/${companyId}/purchase-policies`,
-        userType === 'guest'
-          ? { headers: { Authorization: undefined } }
-          : undefined
-      );
+      const res = await http.get<ApiResponse<any[]>>(`/api/companies/${companyId}/purchase-policies`);
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? [];
     },
-    enabled: Boolean(eventQuery.data?.companyId),
+    enabled: Boolean(token) && Boolean(eventQuery.data?.companyId),
   });
 
   const companyDiscountPoliciesQuery = useQuery({
@@ -357,16 +352,11 @@ export default function EventDetailsPage() {
     queryFn: async () => {
       const companyId = eventQuery.data?.companyId;
       if (!companyId) return [] as any[];
-      const res = await http.get<ApiResponse<any[]>>(
-        `/api/companies/${companyId}/discount-policies`,
-        userType === 'guest'
-          ? { headers: { Authorization: undefined } }
-          : undefined
-      );
+      const res = await http.get<ApiResponse<any[]>>(`/api/companies/${companyId}/discount-policies`);
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? [];
     },
-    enabled: Boolean(eventQuery.data?.companyId),
+    enabled: Boolean(token) && Boolean(eventQuery.data?.companyId),
   });
 
   const purchasePoliciesQuery = useQuery({
@@ -1325,15 +1315,6 @@ export default function EventDetailsPage() {
             >
               {checkoutStarted ? 'Checkout started' : 'Start checkout'}
             </button>
-
-            {checkoutStarted && (
-              <Link
-                to="/orders"
-                className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
-              >
-                Go to Orders
-              </Link>
-            )}
           </div>
         </div>
       )}

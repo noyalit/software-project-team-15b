@@ -303,10 +303,7 @@ export default function CheckoutPage() {
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? [];
     },
-    enabled:
-      Boolean(token) &&
-      userType === 'member' &&
-      Boolean(eventQuery.data?.companyId),
+    enabled: Boolean(token) && Boolean(eventQuery.data?.companyId),
   });
 
   const companyDiscountPoliciesQuery = useQuery({
@@ -318,10 +315,7 @@ export default function CheckoutPage() {
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? [];
     },
-    enabled:
-      Boolean(token) &&
-      userType === 'member' &&
-      Boolean(eventQuery.data?.companyId),
+    enabled: Boolean(token) && Boolean(eventQuery.data?.companyId),
   });
 
   const discountPoliciesQuery = useQuery({
@@ -970,9 +964,7 @@ export default function CheckoutPage() {
                   Company purchase policies
                 </div>
 
-                {userType !== 'member' ? (
-                  <div className="mt-1 text-sm text-slate-600">Company purchase policies are only available for members.</div>
-                ) : !eventQuery.data?.companyId ? (
+                {!eventQuery.data?.companyId ? (
                   <div className="mt-1 text-sm text-slate-600">Load the event to view policies.</div>
                 ) : companyPurchasePoliciesQuery.isPending ? (
                   <div className="mt-1 text-sm text-slate-600">Loading…</div>
@@ -1033,13 +1025,11 @@ export default function CheckoutPage() {
                   Company discount policies
                 </div>
 
-                {userType !== 'member' ? (
-                  <div className="mt-1 text-sm text-slate-600">Company purchase policies are only available for members.</div>
-                ) : !eventQuery.data?.companyId ? (
+                {!eventQuery.data?.companyId ? (
                   <div className="mt-1 text-sm text-slate-600">Load the event to view policies.</div>
-                ) : companyPurchasePoliciesQuery.isPending ? (
+                ) : companyDiscountPoliciesQuery.isPending ? (
                   <div className="mt-1 text-sm text-slate-600">Loading…</div>
-                ) : companyPurchasePoliciesQuery.isError ? (
+                ) : companyDiscountPoliciesQuery.isError ? (
                   <div className="mt-1 text-sm text-rose-700">
                     {getApiErrorMessage(companyDiscountPoliciesQuery.error)}
                   </div>

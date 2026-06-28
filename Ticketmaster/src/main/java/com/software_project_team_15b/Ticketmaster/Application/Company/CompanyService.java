@@ -466,12 +466,15 @@ public class CompanyService {
      */
     @Transactional(readOnly = true)
     public List<ICompanyPurchasePolicy> getCompanyPurchasePolicies(String token, UUID companyId) {
-        requireValidToken(token);
         requireNonNull(companyId, "Company ID");
-        UUID callerId = auth.extractUserId(token);
-        boolean canViewClosed = auth.isSystemAdmin(token)
-                || userDomainService.isActiveFounder(callerId, companyId)
-                || userDomainService.isActiveOwner(callerId, companyId);
+        boolean canViewClosed = false;
+        if (token != null && !token.isBlank()) {
+            requireValidToken(token);
+            UUID callerId = auth.extractUserId(token);
+            canViewClosed = auth.isSystemAdmin(token)
+                    || userDomainService.isActiveFounder(callerId, companyId)
+                    || userDomainService.isActiveOwner(callerId, companyId);
+        }
         Company company = companyDomainService.getCompany(companyId, canViewClosed);
         return company.getPurchasePolicies();
     }
@@ -494,12 +497,15 @@ public class CompanyService {
      */
     @Transactional(readOnly = true)
     public List<ICompanyDiscountPolicy> getCompanyDiscountPolicies(String token, UUID companyId) {
-        requireValidToken(token);
         requireNonNull(companyId, "Company ID");
-        UUID callerId = auth.extractUserId(token);
-        boolean canViewClosed = auth.isSystemAdmin(token)
-                || userDomainService.isActiveFounder(callerId, companyId)
-                || userDomainService.isActiveOwner(callerId, companyId);
+        boolean canViewClosed = false;
+        if (token != null && !token.isBlank()) {
+            requireValidToken(token);
+            UUID callerId = auth.extractUserId(token);
+            canViewClosed = auth.isSystemAdmin(token)
+                    || userDomainService.isActiveFounder(callerId, companyId)
+                    || userDomainService.isActiveOwner(callerId, companyId);
+        }
         Company company = companyDomainService.getCompany(companyId, canViewClosed);
         return company.getDiscountPolicies();
     }
