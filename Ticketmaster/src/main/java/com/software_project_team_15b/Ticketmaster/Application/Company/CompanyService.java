@@ -471,9 +471,11 @@ public class CompanyService {
         if (!isMissingToken(token)) {
             requireValidToken(token);
             UUID callerId = auth.extractUserId(token);
-            canViewClosed = auth.isSystemAdmin(token)
-                    || userDomainService.isActiveFounder(callerId, companyId)
-                    || userDomainService.isActiveOwner(callerId, companyId);
+            if (callerId != null) {
+                canViewClosed = auth.isSystemAdmin(token)
+                        || userDomainService.isActiveFounder(callerId, companyId)
+                        || userDomainService.isActiveOwner(callerId, companyId);
+            }
         }
         Company company = companyDomainService.getCompany(companyId, canViewClosed);
         return company.getPurchasePolicies();
@@ -502,9 +504,11 @@ public class CompanyService {
         if (!isMissingToken(token)) {
             requireValidToken(token);
             UUID callerId = auth.extractUserId(token);
-            canViewClosed = auth.isSystemAdmin(token)
-                    || userDomainService.isActiveFounder(callerId, companyId)
-                    || userDomainService.isActiveOwner(callerId, companyId);
+            if (callerId != null) {
+                canViewClosed = auth.isSystemAdmin(token)
+                        || userDomainService.isActiveFounder(callerId, companyId)
+                        || userDomainService.isActiveOwner(callerId, companyId);
+            }
         }
         Company company = companyDomainService.getCompany(companyId, canViewClosed);
         return company.getDiscountPolicies();
