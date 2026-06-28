@@ -1,0 +1,2 @@
+org.springframework.boot.EnvironmentPostProcessor=\
+com.software_project_team_15b.Ticketmaster.Infrastructure.Config.TestDotenvEnvironmentPostProcessor
