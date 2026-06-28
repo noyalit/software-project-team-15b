@@ -468,7 +468,7 @@ public class CompanyService {
     public List<ICompanyPurchasePolicy> getCompanyPurchasePolicies(String token, UUID companyId) {
         requireNonNull(companyId, "Company ID");
         boolean canViewClosed = false;
-        if (token != null && !token.isBlank()) {
+        if (!isMissingToken(token)) {
             requireValidToken(token);
             UUID callerId = auth.extractUserId(token);
             canViewClosed = auth.isSystemAdmin(token)
@@ -499,7 +499,7 @@ public class CompanyService {
     public List<ICompanyDiscountPolicy> getCompanyDiscountPolicies(String token, UUID companyId) {
         requireNonNull(companyId, "Company ID");
         boolean canViewClosed = false;
-        if (token != null && !token.isBlank()) {
+        if (!isMissingToken(token)) {
             requireValidToken(token);
             UUID callerId = auth.extractUserId(token);
             canViewClosed = auth.isSystemAdmin(token)
@@ -508,6 +508,27 @@ public class CompanyService {
         }
         Company company = companyDomainService.getCompany(companyId, canViewClosed);
         return company.getDiscountPolicies();
+    }
+
+    private static boolean isMissingToken(String token) {
+        if (token == null) {
+            return true;
+        }
+        String t = token.trim();
+        if (t.isEmpty()) {
+            return true;
+        }
+        if (t.equalsIgnoreCase("null")) {
+            return true;
+        }
+        if (t.equalsIgnoreCase("Bearer") || t.equalsIgnoreCase("Bearer null")) {
+            return true;
+        }
+        if (t.regionMatches(true, 0, "Bearer ", 0, "Bearer ".length())) {
+            String after = t.substring("Bearer ".length()).trim();
+            return after.isEmpty() || after.equalsIgnoreCase("null");
+        }
+        return false;
     }
 
     /**
