@@ -4,7 +4,8 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { http } from '../api/http';
 import type { ApiResponse, MemberDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
-import logo from '../assets/Ticket4U_logo.jpeg';
+// import logo from '../assets/Ticket4U_logo.jpeg';
+import logo from '../assets/Ticket4U_logo.png';
 import NotificationsBell from './NotificationsBell';
 import { connectNotifications, disconnectNotifications } from './notificationsClient';
 
@@ -157,7 +158,7 @@ const canAccessManagerPages =
       <header className="sticky top-0 z-10 border-b border-slate-200/70 bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
           <Link to="/" className="flex shrink-0 items-center">
-            <img src={logo} alt="Ticket4U" className="h-10 w-auto shrink-0 object-contain" />
+            <img src={logo} alt="Ticket4U" className="h-14 w-auto shrink-0 object-contain" />
             <span className="sr-only">Ticket4U</span>
           </Link>
 
