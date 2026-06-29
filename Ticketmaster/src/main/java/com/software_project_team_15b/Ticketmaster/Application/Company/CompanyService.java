@@ -19,6 +19,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
+import com.software_project_team_15b.Ticketmaster.Application.Event.IEventManagementService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.SearchCriteria;
@@ -36,21 +37,25 @@ public class CompanyService {
     private final ICompanyDomainService companyDomainService;
     private final UserDomainService userDomainService;
     private final IEventDomainService eventDomainService;
+    private final IEventManagementService eventManagementService;
     private final IAuth auth;
 
     /**
      * Constructs the service with its required collaborators.
      *
-     * @param companyDomainService domain service for company aggregate operations; must not be null
-     * @param userDomainService    domain service for member/role operations; must not be null
-     * @param eventDomainService   domain service for event operations; must not be null
-     * @param auth                 authentication/authorization gateway; must not be null
+     * @param companyDomainService    domain service for company aggregate operations; must not be null
+     * @param userDomainService       domain service for member/role operations; must not be null
+     * @param eventDomainService      domain service for event operations; must not be null
+     * @param eventManagementService  application service used to cancel events (with refund/notification
+     *                                cascade) when a company is suspended or closed; must not be null
+     * @param auth                    authentication/authorization gateway; must not be null
      * @throws NullPointerException if any argument is null
      */
-    public CompanyService(ICompanyDomainService companyDomainService, UserDomainService userDomainService, IEventDomainService eventDomainService, IAuth auth) {
+    public CompanyService(ICompanyDomainService companyDomainService, UserDomainService userDomainService, IEventDomainService eventDomainService, IEventManagementService eventManagementService, IAuth auth) {
         this.companyDomainService = Objects.requireNonNull(companyDomainService, "companyDomainService cannot be null");
         this.userDomainService = Objects.requireNonNull(userDomainService, "userDomainService cannot be null");
         this.eventDomainService = Objects.requireNonNull(eventDomainService, "eventDomainService cannot be null");
+        this.eventManagementService = Objects.requireNonNull(eventManagementService, "eventManagementService cannot be null");
         this.auth = Objects.requireNonNull(auth, "auth cannot be null");
     }
 
@@ -332,7 +337,6 @@ public class CompanyService {
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
      *                                           if no company with {@code companyId} exists
      */
-    @Transactional
     public CompanyDTO suspendCompany(String token, UUID companyId) {
         try {
             requireNonNull(companyId, "Company ID");
@@ -342,8 +346,13 @@ public class CompanyService {
             }
             UUID callerId = auth.extractUserId(token);
             Company saved = companyDomainService.changeStatus(companyId, CompanyStatus.SUSPENDED);
+            // Cancel every event through the event service so the refund/notification cascade
+            // runs (cancel + publish to EventCancelManager). NOTE: intentionally not wrapped in
+            // an enclosing @Transactional — the cascade triggers external refunds that cannot be
+            // rolled back, so each step (status change, per-event cancel+refund, appointment
+            // cleanup) commits independently, mirroring the regular event-cancel path.
             eventDomainService.searchInCompany(companyId, SearchCriteria.empty())
-                    .forEach(event -> eventDomainService.cancel(event.eventId()));
+                    .forEach(event -> eventManagementService.cancelForCompanyShutdown(event.eventId()));
 
             // Cancel all appointments (including founders) in the company
             userDomainService.cancelAllAppointments(companyId);
@@ -367,7 +376,6 @@ public class CompanyService {
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException
      *                                           if no company with {@code companyId} exists
      */
-    @Transactional
     public CompanyDTO closeCompany(String token, UUID companyId) {
         try {
             requireNonNull(companyId, "Company ID");
@@ -377,8 +385,10 @@ public class CompanyService {
                 throw new UnauthorizedCompanyActionException("Only company founder can close the company");
             }
             Company saved = companyDomainService.changeStatus(companyId, CompanyStatus.CLOSED);
+            // Cancel every event through the event service so the refund/notification cascade
+            // runs. See suspendCompany for why this is intentionally not @Transactional.
             eventDomainService.searchInCompany(companyId, SearchCriteria.empty())
-                    .forEach(event -> eventDomainService.cancel(event.eventId()));
+                    .forEach(event -> eventManagementService.cancelForCompanyShutdown(event.eventId()));
             AUDIT.info("op=closeCompany callerId={} companyId={} result=ok", callerId, companyId);
             return CompanyDTO.from(saved);
         } catch (RuntimeException e) {
