@@ -52,25 +52,29 @@ memory of the relevant work.
   event layer once we decided that closing/suspending a company should cancel its
   events.
 - **Summary of prompt(s):** "CompanyService directly reaches into event internals to cancel
-  events when a company shuts down - how do I move this behind an interface so the
-  dependency points the right way?"
-- **Output received (short description):** the suggestion to expose a single method on the
-  event-management interface (we named it `cancelForCompanyShutdown`) and have
-  `CompanyService` depend on `IEventManagementService` instead of the concrete class.
-- **Files / components affected:** `CompanyService`, `IEventManagementService` /
-  `EventManagementService`.
-- **Modifications made:** we kept the interface idea but wrote the cancellation + refund
-  cascade ourselves, including the part that fires the cancellation event and the order
-  in which refunds are issued before the event is marked cancelled. The rollback/refund
-  behavior on a partial failure is our own design - we did not want a generated version
-  of failure handling, since that's one of the core things being graded.
+  events when a company shuts down - how do I publish the shutdown request without
+  coupling company logic to event-cancellation internals?"
+- **Output received (short description):** an initial suggestion to put the shutdown
+  cancellation behind the event-management boundary. We later adapted that into a Spring
+  application event (`EventCancellationEvent`) so `CompanyService` publishes the intent
+  and `EventManagementService` handles the actual event cancellation path.
+- **Files / components affected:** `CompanyService`, `EventCancellationEvent`,
+  `EventManagementService`, and `IEventManagementService`.
+- **Modifications made:** we wrote the cancellation cascade ourselves. `CompanyService`
+  now finds the events for a closed/suspended company and publishes one
+  `EventCancellationEvent` per event; `EventManagementService` listens for that event,
+  cancels the event through the domain service, and then triggers the cancellation
+  manager so order/refund/notification subscribers can run. The rollback/refund behavior
+  on partial failures is our own design - we did not want a generated version of failure
+  handling, since that's one of the core things being graded.
 - **Initial gaps in understanding (if any):** whether the refund cascade should live in
   `CompanyService` or be pushed down into the event service.
 - **Final understanding (brief explanation in your own words):** `CompanyService` only knows
   "shut this company down"; it shouldn't know how an event refunds its buyers. So it
-  calls one method on the event service, and the event service owns the cancellation,
-  the refunds, and the notification. That keeps the company layer from depending on
-  event internals and means the refund logic has a single home.
+  publishes a cancellation event for each event in the company, and the event service
+  owns the cancellation, the refunds, and the notification cascade. That keeps the
+  company layer from depending on event internals and means the refund logic has a
+  single home.
 
 ## Bug fixing - auth/guest edge cases
 
@@ -138,8 +142,8 @@ memory of the relevant work.
   test scaffolding, small refactors, and bug-hunting. Most of that was edited heavily
   before it landed, so "influenced" is more accurate than "generated".
 - **Main areas where LLMs were used:** test boilerplate and edge-case brainstorming,
-  mechanical refactors (e.g. introducing `IEventManagementService` to decouple the
-  company layer), debugging null/permission bugs, and documentation/config wording.
+  mechanical refactors (e.g. moving company-shutdown cancellation behind an event-service
+  boundary), debugging null/permission bugs, and documentation/config wording.
 - **Main areas implemented without LLM assistance:** concurrency control and the seat-hold
   /race handling, the purchase and discount policy evaluation and composition, the
   role/permission enforcement (Founder/Owner/Manager + System Admin), the
