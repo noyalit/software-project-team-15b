@@ -120,11 +120,10 @@ export default function OrdersPage() {
 
         {!orderHistoryQuery.isPending && !orderHistoryQuery.isError && (
           <div className="mt-3 grid gap-3">
-            {(orderHistoryQuery.data ?? []).filter((o) => !o.cancelled).length === 0 ? (
+            {(orderHistoryQuery.data ?? []).length === 0 ? (
               <div className="text-sm text-slate-600">No completed orders yet.</div>
             ) : (
               (orderHistoryQuery.data ?? [])
-                .filter((o) => !o.cancelled)
                 .map((o) => (
                   <Link
                     key={o.orderId}
@@ -134,8 +133,13 @@ export default function OrdersPage() {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="text-sm font-semibold text-slate-900">
-                          Completed order
+                          {o.cancelled ? 'Cancelled order' : 'Completed order'}
                         </div>
+                        {o.cancelled && (
+                          <span className="mt-2 inline-flex rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-bold text-rose-700">
+                            Cancelled
+                          </span>
+                        )}
                       </div>
 
                       <div className="text-right">
