@@ -7,6 +7,7 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import com.software_project_team_15b.Ticketmaster.Application.Event.commands.AddAreaCommand;
@@ -20,6 +21,7 @@ import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventCancelManager;
 import com.software_project_team_15b.Ticketmaster.Application.Publisher_SubscriberCancelEvent.EventSubscriber;
+import com.software_project_team_15b.Ticketmaster.Application.events.EventCancellationEvent;
 import com.software_project_team_15b.Ticketmaster.DTO.DiscountPolicyDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventAvailabilityDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.EventDTO;
@@ -124,6 +126,11 @@ public class EventManagementService implements IEventManagementService, EventSub
             AUDIT.warn("op=publish event={} caller={} result=rejected reason={}", eventId, callerId, e.getMessage());
             throw e;
         }
+    }
+
+    @EventListener
+    public void onEventCancellation(EventCancellationEvent event) {
+        cancel(event.eventId(), event.cancelledById());
     }
 
     public void cancel(UUID eventId, UUID callerId) {

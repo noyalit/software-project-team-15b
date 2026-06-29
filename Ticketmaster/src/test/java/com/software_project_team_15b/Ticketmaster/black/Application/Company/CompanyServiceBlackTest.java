@@ -21,19 +21,20 @@ import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.context.ApplicationEventPublisher;
 
 import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.events.EventCancellationEvent;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyDomainServiceImpl;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
-import com.software_project_team_15b.Ticketmaster.Application.Event.IEventManagementService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
@@ -49,7 +50,7 @@ class CompanyServiceBlackTest {
     @Mock private IAuth auth;
     @Mock private UserDomainService userDomainService;
     @Mock private IEventDomainService eventDomainService;
-    @Mock private IEventManagementService eventManagementService;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private CompanyService service;
 
@@ -74,7 +75,7 @@ class CompanyServiceBlackTest {
         when(eventDomainService.searchInCompany(any(), any())).thenReturn(List.of());
 
         CompanyDomainServiceImpl domainService = new CompanyDomainServiceImpl(repo);
-        service = new CompanyService(domainService, userDomainService, eventDomainService, eventManagementService, auth);
+        service = new CompanyService(domainService, userDomainService, eventDomainService, auth, eventPublisher);
     }
 
     private Company saveToRepo(Company company) {
@@ -547,7 +548,7 @@ class CompanyServiceBlackTest {
 
         service.suspendCompany(adminToken, dto.companyId());
 
-        verify(eventManagementService).cancelForCompanyShutdown(eventId);
+        verify(eventPublisher).publishEvent(new EventCancellationEvent(eventId, adminId));
     }
 
     // ===========================================================================================
