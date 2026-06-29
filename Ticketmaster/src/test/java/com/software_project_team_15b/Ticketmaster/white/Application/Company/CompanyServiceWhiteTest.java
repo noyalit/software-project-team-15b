@@ -34,6 +34,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyDomainS
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
+import com.software_project_team_15b.Ticketmaster.Application.Event.IEventManagementService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.PurchaseRequest;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
@@ -48,6 +49,7 @@ class CompanyServiceWhiteTest {
     private IAuth auth;
     private UserDomainService userDomainService;
     private IEventDomainService eventDomainService;
+    private IEventManagementService eventManagementService;
     private ICompanyDomainService domainService;
     private CompanyService service;
 
@@ -74,9 +76,10 @@ class CompanyServiceWhiteTest {
         when(userDomainService.isActiveOwner(any(), any())).thenReturn(true);
         eventDomainService = mock(IEventDomainService.class);
         when(eventDomainService.searchInCompany(any(), any())).thenReturn(List.of());
+        eventManagementService = mock(IEventManagementService.class);
 
         domainService = new CompanyDomainServiceImpl(repo);
-        service = new CompanyService(domainService, userDomainService, eventDomainService, auth);
+        service = new CompanyService(domainService, userDomainService, eventDomainService, eventManagementService, auth);
     }
 
     private Company saveToRepo(Company company) {
@@ -117,25 +120,31 @@ class CompanyServiceWhiteTest {
 
     @Test
     void constructor_throws_when_domainService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(null, userDomainService, eventDomainService, auth))
+        assertThatThrownBy(() -> new CompanyService(null, userDomainService, eventDomainService, eventManagementService, auth))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_userDomainService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(domainService, null, eventDomainService, auth))
+        assertThatThrownBy(() -> new CompanyService(domainService, null, eventDomainService, eventManagementService, auth))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_eventDomainService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, null, auth))
+        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, null, eventManagementService, auth))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void constructor_throws_when_eventManagementService_is_null() {
+        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, eventDomainService, null, auth))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_auth_is_null() {
-        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, eventDomainService, null))
+        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, eventDomainService, eventManagementService, null))
                 .isInstanceOf(NullPointerException.class);
     }
 
@@ -736,7 +745,7 @@ class CompanyServiceWhiteTest {
         CompanyDTO result = service.closeCompany(token, dto.companyId());
 
         assertThat(result.status()).isEqualTo(CompanyStatus.CLOSED);
-        verify(eventDomainService).cancel(eventId);
+        verify(eventManagementService).cancelForCompanyShutdown(eventId);
     }
 
     @Test
@@ -751,7 +760,7 @@ class CompanyServiceWhiteTest {
         CompanyDTO result = service.suspendCompany(adminToken, dto.companyId());
 
         assertThat(result.status()).isEqualTo(CompanyStatus.SUSPENDED);
-        verify(eventDomainService).cancel(eventId);
+        verify(eventManagementService).cancelForCompanyShutdown(eventId);
     }
 
     @Test

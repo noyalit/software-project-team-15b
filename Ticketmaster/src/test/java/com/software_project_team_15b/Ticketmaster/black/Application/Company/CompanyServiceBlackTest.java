@@ -33,6 +33,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.ICompanyRepository;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyDiscountPolicy;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.policy.ICompanyPurchasePolicy;
+import com.software_project_team_15b.Ticketmaster.Application.Event.IEventManagementService;
 import com.software_project_team_15b.Ticketmaster.Domain.Event.IEventDomainService;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.UserDomainService;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyDTO;
@@ -48,6 +49,7 @@ class CompanyServiceBlackTest {
     @Mock private IAuth auth;
     @Mock private UserDomainService userDomainService;
     @Mock private IEventDomainService eventDomainService;
+    @Mock private IEventManagementService eventManagementService;
 
     private CompanyService service;
 
@@ -72,7 +74,7 @@ class CompanyServiceBlackTest {
         when(eventDomainService.searchInCompany(any(), any())).thenReturn(List.of());
 
         CompanyDomainServiceImpl domainService = new CompanyDomainServiceImpl(repo);
-        service = new CompanyService(domainService, userDomainService, eventDomainService, auth);
+        service = new CompanyService(domainService, userDomainService, eventDomainService, eventManagementService, auth);
     }
 
     private Company saveToRepo(Company company) {
@@ -545,7 +547,7 @@ class CompanyServiceBlackTest {
 
         service.suspendCompany(adminToken, dto.companyId());
 
-        verify(eventDomainService).cancel(eventId);
+        verify(eventManagementService).cancelForCompanyShutdown(eventId);
     }
 
     // ===========================================================================================
