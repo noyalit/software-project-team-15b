@@ -301,6 +301,24 @@ public class EventManagementService implements IEventManagementService, EventSub
     }
 
     @Override
+    public void cancelForCompanyShutdown(UUID eventId) {
+        Objects.requireNonNull(eventId, "eventId");
+        // Authorization is enforced by the caller at the company-lifecycle boundary
+        // (system admin for suspend, founder for close), so the per-event manager
+        // permission check is intentionally skipped here. Otherwise this mirrors
+        // cancel(UUID, UUID): flip the state, then publish so subscribers run order
+        // cancellation, refunds, and notifications. Subscriber failures are best-effort.
+        eventDomainService.cancel(eventId);
+        try {
+            cancelManager.cancelEvent(eventId);
+        } catch (RuntimeException notifyEx) {
+            AUDIT.warn("op=cancelForCompanyShutdown event={} result=ok-notify-failed reason={}",
+                    eventId, notifyEx.getMessage());
+        }
+        AUDIT.info("op=cancelForCompanyShutdown event={} result=ok", eventId);
+    }
+
+    @Override
     public void updateEvent(UUID eventId, UpdateEventCommand cmd, String token) {
         updateEvent(eventId, cmd, resolveMemberCallerId(token));
     }
