@@ -136,6 +136,21 @@ public interface IEventManagementService {
     void cancel(UUID eventId, String token);
 
     /**
+     * Cancels the event as part of a company-lifecycle transition (company suspended or closed).
+     * Behaves like {@link #cancel(UUID, UUID)} — flips the event to cancelled and publishes the
+     * cancellation so downstream subscribers run order cancellation, refunds, and notifications —
+     * but performs <strong>no</strong> per-event manager authorization, because the caller is
+     * already authorized at the company boundary (system admin for suspend, founder for close).
+     * Idempotent and best-effort: a subscriber failure is logged, not rethrown.
+     * <p>
+     * Requirement: {@code I.3} (refund cascade), {@code I.5} (notifications).
+     *
+     * @param eventId event id; must not be null
+     * @throws InvalidEventStateException if the event is not found
+     */
+    void cancelForCompanyShutdown(UUID eventId);
+
+    /**
      * Transitions the event from DRAFT to PUBLISHED. Requires at least one area.
      * <p>
      * Requirement: {@code II.4.1} (lifecycle), {@code II.2.1}/{@code II.2.3}

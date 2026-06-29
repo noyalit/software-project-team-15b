@@ -21,12 +21,14 @@ import static org.mockito.Mockito.when;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.context.ApplicationEventPublisher;
 
 import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.events.EventCancellationEvent;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyDomainServiceImpl;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
@@ -48,6 +50,7 @@ class CompanyServiceBlackTest {
     @Mock private IAuth auth;
     @Mock private UserDomainService userDomainService;
     @Mock private IEventDomainService eventDomainService;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private CompanyService service;
 
@@ -72,7 +75,7 @@ class CompanyServiceBlackTest {
         when(eventDomainService.searchInCompany(any(), any())).thenReturn(List.of());
 
         CompanyDomainServiceImpl domainService = new CompanyDomainServiceImpl(repo);
-        service = new CompanyService(domainService, userDomainService, eventDomainService, auth);
+        service = new CompanyService(domainService, userDomainService, eventDomainService, auth, eventPublisher);
     }
 
     private Company saveToRepo(Company company) {
@@ -545,7 +548,7 @@ class CompanyServiceBlackTest {
 
         service.suspendCompany(adminToken, dto.companyId());
 
-        verify(eventDomainService).cancel(eventId);
+        verify(eventPublisher).publishEvent(new EventCancellationEvent(eventId, adminId));
     }
 
     // ===========================================================================================

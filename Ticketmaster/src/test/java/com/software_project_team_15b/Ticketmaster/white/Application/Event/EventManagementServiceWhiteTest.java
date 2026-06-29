@@ -208,6 +208,36 @@ class EventManagementServiceWhiteTest {
         verify(cancelManager).cancelEvent(eventId);
     }
 
+    @Test
+    void GivenEventId_WhenCancelForCompanyShutdown_ThenCancelsAndPublishesWithoutAuthorization() {
+        UUID eventId = UUID.randomUUID();
+
+        service.cancelForCompanyShutdown(eventId);
+
+        // The refund/notification cascade is driven by publishing to the cancel manager.
+        verify(eventDomainService).cancel(eventId);
+        verify(cancelManager).cancelEvent(eventId);
+        // Authorization is enforced at the company boundary, so no per-event manager check.
+        verify(userDomainService, never()).isLegalEventManager(any(), any(), any(), any());
+    }
+
+    @Test
+    void GivenSubscriberFails_WhenCancelForCompanyShutdown_ThenSucceedsBestEffort() {
+        UUID eventId = UUID.randomUUID();
+        doThrow(new RuntimeException("notify boom")).when(cancelManager).cancelEvent(eventId);
+
+        service.cancelForCompanyShutdown(eventId);
+
+        verify(eventDomainService).cancel(eventId);
+        verify(cancelManager).cancelEvent(eventId);
+    }
+
+    @Test
+    void GivenNullEventId_WhenCancelForCompanyShutdown_ThenThrowsNullPointer() {
+        assertThatThrownBy(() -> service.cancelForCompanyShutdown(null))
+                .isInstanceOf(NullPointerException.class);
+    }
+
     // -------------------- addArea --------------------
 
     @Test

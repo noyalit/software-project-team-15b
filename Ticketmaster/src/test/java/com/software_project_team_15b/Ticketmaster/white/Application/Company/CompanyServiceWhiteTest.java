@@ -21,12 +21,14 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.springframework.context.ApplicationEventPublisher;
 
 import com.software_project_team_15b.Ticketmaster.Application.Company.CompanyService;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.CompanyNotFoundException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedCompanyActionException;
 import com.software_project_team_15b.Ticketmaster.Application.IAuth;
+import com.software_project_team_15b.Ticketmaster.Application.events.EventCancellationEvent;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.Company;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyDomainServiceImpl;
 import com.software_project_team_15b.Ticketmaster.Domain.Company.CompanyStatus;
@@ -48,6 +50,7 @@ class CompanyServiceWhiteTest {
     private IAuth auth;
     private UserDomainService userDomainService;
     private IEventDomainService eventDomainService;
+    private ApplicationEventPublisher eventPublisher;
     private ICompanyDomainService domainService;
     private CompanyService service;
 
@@ -74,9 +77,10 @@ class CompanyServiceWhiteTest {
         when(userDomainService.isActiveOwner(any(), any())).thenReturn(true);
         eventDomainService = mock(IEventDomainService.class);
         when(eventDomainService.searchInCompany(any(), any())).thenReturn(List.of());
+        eventPublisher = mock(ApplicationEventPublisher.class);
 
         domainService = new CompanyDomainServiceImpl(repo);
-        service = new CompanyService(domainService, userDomainService, eventDomainService, auth);
+        service = new CompanyService(domainService, userDomainService, eventDomainService, auth, eventPublisher);
     }
 
     private Company saveToRepo(Company company) {
@@ -117,25 +121,31 @@ class CompanyServiceWhiteTest {
 
     @Test
     void constructor_throws_when_domainService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(null, userDomainService, eventDomainService, auth))
+        assertThatThrownBy(() -> new CompanyService(null, userDomainService, eventDomainService, auth, eventPublisher))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_userDomainService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(domainService, null, eventDomainService, auth))
+        assertThatThrownBy(() -> new CompanyService(domainService, null, eventDomainService, auth, eventPublisher))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_eventDomainService_is_null() {
-        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, null, auth))
+        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, null, auth, eventPublisher))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void constructor_throws_when_eventPublisher_is_null() {
+        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, eventDomainService, auth, null))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void constructor_throws_when_auth_is_null() {
-        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, eventDomainService, null))
+        assertThatThrownBy(() -> new CompanyService(domainService, userDomainService, eventDomainService, null, eventPublisher))
                 .isInstanceOf(NullPointerException.class);
     }
 
@@ -736,7 +746,7 @@ class CompanyServiceWhiteTest {
         CompanyDTO result = service.closeCompany(token, dto.companyId());
 
         assertThat(result.status()).isEqualTo(CompanyStatus.CLOSED);
-        verify(eventDomainService).cancel(eventId);
+        verify(eventPublisher).publishEvent(new EventCancellationEvent(eventId, founderId));
     }
 
     @Test
@@ -751,7 +761,7 @@ class CompanyServiceWhiteTest {
         CompanyDTO result = service.suspendCompany(adminToken, dto.companyId());
 
         assertThat(result.status()).isEqualTo(CompanyStatus.SUSPENDED);
-        verify(eventDomainService).cancel(eventId);
+        verify(eventPublisher).publishEvent(new EventCancellationEvent(eventId, auth.extractUserId(adminToken)));
     }
 
     @Test
