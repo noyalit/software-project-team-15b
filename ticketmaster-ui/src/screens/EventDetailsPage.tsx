@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { http } from '../api/http';
+import axios from 'axios';
 import type {
   ApiResponse,
   CompanyDTO,
@@ -340,7 +341,9 @@ export default function EventDetailsPage() {
     queryFn: async () => {
       const companyId = eventQuery.data?.companyId;
       if (!companyId) return [] as any[];
-      const res = await http.get<ApiResponse<any[]>>(`/api/companies/${companyId}/purchase-policies`);
+      const res = await axios.get<ApiResponse<any[]>>(
+        `/api/companies/${companyId}/purchase-policies`
+      );
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? [];
     },
@@ -352,7 +355,9 @@ export default function EventDetailsPage() {
     queryFn: async () => {
       const companyId = eventQuery.data?.companyId;
       if (!companyId) return [] as any[];
-      const res = await http.get<ApiResponse<any[]>>(`/api/companies/${companyId}/discount-policies`);
+      const res = await axios.get<ApiResponse<any[]>>(
+        `/api/companies/${companyId}/discount-policies`
+      );
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? [];
     },

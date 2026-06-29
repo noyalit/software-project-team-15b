@@ -466,12 +466,17 @@ public class CompanyService {
      */
     @Transactional(readOnly = true)
     public List<ICompanyPurchasePolicy> getCompanyPurchasePolicies(String token, UUID companyId) {
-        requireValidToken(token);
         requireNonNull(companyId, "Company ID");
-        UUID callerId = auth.extractUserId(token);
-        boolean canViewClosed = auth.isSystemAdmin(token)
-                || userDomainService.isActiveFounder(callerId, companyId)
-                || userDomainService.isActiveOwner(callerId, companyId);
+        boolean canViewClosed = false;
+        if (!isMissingToken(token)) {
+            requireValidToken(token);
+            UUID callerId = auth.extractUserId(token);
+            if (callerId != null) {
+                canViewClosed = auth.isSystemAdmin(token)
+                        || userDomainService.isActiveFounder(callerId, companyId)
+                        || userDomainService.isActiveOwner(callerId, companyId);
+            }
+        }
         Company company = companyDomainService.getCompany(companyId, canViewClosed);
         return company.getPurchasePolicies();
     }
@@ -494,14 +499,40 @@ public class CompanyService {
      */
     @Transactional(readOnly = true)
     public List<ICompanyDiscountPolicy> getCompanyDiscountPolicies(String token, UUID companyId) {
-        requireValidToken(token);
         requireNonNull(companyId, "Company ID");
-        UUID callerId = auth.extractUserId(token);
-        boolean canViewClosed = auth.isSystemAdmin(token)
-                || userDomainService.isActiveFounder(callerId, companyId)
-                || userDomainService.isActiveOwner(callerId, companyId);
+        boolean canViewClosed = false;
+        if (!isMissingToken(token)) {
+            requireValidToken(token);
+            UUID callerId = auth.extractUserId(token);
+            if (callerId != null) {
+                canViewClosed = auth.isSystemAdmin(token)
+                        || userDomainService.isActiveFounder(callerId, companyId)
+                        || userDomainService.isActiveOwner(callerId, companyId);
+            }
+        }
         Company company = companyDomainService.getCompany(companyId, canViewClosed);
         return company.getDiscountPolicies();
+    }
+
+    private static boolean isMissingToken(String token) {
+        if (token == null) {
+            return true;
+        }
+        String t = token.trim();
+        if (t.isEmpty()) {
+            return true;
+        }
+        if (t.equalsIgnoreCase("null")) {
+            return true;
+        }
+        if (t.equalsIgnoreCase("Bearer") || t.equalsIgnoreCase("Bearer null")) {
+            return true;
+        }
+        if (t.regionMatches(true, 0, "Bearer ", 0, "Bearer ".length())) {
+            String after = t.substring("Bearer ".length()).trim();
+            return after.isEmpty() || after.equalsIgnoreCase("null");
+        }
+        return false;
     }
 
     /**

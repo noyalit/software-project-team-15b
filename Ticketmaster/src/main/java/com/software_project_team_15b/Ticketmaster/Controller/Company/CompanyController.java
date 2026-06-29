@@ -120,7 +120,7 @@ public class CompanyController {
     @Operation(summary = "List the company's purchase-policy chain in order")
     @GetMapping("/{companyId}/purchase-policies")
     public ResponseEntity<ApiResponse<List<CompanyPurchasePolicyDTO>>> getCompanyPurchasePolicies(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token,
             @PathVariable UUID companyId
     ) {
         try {
@@ -144,7 +144,7 @@ public class CompanyController {
     @Operation(summary = "List the company's discount-policy chain in order")
     @GetMapping("/{companyId}/discount-policies")
     public ResponseEntity<ApiResponse<List<CompanyDiscountPolicyDTO>>> getCompanyDiscountPolicies(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token,
             @PathVariable UUID companyId
     ) {
         try {
