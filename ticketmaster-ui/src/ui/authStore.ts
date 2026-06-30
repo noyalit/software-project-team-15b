@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type UserType = 'guest' | 'member' | 'system-admin' | null;
+export type UserType = 'guest' | 'temp' | 'member' | 'system-admin' | null;
 
 type AuthState = {
   token: string | null;

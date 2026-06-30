@@ -86,7 +86,9 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      * @return an unmodifiable view of the admitted-token set
      */
     public Set<String> getAcceptedTokens() {
-        return Collections.unmodifiableSet(acceptedTokens);
+        synchronized (this) {
+            return Collections.unmodifiableSet(new HashSet<>(acceptedTokens));
+        }
     }
 
     /**
@@ -128,6 +130,53 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
             throw new IllegalArgumentException("User is already in the site queue");
         }
         siteQueue.add(token);
+    }
+
+    @Override
+    public synchronized boolean tryAdmitToSite(String token) {
+        if (token == null) throw new IllegalArgumentException("token cannot be null");
+        if (acceptedTokens.size() >= maxVisitors) return false;
+        acceptedTokens.add(token);
+        return true;
+    }
+
+    @Override
+    public synchronized void replaceSiteToken(String oldToken, String newToken) {
+        if (oldToken == null) throw new IllegalArgumentException("oldToken cannot be null");
+        if (newToken == null) throw new IllegalArgumentException("newToken cannot be null");
+
+        boolean wasAccepted = acceptedTokens.remove(oldToken);
+        if (wasAccepted) {
+            acceptedTokens.add(newToken);
+        }
+
+        if (siteQueue.remove(oldToken)) {
+            siteQueue.addFirst(newToken);
+        }
+    }
+
+    @Override
+    public synchronized void evictSiteToken(String token) {
+        if (token == null) throw new IllegalArgumentException("token cannot be null");
+        acceptedTokens.remove(token);
+        siteQueue.remove(token);
+    }
+
+    @Override
+    public synchronized boolean isSiteTokenAccepted(String token) {
+        if (token == null) throw new IllegalArgumentException("token cannot be null");
+        return acceptedTokens.contains(token);
+    }
+
+    @Override
+    public synchronized int getSiteQueuePosition(String token) {
+        if (token == null) throw new IllegalArgumentException("token cannot be null");
+        int idx = 0;
+        for (String t : siteQueue) {
+            if (token.equals(t)) return idx;
+            idx++;
+        }
+        return -1;
     }
 
     /**
@@ -384,7 +433,9 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      */
     @Override
     public boolean canAccessWebsite() {
-        return acceptedTokens.size() < maxVisitors;
+        synchronized (this) {
+            return acceptedTokens.size() < maxVisitors;
+        }
     }
 
     /**

@@ -289,7 +289,7 @@ class QueueServiceWhiteTest {
 
         verify(queueDomainService, times(2)).getAcceptedTokens();
         verify(auth).isTokenValid("expired-tok");
-        verify(queueDomainService).removeAcceptedToken("expired-tok");
+        verify(queueDomainService).evictSiteToken("expired-tok");
         verify(queueDomainService).acceptUsersFromSiteQueue();
         verify(eventPublisher, never()).publishEvent(any());
     }
@@ -305,7 +305,7 @@ class QueueServiceWhiteTest {
 
         verify(queueDomainService, times(2)).getAcceptedTokens();
         verify(auth).isTokenValid("valid-tok");
-        verify(queueDomainService, never()).removeAcceptedToken(any());
+        verify(queueDomainService, never()).evictSiteToken(any());
         verify(queueDomainService).acceptUsersFromSiteQueue();
         verify(eventPublisher, never()).publishEvent(any());
     }
@@ -561,9 +561,17 @@ class QueueServiceWhiteTest {
         SiteQueueSnapshotDTO expected = new SiteQueueSnapshotDTO(500, 10, 3);
         when(queueDomainService.getSiteQueueSnapshot()).thenReturn(expected);
 
+        when(queueDomainService.getAcceptedTokens()).thenReturn(Set.of("u1", "u2", "u3"));
+        when(auth.isTokenValid("u1")).thenReturn(true);
+        when(auth.isTokenValid("u2")).thenReturn(true);
+        when(auth.isTokenValid("u3")).thenReturn(true);
+        when(auth.isSystemAdmin("u1")).thenReturn(false);
+        when(auth.isSystemAdmin("u2")).thenReturn(false);
+        when(auth.isSystemAdmin("u3")).thenReturn(false);
+
         SiteQueueSnapshotDTO result = service.getSiteQueueSnapshot(ADMIN_TOKEN);
 
-        assertThat(result).isSameAs(expected);
+        assertThat(result).isEqualTo(expected);
         var inOrder = inOrder(auth, queueDomainService);
         inOrder.verify(auth).isTokenValid(ADMIN_TOKEN);
         inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);
@@ -602,9 +610,15 @@ class QueueServiceWhiteTest {
         SiteQueueSnapshotDTO expected = new SiteQueueSnapshotDTO(200, 5, 2);
         when(queueDomainService.getSiteQueueSnapshot()).thenReturn(expected);
 
+        when(queueDomainService.getAcceptedTokens()).thenReturn(Set.of("u1", "u2"));
+        when(auth.isTokenValid("u1")).thenReturn(true);
+        when(auth.isTokenValid("u2")).thenReturn(true);
+        when(auth.isSystemAdmin("u1")).thenReturn(false);
+        when(auth.isSystemAdmin("u2")).thenReturn(false);
+
         SiteQueueSnapshotDTO result = service.updateSiteQueueSettings(ADMIN_TOKEN, 200);
 
-        assertThat(result).isSameAs(expected);
+        assertThat(result).isEqualTo(expected);
         var inOrder = inOrder(auth, queueDomainService);
         inOrder.verify(auth).isTokenValid(ADMIN_TOKEN);
         inOrder.verify(auth).isSystemAdmin(ADMIN_TOKEN);

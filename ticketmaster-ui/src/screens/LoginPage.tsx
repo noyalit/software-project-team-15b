@@ -5,6 +5,7 @@ import { http } from '../api/http';
 import { getApiErrorMessage } from '../api/errors';
 import type { ApiResponse, MemberDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
+import { ensureGuestToken } from '../api/bootstrap';
 import { useState } from 'react';
 
 type LoginResponse = ApiResponse<string>;
@@ -12,7 +13,7 @@ type LoginResponse = ApiResponse<string>;
 export default function LoginPage() {
   const nav = useNavigate();
   const location = useLocation();
-  const { setAuth, setUsername: setAuthUsername } = useAuthStore();
+  const { token, setAuth, setUsername: setAuthUsername } = useAuthStore();
 
   const successMessage = (location.state as { successMessage?: string } | null)?.successMessage;
 
@@ -23,6 +24,9 @@ export default function LoginPage() {
   const login = useMutation({
     mutationFn: async () => {
       const path = mode === 'member' ? '/api/users/login' : '/api/users/login/system-admin';
+      if (mode === 'system-admin' && !token) {
+        await ensureGuestToken();
+      }
       try {
         const res = await http.post<LoginResponse>(path, { username: usernameInput, password });
         if (res.data.error) throw new Error(res.data.error);

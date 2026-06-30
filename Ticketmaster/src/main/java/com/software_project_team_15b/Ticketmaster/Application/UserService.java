@@ -12,6 +12,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.Application.events.TempTokenAcceptedFromQueueEvent;
@@ -123,13 +124,21 @@ public class UserService {
                 token = enterAsGuest();
             }
             validateEntranceToken(token);
-            auth.exitSystem(token);
-            Member member = userDomainService.getMemberByUsername(username);
+            Member member;
+            try {
+                member = userDomainService.getMemberByUsername(username);
+            } catch (RuntimeException e) {
+                auth.exitSystem(token);
+                throw e;
+            }
             if (!passwordEncoder.matches(password, member.getPasswordHash())) {
+                auth.exitSystem(token);
                 throw new IllegalArgumentException("Invalid username or password");
             }
 
             String memberToken = auth.generateMemberToken(member);
+            queueDomainService.replaceSiteToken(token, memberToken);
+            auth.exitSystem(token);
             AUDIT.info("op=login userId={} username={}",member.getUserId(),username);
             return memberToken;
 
@@ -159,11 +168,10 @@ public class UserService {
     public String enterSystem() {
         if (queueDomainService.canAccessWebsite()) {
             String guestToken = enterAsGuest();
-            // Count this visitor as an active admitted visitor so the site-wide cap is
-            // enforced. Without this, the admitted set never grows from normal entry and
-            // the visitor cap throttles nothing.
-            queueDomainService.admitToken(guestToken);
-            return guestToken;
+            if (queueDomainService.tryAdmitToSite(guestToken)) {
+                return guestToken;
+            }
+            auth.exitSystem(guestToken);
         }
 
         String tempToken = auth.generateTempToken();
@@ -189,20 +197,24 @@ public class UserService {
             throw new InvalidTokenException("Token is not a temporary queue token");
         }
 
+        if (!queueDomainService.isSiteTokenAccepted(tempToken)) {
+            throw new UnauthorizedException("You are still waiting in the site queue");
+        }
+
         auth.exitSystem(tempToken);
         AUDIT.info("op=exit-queue success=true");
-        return enterAsGuest();
+        String guestToken = enterAsGuest();
+        queueDomainService.replaceSiteToken(tempToken, guestToken);
+        return guestToken;
     }
 
     @EventListener
     public void handleTempTokenAcceptedFromQueue(TempTokenAcceptedFromQueueEvent event) {
         try {
-            String guestToken = tryEnterFromQueue(event.tempToken());
-
             AUDIT.info(
                     "op=queue-token-accepted tempToken={} guestTokenIssued={}",
                     event.tempToken(),
-                    guestToken != null
+                    false
             );
 
         } catch (RuntimeException e) {
@@ -227,9 +239,12 @@ public class UserService {
     public String loginSystemAdmin(String token, String username, String password) {
         // System admins authenticate with a pre-existing SystemAdmin record.
         if (token == null || token.isBlank()) {
-            token = enterAsGuest();
+            throw new InvalidTokenException("Missing entrance token");
         }
         validateEntranceToken(token);
+
+        queueDomainService.evictSiteToken(token);
+        queueDomainService.acceptUsersFromSiteQueue();
         auth.exitSystem(token);
         SystemAdmin admin = systemAdminRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid username or password"));
@@ -249,6 +264,8 @@ public class UserService {
      * @param token Entrance token (guest/temp token)
      */
     public void exitSystem(String token) {
+        queueDomainService.evictSiteToken(token);
+        queueDomainService.acceptUsersFromSiteQueue();
         auth.exitSystem(token);
         AUDIT.info("op=exit-system");
     }
@@ -266,6 +283,8 @@ public class UserService {
 
         if (auth.isGuest(token)) {
             eventPublisher.publishEvent(new GuestLoggedOutEvent(token));
+            queueDomainService.evictSiteToken(token);
+            queueDomainService.acceptUsersFromSiteQueue();
             auth.exitSystem(token);
             AUDIT.info("op=logout userType=guest");
             return null;
@@ -274,11 +293,16 @@ public class UserService {
         if (auth.isMember(token)) {
             UUID userId = auth.extractUserId(token);
             String entranceToken = auth.logout(token);
+            if (entranceToken != null && !entranceToken.isBlank()) {
+                queueDomainService.replaceSiteToken(token, entranceToken);
+            }
             AUDIT.info("op=logout userType=member userId={}", userId);
             return entranceToken;
         }
 
         if (auth.isSystemAdmin(token)) {
+            queueDomainService.evictSiteToken(token);
+            queueDomainService.acceptUsersFromSiteQueue();
             auth.exitSystem(token);
             AUDIT.info("op=logout userType=system-admin");
             return null;

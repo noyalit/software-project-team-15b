@@ -44,6 +44,47 @@ public interface IQueueDomainService {
     void addUserToSiteQueue(String token);
 
     /**
+     * Atomically attempts to admit the given token to the site, respecting the current
+     * max-visitors cap.
+     *
+     * @param token the user's auth token; must not be null
+     * @return {@code true} if admitted; {@code false} if the site is at capacity
+     */
+    boolean tryAdmitToSite(String token);
+
+    /**
+     * Replaces a token in the site tracking structures (admitted set / waiting queue)
+     * while preserving the user's place/state. Used when exchanging tokens (e.g.
+     * guest/temp token -> member token).
+     *
+     * @param oldToken previous token; must not be null
+     * @param newToken new token; must not be null
+     */
+    void replaceSiteToken(String oldToken, String newToken);
+
+    /**
+     * Removes the given token from both the admitted set and the site waiting queue,
+     * if present.
+     *
+     * @param token token to evict; must not be null
+     */
+    void evictSiteToken(String token);
+
+    /**
+     * @param token user's auth token
+     * @return true if the token is currently in the admitted set for the site queue
+     */
+    boolean isSiteTokenAccepted(String token);
+
+    /**
+     * Returns the zero-based position of the given token in the site waiting queue.
+     *
+     * @param token user's auth token
+     * @return 0-based position, or {@code -1} if the token is not currently waiting
+     */
+    int getSiteQueuePosition(String token);
+
+    /**
      * Marks the given token as an admitted (active) site visitor by adding it directly
      * to the admitted-token set. Used when a visitor enters while the site still has
      * capacity, so the visitor cap reflects active visitors.
