@@ -98,6 +98,70 @@ memory of the relevant work.
   error. Separating those two cases is what fixed the guest policy view without opening
   up anything a guest shouldn't see.
 
+## Authentication / token handling - understanding `Auth.java`
+
+- **Purpose of LLM use:** learn how JWT/token-based authentication works in general and
+  use that understanding to implement our backend auth module (token validation and
+  extracting a caller identity) so the rest of the system could consistently authorize
+  requests.
+- **Summary of prompt(s):** questions like "explain the typical JWT validation flow",
+  "how do I extract a `userId` claim safely", "what should the interface look like for
+  application services (e.g., `requireValidToken`, `extractUserId`)", and "how should we
+  distinguish missing token (guest) from invalid token (error)".
+- **Output received (short description):** implementation guidance and code scaffolding
+  for an auth abstraction (`IAuth`) and its implementation (`Infrastructure/Auth.java`),
+  including validation/extraction steps and edge cases (empty header values, missing
+  claims, and null userId).
+- **Files / components affected:** `Ticketmaster/.../Infrastructure/Auth.java`,
+  `Ticketmaster/.../Application/IAuth.java`, and service-layer call sites that consume
+  `IAuth` (e.g., guest-facing policy reads).
+- **Modifications made:** we integrated the generated/authored pieces into our codebase,
+  aligned them with our project conventions and exception types, and verified behavior
+  end-to-end with real UI calls. We also refined call sites to correctly handle guest
+  access rules and avoid NPEs when the token is missing or a claim is absent.
+- **Initial gaps in understanding (if any):** we initially lacked practical knowledge of
+  JWT/token flows and how to design a clean boundary (`IAuth`) that is usable across all
+  services without leaking low-level details.
+- **Final understanding (brief explanation in your own words):** in our implementation,
+  the token is a signed JWT (subject is a UUID; claims include `userType` and sometimes
+  `username`/`role`), and we also keep an in-memory `activeSessions` map so a token is
+  considered valid only if it is present in `activeSessions` and not expired. A "guest"
+  is represented by a real guest token created by `generateGuestToken()` (not by a
+  missing header). Therefore, services should treat a missing/blank token as unauthenticated,
+  and only treat a request as guest/member/admin/temp after checking `isTokenValid()` and
+  reading the session/userType.
+
+## UI implementation - screen design, flows, and bug fixing
+
+- **Purpose of LLM use:** accelerate building the front-end by iterating on screen
+  requirements and having the LLM generate initial implementations for many React pages
+  (layout, component structure, state, and API wiring), plus follow-up debugging for UI
+  issues found during integration and E2E testing.
+- **Summary of prompt(s):** things like "build the `CompanyPage`/`MyEventsPage`/`CheckoutPage`
+  UI with these requirements", "what should each screen show and how should it behave",
+  "implement the data fetching and loading/error states", and later "why is this screen
+  blank (Rules of Hooks)" / "why does this field render as `[object Object]`".
+- **Output received (short description):** generated TSX screen skeletons and iterations
+  on UI flows (forms, tables, modals, empty states), plus guidance on React Query patterns
+  (`useQuery`/`useMutation`, `enabled`, cache keys) and React correctness fixes (Rules of
+  Hooks, derived state with `useMemo`).
+- **Files / components affected:** most of the `ticketmaster-ui/src/screens/*` pages and a
+  few shared UI components (e.g., navigation/shell), including `ProfilePage.tsx`,
+  `CompanyPage.tsx`, `MyEventsPage.tsx`, `CheckoutPage.tsx`, `OrdersPage.tsx`,
+  `EventDetailsPage.tsx`, and `AdminMembersPage.tsx`.
+- **Modifications made:** we treated LLM output as a starting point. We adjusted the UI to
+  match our actual backend contracts and domain rules, fixed TypeScript types, aligned
+  queries/mutations with our API response wrapper, and refactored parts that caused runtime
+  issues (e.g., moving hooks above early returns to satisfy hook ordering). We also kept
+  final responsibility for UX decisions (what data is shown to guests vs. members, what
+  actions are allowed by role, and what errors are surfaced).
+- **Initial gaps in understanding (if any):** We did not study UI in class therfore needed LLMs to be able to understand how to build UI components and how to use React hooks.
+- **Final understanding (brief explanation in your own words):** LLMs can speed up UI
+  scaffolding and iteration, but the screen behavior must be validated against real API
+  behavior and role rules. Hooks must always be called in the same order (so early returns
+  must come after hooks), and React Query behavior should be controlled through `enabled`
+  and stable cache keys rather than conditional hook calls.
+
 ## Docker / environment config & documentation
 
 - **Purpose of LLM use:** wording and formatting help on the README and the Docker/`.env`
@@ -143,7 +207,7 @@ memory of the relevant work.
   before it landed, so "influenced" is more accurate than "generated".
 - **Main areas where LLMs were used:** test boilerplate and edge-case brainstorming,
   mechanical refactors (e.g. moving company-shutdown cancellation behind an event-service
-  boundary), debugging null/permission bugs, and documentation/config wording.
+  boundary), debugging null/permission bugs, implementing the UI according to the requirements and documentation/config wording.
 - **Main areas implemented without LLM assistance:** concurrency control and the seat-hold
   /race handling, the purchase and discount policy evaluation and composition, the
   role/permission enforcement (Founder/Owner/Manager + System Admin), the
