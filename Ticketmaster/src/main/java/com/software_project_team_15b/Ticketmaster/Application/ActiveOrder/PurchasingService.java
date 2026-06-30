@@ -237,8 +237,6 @@ public class PurchasingService {
 
             UUID orderId = purchasingDomainService.createActiveOrder(userId, eventId, areaId);
 
-            queueDomainService.releaseEventAccess(token, eventId);
-
             AUDIT.info("op=createActiveOrder order={} user={} event={} area={} result=ok",
                     orderId, userId, eventId, areaId);
 
@@ -478,6 +476,7 @@ public class PurchasingService {
         LocalDate birthDate = getUserBirthDate(userId);
 
         return completeCheckoutForUser(
+                token,
                 userId,
                 orderId,
                 birthDate,
@@ -508,6 +507,7 @@ public class PurchasingService {
         }
 
         return completeCheckoutForUser(
+                token,
                 userId,
                 orderId,
                 birthDate,
@@ -517,6 +517,7 @@ public class PurchasingService {
     }
 
     private CheckoutCompletedDTO completeCheckoutForUser(
+            String token,
             UUID userId,
             UUID orderId,
             LocalDate birthDate,
@@ -546,6 +547,8 @@ public class PurchasingService {
 
             purchasingDomainService.finalizeCheckout(activeOrder, transactionId, issuedTicketId,priceBreakdown);
             finalizeDone = true;
+
+            queueDomainService.releaseEventAccess(token, activeOrder.getEventId());
 
             ConfirmationReceipt receipt = confirmCheckout(activeOrder);
             confirmed = true;
@@ -634,6 +637,7 @@ public class PurchasingService {
             for (ActiveOrder activeOrder : activeOrders) {
                 releaseHoldIfNeeded(activeOrder);
                 purchasingDomainService.cancelOrder(activeOrder);
+                queueDomainService.releaseEventAccess(token, activeOrder.getEventId());
             }
             int canceledCount = activeOrders.size();
 

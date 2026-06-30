@@ -40,7 +40,7 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class QueueDomainServiceImpl implements IQueueDomainService {
 
-    private static final int ACCESS_TIME = 100;
+    private static final int ACCESS_TIME = 60;
     private static final int EVENT_QUEUE_INTERVAL = 1;
 
     private int maxVisitors = 100;

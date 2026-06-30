@@ -50,7 +50,7 @@ export default function WaitQueuePage() {
       if (!eventId) throw new Error('Event ID is missing.');
 
       try {
-        const res = await http.get<AccessResponse>(`/api/queues/${eventId}/access`);
+        const res = await http.post<AccessResponse>(`/api/active-orders/access/${eventId}`);
         if (res.data.error) throw new Error(res.data.error);
         if (!res.data.data) throw new Error('Queue access is unavailable.');
         return res.data.data;
