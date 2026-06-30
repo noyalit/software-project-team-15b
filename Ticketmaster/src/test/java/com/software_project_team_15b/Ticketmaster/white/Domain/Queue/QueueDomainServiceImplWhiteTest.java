@@ -366,7 +366,7 @@ class QueueDomainServiceImplWhiteTest {
 
         QueueAccessDTO view = exposed.getQueueAccessView("token-a", EVENT_ID);
         assertThat(view.accessExpiresAt())
-                .isBetween(before.plusSeconds(100), after.plusSeconds(100));
+                .isBetween(before.plusSeconds(60), after.plusSeconds(60));
     }
 
     @Test

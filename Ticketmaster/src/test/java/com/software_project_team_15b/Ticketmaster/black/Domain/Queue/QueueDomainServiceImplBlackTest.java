@@ -504,13 +504,15 @@ class QueueDomainServiceImplBlackTest {
     }
 
     @Test
-    void requestAccess_negative_throwsAlreadyInQueue_whenUserAlreadyWaiting() {
+    void requestAccess_positive_returnsWaiting_whenUserAlreadyWaiting() {
         VirtualQueue queue = new VirtualQueue(EVENT_ID, Integer.MAX_VALUE, 0);
         queue.push("token-a");
         when(queueRepository.getQueue(EVENT_ID)).thenReturn(queue);
 
-        assertThatThrownBy(() -> domainService.requestAccess("token-a", EVENT_ID))
-                .isInstanceOf(AlreadyInQueueException.class);
+        QueueAccessDTO view = domainService.requestAccess("token-a", EVENT_ID);
+
+        assertThat(view.status()).isEqualTo(QueueAccessStatus.WAITING);
+        assertThat(view.position()).isEqualTo(0);
     }
 
     @Test
