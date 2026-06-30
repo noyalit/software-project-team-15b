@@ -2,8 +2,10 @@ package com.software_project_team_15b.Ticketmaster.Application;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +18,8 @@ import com.software_project_team_15b.Ticketmaster.Application.Notification.INoti
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.Application.events.TempTokenAcceptedFromQueueEvent;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyRoleTreeDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.EntranceDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.EntranceStatus;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.NotificationDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.AdminSystem.ISystemAdminRepository;
@@ -41,6 +45,14 @@ public class UserService {
     private final ISystemAdminRepository systemAdminRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final INotifier notifier;
+
+    /**
+     * Maps a temporary queue token to the guest token minted for it once it is admitted
+     * from the site queue. Lets a queued client retrieve its real session token by polling
+     * with the temp token it was given — the admission itself happens asynchronously on a
+     * scheduler thread, so it cannot be returned in the original {@code /enter} response.
+     */
+    private final Map<String, String> admittedQueueTokens = new ConcurrentHashMap<>();
 
     public UserService(
             UserDomainService userDomainService,
@@ -152,26 +164,62 @@ public class UserService {
     }
 
     /**
-     * Enters the system, potentially queuing if necessary.
-     * 
-     * @return Entrance token (guest/temp token)
+     * Enters the system, joining the site-wide waiting queue if the visitor cap is full.
+     *
+     * @return an {@link EntranceDTO}: {@link EntranceStatus#ADMITTED} with a usable guest
+     *         token when there is capacity, or {@link EntranceStatus#QUEUED} with the
+     *         temporary queue token and the caller's position when the site is full
      */
-    public String enterSystem() {
+    public EntranceDTO enterSystem() {
         if (queueDomainService.canAccessWebsite()) {
             String guestToken = enterAsGuest();
             // Count this visitor as an active admitted visitor so the site-wide cap is
             // enforced. Without this, the admitted set never grows from normal entry and
             // the visitor cap throttles nothing.
             queueDomainService.admitToken(guestToken);
-            return guestToken;
+            return new EntranceDTO(guestToken, EntranceStatus.ADMITTED, null);
         }
 
         String tempToken = auth.generateTempToken();
         queueDomainService.addUserToSiteQueue(tempToken);
+        int position = queueDomainService.getSiteQueuePosition(tempToken);
 
-        AUDIT.info("op=enter-system queued=true");
+        AUDIT.info("op=enter-system queued=true position={}", position);
 
-        return tempToken;
+        return new EntranceDTO(tempToken, EntranceStatus.QUEUED, position);
+    }
+
+    /**
+     * Polls the site-wide queue on behalf of a waiting client holding {@code tempToken}.
+     *
+     * <p>If the token has been admitted (a guest token was minted for it by the scheduled
+     * sweep), that guest token is handed back exactly once and the client is now in. While
+     * still waiting, returns {@link EntranceStatus#QUEUED} with the current position.
+     *
+     * @param tempToken the temporary queue token the client received from {@link #enterSystem()}
+     * @return an {@link EntranceDTO} describing the caller's current entrance state
+     * @throws IllegalArgumentException if {@code tempToken} is null
+     * @throws InvalidTokenException    if the token is neither admitted nor a valid, waiting
+     *                                  temp token (e.g. it expired); the client should re-enter
+     */
+    public EntranceDTO pollQueueEntrance(String tempToken) {
+        if (tempToken == null) throw new IllegalArgumentException("tempToken cannot be null");
+
+        // Admission is delivered here: the async handler stored temp -> guest once the
+        // sweep accepted this token. Hand the guest token over once, then forget the mapping.
+        String guestToken = admittedQueueTokens.remove(tempToken);
+        if (guestToken != null) {
+            AUDIT.info("op=poll-queue result=admitted");
+            return new EntranceDTO(guestToken, EntranceStatus.ADMITTED, null);
+        }
+
+        if (!auth.isTokenValid(tempToken) || !auth.isTemp(tempToken)) {
+            throw new InvalidTokenException("Queue session is no longer valid; please re-enter.");
+        }
+
+        int position = queueDomainService.getSiteQueuePosition(tempToken);
+        AUDIT.info("op=poll-queue result=waiting position={}", position);
+        return new EntranceDTO(tempToken, EntranceStatus.QUEUED, position);
     }
 
     /**
@@ -210,6 +258,11 @@ public class UserService {
             } catch (InvalidTokenException alreadyRemoved) {
                 // Temp token was already evicted; the guest remains admitted.
             }
+
+            // Publish the minted guest token so the still-waiting client can pick it up by
+            // polling with its temp token (see pollQueueEntrance). The admission happens on a
+            // scheduler thread, so this hand-off map is the only way to deliver it.
+            admittedQueueTokens.put(event.tempToken(), guestToken);
 
             AUDIT.info(
                     "op=queue-token-accepted tempToken={} guestTokenIssued={}",

@@ -27,6 +27,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import com.software_project_team_15b.Ticketmaster.Application.events.TempTokenAcceptedFromQueueEvent;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyRoleTreeDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.EntranceStatus;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AlreadyOwnerInCompanyException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.AppointmentCycleDetectedException;
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidCredentialsException;
@@ -815,9 +816,11 @@ class UserServiceTest {
         when(queueDomainService.canAccessWebsite()).thenReturn(true);
         when(auth.generateGuestToken()).thenReturn("g-tok");
 
-        String result = service.enterSystem();
+        var result = service.enterSystem();
 
-        assertThat(result).isEqualTo("g-tok");
+        assertThat(result.token()).isEqualTo("g-tok");
+        assertThat(result.status()).isEqualTo(EntranceStatus.ADMITTED);
+        assertThat(result.position()).isNull();
         verify(queueDomainService).canAccessWebsite();
         verify(auth).generateGuestToken();
         // The issued guest token must be counted as an active admitted visitor so the
@@ -829,13 +832,49 @@ class UserServiceTest {
     void enterSystem_returnsTempToken_whenCannotAccessWebsite() {
         when(queueDomainService.canAccessWebsite()).thenReturn(false);
         when(auth.generateTempToken()).thenReturn("tmp-tok");
+        when(queueDomainService.getSiteQueuePosition("tmp-tok")).thenReturn(3);
 
-        String result = service.enterSystem();
+        var result = service.enterSystem();
 
-        assertThat(result).isEqualTo("tmp-tok");
+        assertThat(result.token()).isEqualTo("tmp-tok");
+        assertThat(result.status()).isEqualTo(EntranceStatus.QUEUED);
+        assertThat(result.position()).isEqualTo(3);
         verify(queueDomainService).canAccessWebsite();
         verify(auth).generateTempToken();
         verify(queueDomainService).addUserToSiteQueue("tmp-tok");
+    }
+
+    @Test
+    void pollQueueEntrance_returnsAdmittedGuestToken_afterAdmission() {
+        // Drive an admission so the temp -> guest mapping is registered.
+        when(auth.isTokenValid("tmp-tok")).thenReturn(true);
+        when(auth.isTemp("tmp-tok")).thenReturn(true);
+        when(auth.generateGuestToken()).thenReturn("g-tok");
+        service.handleTempTokenAcceptedFromQueue(new TempTokenAcceptedFromQueueEvent("tmp-tok"));
+
+        var result = service.pollQueueEntrance("tmp-tok");
+
+        assertThat(result.status()).isEqualTo(EntranceStatus.ADMITTED);
+        assertThat(result.token()).isEqualTo("g-tok");
+
+        // The guest token is handed out exactly once: a second poll no longer finds it
+        // and falls through to the (now invalid) temp-token path.
+        when(auth.isTokenValid("tmp-tok")).thenReturn(false);
+        assertThatThrownBy(() -> service.pollQueueEntrance("tmp-tok"))
+                .isInstanceOf(InvalidTokenException.class);
+    }
+
+    @Test
+    void pollQueueEntrance_returnsQueued_whenStillWaiting() {
+        when(auth.isTokenValid("tmp-tok")).thenReturn(true);
+        when(auth.isTemp("tmp-tok")).thenReturn(true);
+        when(queueDomainService.getSiteQueuePosition("tmp-tok")).thenReturn(5);
+
+        var result = service.pollQueueEntrance("tmp-tok");
+
+        assertThat(result.status()).isEqualTo(EntranceStatus.QUEUED);
+        assertThat(result.token()).isEqualTo("tmp-tok");
+        assertThat(result.position()).isEqualTo(5);
     }
 
     // =========================================================================

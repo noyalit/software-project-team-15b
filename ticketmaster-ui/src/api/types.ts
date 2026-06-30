@@ -3,6 +3,14 @@ export type ApiResponse<T> = {
   error: string | null;
 };
 
+export type EntranceStatus = 'ADMITTED' | 'QUEUED';
+
+export type EntranceDTO = {
+  token: string;
+  status: EntranceStatus;
+  position: number | null;
+};
+
 export type Category = string;
 export type EventStatus = string;
 

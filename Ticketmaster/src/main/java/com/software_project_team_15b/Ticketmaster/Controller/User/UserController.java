@@ -21,6 +21,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Exceptions.Unautho
 import com.software_project_team_15b.Ticketmaster.Application.UserService;
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
 import com.software_project_team_15b.Ticketmaster.DTO.CompanyRoleTreeDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.EntranceDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.MemberDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Member.ManagerPermission;
 
@@ -40,9 +41,28 @@ public class UserController {
 
     @Operation(summary = "Enter the system")
     @PostMapping("/enter")
-    public ResponseEntity<ApiResponse<String>> enterSystem() {
+    public ResponseEntity<ApiResponse<EntranceDTO>> enterSystem() {
         try {
             return ResponseEntity.ok(new ApiResponse<>(userService.enterSystem(), null));
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Poll the site queue with a temporary token; returns a session token once admitted")
+    @PostMapping("/enter/poll")
+    public ResponseEntity<ApiResponse<EntranceDTO>> pollQueueEntrance(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token
+    ) {
+        try {
+            if (token == null || token.isBlank()) {
+                throw new InvalidTokenException("Missing or blank Authorization header");
+            }
+            return ResponseEntity.ok(new ApiResponse<>(userService.pollQueueEntrance(token), null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
         } catch (Exception ex) {
             return internalServerError(ex);
         }

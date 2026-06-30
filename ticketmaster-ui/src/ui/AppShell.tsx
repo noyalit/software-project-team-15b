@@ -8,6 +8,7 @@ import { useAuthStore } from '../ui/authStore';
 // import logo from '../assets/Ticket4U_logo.jpeg';
 import logo from '../assets/Ticket4U_logo.png';
 import NotificationsBell from './NotificationsBell';
+import SiteQueueGate from './SiteQueueGate';
 import { connectNotifications, disconnectNotifications } from './notificationsClient';
 
 function NavLink({ to, label }: { to: string; label: string }) {
@@ -28,7 +29,7 @@ function NavLink({ to, label }: { to: string; label: string }) {
 }
 
 export default function AppShell() {
-  const { token, userType, username, logout } = useAuthStore();
+  const { token, userType, username, logout, queueToken } = useAuthStore();
 
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('theme');
@@ -68,11 +69,13 @@ export default function AppShell() {
   useQuery({
     queryKey: ['enter-system'],
     queryFn: async () => {
+      // Returns null when the visitor is placed in the site queue; SiteQueueGate then
+      // takes over polling. A null result is a valid outcome here, not an error.
       const newToken = await ensureGuestToken();
-      if (!newToken) throw new Error('No token returned');
-      return newToken;
+      return newToken ?? null;
     },
-    enabled: !token,
+    // Don't re-enter while we already hold a session or are waiting in the site queue.
+    enabled: !token && !queueToken,
     staleTime: Infinity,
     retry: 1,
   });
@@ -154,6 +157,7 @@ const canAccessManagerPages =
 
   return (
     <div className="min-h-screen">
+      <SiteQueueGate />
       <header className="sticky top-0 z-10 border-b border-slate-200/70 bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
           <Link to="/" className="flex shrink-0 items-center">

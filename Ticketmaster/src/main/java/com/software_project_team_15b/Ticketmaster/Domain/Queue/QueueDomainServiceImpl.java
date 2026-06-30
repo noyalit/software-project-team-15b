@@ -149,6 +149,19 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
     }
 
     @Override
+    public synchronized int getSiteQueuePosition(String token) {
+        if (token == null) throw new IllegalArgumentException("token cannot be null");
+        int index = 0;
+        for (String waiting : siteQueue) {
+            if (waiting.equals(token)) {
+                return index;
+            }
+            index++;
+        }
+        return -1;
+    }
+
+    @Override
     public synchronized SiteQueueSnapshotDTO getSiteQueueSnapshot() {
         return new SiteQueueSnapshotDTO(maxVisitors, siteQueue.size(), acceptedTokens.size());
     }

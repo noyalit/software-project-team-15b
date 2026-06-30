@@ -54,6 +54,16 @@ public interface IQueueDomainService {
     void admitToken(String token);
 
     /**
+     * Returns the zero-based position of the given token in the site-wide waiting queue.
+     *
+     * @param token the user's temporary queue token; must not be null
+     * @return the 0-based position (0 = next to be admitted), or {@code -1} if the token
+     *         is not currently waiting in the site queue
+     * @throws IllegalArgumentException if {@code token} is null
+     */
+    int getSiteQueuePosition(String token);
+
+    /**
      * Returns a snapshot of the site-wide queue state.
      */
     SiteQueueSnapshotDTO getSiteQueueSnapshot();

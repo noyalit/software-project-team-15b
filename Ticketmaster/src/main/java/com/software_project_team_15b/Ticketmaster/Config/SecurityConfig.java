@@ -34,6 +34,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/**").permitAll()
                         .requestMatchers(
                                 "/api/users/enter",
+                                "/api/users/enter/poll",
                                 "/api/users/login",
                                 "/api/users/login/system-admin",
                                 "/api/users/register"
