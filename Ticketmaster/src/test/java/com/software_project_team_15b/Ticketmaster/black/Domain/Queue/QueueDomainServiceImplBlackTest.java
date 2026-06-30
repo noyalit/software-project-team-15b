@@ -147,6 +147,38 @@ class QueueDomainServiceImplBlackTest {
         assertThat(domainService.canAccessWebsite()).isFalse();
     }
 
+    @Test
+    void admitToken_positive_addsTokenToAdmittedSet() {
+        domainService.admitToken("token-a");
+        assertThat(domainService.getAcceptedTokens()).contains("token-a");
+    }
+
+    @Test
+    void admitToken_negative_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> domainService.admitToken(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void admitToken_positive_countsTowardSiteCap() {
+        domainService.updateSiteQueueSettings(1);
+        domainService.admitToken("token-a");
+        assertThat(domainService.canAccessWebsite()).isFalse();
+    }
+
+    @Test
+    void updateSiteQueueSettings_positive_demotesExcessAdmittedWhenCapLowered() {
+        for (int i = 0; i < 5; i++) {
+            domainService.admitToken("token-" + i);
+        }
+        domainService.updateSiteQueueSettings(2);
+
+        var snap = domainService.getSiteQueueSnapshot();
+        assertThat(snap.maxVisitors()).isEqualTo(2);
+        assertThat(snap.admittedCount()).isEqualTo(2);
+        assertThat(snap.waitingCount()).isEqualTo(3);
+    }
+
     // =========================================================================
     // createEventQueue
     // =========================================================================

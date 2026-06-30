@@ -47,7 +47,7 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
 
     private final IQueueRepository queueRepository;
 
-    private final Queue<String> siteQueue = new LinkedList<>();
+    private final Deque<String> siteQueue = new LinkedList<>();
     private final Set<String> acceptedTokens = new HashSet<>();
 
     public QueueDomainServiceImpl(IQueueRepository queueRepository) {
@@ -130,6 +130,19 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
         siteQueue.add(token);
     }
 
+    /**
+     * Marks the given token as an admitted (active) site visitor by adding it directly
+     * to the admitted-token set.
+     *
+     * @param token the user's auth token; must not be null
+     * @throws IllegalArgumentException if {@code token} is null
+     */
+    @Override
+    public synchronized void admitToken(String token) {
+        if (token == null) throw new IllegalArgumentException("token cannot be null");
+        acceptedTokens.add(token);
+    }
+
     @Override
     public synchronized SiteQueueSnapshotDTO getSiteQueueSnapshot() {
         return new SiteQueueSnapshotDTO(maxVisitors, siteQueue.size(), acceptedTokens.size());
@@ -139,6 +152,15 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
     public synchronized void updateSiteQueueSettings(int maxVisitors) {
         if (maxVisitors <= 0) throw new IllegalArgumentException("maxVisitors must be positive");
         this.maxVisitors = maxVisitors;
+
+        // If the new cap is below the current admitted count, demote the excess admitted
+        // users back to the *front* of the waiting queue so they are re-admitted first.
+        Iterator<String> it = acceptedTokens.iterator();
+        while (acceptedTokens.size() > maxVisitors && it.hasNext()) {
+            String token = it.next();
+            it.remove();
+            siteQueue.addFirst(token);
+        }
     }
 
     /**

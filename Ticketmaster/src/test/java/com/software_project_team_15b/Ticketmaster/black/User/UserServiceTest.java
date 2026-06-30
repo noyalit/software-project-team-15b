@@ -820,6 +820,9 @@ class UserServiceTest {
         assertThat(result).isEqualTo("g-tok");
         verify(queueDomainService).canAccessWebsite();
         verify(auth).generateGuestToken();
+        // The issued guest token must be counted as an active admitted visitor so the
+        // site-wide visitor cap is enforced.
+        verify(queueDomainService).admitToken("g-tok");
     }
 
     @Test

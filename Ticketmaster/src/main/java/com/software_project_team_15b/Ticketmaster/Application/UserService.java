@@ -158,7 +158,12 @@ public class UserService {
      */
     public String enterSystem() {
         if (queueDomainService.canAccessWebsite()) {
-            return enterAsGuest();
+            String guestToken = enterAsGuest();
+            // Count this visitor as an active admitted visitor so the site-wide cap is
+            // enforced. Without this, the admitted set never grows from normal entry and
+            // the visitor cap throttles nothing.
+            queueDomainService.admitToken(guestToken);
+            return guestToken;
         }
 
         String tempToken = auth.generateTempToken();

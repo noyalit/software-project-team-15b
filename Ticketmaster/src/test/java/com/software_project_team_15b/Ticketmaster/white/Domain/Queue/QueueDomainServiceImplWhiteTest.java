@@ -874,6 +874,75 @@ class QueueDomainServiceImplWhiteTest {
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void updateSiteQueueSettings_demotesExcessAdmittedUsersToWaitingQueue_whenCapLowered() {
+        for (int i = 0; i < 5; i++) {
+            service.addUserToSiteQueue("tok-" + i);
+        }
+        service.acceptUsersFromSiteQueue(); // all 5 admitted (cap is 100)
+        assertThat(service.getAcceptedTokens()).hasSize(5);
+
+        service.updateSiteQueueSettings(3);
+
+        var snap = service.getSiteQueueSnapshot();
+        assertThat(snap.maxVisitors()).isEqualTo(3);
+        assertThat(snap.admittedCount()).isEqualTo(3);
+        assertThat(snap.waitingCount()).isEqualTo(2);
+        assertThat(service.canAccessWebsite()).isFalse();
+    }
+
+    @Test
+    void updateSiteQueueSettings_demotedUsersAreReAdmittedFirst_whenCapRestored() {
+        for (int i = 0; i < 4; i++) {
+            service.addUserToSiteQueue("tok-" + i);
+        }
+        service.acceptUsersFromSiteQueue();   // 4 admitted
+        service.updateSiteQueueSettings(2);   // demote 2 to front of waiting queue
+        assertThat(service.getSiteQueueSnapshot().waitingCount()).isEqualTo(2);
+
+        service.updateSiteQueueSettings(4);   // restore cap
+        service.acceptUsersFromSiteQueue();   // drain waiting back into admitted
+
+        var snap = service.getSiteQueueSnapshot();
+        assertThat(snap.admittedCount()).isEqualTo(4);
+        assertThat(snap.waitingCount()).isEqualTo(0);
+    }
+
+    @Test
+    void updateSiteQueueSettings_noDemotion_whenCapAboveAdmittedCount() {
+        service.addUserToSiteQueue("tok-a");
+        service.acceptUsersFromSiteQueue();
+
+        service.updateSiteQueueSettings(50);
+
+        var snap = service.getSiteQueueSnapshot();
+        assertThat(snap.admittedCount()).isEqualTo(1);
+        assertThat(snap.waitingCount()).isEqualTo(0);
+    }
+
+    // =========================================================================
+    // admitToken — direct admission
+    // =========================================================================
+
+    @Test
+    void admitToken_positive_addsTokenToAcceptedSet() {
+        service.admitToken("tok-a");
+        assertThat(service.getAcceptedTokens()).contains("tok-a");
+    }
+
+    @Test
+    void admitToken_negative_nullToken_throwsIllegalArgument() {
+        assertThatThrownBy(() -> service.admitToken(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void admitToken_countsTowardSiteCap() {
+        service.updateSiteQueueSettings(1);
+        service.admitToken("tok-a");
+        assertThat(service.canAccessWebsite()).isFalse();
+    }
+
     // =========================================================================
     // removeAcceptedToken — token not found
     // =========================================================================

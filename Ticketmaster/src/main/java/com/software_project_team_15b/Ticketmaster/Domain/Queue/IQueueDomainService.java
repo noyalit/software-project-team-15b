@@ -44,6 +44,16 @@ public interface IQueueDomainService {
     void addUserToSiteQueue(String token);
 
     /**
+     * Marks the given token as an admitted (active) site visitor by adding it directly
+     * to the admitted-token set. Used when a visitor enters while the site still has
+     * capacity, so the visitor cap reflects active visitors.
+     *
+     * @param token the user's auth token; must not be null
+     * @throws IllegalArgumentException if {@code token} is null
+     */
+    void admitToken(String token);
+
+    /**
      * Returns a snapshot of the site-wide queue state.
      */
     SiteQueueSnapshotDTO getSiteQueueSnapshot();
