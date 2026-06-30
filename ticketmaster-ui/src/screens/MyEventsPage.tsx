@@ -261,6 +261,46 @@ export default function MyEventsPage() {
     activeRole === 'Owner' ||
     (activeRole === 'CompanyManager' && companyManagerCanManageEvents);
 
+  const purchasePoliciesQuery = useQuery({
+    queryKey: ['event', 'purchase-policies', policyEventId],
+    queryFn: async () => {
+      if (!policyEventId) return [] as PurchasePolicyDTO[];
+      const res = await http.get<ApiResponse<PurchasePolicyDTO[]>>(
+        `/api/events/${policyEventId}/purchase-policies`
+      );
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
+    },
+    enabled: Boolean(policyEventId),
+  });
+
+  useEffect(() => {
+    if (!policyEventId) return;
+    if (!purchasePoliciesQuery.isSuccess) return;
+    if (purchasePoliciesDirty) return;
+    setPurchasePoliciesDraft(purchasePoliciesQuery.data ?? []);
+  }, [policyEventId, purchasePoliciesDirty, purchasePoliciesQuery.data, purchasePoliciesQuery.isSuccess]);
+
+  const discountPoliciesQuery = useQuery({
+    queryKey: ['event', 'discount-policies', policyEventId],
+    queryFn: async () => {
+      if (!policyEventId) return [] as DiscountPolicyDTO[];
+      const res = await http.get<ApiResponse<DiscountPolicyDTO[]>>(
+        `/api/events/${policyEventId}/discount-policies`
+      );
+      if (res.data.error) throw new Error(res.data.error);
+      return res.data.data ?? [];
+    },
+    enabled: Boolean(policyEventId),
+  });
+
+  useEffect(() => {
+    if (!policyEventId) return;
+    if (!discountPoliciesQuery.isSuccess) return;
+    if (discountPoliciesDirty) return;
+    setDiscountPoliciesDraft(discountPoliciesQuery.data ?? []);
+  }, [policyEventId, discountPoliciesDirty, discountPoliciesQuery.data, discountPoliciesQuery.isSuccess]);
+
   const deleteLotteryMutation = useMutation({
     mutationFn: async ({ companyId, eventId }: { companyId: string; eventId: string }) => {
       setSuccessMessage(null);
@@ -701,46 +741,6 @@ export default function MyEventsPage() {
       </div>
     );
   }
-
-  const purchasePoliciesQuery = useQuery({
-    queryKey: ['event', 'purchase-policies', policyEventId],
-    queryFn: async () => {
-      if (!policyEventId) return [] as PurchasePolicyDTO[];
-      const res = await http.get<ApiResponse<PurchasePolicyDTO[]>>(
-        `/api/events/${policyEventId}/purchase-policies`
-      );
-      if (res.data.error) throw new Error(res.data.error);
-      return res.data.data ?? [];
-    },
-    enabled: Boolean(policyEventId),
-  });
-
-  useEffect(() => {
-    if (!policyEventId) return;
-    if (!purchasePoliciesQuery.isSuccess) return;
-    if (purchasePoliciesDirty) return;
-    setPurchasePoliciesDraft(purchasePoliciesQuery.data ?? []);
-  }, [policyEventId, purchasePoliciesDirty, purchasePoliciesQuery.data, purchasePoliciesQuery.isSuccess]);
-
-  const discountPoliciesQuery = useQuery({
-    queryKey: ['event', 'discount-policies', policyEventId],
-    queryFn: async () => {
-      if (!policyEventId) return [] as DiscountPolicyDTO[];
-      const res = await http.get<ApiResponse<DiscountPolicyDTO[]>>(
-        `/api/events/${policyEventId}/discount-policies`
-      );
-      if (res.data.error) throw new Error(res.data.error);
-      return res.data.data ?? [];
-    },
-    enabled: Boolean(policyEventId),
-  });
-
-  useEffect(() => {
-    if (!policyEventId) return;
-    if (!discountPoliciesQuery.isSuccess) return;
-    if (discountPoliciesDirty) return;
-    setDiscountPoliciesDraft(discountPoliciesQuery.data ?? []);
-  }, [policyEventId, discountPoliciesDirty, discountPoliciesQuery.data, discountPoliciesQuery.isSuccess]);
 
   const replacePurchasePoliciesMutation = useMutation({
     mutationFn: async ({ eventId, policies }: { eventId: string; policies: PurchasePolicyDTO[] }) => {
