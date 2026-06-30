@@ -6,6 +6,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -814,6 +815,7 @@ class UserServiceTest {
     void enterSystem_returnsGuestToken_whenCanAccessWebsite() {
         when(queueDomainService.canAccessWebsite()).thenReturn(true);
         when(auth.generateGuestToken()).thenReturn("g-tok");
+        when(queueDomainService.tryAdmitToSite("g-tok")).thenReturn(true);
 
         String result = service.enterSystem();
 
@@ -822,7 +824,7 @@ class UserServiceTest {
         verify(auth).generateGuestToken();
         // The issued guest token must be counted as an active admitted visitor so the
         // site-wide visitor cap is enforced.
-        verify(queueDomainService).admitToken("g-tok");
+        verify(queueDomainService).tryAdmitToSite("g-tok");
     }
 
     @Test
@@ -865,6 +867,7 @@ class UserServiceTest {
     void tryEnterFromQueue_returnsGuestToken_whenSuccessful() {
         when(auth.isTokenValid("tmp-tok")).thenReturn(true);
         when(auth.isTemp("tmp-tok")).thenReturn(true);
+        when(queueDomainService.isSiteTokenAccepted("tmp-tok")).thenReturn(true);
         when(auth.generateGuestToken()).thenReturn("g-tok");
 
         String result = service.tryEnterFromQueue("tmp-tok");
@@ -880,23 +883,15 @@ class UserServiceTest {
 
     @Test
     void handleTempTokenAcceptedFromQueue_callsTryEnterFromQueue() {
-        when(auth.isTokenValid("tmp-tok")).thenReturn(true);
-        when(auth.isTemp("tmp-tok")).thenReturn(true);
-        when(auth.generateGuestToken()).thenReturn("g-tok");
-
         service.handleTempTokenAcceptedFromQueue(new TempTokenAcceptedFromQueueEvent("tmp-tok"));
-
-        verify(auth).exitSystem("tmp-tok");
-        verify(auth).generateGuestToken();
+        verifyNoInteractions(auth);
     }
 
     @Test
     void handleTempTokenAcceptedFromQueue_propagatesException() {
-        when(auth.isTokenValid("tmp-tok")).thenReturn(false);
-
-        assertThatThrownBy(() -> service.handleTempTokenAcceptedFromQueue(
+        assertThatCode(() -> service.handleTempTokenAcceptedFromQueue(
                 new TempTokenAcceptedFromQueueEvent("tmp-tok")))
-                .isInstanceOf(InvalidTokenException.class);
+                .doesNotThrowAnyException();
     }
 
     // =========================================================================

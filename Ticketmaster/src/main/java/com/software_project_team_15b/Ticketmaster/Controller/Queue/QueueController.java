@@ -7,6 +7,7 @@ import com.software_project_team_15b.Ticketmaster.Application.Queue.QueueService
 import com.software_project_team_15b.Ticketmaster.Controller.common.ApiResponse;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.SiteAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.SiteQueueSnapshotDTO;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -73,6 +74,24 @@ public class QueueController {
             return unauthorized(ex);
         } catch (UnauthorizedException ex) {
             return forbidden(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
+    @Operation(summary = "Get the caller's site-queue access state")
+    @GetMapping("/site/access")
+    public ResponseEntity<ApiResponse<SiteAccessDTO>> getSiteAccessView(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token
+    ) {
+        try {
+            requireToken(token);
+            SiteAccessDTO view = queueService.getSiteAccessView(token);
+            return ResponseEntity.ok(new ApiResponse<>(view, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
         } catch (IllegalArgumentException ex) {
             return badRequest(ex);
         } catch (Exception ex) {

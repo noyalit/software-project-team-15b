@@ -289,7 +289,7 @@ class QueueServiceWhiteTest {
 
         verify(queueDomainService, times(2)).getAcceptedTokens();
         verify(auth).isTokenValid("expired-tok");
-        verify(queueDomainService).removeAcceptedToken("expired-tok");
+        verify(queueDomainService).evictSiteToken("expired-tok");
         verify(queueDomainService).acceptUsersFromSiteQueue();
         verify(eventPublisher, never()).publishEvent(any());
     }
@@ -305,7 +305,7 @@ class QueueServiceWhiteTest {
 
         verify(queueDomainService, times(2)).getAcceptedTokens();
         verify(auth).isTokenValid("valid-tok");
-        verify(queueDomainService, never()).removeAcceptedToken(any());
+        verify(queueDomainService, never()).evictSiteToken(any());
         verify(queueDomainService).acceptUsersFromSiteQueue();
         verify(eventPublisher, never()).publishEvent(any());
     }

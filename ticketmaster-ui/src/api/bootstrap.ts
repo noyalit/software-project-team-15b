@@ -2,6 +2,20 @@ import axios from 'axios';
 import { useAuthStore, getPersistedToken } from '../ui/authStore';
 import type { ApiResponse } from './types';
 
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const payload = parts[1];
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+    const json = atob(padded);
+    return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 const BOOTSTRAP_LOCK = 'tm-bootstrap';
 
 /**
@@ -33,7 +47,9 @@ export async function ensureGuestToken(): Promise<string | null> {
     const newToken = res.data.data;
     if (typeof newToken !== 'string' || !newToken) throw new Error('No token returned');
 
-    useAuthStore.getState().setAuth(newToken, 'guest');
+    const payload = decodeJwtPayload(newToken);
+    const userType = payload?.userType;
+    useAuthStore.getState().setAuth(newToken, userType === 'TEMP' ? 'temp' : 'guest');
     return newToken;
   };
 

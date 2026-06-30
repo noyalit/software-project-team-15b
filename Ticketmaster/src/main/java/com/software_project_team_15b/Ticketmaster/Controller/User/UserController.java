@@ -48,6 +48,26 @@ public class UserController {
         }
     }
 
+    @Operation(summary = "Exchange an admitted site-queue token for a guest token")
+    @PostMapping("/enter-from-queue")
+    public ResponseEntity<ApiResponse<String>> enterFromQueue(
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token
+    ) {
+        try {
+            if (token == null || token.isBlank()) {
+                throw new InvalidTokenException("Missing or blank Authorization header");
+            }
+            String guestToken = userService.tryEnterFromQueue(token);
+            return ResponseEntity.ok(new ApiResponse<>(guestToken, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     @Operation(summary = "Register a new member")
     @PostMapping(path = "/register", consumes = "application/json")
     public ResponseEntity<ApiResponse<MemberDTO>> registerMember(

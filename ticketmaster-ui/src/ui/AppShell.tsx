@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { http } from '../api/http';
 import { ensureGuestToken } from '../api/bootstrap';
 import type { ApiResponse, MemberDTO } from '../api/types';
@@ -29,6 +29,7 @@ function NavLink({ to, label }: { to: string; label: string }) {
 
 export default function AppShell() {
   const { token, userType, username, logout } = useAuthStore();
+  const nav = useNavigate();
 
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('theme');
@@ -76,6 +77,12 @@ export default function AppShell() {
     staleTime: Infinity,
     retry: 1,
   });
+
+  useEffect(() => {
+    if (token && userType === 'temp') {
+      nav('/site-queue', { replace: true });
+    }
+  }, [nav, token, userType]);
 
   const meQuery = useQuery({
     queryKey: ['me', token],

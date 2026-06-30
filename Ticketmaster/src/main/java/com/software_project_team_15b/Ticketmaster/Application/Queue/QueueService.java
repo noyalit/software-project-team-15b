@@ -19,6 +19,7 @@ import com.software_project_team_15b.Ticketmaster.Application.IAuth;
 import com.software_project_team_15b.Ticketmaster.Application.events.TempTokenAcceptedFromQueueEvent;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.QueueSnapshotDTO;
+import com.software_project_team_15b.Ticketmaster.DTO.SiteAccessDTO;
 import com.software_project_team_15b.Ticketmaster.DTO.SiteQueueSnapshotDTO;
 import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainService;
 
@@ -79,7 +80,7 @@ public class QueueService {
 
         for (String token : beforeAcceptedTokens) {
             if (!auth.isTokenValid(token)) {
-                queueDomainService.removeAcceptedToken(token);
+                queueDomainService.evictSiteToken(token);
             }
         }
 
@@ -242,6 +243,29 @@ public class QueueService {
             return snapshot;
         } catch (RuntimeException e) {
             AUDIT.warn("op=getSiteQueueSnapshot result=error error={}", e.getMessage());
+            throw e;
+        }
+    }
+
+    public SiteAccessDTO getSiteAccessView(String token) {
+        try {
+            if (token == null) throw new IllegalArgumentException("token cannot be null");
+            validateToken(token);
+            UUID userId = auth.extractUserId(token);
+
+            boolean admitted = queueDomainService.isSiteTokenAccepted(token);
+            Integer position = admitted ? null : null;
+
+            if (!admitted) {
+                int idx = queueDomainService.getSiteQueuePosition(token);
+                position = idx >= 0 ? idx : null;
+            }
+
+            SiteAccessDTO view = new SiteAccessDTO(admitted, position);
+            AUDIT.info("op=getSiteAccessView userId={} admitted={} position={}", userId, admitted, position);
+            return view;
+        } catch (RuntimeException e) {
+            AUDIT.warn("op=getSiteAccessView result=error error={}", e.getMessage());
             throw e;
         }
     }

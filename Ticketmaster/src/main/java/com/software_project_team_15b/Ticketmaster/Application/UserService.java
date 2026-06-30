@@ -12,6 +12,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException;
+import com.software_project_team_15b.Ticketmaster.Application.Exceptions.UnauthorizedException;
 import com.software_project_team_15b.Ticketmaster.Application.Notification.INotifier;
 import com.software_project_team_15b.Ticketmaster.Application.events.GuestLoggedOutEvent;
 import com.software_project_team_15b.Ticketmaster.Application.events.TempTokenAcceptedFromQueueEvent;
@@ -130,6 +131,7 @@ public class UserService {
             }
 
             String memberToken = auth.generateMemberToken(member);
+            queueDomainService.replaceSiteToken(token, memberToken);
             AUDIT.info("op=login userId={} username={}",member.getUserId(),username);
             return memberToken;
 
@@ -159,11 +161,10 @@ public class UserService {
     public String enterSystem() {
         if (queueDomainService.canAccessWebsite()) {
             String guestToken = enterAsGuest();
-            // Count this visitor as an active admitted visitor so the site-wide cap is
-            // enforced. Without this, the admitted set never grows from normal entry and
-            // the visitor cap throttles nothing.
-            queueDomainService.admitToken(guestToken);
-            return guestToken;
+            if (queueDomainService.tryAdmitToSite(guestToken)) {
+                return guestToken;
+            }
+            auth.exitSystem(guestToken);
         }
 
         String tempToken = auth.generateTempToken();
@@ -189,20 +190,24 @@ public class UserService {
             throw new InvalidTokenException("Token is not a temporary queue token");
         }
 
+        if (!queueDomainService.isSiteTokenAccepted(tempToken)) {
+            throw new UnauthorizedException("You are still waiting in the site queue");
+        }
+
         auth.exitSystem(tempToken);
         AUDIT.info("op=exit-queue success=true");
-        return enterAsGuest();
+        String guestToken = enterAsGuest();
+        queueDomainService.replaceSiteToken(tempToken, guestToken);
+        return guestToken;
     }
 
     @EventListener
     public void handleTempTokenAcceptedFromQueue(TempTokenAcceptedFromQueueEvent event) {
         try {
-            String guestToken = tryEnterFromQueue(event.tempToken());
-
             AUDIT.info(
                     "op=queue-token-accepted tempToken={} guestTokenIssued={}",
                     event.tempToken(),
-                    guestToken != null
+                    false
             );
 
         } catch (RuntimeException e) {
@@ -239,6 +244,7 @@ public class UserService {
         }
 
         String adminToken = auth.generateSystemAdminToken(admin);
+        queueDomainService.replaceSiteToken(token, adminToken);
         AUDIT.info("op=login-system-admin username={}", admin.getUsername());
         return adminToken;
     }
@@ -274,6 +280,9 @@ public class UserService {
         if (auth.isMember(token)) {
             UUID userId = auth.extractUserId(token);
             String entranceToken = auth.logout(token);
+            if (entranceToken != null && !entranceToken.isBlank()) {
+                queueDomainService.replaceSiteToken(token, entranceToken);
+            }
             AUDIT.info("op=logout userType=member userId={}", userId);
             return entranceToken;
         }
