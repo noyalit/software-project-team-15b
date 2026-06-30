@@ -72,6 +72,27 @@ export default function ProfilePage() {
     enabled: Boolean(token) && userType === 'member',
   });
 
+  const age = useMemo(() => {
+    const birthDate = meQuery.data?.birthDate;
+    if (!birthDate) return '—';
+
+    const birth = new Date(birthDate);
+    const today = new Date();
+
+    let years = today.getFullYear() - birth.getFullYear();
+
+    const monthDiff = today.getMonth() - birth.getMonth();
+
+    if (
+      monthDiff < 0 ||
+      (monthDiff === 0 && today.getDate() < birth.getDate())
+    ) {
+      years--;
+    }
+
+    return years;
+  }, [meQuery.data?.birthDate]);
+
   const companyManagerCompaniesQuery = useQuery({
     queryKey: ['profile', 'company-manager-companies', token, meQuery.data?.assignedRoles],
     queryFn: async () => {
@@ -445,26 +466,6 @@ export default function ProfilePage() {
       role?.isApproved
     );
   };
-
-  const age = useMemo(() => {
-    if (!me.birthDate) return '—';
-
-    const birth = new Date(me.birthDate);
-    const today = new Date();
-
-    let years = today.getFullYear() - birth.getFullYear();
-
-    const monthDiff = today.getMonth() - birth.getMonth();
-
-    if (
-      monthDiff < 0 ||
-      (monthDiff === 0 && today.getDate() < birth.getDate())
-    ) {
-      years--;
-    }
-
-    return years;
-  }, [me.birthDate]);
 
   return (
     <div className="space-y-4">

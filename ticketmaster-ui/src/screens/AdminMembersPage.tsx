@@ -186,7 +186,11 @@ export default function AdminMembersPage() {
               </div>
               <div className="md:col-span-2">
                 <span className="font-medium">Roles:</span>{' '}
-                {(resolvedMember.assignedRoles ?? []).length > 0 ? (resolvedMember.assignedRoles ?? []).join(', ') : 'RegularMember'}
+                {(resolvedMember.assignedRoles ?? []).length > 0
+                  ? (resolvedMember.assignedRoles ?? [])
+                      .map((r) => (typeof r === 'string' ? r : r.roleName))
+                      .join(', ')
+                  : 'RegularMember'}
               </div>
             </div>
 
