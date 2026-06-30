@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '../ui/authStore';
+import { ensureGuestToken } from './bootstrap';
 
 export const http = axios.create({
   baseURL: '/',
@@ -30,10 +31,10 @@ http.interceptors.response.use(
       store.clearAuth();
 
       try {
-        const enterRes = await axios.post('/api/users/enter');
-        const newToken = enterRes?.data?.data;
+        // ensureGuestToken serializes concurrent re-entry across tabs via a Web
+        // Lock, so simultaneous 401s don't each mint a separate guest session.
+        const newToken = await ensureGuestToken();
         if (typeof newToken === 'string' && newToken) {
-          store.setAuth(newToken, 'guest');
           originalRequest.headers = originalRequest.headers ?? {};
           originalRequest.headers['Authorization'] = newToken;
           return http.request(originalRequest);

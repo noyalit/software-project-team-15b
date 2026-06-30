@@ -79,6 +79,7 @@ public class Auth implements IAuth {
                 : member.getActiveRole().getRoleName();
 
         String token = Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(member.getUserId().toString())
                 .claim("userType", UserType.MEMBER.name())
                 .claim("username", member.getUsername())
@@ -97,6 +98,7 @@ public class Auth implements IAuth {
         UUID guestId = UUID.randomUUID();
 
         String token = Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(guestId.toString())
                 .claim("userType", UserType.GUEST.name())
                 .issuedAt(new Date())
@@ -115,6 +117,7 @@ public class Auth implements IAuth {
         }
 
         String token = Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(admin.getAdminId().toString())
                 .claim("userType", UserType.SYSTEM_ADMIN.name())
                 .claim("username", admin.getUsername())
@@ -133,6 +136,7 @@ public class Auth implements IAuth {
         UUID tempId = UUID.randomUUID();
 
         String token = Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(tempId.toString())
                 .claim("userType", UserType.TEMP.name())
                 .issuedAt(new Date())

@@ -10,6 +10,7 @@ type AuthState = {
   setUsername: (username: string | null) => void;
   clearAuth: () => void;
   logout: () => void;
+  syncFromStorage: () => void;
 };
 
 const STORAGE_KEY = 'tm_auth_v1';
@@ -42,6 +43,17 @@ function clearOrderContext() {
 export const useAuthStore = create<AuthState>((set, get) => {
   const initial = load();
 
+  // Keep tabs in sync: when another tab writes the auth entry in localStorage,
+  // the `storage` event fires here (it only fires in *other* tabs, never the
+  // writer) so we refresh this tab's in-memory state. This makes login/logout/
+  // token-refresh in one tab propagate to all open tabs.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (e) => {
+      if (e.key !== STORAGE_KEY) return;
+      get().syncFromStorage();
+    });
+  }
+
   return {
     token: initial.token,
     userType: initial.userType,
@@ -66,5 +78,14 @@ export const useAuthStore = create<AuthState>((set, get) => {
       // This UI keeps it simple and clears auth; you can wire POST /api/users/logout later.
       get().clearAuth();
     },
+    syncFromStorage: () => {
+      const next = load();
+      set({ token: next.token, userType: next.userType, username: next.username });
+    },
   };
 });
+
+/** Reads the token directly from persisted storage, bypassing in-memory state. */
+export function getPersistedToken(): string | null {
+  return load().token;
+}

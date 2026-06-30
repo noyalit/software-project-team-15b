@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { http } from '../api/http';
+import { ensureGuestToken } from '../api/bootstrap';
 import type { ApiResponse, MemberDTO } from '../api/types';
 import { useAuthStore } from '../ui/authStore';
 // import logo from '../assets/Ticket4U_logo.jpeg';
@@ -27,7 +28,7 @@ function NavLink({ to, label }: { to: string; label: string }) {
 }
 
 export default function AppShell() {
-  const { token, userType, username, logout, setAuth } = useAuthStore();
+  const { token, userType, username, logout } = useAuthStore();
 
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('theme');
@@ -67,11 +68,9 @@ export default function AppShell() {
   useQuery({
     queryKey: ['enter-system'],
     queryFn: async () => {
-      const res = await http.post<ApiResponse<string>>('/api/users/enter');
-      if (res.data.error) throw new Error(res.data.error);
-      if (!res.data.data) throw new Error('No token returned');
-      setAuth(res.data.data, 'guest');
-      return res.data.data;
+      const newToken = await ensureGuestToken();
+      if (!newToken) throw new Error('No token returned');
+      return newToken;
     },
     enabled: !token,
     staleTime: Infinity,
