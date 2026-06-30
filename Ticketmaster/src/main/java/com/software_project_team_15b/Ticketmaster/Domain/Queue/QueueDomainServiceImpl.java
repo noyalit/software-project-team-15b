@@ -299,11 +299,19 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
         if (queue == null) {
             return new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null);
         }
-        if (queue.hasAccess(token) == null) {
-            pushToEventQueue(eventId, token);
-            queue.advanceQueue(LocalDateTime.now().plusSeconds(ACCESS_TIME));
-            queueRepository.updateQueue(queue);
+
+        LocalDateTime expiresAt = queue.hasAccess(token);
+        if (expiresAt != null) {
+            return new QueueAccessDTO(eventId, QueueAccessStatus.ADMITTED, null, expiresAt);
         }
+
+        if (queue.contains(token)) {
+            return getQueueAccessView(token, eventId);
+        }
+
+        pushToEventQueue(eventId, token);
+        queue.advanceQueue(LocalDateTime.now().plusSeconds(ACCESS_TIME));
+        queueRepository.updateQueue(queue);
         return getQueueAccessView(token, eventId);
     }
 
