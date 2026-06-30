@@ -269,6 +269,14 @@ const canAccessManagerPages =
                     sessionStorage.removeItem('activeOrderId');
                     await disconnectNotifications();
                     await new Promise((r) => setTimeout(r, 150));
+                    // Tell the backend so it invalidates the session and frees the
+                    // site-wide visitor slot it held; otherwise that slot stays occupied
+                    // (for up to the token lifetime) and can block the queue.
+                    try {
+                      await http.post('/api/users/logout');
+                    } catch {
+                      // best-effort: clear locally even if the call fails
+                    }
                     logout();
                     window.location.href = '/';
                   }}

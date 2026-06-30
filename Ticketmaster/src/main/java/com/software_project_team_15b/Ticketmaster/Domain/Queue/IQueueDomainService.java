@@ -64,6 +64,17 @@ public interface IQueueDomainService {
     int getSiteQueuePosition(String token);
 
     /**
+     * Frees any site-wide slot held by the given token: removes it from both the admitted
+     * set and the waiting queue. Called when a session ends (logout / leaving the site) so
+     * the visitor cap reflects reality and waiting users can be admitted. A no-op if the
+     * token holds neither; never throws for an absent token.
+     *
+     * @param token the user's auth token; must not be null
+     * @throws IllegalArgumentException if {@code token} is null
+     */
+    void releaseToken(String token);
+
+    /**
      * Returns a snapshot of the site-wide queue state.
      */
     SiteQueueSnapshotDTO getSiteQueueSnapshot();

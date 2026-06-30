@@ -314,6 +314,7 @@ public class UserService {
      * @param token Entrance token (guest/temp token)
      */
     public void exitSystem(String token) {
+        queueDomainService.releaseToken(token);
         auth.exitSystem(token);
         AUDIT.info("op=exit-system");
     }
@@ -328,6 +329,10 @@ public class UserService {
         if (!auth.isTokenValid(token)) {
             throw new InvalidTokenException("Invalid or expired token");
         }
+
+        // Free any site-wide visitor slot this session held so waiting users can be
+        // admitted immediately, rather than waiting for the validity sweep.
+        queueDomainService.releaseToken(token);
 
         if (auth.isGuest(token)) {
             eventPublisher.publishEvent(new GuestLoggedOutEvent(token));

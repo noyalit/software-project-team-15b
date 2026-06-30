@@ -162,6 +162,13 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
     }
 
     @Override
+    public synchronized void releaseToken(String token) {
+        if (token == null) throw new IllegalArgumentException("token cannot be null");
+        acceptedTokens.remove(token);
+        siteQueue.remove(token);
+    }
+
+    @Override
     public synchronized SiteQueueSnapshotDTO getSiteQueueSnapshot() {
         return new SiteQueueSnapshotDTO(maxVisitors, siteQueue.size(), acceptedTokens.size());
     }
