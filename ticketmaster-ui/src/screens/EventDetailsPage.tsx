@@ -10,6 +10,7 @@ import type {
   EventDTO,
   MemberDTO,
   PurchasePolicyDTO,
+  QueueAccessDTO,
 } from '../api/types';
 import { getApiErrorMessage } from '../api/errors';
 import { useAuthStore } from '../ui/authStore';
@@ -536,6 +537,32 @@ export default function EventDetailsPage() {
         const message = getApiErrorMessage(e);
 
         const lower = String(message ?? '').toLowerCase();
+
+        if (userType === 'member' && lower.includes('already waiting in line')) {
+          let queuePosition: number | null = null;
+          try {
+            const accessRes = await http.get<ApiResponse<QueueAccessDTO>>(
+              `/api/queues/${eventId}/access`
+            );
+            const access = accessRes.data.data;
+            if (access?.status === 'WAITING') {
+              const pos = access.position;
+              if (typeof pos === 'number') {
+                queuePosition = pos;
+              }
+            }
+          } catch {
+            // fall through
+          }
+
+          if (typeof queuePosition === 'number') {
+            throw new Error(
+              `You are already waiting in line. Your position is ${queuePosition}. Please wait until you are admitted.`
+            );
+          }
+
+          throw new Error(message);
+        }
         const shouldQueue =
           status === 410 ||
           lower.includes('does not have access') ||
