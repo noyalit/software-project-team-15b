@@ -58,6 +58,31 @@ export default function EventDetailsPage() {
   const qc = useQueryClient();
   const { token, userType, clearAuth } = useAuthStore();
 
+  const queueAccessQuery = useQuery({
+    queryKey: ['event-queue-access', eventId, token],
+    queryFn: async () => {
+      if (!eventId) throw new Error('Event ID is missing.');
+      const res = await http.get<ApiResponse<QueueAccessDTO>>(`/api/queues/${eventId}/access`);
+      if (res.data.error) throw new Error(res.data.error);
+      if (!res.data.data) throw new Error('Queue access is unavailable.');
+      return res.data.data;
+    },
+    enabled: Boolean(eventId) && Boolean(token) && userType === 'member',
+    refetchInterval: 2000,
+    retry: 1,
+  });
+
+  useEffect(() => {
+    if (!eventId) return;
+    if (!token) return;
+    if (userType !== 'member') return;
+    const access = queueAccessQuery.data;
+    if (!access) return;
+    if (access.status === 'WAITING') {
+      navigate(`/queue/${eventId}`, { replace: true });
+    }
+  }, [eventId, navigate, queueAccessQuery.data, token, userType]);
+
   const describePurchasePolicy = (p: PurchasePolicyDTO) => {
     const anyP = p as any;
     const t = (anyP?.type ?? anyP?.policyType ?? anyP?.kind) as string | undefined;

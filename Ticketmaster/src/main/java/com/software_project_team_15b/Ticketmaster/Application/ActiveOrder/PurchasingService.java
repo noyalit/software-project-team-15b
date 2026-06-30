@@ -1153,7 +1153,7 @@ public class PurchasingService {
         int maxAccepted = queueDomainService.getQueueSnapshot(eventId).maxAccepted();
         if (maxAccepted > 0 && purchasingDomainService.countActiveOrdersForEvent(eventId) >= maxAccepted) {
             throw new TimeExpiredException(
-                    "User does not have access. Queue is currently active for this event. Please wait until you are admitted."
+                    "This event is currently at capacity for active orders. Please wait in the queue until a spot becomes available."
             );
         }
     }

@@ -416,10 +416,10 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
             throw new QueueNotFoundException("Queue not found for eventId: " + eventId);
         }
         if (queue.isFull()) {
-            throw new QueueIsFullException("Event queue is full. Please try again later.");
+            throw new QueueIsFullException("The queue for this event is full right now. Please try again later.");
         }
         if (queue.contains(token)) {
-            throw new AlreadyInQueueException("Token " + token + " is already in the queue for eventId: " + eventId);
+            throw new AlreadyInQueueException("You are already in the queue for this event.");
         }
         queue.push(token);
         queueRepository.updateQueue(queue);
