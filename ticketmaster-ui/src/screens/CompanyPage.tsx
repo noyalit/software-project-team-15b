@@ -230,19 +230,6 @@ export default function CompanyPage() {
       appointmentApprovedQuery.data === true
     );
 
-  if (!canManageCompany) {
-    return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
-          Company
-        </h1>
-        <p className="mt-2 text-slate-600">
-          Your appointment must be approved before you can manage this company.
-        </p>
-      </div>
-    );
-  }
-
   const eventsQuery = useQuery({
     queryKey: ['company-events', companyId],
     queryFn: async () => {
@@ -258,7 +245,7 @@ export default function CompanyPage() {
 
       return res.data.data ?? [];
     },
-    enabled: Boolean(companyId),
+    enabled: Boolean(companyId) && canManageCompany,
   });
 
   const companyPurchasePoliciesQuery = useQuery({
@@ -269,7 +256,7 @@ export default function CompanyPage() {
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? [];
     },
-    enabled: Boolean(companyId) && Boolean(token) && userType === 'member',
+    enabled: Boolean(companyId) && Boolean(token) && userType === 'member' && canManageCompany,
   });
 
   const companyDiscountPoliciesQuery = useQuery({
@@ -280,8 +267,21 @@ export default function CompanyPage() {
       if (res.data.error) throw new Error(res.data.error);
       return res.data.data ?? [];
     },
-    enabled: Boolean(companyId) && Boolean(token) && userType === 'member',
+    enabled: Boolean(companyId) && Boolean(token) && userType === 'member' && canManageCompany,
   });
+
+  if (!canManageCompany) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
+          Company
+        </h1>
+        <p className="mt-2 text-slate-600">
+          Your appointment must be approved before you can manage this company.
+        </p>
+      </div>
+    );
+  }
 
   // Reset editor state when switching companies so an unsaved draft from one company
   // can't leak into (and overwrite) another company's policy chain. Clearing the dirty
