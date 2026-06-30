@@ -34,7 +34,7 @@ import com.software_project_team_15b.Ticketmaster.Domain.Queue.IQueueDomainServi
  */
 @Service
 public class QueueService {
-    private static final int SITE_QUEUE_INTERVAL = 10;
+    private static final int SITE_QUEUE_INTERVAL = 1;
 
 
     private static final Logger AUDIT = LoggerFactory.getLogger("audit.queue");
