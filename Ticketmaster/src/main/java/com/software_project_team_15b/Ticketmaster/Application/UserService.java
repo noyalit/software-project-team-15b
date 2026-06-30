@@ -235,6 +235,8 @@ public class UserService {
             token = enterAsGuest();
         }
         validateEntranceToken(token);
+
+        queueDomainService.evictSiteToken(token);
         auth.exitSystem(token);
         SystemAdmin admin = systemAdminRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid username or password"));
@@ -244,7 +246,6 @@ public class UserService {
         }
 
         String adminToken = auth.generateSystemAdminToken(admin);
-        queueDomainService.replaceSiteToken(token, adminToken);
         AUDIT.info("op=login-system-admin username={}", admin.getUsername());
         return adminToken;
     }
@@ -255,6 +256,7 @@ public class UserService {
      * @param token Entrance token (guest/temp token)
      */
     public void exitSystem(String token) {
+        queueDomainService.evictSiteToken(token);
         auth.exitSystem(token);
         AUDIT.info("op=exit-system");
     }
@@ -272,6 +274,7 @@ public class UserService {
 
         if (auth.isGuest(token)) {
             eventPublisher.publishEvent(new GuestLoggedOutEvent(token));
+            queueDomainService.evictSiteToken(token);
             auth.exitSystem(token);
             AUDIT.info("op=logout userType=guest");
             return null;
@@ -288,6 +291,7 @@ public class UserService {
         }
 
         if (auth.isSystemAdmin(token)) {
+            queueDomainService.evictSiteToken(token);
             auth.exitSystem(token);
             AUDIT.info("op=logout userType=system-admin");
             return null;

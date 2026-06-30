@@ -48,6 +48,26 @@ public class UserController {
         }
     }
 
+    @Operation(summary = "Exit the system (frees site-queue slot)")
+    @PostMapping(path = "/exit", consumes = "application/json")
+    public ResponseEntity<ApiResponse<Void>> exitSystem(
+            @RequestBody ExitRequest request
+    ) {
+        try {
+            if (request == null || request.token() == null || request.token().isBlank()) {
+                throw new InvalidTokenException("Missing or blank token");
+            }
+            userService.exitSystem(request.token());
+            return ResponseEntity.ok(new ApiResponse<>(null, null));
+        } catch (InvalidTokenException ex) {
+            return unauthorized(ex);
+        } catch (IllegalArgumentException ex) {
+            return badRequest(ex);
+        } catch (Exception ex) {
+            return internalServerError(ex);
+        }
+    }
+
     @Operation(summary = "Exchange an admitted site-queue token for a guest token")
     @PostMapping("/enter-from-queue")
     public ResponseEntity<ApiResponse<String>> enterFromQueue(
@@ -774,6 +794,11 @@ public class UserController {
     public record SendMessageRequest(
             UUID userId,
             String message
+    ) {
+    }
+
+    public record ExitRequest(
+            String token
     ) {
     }
 

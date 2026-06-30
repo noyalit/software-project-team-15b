@@ -84,6 +84,27 @@ export default function AppShell() {
     }
   }, [nav, token, userType]);
 
+  useEffect(() => {
+    if (!token) return;
+
+    const handleUnload = () => {
+      try {
+        const payload = JSON.stringify({ token });
+        const blob = new Blob([payload], { type: 'application/json' });
+        navigator.sendBeacon('/api/users/exit', blob);
+      } catch {
+        // ignore
+      }
+    };
+
+    window.addEventListener('pagehide', handleUnload);
+    window.addEventListener('beforeunload', handleUnload);
+    return () => {
+      window.removeEventListener('pagehide', handleUnload);
+      window.removeEventListener('beforeunload', handleUnload);
+    };
+  }, [token]);
+
   const meQuery = useQuery({
     queryKey: ['me', token],
     queryFn: async () => {
