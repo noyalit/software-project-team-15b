@@ -124,14 +124,21 @@ public class UserService {
                 token = enterAsGuest();
             }
             validateEntranceToken(token);
-            auth.exitSystem(token);
-            Member member = userDomainService.getMemberByUsername(username);
+            Member member;
+            try {
+                member = userDomainService.getMemberByUsername(username);
+            } catch (RuntimeException e) {
+                auth.exitSystem(token);
+                throw e;
+            }
             if (!passwordEncoder.matches(password, member.getPasswordHash())) {
+                auth.exitSystem(token);
                 throw new IllegalArgumentException("Invalid username or password");
             }
 
             String memberToken = auth.generateMemberToken(member);
             queueDomainService.replaceSiteToken(token, memberToken);
+            auth.exitSystem(token);
             AUDIT.info("op=login userId={} username={}",member.getUserId(),username);
             return memberToken;
 
@@ -237,6 +244,7 @@ public class UserService {
         validateEntranceToken(token);
 
         queueDomainService.evictSiteToken(token);
+        queueDomainService.acceptUsersFromSiteQueue();
         auth.exitSystem(token);
         SystemAdmin admin = systemAdminRepository.findByUsername(username)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid username or password"));
@@ -257,6 +265,7 @@ public class UserService {
      */
     public void exitSystem(String token) {
         queueDomainService.evictSiteToken(token);
+        queueDomainService.acceptUsersFromSiteQueue();
         auth.exitSystem(token);
         AUDIT.info("op=exit-system");
     }
@@ -275,6 +284,7 @@ public class UserService {
         if (auth.isGuest(token)) {
             eventPublisher.publishEvent(new GuestLoggedOutEvent(token));
             queueDomainService.evictSiteToken(token);
+            queueDomainService.acceptUsersFromSiteQueue();
             auth.exitSystem(token);
             AUDIT.info("op=logout userType=guest");
             return null;
@@ -292,6 +302,7 @@ public class UserService {
 
         if (auth.isSystemAdmin(token)) {
             queueDomainService.evictSiteToken(token);
+            queueDomainService.acceptUsersFromSiteQueue();
             auth.exitSystem(token);
             AUDIT.info("op=logout userType=system-admin");
             return null;
