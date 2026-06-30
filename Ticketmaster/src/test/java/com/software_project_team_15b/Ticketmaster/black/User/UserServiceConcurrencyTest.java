@@ -253,6 +253,11 @@ class UserServiceConcurrencyTest {
         }
 
         @Override
+        public void convertTempToGuest(String token) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public String logout(String token) {
             throw new UnsupportedOperationException();
         }

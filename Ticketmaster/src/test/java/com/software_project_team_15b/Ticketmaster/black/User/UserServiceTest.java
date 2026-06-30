@@ -6,6 +6,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -852,26 +853,45 @@ class UserServiceTest {
     }
 
     @Test
-    void tryEnterFromQueue_throwsWhenTokenIsNotTemp() {
+    void tryEnterFromQueue_throwsWhenTokenIsNotAVisitorToken() {
+        // A member/admin token is neither temp nor guest: it does not belong in the queue.
         when(auth.isTokenValid("member-tok")).thenReturn(true);
         when(auth.isTemp("member-tok")).thenReturn(false);
+        when(auth.isGuest("member-tok")).thenReturn(false);
 
         assertThatThrownBy(() -> service.tryEnterFromQueue("member-tok"))
                 .isInstanceOf(InvalidTokenException.class)
-                .hasMessageContaining("not a temporary queue token");
+                .hasMessageContaining("not a site-queue visitor token");
     }
 
     @Test
-    void tryEnterFromQueue_returnsGuestToken_whenSuccessful() {
+    void tryEnterFromQueue_keepsAlreadyAdmittedGuest_whenReadmitted() {
+        // A guest that was admitted, demoted when the limit dropped, then re-admitted:
+        // it is already usable, so promotion is a no-op that must not throw or convert.
+        when(auth.isTokenValid("guest-tok")).thenReturn(true);
+        when(auth.isTemp("guest-tok")).thenReturn(false);
+        when(auth.isGuest("guest-tok")).thenReturn(true);
+
+        String result = service.tryEnterFromQueue("guest-tok");
+
+        assertThat(result).isEqualTo("guest-tok");
+        verify(auth, never()).convertTempToGuest("guest-tok");
+        verify(auth, never()).exitSystem("guest-tok");
+    }
+
+    @Test
+    void tryEnterFromQueue_promotesTokenInPlace_whenSuccessful() {
         when(auth.isTokenValid("tmp-tok")).thenReturn(true);
         when(auth.isTemp("tmp-tok")).thenReturn(true);
-        when(auth.generateGuestToken()).thenReturn("g-tok");
 
         String result = service.tryEnterFromQueue("tmp-tok");
 
-        assertThat(result).isEqualTo("g-tok");
-        verify(auth).exitSystem("tmp-tok");
-        verify(auth).generateGuestToken();
+        // The promoted visitor keeps the same token it already holds, now upgraded
+        // to an admitted guest session. We must NOT exit it or mint a new token.
+        assertThat(result).isEqualTo("tmp-tok");
+        verify(auth).convertTempToGuest("tmp-tok");
+        verify(auth, never()).exitSystem("tmp-tok");
+        verify(auth, never()).generateGuestToken();
     }
 
     // =========================================================================
@@ -882,21 +902,25 @@ class UserServiceTest {
     void handleTempTokenAcceptedFromQueue_callsTryEnterFromQueue() {
         when(auth.isTokenValid("tmp-tok")).thenReturn(true);
         when(auth.isTemp("tmp-tok")).thenReturn(true);
-        when(auth.generateGuestToken()).thenReturn("g-tok");
 
         service.handleTempTokenAcceptedFromQueue(new TempTokenAcceptedFromQueueEvent("tmp-tok"));
 
-        verify(auth).exitSystem("tmp-tok");
-        verify(auth).generateGuestToken();
+        verify(auth).convertTempToGuest("tmp-tok");
+        verify(auth, never()).exitSystem("tmp-tok");
     }
 
     @Test
-    void handleTempTokenAcceptedFromQueue_propagatesException() {
+    void handleTempTokenAcceptedFromQueue_swallowsException_toProtectTheSweep() {
+        // The listener runs inside the scheduler's per-token loop; a token that can no
+        // longer be promoted (here, invalid) must be logged and skipped, never rethrown,
+        // so the other tokens admitted in the same sweep are still processed.
         when(auth.isTokenValid("tmp-tok")).thenReturn(false);
 
-        assertThatThrownBy(() -> service.handleTempTokenAcceptedFromQueue(
+        assertThatCode(() -> service.handleTempTokenAcceptedFromQueue(
                 new TempTokenAcceptedFromQueueEvent("tmp-tok")))
-                .isInstanceOf(InvalidTokenException.class);
+                .doesNotThrowAnyException();
+
+        verify(auth, never()).convertTempToGuest("tmp-tok");
     }
 
     // =========================================================================

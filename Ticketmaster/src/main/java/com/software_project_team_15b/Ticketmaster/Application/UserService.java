@@ -175,23 +175,38 @@ public class UserService {
     }
 
     /**
-     * Attempts to exit the queue and enter the system.
-     * 
-     * @param tempToken Temporary token
-     * @return Guest token if successful, or throws an exception
+     * Promotes a waiting visitor out of the site queue and into the system.
+     *
+     * <p>The site-queue scheduler has already moved {@code tempToken} into the
+     * admitted set; this upgrades that very token to an admitted guest session
+     * <em>in place</em> so the client keeps using the token it already holds. We
+     * must not mint a fresh token here — there is no channel to deliver it to the
+     * waiting client, and exiting the promoted token would immediately undo the
+     * admission (the next scheduler sweep would evict it as invalid).
+     *
+     * <p>A promoted token is normally a {@code TEMP} queue token, which we upgrade
+     * to {@code GUEST}. It may instead already be a {@code GUEST}: a visitor who was
+     * admitted, then demoted to the front of the queue when the admin lowered the
+     * limit, and is now being re-admitted. That token is already usable, so we leave
+     * it as-is. Any other token type does not belong in the site queue.
+     *
+     * @param promotedToken the token just promoted out of the site queue
+     * @return the same token, now an admitted guest session
+     * @throws InvalidTokenException if the token is invalid/expired or not a visitor token
      */
-    public String tryEnterFromQueue(String tempToken) {
-        if (!auth.isTokenValid(tempToken)) {
+    public String tryEnterFromQueue(String promotedToken) {
+        if (!auth.isTokenValid(promotedToken)) {
             throw new InvalidTokenException("Invalid or expired token");
         }
 
-        if (!auth.isTemp(tempToken)) {
-            throw new InvalidTokenException("Token is not a temporary queue token");
+        if (auth.isTemp(promotedToken)) {
+            auth.convertTempToGuest(promotedToken);
+        } else if (!auth.isGuest(promotedToken)) {
+            throw new InvalidTokenException("Token is not a site-queue visitor token");
         }
 
-        auth.exitSystem(tempToken);
         AUDIT.info("op=exit-queue success=true");
-        return enterAsGuest();
+        return promotedToken;
     }
 
     @EventListener
@@ -206,13 +221,16 @@ public class UserService {
             );
 
         } catch (RuntimeException e) {
+            // Swallow, never rethrow: this listener runs synchronously inside the
+            // site-queue scheduler's per-token loop. Propagating would abort the
+            // remaining promotions in the same sweep and surface as an "Unexpected
+            // error in scheduled task". A token that can't be promoted (already gone,
+            // expired) is simply left for the next sweep to evict.
             AUDIT.warn(
                     "op=queue-token-accepted tempToken={} result=rejected reason={}",
                     event.tempToken(),
                     e.getMessage()
             );
-
-            throw e;
         }
     }
 

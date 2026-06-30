@@ -155,6 +155,23 @@ public class Auth implements IAuth {
     }
 
     @Override
+    public void convertTempToGuest(String token) {
+        validateTokenInput(token);
+
+        Session session = activeSessions.get(token);
+        if (session == null) {
+            throw new IllegalArgumentException("Session not found");
+        }
+        if (!session.isTemp()) {
+            throw new IllegalArgumentException("Only temporary sessions can be promoted to guest");
+        }
+
+        // Keep the same token string (the client is already holding it) and userId;
+        // only flip the session type so the visitor is now an admitted guest.
+        activeSessions.put(token, new Session(token, session.getUserId(), UserType.GUEST));
+    }
+
+    @Override
     public String logout(String memberToken) {
         validateTokenInput(memberToken);
 

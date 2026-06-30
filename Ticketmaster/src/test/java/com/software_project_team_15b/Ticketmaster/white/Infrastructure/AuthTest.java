@@ -148,6 +148,45 @@ class AuthTest {
     }
 
     // ----------------------------------------------------------------------
+    // convertTempToGuest: site-queue promotion upgrades the held token in place
+    // ----------------------------------------------------------------------
+
+    @Test
+    @DisplayName("convertTempToGuest upgrades a temp session to guest, keeping token and user id")
+    void convertTempToGuest_promotesInPlace() {
+        String token = auth.generateTempToken();
+        String userId = auth.getSessionUserId(token);
+
+        auth.convertTempToGuest(token);
+
+        // Same token string is still valid (the client keeps using it)...
+        assertThat(auth.isTokenValid(token)).isTrue();
+        // ...now reporting a GUEST session for the same identity.
+        assertThat(auth.isTemp(token)).isFalse();
+        assertThat(auth.isGuest(token)).isTrue();
+        assertThat(auth.getSessionUserType(token)).isEqualTo(UserType.GUEST);
+        assertThat(auth.getSessionUserId(token)).isEqualTo(userId);
+    }
+
+    @Test
+    @DisplayName("convertTempToGuest rejects a non-temp session")
+    void convertTempToGuest_rejectsNonTemp() {
+        String guest = auth.generateGuestToken();
+
+        assertThatThrownBy(() -> auth.convertTempToGuest(guest))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("convertTempToGuest rejects unknown and null/blank tokens")
+    void convertTempToGuest_rejectsUnknownOrBlank() {
+        assertThatThrownBy(() -> auth.convertTempToGuest("not-a-real-token"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> auth.convertTempToGuest(" "))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    // ----------------------------------------------------------------------
     // Negative
     // ----------------------------------------------------------------------
 

@@ -15,6 +15,15 @@ public interface IAuth {
     void exitSystem(String token);
     String logout(String token);
 
+    /**
+     * Promotes a waiting temporary session into an admitted guest session
+     * <em>in place</em>: the same token string the client is already holding stays
+     * valid and its server-side type becomes {@link UserType#GUEST}. Used when the
+     * site-queue scheduler admits a waiting visitor, so the client gains access
+     * without needing a new token (there is no channel to hand it one).
+     */
+    void convertTempToGuest(String token);
+
     boolean isTokenValid(String token);
     boolean isGuest(String token);
     boolean isMember(String token);
