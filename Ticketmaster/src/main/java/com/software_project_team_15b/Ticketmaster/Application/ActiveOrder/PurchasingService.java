@@ -237,6 +237,8 @@ public class PurchasingService {
 
             UUID orderId = purchasingDomainService.createActiveOrder(userId, eventId, areaId);
 
+            queueDomainService.releaseEventAccess(token, eventId);
+
             AUDIT.info("op=createActiveOrder order={} user={} event={} area={} result=ok",
                     orderId, userId, eventId, areaId);
 
@@ -1047,6 +1049,20 @@ public class PurchasingService {
 
         LotteryEligibilityDTO eligibility = lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId);
         boolean queueAccess = queueDomainService.hasAccess(token, eventId);
+
+        if (!queueAccess) {
+            try {
+                queueAccess = purchasingDomainService.findByUserIdAndStatus(userId, ActiveOrderStatus.ACTIVE).stream()
+                        .anyMatch(order -> eventId.equals(order.getEventId()));
+            } catch (RuntimeException ex) {
+                AUDIT.warn(
+                        "op=requireAccessForPurchase event={} user={} result=failed_to_check_active_order reason={} ",
+                        eventId,
+                        userId,
+                        ex.getMessage()
+                );
+            }
+        }
 
         // Keep domain validation/mocking expectations intact (tests verify this call),
         // but enrich the error message when access is denied due to queue.

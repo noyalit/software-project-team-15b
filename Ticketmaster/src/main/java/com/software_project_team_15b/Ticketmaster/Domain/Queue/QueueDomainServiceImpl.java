@@ -41,7 +41,7 @@ import java.util.concurrent.TimeUnit;
 public class QueueDomainServiceImpl implements IQueueDomainService {
 
     private static final int ACCESS_TIME = 100;
-    private static final int EVENT_QUEUE_INTERVAL = 5;
+    private static final int EVENT_QUEUE_INTERVAL = 1;
 
     private int maxVisitors = 100;
 
@@ -264,7 +264,11 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
             return new QueueAccessDTO(eventId, QueueAccessStatus.ADMITTED, null, expiresAt);
         }
 
-        int position = getPositionInEventQueue(token, eventId);     // throws if token not in queue
+        if (!queue.contains(token)) {
+            return new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null);
+        }
+
+        int position = getPositionInEventQueue(token, eventId);
         return new QueueAccessDTO(eventId, QueueAccessStatus.WAITING, position, null);
     }
 
@@ -325,6 +329,25 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
             return true;
         }
         return queue.hasAccess(token) != null;
+    }
+
+    @Override
+    public void releaseEventAccess(String token, UUID eventId) {
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
+        }
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+
+        VirtualQueue queue = queueRepository.getQueue(eventId);
+        if (queue == null) {
+            return;
+        }
+
+        queue.clearAccess(token);
+        queue.advanceQueue(LocalDateTime.now().plusSeconds(ACCESS_TIME));
+        queueRepository.updateQueue(queue);
     }
 
     /**

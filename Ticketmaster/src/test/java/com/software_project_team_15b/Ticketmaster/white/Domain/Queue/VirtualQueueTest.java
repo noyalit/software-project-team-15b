@@ -187,7 +187,13 @@ public class VirtualQueueTest {
         VirtualQueue bounded = new VirtualQueue(queueId, 1, Integer.MAX_VALUE);
         bounded.push(ALICE);
         assertTrue(bounded.isFull());
+        bounded.advanceQueue(LocalDateTime.now().plusSeconds(100));
+        assertTrue(bounded.isFull());
+
         bounded.pop();
+        assertTrue(bounded.isFull());
+
+        bounded.clearAccess(ALICE);
         assertFalse(bounded.isFull());
         bounded.push(BOB);
         assertTrue(bounded.contains(BOB));
@@ -302,7 +308,13 @@ public class VirtualQueueTest {
         VirtualQueue bounded = new VirtualQueue(queueId, 1, Integer.MAX_VALUE);
         bounded.push(ALICE);
         assertTrue(bounded.isFull());
+        bounded.advanceQueue(LocalDateTime.now().plusSeconds(100));
+        assertTrue(bounded.isFull());
+
         bounded.pop();
+        assertTrue(bounded.isFull());
+
+        bounded.clearAccess(ALICE);
         assertFalse(bounded.isFull());
     }
 
