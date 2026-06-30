@@ -239,7 +239,7 @@ public class UserService {
     public String loginSystemAdmin(String token, String username, String password) {
         // System admins authenticate with a pre-existing SystemAdmin record.
         if (token == null || token.isBlank()) {
-            token = enterAsGuest();
+            throw new InvalidTokenException("Missing entrance token");
         }
         validateEntranceToken(token);
 

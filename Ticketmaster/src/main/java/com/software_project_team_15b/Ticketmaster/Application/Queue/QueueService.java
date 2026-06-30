@@ -57,7 +57,7 @@ public class QueueService {
             if (maxVisitors <= 0) throw new IllegalArgumentException("maxVisitors must be positive");
             UUID userId = auth.extractUserId(adminToken);
             queueDomainService.updateSiteQueueSettings(maxVisitors);
-            SiteQueueSnapshotDTO snapshot = queueDomainService.getSiteQueueSnapshot();
+            SiteQueueSnapshotDTO snapshot = getSiteQueueSnapshot(adminToken);
             AUDIT.info("op=updateSiteQueueSettings userId={} maxVisitors={} result=ok", userId, maxVisitors);
             return snapshot;
         } catch (RuntimeException e) {
@@ -239,6 +239,13 @@ public class QueueService {
             requireSystemAdmin(adminToken);
             UUID userId = auth.extractUserId(adminToken);
             SiteQueueSnapshotDTO snapshot = queueDomainService.getSiteQueueSnapshot();
+
+            int admittedCount = (int) queueDomainService.getAcceptedTokens().stream()
+                    .filter(auth::isTokenValid)
+                    .filter(token -> !auth.isSystemAdmin(token))
+                    .count();
+
+            snapshot = new SiteQueueSnapshotDTO(snapshot.maxVisitors(), snapshot.waitingCount(), admittedCount);
             AUDIT.info("op=getSiteQueueSnapshot userId={} result=ok", userId);
             return snapshot;
         } catch (RuntimeException e) {

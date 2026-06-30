@@ -971,19 +971,9 @@ class UserServiceTest {
 
     @Test
     void loginSystemAdmin_withNullToken_autoEntersAsGuest() {
-        when(auth.generateGuestToken()).thenReturn("g-tok");
-        when(auth.isTokenValid("g-tok")).thenReturn(true);
-        when(auth.isGuest("g-tok")).thenReturn(true);
-        SystemAdmin admin = new SystemAdmin("admin", "hash");
-        when(systemAdminRepository.findByUsername("admin")).thenReturn(Optional.of(admin));
-        when(passwordEncoder.matches("Password1", "hash")).thenReturn(true);
-        when(auth.generateSystemAdminToken(admin)).thenReturn("admin-tok");
-
-        String result = service.loginSystemAdmin(null, "admin", "Password1");
-
-        assertThat(result).isEqualTo("admin-tok");
-        verify(auth).generateGuestToken();
-        verify(auth).exitSystem("g-tok");
+        assertThatThrownBy(() -> service.loginSystemAdmin(null, "admin", "Password1"))
+                .isInstanceOf(InvalidTokenException.class)
+                .hasMessageContaining("Missing entrance token");
     }
 
     // =========================================================================
