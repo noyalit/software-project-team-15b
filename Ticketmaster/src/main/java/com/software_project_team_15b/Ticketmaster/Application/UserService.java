@@ -199,6 +199,18 @@ public class UserService {
         try {
             String guestToken = tryEnterFromQueue(event.tempToken());
 
+            // The temp token held an admitted slot (it was admitted by the site-queue
+            // sweep before this event fired). Transfer that slot to the freshly issued
+            // guest token so the active-visitor count stays accurate and the site cap is
+            // actually enforced; otherwise the new guest is never counted and the now-
+            // invalid temp token lingers in the admitted set until the next sweep.
+            queueDomainService.admitToken(guestToken);
+            try {
+                queueDomainService.removeAcceptedToken(event.tempToken());
+            } catch (InvalidTokenException alreadyRemoved) {
+                // Temp token was already evicted; the guest remains admitted.
+            }
+
             AUDIT.info(
                     "op=queue-token-accepted tempToken={} guestTokenIssued={}",
                     event.tempToken(),

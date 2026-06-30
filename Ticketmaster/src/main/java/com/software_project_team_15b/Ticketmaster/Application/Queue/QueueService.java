@@ -79,7 +79,12 @@ public class QueueService {
 
         for (String token : beforeAcceptedTokens) {
             if (!auth.isTokenValid(token)) {
-                queueDomainService.removeAcceptedToken(token);
+                try {
+                    queueDomainService.removeAcceptedToken(token);
+                } catch (InvalidTokenException alreadyRemoved) {
+                    // Token was evicted concurrently (e.g. by a settings change); nothing
+                    // to do. Swallow so one stale token cannot abort the whole sweep.
+                }
             }
         }
 
@@ -186,7 +191,7 @@ public class QueueService {
      * @param eventId the unique identifier of the event; must not be null
      * @throws IllegalArgumentException if {@code token} or {@code eventId} is null
      * @throws InvalidTokenException    if the token is invalid or expired
-     * @throws UnauthorizedException    if the caller is not a system adminF
+     * @throws UnauthorizedException    if the caller is not a system admin
      * @throws QueueNotFoundException   if no queue exists for the given event
      */
     public void clearEventQueue(String token, UUID eventId) {
@@ -251,9 +256,9 @@ public class QueueService {
      *
      * @param token        the caller's auth token; must not be null
      * @param eventId      the unique identifier of the event; must not be null
-     * @param capacity     the new maximum number of users that may wait; must be positive
-     * @param max_accepted the new maximum number of simultaneously admitted users; must be positive
-     * @throws IllegalArgumentException if any argument is null or any limit is not positive
+     * @param capacity     the new maximum number of users that may wait; must be non-negative
+     * @param max_accepted the new maximum number of simultaneously admitted users; must be non-negative
+     * @throws IllegalArgumentException if any argument is null or any limit is negative
      * @throws InvalidTokenException    if the token is invalid or expired
      * @throws UnauthorizedException    if the caller is not a system admin
      * @throws QueueNotFoundException   if no queue exists for the given event
@@ -262,8 +267,8 @@ public class QueueService {
         try {
             if (token == null) throw new IllegalArgumentException("token cannot be null");
             if (eventId == null) throw new IllegalArgumentException("eventId cannot be null");
-            if (capacity < 0) throw new IllegalArgumentException("capacity cannot be <= 0");
-            if (max_accepted < 0) throw new IllegalArgumentException("max_accepted cannot be <= 0");
+            if (capacity < 0) throw new IllegalArgumentException("capacity cannot be negative");
+            if (max_accepted < 0) throw new IllegalArgumentException("max_accepted cannot be negative");
             validateToken(token);
             requireSystemAdmin(token);
             UUID userId = auth.extractUserId(token);

@@ -48,7 +48,9 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
     private final IQueueRepository queueRepository;
 
     private final Deque<String> siteQueue = new LinkedList<>();
-    private final Set<String> acceptedTokens = new HashSet<>();
+    // LinkedHashSet preserves admission order so demotion (see updateSiteQueueSettings)
+    // can deterministically re-queue the most-recently admitted users.
+    private final Set<String> acceptedTokens = new LinkedHashSet<>();
 
     public QueueDomainServiceImpl(IQueueRepository queueRepository) {
         this.queueRepository = Objects.requireNonNull(queueRepository);
@@ -83,10 +85,13 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      * Returns an unmodifiable snapshot of the tokens that are currently admitted to
      * the site (i.e. past the site queue and within their access window).
      *
-     * @return an unmodifiable view of the admitted-token set
+     * <p>Returns a defensive copy, so callers may iterate it safely even while other
+     * threads continue to admit or evict tokens.
+     *
+     * @return an unmodifiable copy of the admitted-token set
      */
-    public Set<String> getAcceptedTokens() {
-        return Collections.unmodifiableSet(acceptedTokens);
+    public synchronized Set<String> getAcceptedTokens() {
+        return Set.copyOf(acceptedTokens);
     }
 
     /**
@@ -96,7 +101,7 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      * @throws IllegalArgumentException if {@code token} is null
      * @throws com.software_project_team_15b.Ticketmaster.Application.Exceptions.InvalidTokenException if {@code token} is not present in the admitted set
      */
-    public void removeAcceptedToken(String token) {
+    public synchronized void removeAcceptedToken(String token) {
         if (token == null) {
             throw new IllegalArgumentException("token cannot be null");
         }
@@ -108,7 +113,7 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
 
     /**
      * Drains the front of the site queue into the admitted set until
-     * {@link #MAX_VISITORS} concurrent visitors are admitted or the queue is empty.
+     * {@link #maxVisitors} concurrent visitors are admitted or the queue is empty.
      */
     public synchronized void acceptUsersFromSiteQueue() {
         while (!siteQueue.isEmpty() && acceptedTokens.size() < maxVisitors) {
@@ -155,11 +160,16 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
 
         // If the new cap is below the current admitted count, demote the excess admitted
         // users back to the *front* of the waiting queue so they are re-admitted first.
-        Iterator<String> it = acceptedTokens.iterator();
-        while (acceptedTokens.size() > maxVisitors && it.hasNext()) {
-            String token = it.next();
-            it.remove();
-            siteQueue.addFirst(token);
+        // acceptedTokens is a LinkedHashSet, so iteration is in admission order: the
+        // longest-admitted users keep their slots and the most-recently admitted are
+        // demoted, preserving their relative order at the front of the waiting queue.
+        if (acceptedTokens.size() > maxVisitors) {
+            List<String> admitted = new ArrayList<>(acceptedTokens);
+            for (int i = admitted.size() - 1; i >= maxVisitors; i--) {
+                String token = admitted.get(i);
+                acceptedTokens.remove(token);
+                siteQueue.addFirst(token);
+            }
         }
     }
 
@@ -210,13 +220,18 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
             return new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null);
         }
 
-        LocalDateTime expiresAt = queue.hasAccess(token);
-        if (expiresAt != null) {
-            return new QueueAccessDTO(eventId, QueueAccessStatus.ADMITTED, null, expiresAt);
-        }
+        // Hold the queue's monitor across both reads so the scheduled advanceQueue cannot
+        // promote/expire the token between the admitted check and the position lookup
+        // (which would otherwise throw "item is not in the queue" for a just-admitted user).
+        synchronized (queue) {
+            LocalDateTime expiresAt = queue.hasAccess(token);
+            if (expiresAt != null) {
+                return new QueueAccessDTO(eventId, QueueAccessStatus.ADMITTED, null, expiresAt);
+            }
 
-        int position = getPositionInEventQueue(token, eventId);     // throws if token not in queue
-        return new QueueAccessDTO(eventId, QueueAccessStatus.WAITING, position, null);
+            int position = getPositionInEventQueue(token, eventId); // throws if token not in queue
+            return new QueueAccessDTO(eventId, QueueAccessStatus.WAITING, position, null);
+        }
     }
 
     /**
@@ -246,12 +261,23 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
         if (queue == null) {
             return new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null);
         }
-        if (queue.hasAccess(token) == null) {
-            pushToEventQueue(eventId, token);
-            queue.advanceQueue(LocalDateTime.now().plusSeconds(ACCESS_TIME));
-            queueRepository.updateQueue(queue);
+        // Enqueue + advance + read the resulting view atomically under the queue's monitor
+        // so a concurrent advanceQueue (scheduler) cannot interleave between the steps.
+        synchronized (queue) {
+            if (queue.hasAccess(token) == null) {
+                if (queue.isFull()) {
+                    throw new QueueIsFullException("Event queue is full. Please try again later.");
+                }
+                if (queue.contains(token)) {
+                    throw new AlreadyInQueueException(
+                            "Token " + token + " is already in the queue for eventId: " + eventId);
+                }
+                queue.push(token);
+                queue.advanceQueue(LocalDateTime.now().plusSeconds(ACCESS_TIME));
+                queueRepository.updateQueue(queue);
+            }
+            return getQueueAccessView(token, eventId);
         }
-        return getQueueAccessView(token, eventId);
     }
 
     /**
@@ -383,7 +409,7 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
      * @return {@code true} if below the cap; {@code false} if at or above it
      */
     @Override
-    public boolean canAccessWebsite() {
+    public synchronized boolean canAccessWebsite() {
         return acceptedTokens.size() < maxVisitors;
     }
 
