@@ -42,10 +42,11 @@ public class QueueController {
     @Operation(summary = "Update site queue settings (admin only)")
     @PatchMapping(path = "/site", consumes = "application/json")
     public ResponseEntity<ApiResponse<SiteQueueSnapshotDTO>> updateSiteQueueSettings(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token,
             @RequestBody SiteQueueSettingsRequest request
     ) {
         try {
+            requireToken(token);
             SiteQueueSnapshotDTO snapshot = queueService.updateSiteQueueSettings(token, request.maxVisitors());
             return ResponseEntity.ok(new ApiResponse<>(snapshot, null));
         } catch (InvalidTokenException ex) {
@@ -62,9 +63,10 @@ public class QueueController {
     @Operation(summary = "Get site queue snapshot (admin only)")
     @GetMapping("/site")
     public ResponseEntity<ApiResponse<SiteQueueSnapshotDTO>> getSiteQueueSnapshot(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token
     ) {
         try {
+            requireToken(token);
             SiteQueueSnapshotDTO snapshot = queueService.getSiteQueueSnapshot(token);
             return ResponseEntity.ok(new ApiResponse<>(snapshot, null));
         } catch (InvalidTokenException ex) {
@@ -81,9 +83,10 @@ public class QueueController {
     @Operation(summary = "Get all queue snapshots (admin only)")
     @GetMapping
     public ResponseEntity<ApiResponse<List<QueueSnapshotDTO>>> getAllQueueSnapshots(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token
     ) {
         try {
+            requireToken(token);
             List<QueueSnapshotDTO> snapshots = queueService.getAllQueueSnapshots(token);
             return ResponseEntity.ok(new ApiResponse<>(snapshots, null));
         } catch (InvalidTokenException ex) {
@@ -100,10 +103,11 @@ public class QueueController {
     @Operation(summary = "Get queue snapshot for an event (admin only)")
     @GetMapping("/{eventId}")
     public ResponseEntity<ApiResponse<QueueSnapshotDTO>> getQueueSnapshot(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token,
             @PathVariable UUID eventId
     ) {
         try {
+            requireToken(token);
             QueueSnapshotDTO snapshot = queueService.getQueueSnapshot(token, eventId);
             return ResponseEntity.ok(new ApiResponse<>(snapshot, null));
         } catch (InvalidTokenException ex) {
@@ -122,11 +126,12 @@ public class QueueController {
     @Operation(summary = "Create a virtual queue for an event (admin only)")
     @PostMapping(path = "/{eventId}", consumes = "application/json")
     public ResponseEntity<ApiResponse<Void>> createEventQueue(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token,
             @PathVariable UUID eventId,
             @RequestBody QueueSettingsRequest request
     ) {
         try {
+            requireToken(token);
             queueService.createEventQueue(token, eventId, request.capacity(), request.maxAccepted());
             return ResponseEntity.status(HttpStatus.CREATED)
                     .body(new ApiResponse<>(null, null));
@@ -144,10 +149,11 @@ public class QueueController {
     @Operation(summary = "Delete the virtual queue for an event (admin only)")
     @DeleteMapping("/{eventId}")
     public ResponseEntity<ApiResponse<Void>> deleteEventQueue(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token,
             @PathVariable UUID eventId
     ) {
         try {
+            requireToken(token);
             queueService.deleteEventQueue(token, eventId);
             return ResponseEntity.ok(new ApiResponse<>(null, null));
         } catch (InvalidTokenException ex) {
@@ -166,11 +172,12 @@ public class QueueController {
     @Operation(summary = "Update capacity and max-accepted limits for an event queue (admin only)")
     @PatchMapping(path = "/{eventId}", consumes = "application/json")
     public ResponseEntity<ApiResponse<Void>> updateEventQueueSettings(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token,
             @PathVariable UUID eventId,
             @RequestBody QueueSettingsRequest request
     ) {
         try {
+            requireToken(token);
             queueService.updateEventQueueSettings(token, eventId, request.capacity(), request.maxAccepted());
             return ResponseEntity.ok(new ApiResponse<>(null, null));
         } catch (InvalidTokenException ex) {
@@ -189,10 +196,11 @@ public class QueueController {
     @Operation(summary = "Remove all users from the event queue (admin only)")
     @DeleteMapping("/{eventId}/users")
     public ResponseEntity<ApiResponse<Void>> clearEventQueue(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token,
             @PathVariable UUID eventId
     ) {
         try {
+            requireToken(token);
             queueService.clearEventQueue(token, eventId);
             return ResponseEntity.ok(new ApiResponse<>(null, null));
         } catch (InvalidTokenException ex) {
@@ -211,10 +219,11 @@ public class QueueController {
     @Operation(summary = "Get the caller's queue access state for an event")
     @GetMapping("/{eventId}/access")
     public ResponseEntity<ApiResponse<QueueAccessDTO>> getQueueAccessView(
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String token,
+            @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String token,
             @PathVariable UUID eventId
     ) {
         try {
+            requireToken(token);
             QueueAccessDTO view = queueService.getQueueAccessView(token, eventId);
             return ResponseEntity.ok(new ApiResponse<>(view, null));
         } catch (InvalidTokenException ex) {
@@ -225,6 +234,17 @@ public class QueueController {
             return badRequest(ex);
         } catch (Exception ex) {
             return internalServerError(ex);
+        }
+    }
+
+    /**
+     * Rejects a missing or blank Authorization header by throwing an
+     * {@link InvalidTokenException}, which the per-endpoint handlers map to 401.
+     * This avoids the framework's {@code MissingRequestHeaderException} surfacing as a 500.
+     */
+    private static void requireToken(String token) {
+        if (token == null || token.isBlank()) {
+            throw new InvalidTokenException("Missing or blank Authorization header");
         }
     }
 
