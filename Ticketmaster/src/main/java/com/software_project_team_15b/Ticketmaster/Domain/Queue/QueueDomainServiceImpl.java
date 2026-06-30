@@ -40,8 +40,8 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class QueueDomainServiceImpl implements IQueueDomainService {
 
-    private static final int ACCESS_TIME = 100;
-    private static final int EVENT_QUEUE_INTERVAL = 5;
+    private static final int ACCESS_TIME = 60;
+    private static final int EVENT_QUEUE_INTERVAL = 1;
 
     private int maxVisitors = 100;
 
@@ -264,7 +264,11 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
             return new QueueAccessDTO(eventId, QueueAccessStatus.ADMITTED, null, expiresAt);
         }
 
-        int position = getPositionInEventQueue(token, eventId);     // throws if token not in queue
+        if (!queue.contains(token)) {
+            return new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null);
+        }
+
+        int position = getPositionInEventQueue(token, eventId);
         return new QueueAccessDTO(eventId, QueueAccessStatus.WAITING, position, null);
     }
 
@@ -295,11 +299,19 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
         if (queue == null) {
             return new QueueAccessDTO(eventId, QueueAccessStatus.NO_QUEUE, null, null);
         }
-        if (queue.hasAccess(token) == null) {
-            pushToEventQueue(eventId, token);
-            queue.advanceQueue(LocalDateTime.now().plusSeconds(ACCESS_TIME));
-            queueRepository.updateQueue(queue);
+
+        LocalDateTime expiresAt = queue.hasAccess(token);
+        if (expiresAt != null) {
+            return new QueueAccessDTO(eventId, QueueAccessStatus.ADMITTED, null, expiresAt);
         }
+
+        if (queue.contains(token)) {
+            return getQueueAccessView(token, eventId);
+        }
+
+        pushToEventQueue(eventId, token);
+        queue.advanceQueue(LocalDateTime.now().plusSeconds(ACCESS_TIME));
+        queueRepository.updateQueue(queue);
         return getQueueAccessView(token, eventId);
     }
 
@@ -325,6 +337,25 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
             return true;
         }
         return queue.hasAccess(token) != null;
+    }
+
+    @Override
+    public void releaseEventAccess(String token, UUID eventId) {
+        if (token == null) {
+            throw new IllegalArgumentException("token cannot be null");
+        }
+        if (eventId == null) {
+            throw new IllegalArgumentException("eventId cannot be null");
+        }
+
+        VirtualQueue queue = queueRepository.getQueue(eventId);
+        if (queue == null) {
+            return;
+        }
+
+        queue.clearAccess(token);
+        queue.advanceQueue(LocalDateTime.now().plusSeconds(ACCESS_TIME));
+        queueRepository.updateQueue(queue);
     }
 
     /**
@@ -416,10 +447,10 @@ public class QueueDomainServiceImpl implements IQueueDomainService {
             throw new QueueNotFoundException("Queue not found for eventId: " + eventId);
         }
         if (queue.isFull()) {
-            throw new QueueIsFullException("Event queue is full. Please try again later.");
+            throw new QueueIsFullException("The queue for this event is full right now. Please try again later.");
         }
         if (queue.contains(token)) {
-            throw new AlreadyInQueueException("Token " + token + " is already in the queue for eventId: " + eventId);
+            throw new AlreadyInQueueException("You are already in the queue for this event.");
         }
         queue.push(token);
         queueRepository.updateQueue(queue);

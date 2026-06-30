@@ -143,7 +143,7 @@ public class VirtualQueue {
      * @return {@code true} if the queue has reached its capacity
      */
     public synchronized boolean isFull() {
-        return queue.size() >= capacity;
+        return (queue.size() + accessMap.size()) >= capacity;
     }
 
     /**

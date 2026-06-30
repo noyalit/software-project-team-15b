@@ -476,6 +476,7 @@ public class PurchasingService {
         LocalDate birthDate = getUserBirthDate(userId);
 
         return completeCheckoutForUser(
+                token,
                 userId,
                 orderId,
                 birthDate,
@@ -506,6 +507,7 @@ public class PurchasingService {
         }
 
         return completeCheckoutForUser(
+                token,
                 userId,
                 orderId,
                 birthDate,
@@ -515,6 +517,7 @@ public class PurchasingService {
     }
 
     private CheckoutCompletedDTO completeCheckoutForUser(
+            String token,
             UUID userId,
             UUID orderId,
             LocalDate birthDate,
@@ -544,6 +547,8 @@ public class PurchasingService {
 
             purchasingDomainService.finalizeCheckout(activeOrder, transactionId, issuedTicketId,priceBreakdown);
             finalizeDone = true;
+
+            queueDomainService.releaseEventAccess(token, activeOrder.getEventId());
 
             ConfirmationReceipt receipt = confirmCheckout(activeOrder);
             confirmed = true;
@@ -632,6 +637,7 @@ public class PurchasingService {
             for (ActiveOrder activeOrder : activeOrders) {
                 releaseHoldIfNeeded(activeOrder);
                 purchasingDomainService.cancelOrder(activeOrder);
+                queueDomainService.releaseEventAccess(token, activeOrder.getEventId());
             }
             int canceledCount = activeOrders.size();
 
@@ -1048,6 +1054,20 @@ public class PurchasingService {
         LotteryEligibilityDTO eligibility = lotteryDomainService.getLotteryEligibilityForEvent(userId, eventId);
         boolean queueAccess = queueDomainService.hasAccess(token, eventId);
 
+        if (!queueAccess) {
+            try {
+                queueAccess = purchasingDomainService.findByUserIdAndStatus(userId, ActiveOrderStatus.ACTIVE).stream()
+                        .anyMatch(order -> eventId.equals(order.getEventId()));
+            } catch (RuntimeException ex) {
+                AUDIT.warn(
+                        "op=requireAccessForPurchase event={} user={} result=failed_to_check_active_order reason={} ",
+                        eventId,
+                        userId,
+                        ex.getMessage()
+                );
+            }
+        }
+
         // Keep domain validation/mocking expectations intact (tests verify this call),
         // but enrich the error message when access is denied due to queue.
         try {
@@ -1153,7 +1173,7 @@ public class PurchasingService {
         int maxAccepted = queueDomainService.getQueueSnapshot(eventId).maxAccepted();
         if (maxAccepted > 0 && purchasingDomainService.countActiveOrdersForEvent(eventId) >= maxAccepted) {
             throw new TimeExpiredException(
-                    "User does not have access. Queue is currently active for this event. Please wait until you are admitted."
+                    "This event is currently at capacity for active orders. Please wait in the queue until a spot becomes available."
             );
         }
     }

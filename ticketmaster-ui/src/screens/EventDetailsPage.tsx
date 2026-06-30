@@ -58,6 +58,40 @@ export default function EventDetailsPage() {
   const qc = useQueryClient();
   const { token, userType, clearAuth } = useAuthStore();
 
+  const queueAccessQuery = useQuery({
+    queryKey: ['event-queue-access', eventId, token],
+    queryFn: async () => {
+      if (!eventId) throw new Error('Event ID is missing.');
+      try {
+        const res = await http.get<ApiResponse<QueueAccessDTO>>(`/api/queues/${eventId}/access`);
+        if (res.data.error) throw new Error(res.data.error);
+        if (!res.data.data) throw new Error('Queue access is unavailable.');
+        return res.data.data;
+      } catch (e) {
+        const err = e as AxiosError<ApiResponse<QueueAccessDTO>>;
+        const status = err.response?.status;
+        if (status === 400) {
+          return null;
+        }
+        throw e;
+      }
+    },
+    enabled: Boolean(eventId) && Boolean(token) && userType === 'member',
+    refetchInterval: 2000,
+    retry: 1,
+  });
+
+  useEffect(() => {
+    if (!eventId) return;
+    if (!token) return;
+    if (userType !== 'member') return;
+    const access = queueAccessQuery.data;
+    if (!access) return;
+    if (access.status === 'WAITING') {
+      navigate(`/queue/${eventId}`, { replace: true });
+    }
+  }, [eventId, navigate, queueAccessQuery.data, token, userType]);
+
   const describePurchasePolicy = (p: PurchasePolicyDTO) => {
     const anyP = p as any;
     const t = (anyP?.type ?? anyP?.policyType ?? anyP?.kind) as string | undefined;
@@ -465,7 +499,7 @@ export default function EventDetailsPage() {
       if (!eventId) throw new Error('Event ID is missing.');
 
       try {
-        const res = await http.post<ApiResponse<unknown>>(
+        const res = await http.post<ApiResponse<QueueAccessDTO>>(
           `/api/active-orders/access/${eventId}`
         );
 
@@ -475,21 +509,16 @@ export default function EventDetailsPage() {
           return null;
         }
 
-        if (
-          userType === 'member' &&
-          (res.status === 410 ||
-            String(res.data.error ?? '')
-              .toLowerCase()
-              .includes('does not have access'))
-        ) {
+        const access = res.data.data ?? null;
+        if (userType === 'member' && access?.status === 'WAITING') {
           navigate(`/queue/${eventId}`);
           return null;
         }
 
         if (res.data.error) throw new Error(res.data.error);
-        return res.data.data;
+        return access;
       } catch (e) {
-        const err = e as AxiosError<ApiResponse<unknown>>;
+        const err = e as AxiosError<ApiResponse<QueueAccessDTO>>;
         const status = err.response?.status;
         const message = getApiErrorMessage(e);
         const lower = message.toLowerCase();
@@ -498,6 +527,11 @@ export default function EventDetailsPage() {
           clearAuth();
           navigate('/login');
           return null;
+        }
+
+        if (userType === 'member' && status === 410) {
+          navigate(`/queue/${eventId}`);
+          throw new Error(message || 'This event is currently at capacity. Please wait in the queue.');
         }
 
         const shouldQueue =
@@ -509,7 +543,7 @@ export default function EventDetailsPage() {
 
         if (userType === 'member' && shouldQueue) {
           navigate(`/queue/${eventId}`);
-          return null;
+          throw new Error(message || 'This event is currently at capacity. Please wait in the queue.');
         }
 
         throw e;
@@ -537,6 +571,11 @@ export default function EventDetailsPage() {
         const message = getApiErrorMessage(e);
 
         const lower = String(message ?? '').toLowerCase();
+
+        if (userType === 'member' && status === 410) {
+          navigate(`/queue/${eventId}`);
+          throw new Error(message || 'This event is currently at capacity. Please wait in the queue.');
+        }
 
         if (userType === 'member' && lower.includes('already waiting in line')) {
           let queuePosition: number | null = null;
@@ -572,7 +611,7 @@ export default function EventDetailsPage() {
 
         if (userType === 'member' && shouldQueue) {
           navigate(`/queue/${eventId}`);
-          throw e;
+          throw new Error(message || 'This event is currently at capacity. Please wait in the queue.');
         }
 
         const isAlreadyHasActiveOrder =

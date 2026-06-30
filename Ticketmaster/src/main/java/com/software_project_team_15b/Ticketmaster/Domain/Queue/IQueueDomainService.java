@@ -134,6 +134,16 @@ public interface IQueueDomainService {
     boolean hasAccess(String accessToken, UUID eventId);
 
     /**
+     * Removes admitted access for the given token (if present) and immediately advances
+     * the event queue to fill any newly freed slot.
+     *
+     * <p>Used when a user no longer needs the temporary admitted access window (e.g.
+     * after successfully creating an active order), so the next waiting user can be
+     * admitted without waiting for access expiry.
+     */
+    void releaseEventAccess(String token, UUID eventId);
+
+    /**
      * Returns a snapshot of the user's current access state for the given event.
      *
      * @param token   the user's auth token; must not be null
